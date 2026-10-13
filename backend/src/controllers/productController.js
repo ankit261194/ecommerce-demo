@@ -55,13 +55,25 @@ exports.getProducts = async (req, res, next) => {
     }
 
     if (search) {
-      const searchRegex = new RegExp(search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      query.$or = [
-        { title: searchRegex },
-        { description: searchRegex },
-        { brand: searchRegex },
-        { tags: searchRegex },
-      ];
+      const words = search
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+      if (words.length > 0) {
+        // Match all words in any order across title/desc (e.g. "wireless headphones")
+        const allWordsPattern = words.map(w => `(?=.*${w})`).join('');
+        const allWordsRegex = new RegExp(allWordsPattern, 'i');
+        const anyWordRegex = new RegExp(words.join('|'), 'i');
+
+        query.$or = [
+          { title: allWordsRegex },
+          { description: allWordsRegex },
+          { brand: anyWordRegex },
+          { tags: anyWordRegex },
+        ];
+      }
     }
 
     if (minPrice || maxPrice) {
@@ -311,12 +323,25 @@ exports.getSearchSuggestions = async (req, res, next) => {
       });
     }
 
-    const regex = new RegExp(rawQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const words = rawQuery
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+    const allWordsPattern = words.map(w => `(?=.*${w})`).join('');
+    const allWordsRegex = new RegExp(allWordsPattern, 'i');
+    const anyWordRegex = new RegExp(words.join('|'), 'i');
 
     // 1. Matched Products (Top 6)
     const products = await Product.find({
       isPublished: true,
-      $or: [{ title: regex }, { brand: regex }, { tags: regex }, { description: regex }],
+      $or: [
+        { title: allWordsRegex },
+        { description: allWordsRegex },
+        { brand: anyWordRegex },
+        { tags: anyWordRegex },
+      ],
     })
       .select('title slug brand sellingPrice mrp images category ratingsAverage stock')
       .populate('category', 'name slug')
@@ -324,21 +349,21 @@ exports.getSearchSuggestions = async (req, res, next) => {
 
     // 2. Matched Categories
     const categories = await Category.find({
-      name: regex,
+      name: anyWordRegex,
     })
       .select('name slug icon')
       .limit(4);
 
     // 3. Matched Brands
     const brandAgg = await Product.aggregate([
-      { $match: { isPublished: true, brand: regex } },
+      { $match: { isPublished: true, brand: anyWordRegex } },
       { $group: { _id: '$brand', count: { $sum: 1 } } },
       { $limit: 4 },
     ]);
     const brands = brandAgg.map(b => ({ name: b._id, count: b.count }));
 
     // 4. Matched Trending Searches
-    const matchedTrending = trendingSearches.filter(t => regex.test(t));
+    const matchedTrending = trendingSearches.filter(t => anyWordRegex.test(t));
 
     res.status(200).json({
       success: true,

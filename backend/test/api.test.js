@@ -374,6 +374,27 @@ const runTests = async () => {
       assert.ok(Array.isArray(dataQuery.brands), 'Must return brands array');
     });
 
+    await test('Point 10: Storefront Voice Search phrase query matches catalog via /products?search and suggestions', async () => {
+      // Natural voice queries (e.g., spoken into microphone speech-to-text)
+      const spokenVoicePhrase = 'wireless headphones';
+      const res = await fetch(`${baseUrl}/products?search=${encodeURIComponent(spokenVoicePhrase)}`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.length >= 1, 'Should find products for spoken query "wireless headphones"');
+      assert.ok(
+        data.data.some(p => p.title.toLowerCase().includes('headphones')),
+        'Matched product must match voice query title'
+      );
+
+      // Suggestions for voice transcription
+      const resSugg = await fetch(`${baseUrl}/products/search/suggestions?q=${encodeURIComponent(spokenVoicePhrase)}`);
+      assert.strictEqual(resSugg.status, 200);
+      const dataSugg = await resSugg.json();
+      assert.strictEqual(dataSugg.success, true);
+      assert.ok(dataSugg.products.length >= 1, 'Voice suggestion must find matching product');
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

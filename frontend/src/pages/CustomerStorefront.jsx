@@ -21,6 +21,7 @@ import {
   X,
   MapPin,
   Eye,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
@@ -238,6 +239,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     { id: 'wishlist', label: `My Wishlist (${wishlist.length})`, icon: '❤️' },
   ];
 
+  // Price Range Filter State (Point #3)
+  const [priceRange, setPriceRange] = useState([0, 50000]);
+
   // Filtering products
   const filteredProducts = products.filter(p => {
     if (selectedCategory === 'wishlist') {
@@ -248,7 +252,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       !searchQuery ||
       p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.brand.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    const matchesPrice = p.sellingPrice >= priceRange[0] && p.sellingPrice <= priceRange[1];
+    return matchesCategory && matchesSearch && matchesPrice;
   });
 
   // Inject JSON-LD ItemList Schema for Product Catalog
@@ -550,6 +555,109 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           </div>
         </div>
 
+        {/* Interactive Dual-Handle Price Range Slider & Budget Filter (Point #3) */}
+        <div className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 shadow-sm space-y-3.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600">
+                <SlidersHorizontal className="w-4 h-4 stroke-[2.5]" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-900">
+                  Filter by Budget & Price Range
+                </h3>
+                <p className="text-[11px] text-slate-400 font-medium">
+                  Select price bracket or adjust slider to refine marketplace items
+                </p>
+              </div>
+            </div>
+
+            {/* Active Range Display & Reset Pill */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-900 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 shadow-inner">
+                ₹{priceRange[0].toLocaleString('en-IN')} — ₹{priceRange[1].toLocaleString('en-IN')}
+              </span>
+              {(priceRange[0] > 0 || priceRange[1] < 50000) && (
+                <button
+                  type="button"
+                  onClick={() => setPriceRange([0, 50000])}
+                  className="text-xs font-bold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2.5 py-1.5 rounded-xl transition-all border border-amber-200/60"
+                >
+                  ✕ Reset Filter
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Preset Budget Pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-device-scrollbar">
+            {[
+              { label: 'All Budgets', min: 0, max: 50000 },
+              { label: 'Under ₹2,000', min: 0, max: 2000 },
+              { label: '₹2,000 - ₹5,000', min: 2000, max: 5000 },
+              { label: '₹5,000 - ₹10,000', min: 5000, max: 10000 },
+              { label: 'Above ₹10,000', min: 10000, max: 50000 },
+            ].map(preset => {
+              const isSelected = priceRange[0] === preset.min && priceRange[1] === preset.max;
+              return (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => setPriceRange([preset.min, preset.max])}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                    isSelected
+                      ? 'bg-slate-900 text-amber-400 border-slate-900 ring-2 ring-amber-400/30 shadow-sm'
+                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-white'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Dual Range Sliders & Exact Inputs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+            <div className="space-y-1">
+              <div className="flex justify-between text-[11px] font-bold text-slate-500">
+                <span>Min Price: ₹{priceRange[0].toLocaleString('en-IN')}</span>
+                <span>₹0</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={50000}
+                step={250}
+                value={priceRange[0]}
+                onChange={e => {
+                  const val = Math.min(Number(e.target.value), priceRange[1] - 250);
+                  setPriceRange([val, priceRange[1]]);
+                }}
+                className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between text-[11px] font-bold text-slate-500">
+                <span>Max Price: ₹{priceRange[1].toLocaleString('en-IN')}</span>
+                <span>₹50,000</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={50000}
+                step={250}
+                value={priceRange[1]}
+                onChange={e => {
+                  const val = Math.max(Number(e.target.value), priceRange[0] + 250);
+                  setPriceRange([priceRange[0], val]);
+                }}
+                className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Products Grid (Amazon/Myntra Clean High-Contrast Cards) */}
         <div className="space-y-4">
           <div className="flex items-center justify-between border-b border-slate-200 pb-3">
@@ -564,7 +672,27 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+          {filteredProducts.length === 0 ? (
+            <div className="p-12 rounded-3xl bg-white border border-slate-200 text-center space-y-3">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-2xl shadow-inner">
+                🔍
+              </div>
+              <h3 className="font-extrabold text-base text-slate-900">
+                No products found in this price bracket
+              </h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                No items match ₹{priceRange[0].toLocaleString('en-IN')} to ₹{priceRange[1].toLocaleString('en-IN')}. Try expanding your budget range or resetting filters.
+              </p>
+              <button
+                type="button"
+                onClick={() => setPriceRange([0, 50000])}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md transition-all"
+              >
+                Reset Price Filter
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
             {filteredProducts.map(product => {
               const discount = Math.round(((product.mrp - product.sellingPrice) / product.mrp) * 100);
               const isWishlisted = wishlist.includes(product._id);
@@ -698,7 +826,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               );
             })}
           </div>
-        </div>
+        )}
+      </div>
       </div>
 
       {/* Rich Product Detail Page (PDP) & Quick-View Modal */}

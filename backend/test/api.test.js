@@ -189,6 +189,20 @@ const runTests = async () => {
       assert.ok(data.data[0].title.toLowerCase().includes('headphones'));
     });
 
+    await test('Point 3: GET /products with minPrice and maxPrice filters catalog within exact price range', async () => {
+      const res = await fetch(`${baseUrl}/products?minPrice=2000&maxPrice=5000`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.length >= 1, 'Should find products within ₹2,000 to ₹5,000 bracket');
+      for (const prod of data.data) {
+        assert.ok(
+          prod.sellingPrice >= 2000 && prod.sellingPrice <= 5000,
+          `Product '${prod.title}' price ₹${prod.sellingPrice} must be within 2000-5000`
+        );
+      }
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

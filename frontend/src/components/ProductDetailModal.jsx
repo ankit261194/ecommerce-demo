@@ -1,0 +1,709 @@
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  Star,
+  ShoppingBag,
+  Zap,
+  Heart,
+  Share2,
+  ShieldCheck,
+  Truck,
+  RotateCcw,
+  CheckCircle2,
+  AlertCircle,
+  ChevronRight,
+  Sparkles,
+  Layers,
+  Store,
+  Check,
+  ThumbsUp,
+  MessageSquare,
+} from 'lucide-react';
+
+export const ProductDetailModal = ({
+  product,
+  isOpen,
+  onClose,
+  onAddToCart,
+  onBuyNow,
+  isWishlisted,
+  onToggleWishlist,
+}) => {
+  if (!isOpen || !product) return null;
+
+  // Active Image Gallery State
+  const images = product.images && product.images.length > 0
+    ? product.images
+    : [product.image || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800'];
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  // Active Variant State
+  const [selectedVariant, setSelectedVariant] = useState(
+    product.hasVariants && product.variants?.length > 0 ? product.variants[0] : null
+  );
+
+  // Quantity State
+  const [quantity, setQuantity] = useState(1);
+
+  // Active Tab: 'overview' | 'specs' | 'reviews' | 'seller'
+  const [activeTab, setActiveTab] = useState('overview');
+
+  // Copy share feedback
+  const [copiedShare, setCopiedShare] = useState(false);
+
+  // Hover zoom coordinates
+  const [zoomStyle, setZoomStyle] = useState({ display: 'none' });
+
+  // Reset states when product changes
+  useEffect(() => {
+    setActiveImageIndex(0);
+    setSelectedVariant(product.hasVariants && product.variants?.length > 0 ? product.variants[0] : null);
+    setQuantity(1);
+    setActiveTab('overview');
+  }, [product]);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = e => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = 'unset';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  // Calculated Pricing
+  const basePrice = product.sellingPrice || product.price || 0;
+  const variantAdditional = selectedVariant?.additionalPrice || 0;
+  const currentSellingPrice = basePrice + variantAdditional;
+  const currentMrp = (product.mrp || Math.round(basePrice * 1.5)) + variantAdditional;
+  const discountAmount = Math.max(0, currentMrp - currentSellingPrice);
+  const discountPercentage = currentMrp > 0 ? Math.round((discountAmount / currentMrp) * 100) : 0;
+
+  // Current Stock
+  const currentStock = selectedVariant ? selectedVariant.stock : (product.stock ?? 10);
+
+  const handleShare = () => {
+    const url = window.location.href;
+    if (navigator.share) {
+      navigator.share({
+        title: product.title,
+        text: `Check out ${product.title} for ₹${currentSellingPrice}!`,
+        url,
+      }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(url);
+      setCopiedShare(true);
+      setTimeout(() => setCopiedShare(false), 2000);
+    }
+  };
+
+  const handleMouseMove = e => {
+    const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - left) / width) * 100;
+    const y = ((e.clientY - top) / height) * 100;
+    setZoomStyle({
+      display: 'block',
+      transformOrigin: `${x}% ${y}%`,
+    });
+  };
+
+  const handleMouseLeave = () => {
+    setZoomStyle({ display: 'none' });
+  };
+
+  // Structured Specs
+  const specs = product.specifications && product.specifications.length > 0
+    ? product.specifications
+    : [
+        { key: 'Brand', value: product.brand || 'AuraChoice' },
+        { key: 'SKU', value: selectedVariant?.sku || product.sku || 'N/A' },
+        { key: 'Category', value: product.category?.name || 'General' },
+        { key: 'Stock Availability', value: currentStock > 0 ? `${currentStock} Units in Stock` : 'Out of Stock' },
+        { key: 'Warranty', value: '1 Year Brand Manufacturer Warranty' },
+        { key: 'Country of Origin', value: 'India' },
+        { key: 'Condition', value: '100% Brand New & Factory Sealed' },
+      ];
+
+  // Authentic Buyer Reviews Mockup
+  const sampleReviews = [
+    {
+      id: 1,
+      author: 'Rohit Verma',
+      rating: 5,
+      date: '2 days ago',
+      verified: true,
+      title: 'Exceeded my expectations!',
+      comment: 'Audio quality is punchy and build quality feels remarkably premium. Packaging was sturdy and courier arrived with OTP verification within 48 hours.',
+      likes: 12,
+    },
+    {
+      id: 2,
+      author: 'Pooja Nair',
+      rating: 5,
+      date: '1 week ago',
+      verified: true,
+      title: 'Must-buy for everyday use',
+      comment: 'Matches the description 100%. Got an amazing deal during the festive sale. Highly recommended seller!',
+      likes: 8,
+    },
+    {
+      id: 3,
+      author: 'Sameer Khan',
+      rating: 4,
+      date: '2 weeks ago',
+      verified: true,
+      title: 'Great value for money',
+      comment: 'Very solid craftsmanship. Battery backup matches specifications. Fast delivery as well.',
+      likes: 5,
+    },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-fade-in">
+      {/* Click outside backdrop */}
+      <div className="fixed inset-0" onClick={onClose} />
+
+      {/* Main Modal Card */}
+      <div className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden z-10 flex flex-col max-h-[92vh] animate-scale-up">
+        
+        {/* Header Bar */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 sticky top-0 z-20">
+          <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+            <span>Home</span>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-amber-600 font-bold">{product.category?.name || 'Catalog'}</span>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-400 hidden sm:inline" />
+            <span className="font-bold text-slate-800 truncate max-w-[200px] sm:max-w-xs hidden sm:inline">
+              {product.title}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleShare}
+              title="Share Product"
+              className="p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 transition-all relative"
+            >
+              <Share2 className="w-4 h-4" />
+              {copiedShare && (
+                <span className="absolute -bottom-8 right-0 text-[10px] bg-slate-900 text-white px-2 py-0.5 rounded font-bold whitespace-nowrap shadow-md">
+                  Link Copied!
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={e => onToggleWishlist(product, e)}
+              title="Save to Wishlist"
+              className={`p-2 rounded-xl transition-all ${
+                isWishlisted
+                  ? 'text-red-500 bg-red-50 hover:bg-red-100'
+                  : 'text-slate-500 hover:text-red-500 hover:bg-slate-200/60'
+              }`}
+            >
+              <Heart className={`w-4 h-4 ${isWishlisted ? 'fill-current' : ''}`} />
+            </button>
+
+            <button
+              onClick={onClose}
+              title="Close (Esc)"
+              className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-200/60 transition-all"
+            >
+              <X className="w-5 h-5 stroke-[2.5]" />
+            </button>
+          </div>
+        </div>
+
+        {/* Scrollable Content Body */}
+        <div className="overflow-y-auto custom-device-scrollbar flex-1 p-5 sm:p-7">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            {/* LEFT COLUMN: Multi-Image Zoom Gallery (5 Cols) */}
+            <div className="lg:col-span-5 space-y-4">
+              {/* Main Image Container with Lens Zoom on Hover */}
+              <div
+                className="relative aspect-square w-full rounded-2xl bg-slate-100 border border-slate-200/80 overflow-hidden group shadow-inner flex items-center justify-center cursor-crosshair"
+                onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
+              >
+                <img
+                  src={images[activeImageIndex]}
+                  alt={product.title}
+                  className="w-full h-full object-cover transition-transform duration-200"
+                  style={zoomStyle.display === 'block' ? { transform: 'scale(1.5)', ...zoomStyle } : {}}
+                />
+
+                {/* Overlaid Badges */}
+                <div className="absolute top-3 left-3 flex flex-col gap-1.5 pointer-events-none">
+                  {discountPercentage > 0 && (
+                    <span className="px-2.5 py-1 rounded-lg bg-red-600 text-white text-[11px] font-black uppercase tracking-wider shadow-md">
+                      {discountPercentage}% OFF
+                    </span>
+                  )}
+                  {product.isFeatured && (
+                    <span className="px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-black uppercase tracking-wider shadow-md flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" /> Featured Choice
+                    </span>
+                  )}
+                </div>
+
+                {/* Zoom Hint */}
+                <div className="absolute bottom-2.5 right-2.5 bg-slate-900/75 backdrop-blur-sm text-white px-2 py-1 rounded-md text-[10px] font-bold pointer-events-none opacity-80 group-hover:opacity-100 transition-opacity">
+                  🔍 Hover to Zoom
+                </div>
+              </div>
+
+              {/* Thumbnails Row */}
+              {images.length > 1 && (
+                <div className="flex items-center gap-2.5 overflow-x-auto pb-1.5 custom-device-scrollbar">
+                  {images.map((img, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setActiveImageIndex(idx)}
+                      className={`relative w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 rounded-xl overflow-hidden border-2 transition-all ${
+                        activeImageIndex === idx
+                          ? 'border-amber-500 ring-2 ring-amber-400/30 scale-105 shadow-md'
+                          : 'border-slate-200 opacity-70 hover:opacity-100 hover:border-slate-300'
+                      }`}
+                    >
+                      <img src={img} alt={`Angle ${idx + 1}`} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Verified Seller Badge Card */}
+              <div className="p-3.5 rounded-2xl bg-amber-50/60 border border-amber-200/60 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center font-bold">
+                    <Store className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="font-extrabold text-slate-900 flex items-center gap-1.5">
+                      <span>{product.vendor?.storeName || 'Verified Partner Store'}</span>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 fill-emerald-100" />
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      ★ {product.vendor?.rating || '4.8'} Seller Rating • 99% Dispatch Speed
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-black uppercase text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
+                  Official Merchant
+                </span>
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN: Product Details, Pricing, Variants & Actions (7 Cols) */}
+            <div className="lg:col-span-7 space-y-5">
+              
+              {/* Brand & Title */}
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-xs font-black uppercase tracking-wider text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-md border border-amber-200/50">
+                    {product.brand || 'AuraChoice'}
+                  </span>
+                  <span className="text-xs text-slate-400 font-medium">
+                    SKU: {selectedVariant?.sku || product.sku}
+                  </span>
+                </div>
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 leading-snug">
+                  {product.title}
+                </h1>
+              </div>
+
+              {/* Rating & Social Urgency */}
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <div className="flex items-center gap-1 bg-amber-500 text-slate-950 px-2.5 py-1 rounded-lg text-xs font-black shadow-sm">
+                  <span>{product.ratingsAverage || 4.8}</span>
+                  <Star className="w-3.5 h-3.5 fill-current" />
+                </div>
+                <span className="text-xs text-slate-500 font-semibold">
+                  {product.ratingsQuantity || 42} Verified Ratings & Reviews
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> 100% Genuine Guarantee
+                </span>
+              </div>
+
+              {/* Price & Savings Block */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
+                <div className="flex items-baseline gap-3 flex-wrap">
+                  <span className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tight">
+                    ₹{currentSellingPrice.toLocaleString('en-IN')}
+                  </span>
+                  {currentMrp > currentSellingPrice && (
+                    <span className="text-base sm:text-lg text-slate-400 font-bold line-through">
+                      ₹{currentMrp.toLocaleString('en-IN')}
+                    </span>
+                  )}
+                  {discountPercentage > 0 && (
+                    <span className="text-xs font-extrabold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-300">
+                      Save ₹{discountAmount.toLocaleString('en-IN')} ({discountPercentage}% OFF)
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] font-medium text-slate-500">
+                  Inclusive of all taxes • Free express shipping on this order
+                </p>
+              </div>
+
+              {/* Real-time Stock Status */}
+              <div>
+                {currentStock > 10 ? (
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>In Stock — Ready to ship from local fulfillment hub</span>
+                  </div>
+                ) : currentStock > 0 ? (
+                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
+                    <AlertCircle className="w-4 h-4 text-amber-600" />
+                    <span>🔥 Hurry! Only {currentStock} items left in stock — order soon!</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-xl border border-red-200">
+                    <AlertCircle className="w-4 h-4 text-red-600" />
+                    <span>Currently Out of Stock. Join waitlist to get notified.</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Variants Selector */}
+              {product.hasVariants && product.variants?.length > 0 && (
+                <div className="space-y-2.5 pt-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-black uppercase tracking-wider text-slate-700">
+                      Select Variant / Option:
+                    </span>
+                    <span className="text-amber-600 font-bold">
+                      {selectedVariant?.name || 'Please select'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {product.variants.map(variant => {
+                      const isSelected = selectedVariant?.sku === variant.sku;
+                      const varPrice = basePrice + (variant.additionalPrice || 0);
+                      return (
+                        <button
+                          key={variant.sku}
+                          onClick={() => setSelectedVariant(variant)}
+                          className={`p-3 rounded-xl border text-left flex items-center justify-between text-xs font-bold transition-all ${
+                            isSelected
+                              ? 'border-amber-500 bg-amber-50/80 text-slate-950 ring-2 ring-amber-400/30 shadow-sm'
+                              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div>
+                            <span className="font-extrabold block">{variant.name}</span>
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              Stock: {variant.stock} left
+                            </span>
+                          </div>
+                          <span className="font-black text-slate-900">
+                            ₹{varPrice.toLocaleString('en-IN')}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Quantity Selector & Purchase Actions */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center border-2 border-slate-200 rounded-xl bg-white overflow-hidden font-extrabold text-sm">
+                    <button
+                      onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                      disabled={quantity <= 1}
+                      className="px-3.5 py-2.5 text-slate-600 hover:text-slate-950 hover:bg-slate-100 disabled:opacity-40 transition-colors"
+                    >
+                      -
+                    </button>
+                    <span className="px-4 py-2.5 text-slate-950 text-center select-none font-black min-w-[40px]">
+                      {quantity}
+                    </span>
+                    <button
+                      onClick={() => setQuantity(q => Math.min(currentStock || 10, q + 1))}
+                      disabled={quantity >= currentStock}
+                      className="px-3.5 py-2.5 text-slate-600 hover:text-slate-950 hover:bg-slate-100 disabled:opacity-40 transition-colors"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      onAddToCart(product, selectedVariant, quantity);
+                    }}
+                    disabled={currentStock <= 0}
+                    className="flex-1 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black text-sm shadow-lg hover:shadow-xl transition-all transform active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ShoppingBag className="w-4 h-4 stroke-[2.5]" />
+                    <span>Add to Cart</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onBuyNow(product, selectedVariant, quantity);
+                    }}
+                    disabled={currentStock <= 0}
+                    className="flex-1 py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white font-black text-sm shadow-lg hover:shadow-xl transition-all transform active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Zap className="w-4 h-4 fill-amber-400 text-amber-400 stroke-none" />
+                    <span>Buy Now</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Trust Badges Bar */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2 border-t border-slate-100 text-[11px]">
+                <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-700">
+                  <Truck className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                  <span className="font-bold leading-tight">Express 48h Delivery</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-700">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <span className="font-bold leading-tight">1-Year Warranty</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-700">
+                  <RotateCcw className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                  <span className="font-bold leading-tight">7-Day Free Returns</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-700">
+                  <CheckCircle2 className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                  <span className="font-bold leading-tight">OTP Delivery Proof</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* BOTTOM TABS SECTION: Overview | Specifications | Reviews | Seller Info */}
+          <div className="mt-8 pt-6 border-t border-slate-200">
+            {/* Tab Navigation Buttons */}
+            <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 pb-px">
+              {[
+                { id: 'overview', label: '📖 Overview & Description' },
+                { id: 'specs', label: `⚙️ Specifications (${specs.length})` },
+                { id: 'reviews', label: `⭐ Reviews & Ratings (${sampleReviews.length})` },
+                { id: 'seller', label: '🏪 Merchant Information' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-4 py-3 text-xs font-black rounded-t-xl transition-all whitespace-nowrap border-b-2 ${
+                    activeTab === tab.id
+                      ? 'border-amber-500 text-slate-950 bg-amber-50/50'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab Contents */}
+            <div className="py-5">
+              
+              {/* TAB 1: OVERVIEW */}
+              {activeTab === 'overview' && (
+                <div className="space-y-4 text-slate-700 text-xs sm:text-sm leading-relaxed animate-fade-in">
+                  <p className="font-medium text-slate-600">{product.description}</p>
+                  
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                    <h4 className="font-black text-slate-900 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Key Product Highlights
+                    </h4>
+                    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-600 font-medium">
+                      <li className="flex items-center gap-2">
+                        <Check className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                        <span>Engineered with premium durable materials for long-lasting performance</span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                        <span>Factory calibrated for optimal acoustics and energy efficiency</span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                        <span>Seamless compatibility across Android, iOS, and PC ecosystems</span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                        <span>Certified BIS / CE standards with full manufacturer compliance</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="text-[11px] text-slate-400">
+                    <span className="font-bold text-slate-600">Tags: </span>
+                    {product.tags?.map((t, idx) => (
+                      <span key={idx} className="mr-1.5 px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                        #{t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: SPECIFICATIONS */}
+              {activeTab === 'specs' && (
+                <div className="space-y-3 animate-fade-in">
+                  <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                    <table className="w-full text-xs text-left">
+                      <tbody>
+                        {specs.map((item, idx) => (
+                          <tr
+                            key={idx}
+                            className={`border-b border-slate-100 last:border-0 ${
+                              idx % 2 === 0 ? 'bg-slate-50/70' : 'bg-white'
+                            }`}
+                          >
+                            <td className="py-3 px-4 font-black text-slate-800 w-1/3 sm:w-1/4">
+                              {item.key}
+                            </td>
+                            <td className="py-3 px-4 font-semibold text-slate-600">
+                              {item.value}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: REVIEWS & RATINGS */}
+              {activeTab === 'reviews' && (
+                <div className="space-y-6 animate-fade-in">
+                  {/* Reviews Summary Stats */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-5 rounded-2xl bg-slate-50 border border-slate-200">
+                    <div className="text-center sm:text-left sm:border-r border-slate-200 sm:pr-4">
+                      <div className="text-4xl font-black text-slate-900">
+                        {product.ratingsAverage || 4.8}
+                      </div>
+                      <div className="flex items-center justify-center sm:justify-start gap-1 my-1 text-amber-500">
+                        {[...Array(5)].map((_, i) => (
+                          <Star key={i} className="w-4 h-4 fill-current" />
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-bold">
+                        Based on {product.ratingsQuantity || 42} verified customer reviews
+                      </p>
+                    </div>
+
+                    <div className="sm:col-span-2 space-y-1.5 text-[11px] font-bold text-slate-600">
+                      {[
+                        { star: 5, pct: '82%' },
+                        { star: 4, pct: '12%' },
+                        { star: 3, pct: '4%' },
+                        { star: 2, pct: '1%' },
+                        { star: 1, pct: '1%' },
+                      ].map(bar => (
+                        <div key={bar.star} className="flex items-center gap-2">
+                          <span className="w-8">{bar.star} ★</span>
+                          <div className="flex-1 h-2 rounded-full bg-slate-200 overflow-hidden">
+                            <div className="h-full bg-amber-500 rounded-full" style={{ width: bar.pct }} />
+                          </div>
+                          <span className="w-8 text-right text-slate-400">{bar.pct}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Customer Review Cards */}
+                  <div className="space-y-3">
+                    {sampleReviews.map(rev => (
+                      <div key={rev.id} className="p-4 rounded-2xl border border-slate-200 bg-white space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-900 font-black flex items-center justify-center text-xs">
+                              {rev.author[0]}
+                            </div>
+                            <div>
+                              <span className="font-extrabold text-slate-900">{rev.author}</span>
+                              {rev.verified && (
+                                <span className="ml-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                  ✓ Verified Buyer
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-[11px] text-slate-400">{rev.date}</span>
+                        </div>
+
+                        <div className="flex items-center gap-1 text-amber-500">
+                          {[...Array(rev.rating)].map((_, i) => (
+                            <Star key={i} className="w-3.5 h-3.5 fill-current" />
+                          ))}
+                        </div>
+
+                        <h5 className="font-extrabold text-slate-900 text-xs">{rev.title}</h5>
+                        <p className="text-xs text-slate-600 leading-relaxed">{rev.comment}</p>
+
+                        <div className="flex items-center gap-2 pt-1 text-[11px] text-slate-400">
+                          <button className="flex items-center gap-1 hover:text-slate-700">
+                            <ThumbsUp className="w-3 h-3" /> Helpful ({rev.likes})
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: SELLER INFORMATION */}
+              {activeTab === 'seller' && (
+                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4 animate-fade-in text-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-xl shadow-md">
+                      {product.vendor?.storeName?.[0] || 'A'}
+                    </div>
+                    <div>
+                      <h4 className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                        {product.vendor?.storeName || 'AuraAudio Verified Merchant'}
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 fill-emerald-100" />
+                      </h4>
+                      <p className="text-slate-500 text-[11px]">
+                        Registered Marketplace Merchant since 2024
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="text-slate-600 font-medium">
+                    {product.vendor?.description ||
+                      'Authorized distributor offering genuine branded products with official warranty and direct doorstep express shipping.'}
+                  </p>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2">
+                    <div className="p-3 rounded-xl bg-white border border-slate-200">
+                      <span className="text-[10px] text-slate-400 font-bold block uppercase">Seller Rating</span>
+                      <span className="text-sm font-black text-slate-900">★ {product.vendor?.rating || '4.8'} / 5.0</span>
+                    </div>
+                    <div className="p-3 rounded-xl bg-white border border-slate-200">
+                      <span className="text-[10px] text-slate-400 font-bold block uppercase">Fulfillment Rate</span>
+                      <span className="text-sm font-black text-emerald-700">99.4% On Time</span>
+                    </div>
+                    <div className="p-3 rounded-xl bg-white border border-slate-200">
+                      <span className="text-[10px] text-slate-400 font-bold block uppercase">Returns Accepted</span>
+                      <span className="text-sm font-black text-slate-900">7 Days Return</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  );
+};

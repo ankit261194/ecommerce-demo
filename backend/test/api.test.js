@@ -198,6 +198,18 @@ const runTests = async () => {
       assert.ok(data.data.vendor.storeName);
     });
 
+    await test('Point 1: GET /products/:slug returns rich specifications, multi-image gallery, and variants for PDP', async () => {
+      const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data.images) && data.data.images.length >= 2, 'Product must have multiple gallery images');
+      assert.ok(Array.isArray(data.data.specifications) && data.data.specifications.length >= 4, 'Product must have detailed specifications');
+      assert.ok(data.data.specifications.some(s => s.key === 'Battery Life'), 'Specifications must include attributes like Battery Life');
+      assert.ok(data.data.hasVariants && data.data.variants.length > 0, 'Product must include variant details');
+      assert.ok(data.data.vendor && data.data.vendor.storeName, 'Product must include vendor store information');
+    });
+
     // 5. Vendor Portal Actions
     let createdProductId;
 

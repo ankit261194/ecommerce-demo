@@ -142,6 +142,8 @@ const seedDemoData = async () => {
       images: [
         'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800',
         'https://images.unsplash.com/photo-1484704849700-f032a568e944?w=800',
+        'https://images.unsplash.com/photo-1583394838336-acd977736f90?w=800',
+        'https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=800',
       ],
       mrp: 14999,
       sellingPrice: 8999,
@@ -151,6 +153,16 @@ const seedDemoData = async () => {
       variants: [
         { sku: 'APX-HEAD-BLK', name: 'Obsidian Black', attributes: { color: 'Black' }, additionalPrice: 0, stock: 25 },
         { sku: 'APX-HEAD-SLV', name: 'Silver Matte', attributes: { color: 'Silver' }, additionalPrice: 500, stock: 20 },
+      ],
+      specifications: [
+        { key: 'Driver Unit', value: '40mm Custom Titanium Drivers' },
+        { key: 'Noise Cancellation', value: 'Hybrid Active Noise Cancellation (-38dB)' },
+        { key: 'Battery Life', value: '40 Hours (ANC On) / 55 Hours (ANC Off)' },
+        { key: 'Charging', value: 'USB Type-C Fast Charge (10 min = 5 hours playback)' },
+        { key: 'Bluetooth Version', value: 'Bluetooth 5.3 with Multipoint Connect' },
+        { key: 'Microphones', value: 'Quad-mic array with AI ENC voice isolation' },
+        { key: 'Weight', value: '248 grams' },
+        { key: 'Warranty', value: '1 Year Brand Replacement Warranty' },
       ],
       ratingsAverage: 4.8,
       ratingsQuantity: 42,
@@ -166,12 +178,23 @@ const seedDemoData = async () => {
       brand: 'AeroTech',
       images: [
         'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800',
+        'https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=800',
+        'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=800',
       ],
       mrp: 9999,
       sellingPrice: 4499,
       stock: 30,
       sku: 'APX-WTCH-002',
       hasVariants: false,
+      specifications: [
+        { key: 'Display', value: '2.02 inch Ultra AMOLED (500 nits peak brightness)' },
+        { key: 'Chassis Material', value: 'Aerospace Grade Titanium Case' },
+        { key: 'Sensors', value: 'Optical Heart Rate, SpO2, ECG, Pedometer' },
+        { key: 'Water Resistance', value: 'IP68 & 5ATM Water Resistant (Up to 50m)' },
+        { key: 'Battery Life', value: '420mAh Lithium-Polymer (Up to 7 Days typical use)' },
+        { key: 'Compatibility', value: 'Android 8.0+ & iOS 12.0+' },
+        { key: 'Warranty', value: '1 Year Manufacturer Warranty' },
+      ],
       ratingsAverage: 4.7,
       ratingsQuantity: 38,
       isFeatured: true,
@@ -186,6 +209,8 @@ const seedDemoData = async () => {
       brand: 'Vogue Urban',
       images: [
         'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=800',
+        'https://images.unsplash.com/photo-1509967419530-da38b4704bc6?w=800',
+        'https://images.unsplash.com/photo-1578587018452-892bacefd3f2?w=800',
       ],
       mrp: 3999,
       sellingPrice: 1999,
@@ -196,6 +221,13 @@ const seedDemoData = async () => {
         { sku: 'VOG-HOD-M', name: 'Medium / Obsidian', attributes: { size: 'M', color: 'Obsidian' }, additionalPrice: 0, stock: 20 },
         { sku: 'VOG-HOD-L', name: 'Large / Obsidian', attributes: { size: 'L', color: 'Obsidian' }, additionalPrice: 0, stock: 25 },
         { sku: 'VOG-HOD-XL', name: 'XL / Obsidian', attributes: { size: 'XL', color: 'Obsidian' }, additionalPrice: 100, stock: 15 },
+      ],
+      specifications: [
+        { key: 'Fabric Composition', value: '100% Combed French Terry Cotton (450 GSM)' },
+        { key: 'Fit Type', value: 'Oversized Streetwear Drop-Shoulder Silhouette' },
+        { key: 'Wash Care', value: 'Machine Wash Cold Inside-Out, Do Not Bleach' },
+        { key: 'Pockets', value: 'Kangaroo Front Pocket with Reinforced Double-Stitch' },
+        { key: 'Country of Origin', value: 'India' },
       ],
       ratingsAverage: 4.9,
       ratingsQuantity: 84,
@@ -211,12 +243,20 @@ const seedDemoData = async () => {
       brand: 'Vogue Luxe',
       images: [
         'https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=800',
+        'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=800',
       ],
       mrp: 7999,
       sellingPrice: 4299,
       stock: 25,
       sku: 'VOG-BLZ-002',
       hasVariants: false,
+      specifications: [
+        { key: 'Material', value: '100% Pure European Breathable Linen' },
+        { key: 'Lining', value: 'Half-Lined Soft Breathable Viscose' },
+        { key: 'Fit', value: 'Slim-Tailored Unstructured Silhouette' },
+        { key: 'Buttons', value: 'Natural Horn Buttons with Contrast Thread' },
+        { key: 'Care Instructions', value: 'Dry Clean Recommended' },
+      ],
       ratingsAverage: 4.6,
       ratingsQuantity: 19,
       isFeatured: false,
@@ -228,6 +268,8 @@ const seedDemoData = async () => {
     const existing = await Product.findOne({ slug: prod.slug });
     if (!existing) {
       await Product.create(prod);
+    } else {
+      await Product.findByIdAndUpdate(existing._id, { $set: prod });
     }
   }
 

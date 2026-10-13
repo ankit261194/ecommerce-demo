@@ -20,8 +20,10 @@ import {
   Check,
   X,
   MapPin,
+  Eye,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
+import { ProductDetailModal } from '../components/ProductDetailModal';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -592,8 +594,19 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                       {discount}% OFF
                     </div>
 
-                    {/* Quick Actions: Share & Wishlist Heart */}
+                    {/* Quick Actions: Quick View Eye, Share & Wishlist Heart */}
                     <div className="absolute top-2 right-2 sm:top-3 sm:right-3 flex items-center gap-1 sm:gap-1.5 z-10">
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          setSelectedProduct(product);
+                          if (product.hasVariants) setSelectedVariant(product.variants[0]);
+                        }}
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/90 hover:bg-white text-slate-700 hover:text-amber-600 flex items-center justify-center shadow-md backdrop-blur transition-all active:scale-90"
+                        title="Quick View Details"
+                      >
+                        <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      </button>
                       <button
                         onClick={e => handleShareProduct(product, e)}
                         className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/90 hover:bg-white text-slate-700 hover:text-slate-950 flex items-center justify-center shadow-md backdrop-blur transition-all active:scale-90"
@@ -688,69 +701,28 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         </div>
       </div>
 
-      {/* Product Variant Quick-Select Drawer */}
-      <SlideOverDrawer
-        isOpen={!!selectedProduct}
+      {/* Rich Product Detail Page (PDP) & Quick-View Modal */}
+      <ProductDetailModal
+        product={selectedProduct}
+        isOpen={Boolean(selectedProduct)}
         onClose={() => setSelectedProduct(null)}
-        title={selectedProduct?.title || 'Product Options'}
-        width="max-w-md"
-      >
-        {selectedProduct && (
-          <div className="space-y-6 text-slate-800">
-            <img
-              src={selectedProduct.images[0]}
-              alt={selectedProduct.title}
-              className="w-full h-56 object-cover rounded-xl shadow-md"
-            />
-
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-amber-600">Verified Seller: {selectedProduct.vendor.storeName}</span>
-                <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">
-                  Stock: {selectedProduct.stock} Available
-                </span>
-              </div>
-              <h3 className="text-lg font-black text-slate-900 mt-1">{selectedProduct.title}</h3>
-              <p className="text-xs text-slate-600 mt-2 leading-relaxed">{selectedProduct.description}</p>
-            </div>
-
-            {selectedProduct.hasVariants && (
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase text-slate-500">Choose Option / Variant</label>
-                <div className="space-y-2">
-                  {selectedProduct.variants.map(variant => (
-                    <button
-                      key={variant.sku}
-                      onClick={() => setSelectedVariant(variant)}
-                      className={`w-full p-3.5 rounded-xl border text-left flex items-center justify-between text-xs font-bold transition-all ${
-                        selectedVariant?.sku === variant.sku
-                          ? 'border-amber-500 bg-amber-50 text-slate-950 ring-2 ring-amber-400/30'
-                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                      }`}
-                    >
-                      <span className="font-extrabold">{variant.name}</span>
-                      <span className="text-slate-900 font-black">
-                        ₹{(selectedProduct.sellingPrice + variant.additionalPrice).toLocaleString('en-IN')}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={() => {
-                addToCart(selectedProduct, selectedVariant);
-                setSelectedProduct(null);
-              }}
-              className="w-full py-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm shadow-lg flex items-center justify-center gap-2 transition-all"
-            >
-              <ShoppingBag className="w-4 h-4" />
-              <span>Confirm & Add to Cart</span>
-            </button>
-          </div>
-        )}
-      </SlideOverDrawer>
+        onAddToCart={(prod, variant, qty = 1) => {
+          for (let i = 0; i < qty; i++) {
+            addToCart(prod, variant);
+          }
+          setToastMessage(`Added ${qty}x ${prod.title} to cart! 🛍️`);
+          setTimeout(() => setToastMessage(null), 2500);
+        }}
+        onBuyNow={(prod, variant, qty = 1) => {
+          for (let i = 0; i < qty; i++) {
+            addToCart(prod, variant);
+          }
+          setSelectedProduct(null);
+          setIsCartOpen(true);
+        }}
+        isWishlisted={selectedProduct ? wishlist.includes(selectedProduct._id) : false}
+        onToggleWishlist={toggleWishlist}
+      />
 
       {/* Cart & Multi-Vendor Split Checkout SlideOver Drawer */}
       <SlideOverDrawer

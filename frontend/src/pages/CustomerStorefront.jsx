@@ -1585,6 +1585,13 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         }}
         isWishlisted={selectedProduct ? wishlist.includes(selectedProduct._id) : false}
         onToggleWishlist={toggleWishlist}
+        onSelectProduct={(prod) => {
+          const fullProduct = products.find(p => p._id === prod._id || p.slug === prod.slug) || prod;
+          setSelectedProduct(fullProduct);
+          if (fullProduct.hasVariants && fullProduct.variants?.length > 0) {
+            setSelectedVariant(fullProduct.variants[0]);
+          }
+        }}
       />
 
       {/* Point #17: Dedicated Wishlist Slide-Over Drawer */}

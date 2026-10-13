@@ -776,6 +776,25 @@ const runTests = async () => {
       assert.ok(data.pricing.totalBundleSavings > 0, 'Must provide total bundle savings');
     });
 
+    await test('Point 21: Related Products & Customers Also Viewed: GET /products/:identifier/recommendations returns categorized and popular items', async () => {
+      const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}/recommendations`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.related), 'Related products must be an array');
+      assert.ok(data.related.length >= 1, 'Must return at least 1 related product');
+      assert.ok(Array.isArray(data.alsoViewed), 'Customers also viewed must be an array');
+      assert.ok(data.alsoViewed.length >= 1, 'Must return at least 1 also viewed product');
+
+      // Verify structure of recommended product
+      const item = data.related[0];
+      assert.ok(item._id, 'Recommended product must have _id');
+      assert.ok(item.title, 'Recommended product must have title');
+      assert.ok(item.sellingPrice > 0, 'Recommended product must have sellingPrice');
+      assert.ok(item.stockUrgency, 'Recommended product must have stockUrgency');
+      assert.ok(item.ratingsAverage >= 0, 'Recommended product must have ratingsAverage');
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

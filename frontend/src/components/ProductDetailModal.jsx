@@ -24,6 +24,7 @@ import RecentPurchaseCounter from './RecentPurchaseCounter';
 import ProductReviewsSection from './ProductReviewsSection';
 import ProductQnASection from './ProductQnASection';
 import FrequentlyBoughtTogether from './FrequentlyBoughtTogether';
+import { ProductRecommendationSlider } from './ProductRecommendationSlider';
 
 export const ProductDetailModal = ({
   product,
@@ -33,6 +34,7 @@ export const ProductDetailModal = ({
   onBuyNow,
   isWishlisted,
   onToggleWishlist,
+  onSelectProduct,
 }) => {
   if (!isOpen || !product) return null;
 
@@ -808,6 +810,24 @@ export const ProductDetailModal = ({
               )}
 
             </div>
+          </div>
+
+          {/* Point #21: Related Products & Customers Also Viewed Recommendation Sliders */}
+          <div className="mt-6 pt-4 border-t border-slate-200">
+            <ProductRecommendationSlider
+              productId={product._id}
+              mainProduct={product}
+              onSelectProduct={(item) => {
+                if (onSelectProduct) {
+                  onSelectProduct(item);
+                }
+              }}
+              onAddToCart={(item, variant, qty) => {
+                if (onAddToCart) {
+                  onAddToCart(item, variant, qty);
+                }
+              }}
+            />
           </div>
 
         </div>

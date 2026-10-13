@@ -795,6 +795,106 @@ exports.getProductBundle = async (req, res, next) => {
   }
 };
 
+// Point #21: Related Products & "Customers Also Viewed" recommendation sliders
+// @route   GET /api/products/:identifier/recommendations
+exports.getProductRecommendations = async (req, res, next) => {
+  try {
+    const { identifier } = req.params;
+    const mongoose = require('mongoose');
+    const isMongoId = mongoose.Types.ObjectId.isValid(identifier);
+
+    const mainProduct = await Product.findOne(
+      isMongoId ? { _id: identifier } : { slug: identifier }
+    ).populate('category subCategory');
+
+    if (!mainProduct) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found',
+      });
+    }
+
+    const formatProduct = (p) => {
+      const mrp = p.mrp || Math.round((p.sellingPrice || p.price) * 1.35);
+      const sellingPrice = p.sellingPrice || p.price || 0;
+      const discountPercent = mrp > sellingPrice ? Math.round(((mrp - sellingPrice) / mrp) * 100) : 0;
+      return {
+        _id: p._id,
+        title: p.title,
+        slug: p.slug,
+        brand: p.brand || 'Generic',
+        image: p.images?.[0] || p.image,
+        images: p.images || [p.image],
+        sellingPrice,
+        price: sellingPrice,
+        mrp,
+        discountPercent,
+        stock: p.stock,
+        stockUrgency: calculateStockUrgency(p.stock),
+        ratingsAverage: p.ratingsAverage || 4.5,
+        ratingsQuantity: p.ratingsQuantity || 12,
+        recentPurchases24h: getPurchaseVelocity(p),
+        category: p.category,
+        subCategory: p.subCategory,
+      };
+    };
+
+    // 1. Related Products: Same category or subcategory (excluding current product)
+    let related = await Product.find({
+      _id: { $ne: mainProduct._id },
+      isPublished: true,
+      $or: [
+        { category: mainProduct.category?._id || mainProduct.category },
+        ...(mainProduct.subCategory ? [{ subCategory: mainProduct.subCategory?._id || mainProduct.subCategory }] : []),
+      ],
+    })
+      .sort({ ratingsAverage: -1, stock: -1 })
+      .limit(6);
+
+    // If related count is low, add other published products
+    if (related.length < 2) {
+      const excludedIds = [mainProduct._id, ...related.map(r => r._id)];
+      const fillers = await Product.find({
+        _id: { $nin: excludedIds },
+        isPublished: true,
+      })
+        .sort({ ratingsAverage: -1 })
+        .limit(4 - related.length);
+      related = [...related, ...fillers];
+    }
+
+    // 2. Customers Also Viewed: complementary or high-velocity items
+    let alsoViewed = await Product.find({
+      _id: { $ne: mainProduct._id, $nin: related.map(r => r._id) },
+      isPublished: true,
+    })
+      .sort({ recentViewsPerHour: -1, ratingsQuantity: -1, ratingsAverage: -1 })
+      .limit(6);
+
+    // If alsoViewed is empty because related contains all other catalog products,
+    // take the other catalog items so this slider is also populated and rich
+    if (alsoViewed.length === 0) {
+      alsoViewed = await Product.find({
+        _id: { $ne: mainProduct._id },
+        isPublished: true,
+      })
+        .sort({ recentViewsPerHour: -1, ratingsAverage: -1 })
+        .limit(6);
+    }
+
+    res.status(200).json({
+      success: true,
+      mainProductId: mainProduct._id,
+      categoryName: mainProduct.category?.name || 'Category',
+      related: related.map(formatProduct),
+      alsoViewed: alsoViewed.map(formatProduct),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
 
 
 

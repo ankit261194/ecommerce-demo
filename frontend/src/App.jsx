@@ -9,7 +9,7 @@ import { CustomerStorefront } from './pages/CustomerStorefront';
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { VendorPortal } from './pages/VendorPortal';
 import { CourierDashboard } from './pages/CourierDashboard';
-import { ShoppingBag, Flame, Layers, LayoutGrid, MessageCircle, Phone, BookOpen } from 'lucide-react';
+import { ShoppingBag, Flame, Layers, LayoutGrid, MessageCircle, Phone, BookOpen, ChevronUp } from 'lucide-react';
 import api from './api/client';
 
 const MainLayout = () => {
@@ -19,6 +19,8 @@ const MainLayout = () => {
   const [isBarCollapsed, setIsBarCollapsed] = useState(false);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const [showBackToTop, setShowBackToTop] = useState(false);
 
   const { switchPersona } = useAuth();
   const { cartCount, setIsCartOpen, clearCart } = useCart();
@@ -281,6 +283,51 @@ const MainLayout = () => {
     }
   }, [uiConfig?.seo, uiConfig?.storeName, uiConfig?.supportPhone]);
 
+  // Universal Scroll Progress Tracker & Floating Back to Top Button
+  useEffect(() => {
+    const handleScroll = () => {
+      const totalScroll = document.documentElement.scrollTop || document.body.scrollTop;
+      const windowHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      if (windowHeight > 0) {
+        const progress = (totalScroll / windowHeight) * 100;
+        setScrollProgress(Math.min(100, Math.max(0, progress)));
+      } else {
+        setScrollProgress(0);
+      }
+      setShowBackToTop(totalScroll > 240);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const renderScrollIndicators = () => (
+    <>
+      {/* Universal Top Reading Progress Indicator */}
+      <div className="fixed top-0 left-0 right-0 h-1 bg-slate-200/50 z-50 pointer-events-none">
+        <div
+          className="h-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-600 transition-all duration-75 shadow-sm"
+          style={{ width: `${scrollProgress}%` }}
+        />
+      </div>
+
+      {/* Floating Back to Top Button */}
+      {showBackToTop && (
+        <button
+          onClick={scrollToTop}
+          title="Scroll to top"
+          aria-label="Scroll to top"
+          className="fixed bottom-6 right-6 z-40 p-3 rounded-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-1 active:translate-y-0 flex items-center justify-center border-2 border-white ring-2 ring-amber-500/30"
+        >
+          <ChevronUp className="w-5 h-5 text-slate-950 stroke-[2.5]" />
+        </button>
+      )}
+    </>
+  );
 
   const handleResetDemo = () => {
     clearCart();
@@ -490,6 +537,7 @@ const MainLayout = () => {
   if (activeTab === 'hub') {
     return (
       <>
+        {renderScrollIndicators()}
         <DemoHub
           onSelectPortal={handleSelectPortalFromHub}
           uiConfig={uiConfig}
@@ -506,6 +554,7 @@ const MainLayout = () => {
   // If viewing a specific portal, render with the CodeCanyon top demo toolbar
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
+      {renderScrollIndicators()}
       {/* CodeCanyon Style Top Demo Control Toolbar */}
       <DemoToolbar
         deviceMode={deviceMode}

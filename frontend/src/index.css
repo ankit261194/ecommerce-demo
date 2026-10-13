@@ -3,6 +3,12 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    overflow-y: scroll !important;
+    scrollbar-gutter: stable;
+    scroll-behavior: smooth;
+  }
+
   body {
     background-color: #f8fafc;
     color: #0f172a;
@@ -11,42 +17,92 @@
   }
 }
 
-/* Sleek subtle scrollbar */
+/* Universal High-Visibility Scrollbar for Chrome, Edge, Safari */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
+  display: block !important;
 }
+
 ::-webkit-scrollbar-track {
   background: #f1f5f9;
+  border-left: 1px solid #e2e8f0;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 9999px;
-}
-::-webkit-scrollbar-thumb:hover {
   background: #f59e0b;
+  border-radius: 9999px;
+  border: 2px solid #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #d97706;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: #b45309;
+}
+
+/* Firefox standard scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #f59e0b #f1f5f9;
+}
+
+/* Ensure all scrollable panels (drawers, modals, simulators, tables) show prominent scrollbars */
+.overflow-y-auto,
+.overflow-x-auto,
+.overflow-y-scroll,
+.overflow-x-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #f59e0b #f1f5f9;
+}
+
+.overflow-y-auto::-webkit-scrollbar,
+.overflow-x-auto::-webkit-scrollbar,
+.overflow-y-scroll::-webkit-scrollbar,
+.overflow-x-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  display: block !important;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track,
+.overflow-x-auto::-webkit-scrollbar-track,
+.overflow-y-scroll::-webkit-scrollbar-track,
+.overflow-x-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb,
+.overflow-x-auto::-webkit-scrollbar-thumb,
+.overflow-y-scroll::-webkit-scrollbar-thumb,
+.overflow-x-scroll::-webkit-scrollbar-thumb {
+  background: #f59e0b;
+  border-radius: 9999px;
 }
 
 /* High-Visibility Custom Device Scrollbar (Always visible & draggable in Simulator) */
 .custom-device-scrollbar::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
+  display: block !important;
 }
 .custom-device-scrollbar::-webkit-scrollbar-track {
   background: #e2e8f0;
   border-radius: 9999px;
 }
 .custom-device-scrollbar::-webkit-scrollbar-thumb {
-  background: #0f2444;
+  background: #f59e0b;
   border-radius: 9999px;
-  border: 1px solid #cbd5e1;
+  border: 2px solid #e2e8f0;
 }
 .custom-device-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #f59e0b;
+  background: #d97706;
 }
 .custom-device-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: #0f2444 #e2e8f0;
+  scrollbar-width: auto;
+  scrollbar-color: #f59e0b #e2e8f0;
 }
 
 /* Crisp Clean Card Styles (Replacing dark glassmorphism) */

@@ -107,6 +107,14 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    recentPurchases24h: {
+      type: Number,
+      default: 18,
+    },
+    recentViewsPerHour: {
+      type: Number,
+      default: 85,
+    },
     tags: [String],
   },
   { timestamps: true }

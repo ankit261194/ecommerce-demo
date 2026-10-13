@@ -20,6 +20,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import StockUrgencyBadge from './StockUrgencyBadge';
+import RecentPurchaseCounter from './RecentPurchaseCounter';
 
 export const ProductDetailModal = ({
   product,
@@ -399,6 +400,13 @@ export const ProductDetailModal = ({
                   <CheckCircle2 className="w-3 h-3" /> 100% Genuine Guarantee
                 </span>
               </div>
+
+              {/* Live Recent Purchase Counter & Viewers Velocity (Point #13) */}
+              <RecentPurchaseCounter
+                purchases={product.recentPurchases24h}
+                viewers={product.recentViewsPerHour}
+                variant="banner"
+              />
 
               {/* Price & Savings Block */}
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">

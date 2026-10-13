@@ -34,6 +34,7 @@ import { ProductDetailModal } from '../components/ProductDetailModal';
 import CategorySidebar from '../components/CategorySidebar';
 import FlashSaleSection from '../components/FlashSaleSection';
 import StockUrgencyBadge from '../components/StockUrgencyBadge';
+import RecentPurchaseCounter from '../components/RecentPurchaseCounter';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -1417,9 +1418,14 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                         </span>
                       </div>
 
-                      {/* Real-time Stock Urgency Badge (Point #12) */}
-                      <div className="pt-0.5">
+                      {/* Real-time Stock Urgency Badge & Recent Purchase Counter (Points #12 & #13) */}
+                      <div className="pt-0.5 flex items-center justify-between gap-1 flex-wrap">
                         <StockUrgencyBadge stock={product.stock} variant="compact" />
+                        <RecentPurchaseCounter
+                          purchases={product.recentPurchases24h}
+                          viewers={product.recentViewsPerHour}
+                          variant="pill"
+                        />
                       </div>
 
                       {product.stock <= 0 ? (

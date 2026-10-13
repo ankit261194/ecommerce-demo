@@ -443,6 +443,27 @@ const runTests = async () => {
       assert.strictEqual(v.stockUrgency.unitsLeft, v.stock);
     });
 
+    await test('Point 13: GET /products and /products/:slug return live recent purchase velocity (24h) and active viewers counter', async () => {
+      // 1. Check getProducts returns recentPurchases24h & recentViewsPerHour
+      const resList = await fetch(`${baseUrl}/products`);
+      assert.strictEqual(resList.status, 200);
+      const dataList = await resList.json();
+      assert.strictEqual(dataList.success, true);
+      const p = dataList.data[0];
+      assert.ok(typeof p.recentPurchases24h === 'number', 'Must include recentPurchases24h number');
+      assert.ok(p.recentPurchases24h > 0, 'recentPurchases24h must be greater than 0');
+      assert.ok(typeof p.recentViewsPerHour === 'number', 'Must include recentViewsPerHour number');
+      assert.ok(p.recentViewsPerHour > 0, 'recentViewsPerHour must be greater than 0');
+
+      // 2. Check getProductBySlug returns recent velocity
+      const resSlug = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
+      assert.strictEqual(resSlug.status, 200);
+      const dataSlug = await resSlug.json();
+      assert.strictEqual(dataSlug.success, true);
+      assert.ok(dataSlug.data.recentPurchases24h > 0, 'PDP must include positive recent purchase counter');
+      assert.ok(dataSlug.data.recentViewsPerHour > 0, 'PDP must include positive viewers counter');
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

@@ -417,7 +417,7 @@ exports.getOrderById = async (req, res, next) => {
   }
 };
 
-// @desc    Cancel an order
+// @desc    Cancel an order (Point #28: 1-Click Self-Cancel Order Before Dispatch)
 // @route   POST /api/orders/:id/cancel
 exports.cancelOrder = async (req, res, next) => {
   try {
@@ -441,13 +441,31 @@ exports.cancelOrder = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Order is already cancelled' });
     }
 
+    // Point #28 Guardrail: Before-dispatch verification for customer self-cancellation
+    if (req.user.role !== 'superadmin') {
+      const isAlreadyDispatched = order.subOrders.some(sub =>
+        ['dispatched', 'out_for_delivery', 'delivered'].includes(sub.status)
+      );
+      if (isAlreadyDispatched) {
+        return res.status(400).json({
+          success: false,
+          message: 'Order cannot be self-cancelled after dispatch. The shipment is already in transit with courier partner. Please initiate a Return after delivery.',
+        });
+      }
+    }
+
+    const reason = req.body.reason || (req.user.role === 'superadmin' ? 'Cancelled by platform admin' : 'Cancelled by customer before dispatch');
+    order.cancellationReason = reason;
+    order.cancelledAt = new Date();
+
     for (const sub of order.subOrders) {
       if (sub.status !== 'delivered' && sub.status !== 'cancelled') {
         sub.status = 'cancelled';
+        sub.cancellationReason = reason;
         sub.trackingHistory.push({
           status: 'cancelled',
           timestamp: new Date(),
-          note: `Order cancelled by ${req.user.role === 'superadmin' ? 'Admin' : 'Customer'}`,
+          note: `Order cancelled: ${reason}`,
         });
         await sub.save();
 
@@ -482,7 +500,7 @@ exports.cancelOrder = async (req, res, next) => {
             subOrder: sub._id,
             type: 'REFUND',
             amount: sub.vendorEarning,
-            description: `Refund/Reversal for cancelled SubOrder #${sub._id.toString().slice(-6)}`,
+            description: `Refund/Reversal for cancelled SubOrder #${sub._id.toString().slice(-6)}: ${reason}`,
             balanceAfter: vendor.walletBalance,
             status: 'COMPLETED',
           });
@@ -505,7 +523,7 @@ exports.cancelOrder = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: 'Order cancelled successfully! Stock restored and vendor ledgers adjusted.',
+      message: 'Order cancelled successfully! Stock restored to inventory and vendor ledgers adjusted.',
       data: order,
     });
   } catch (error) {
@@ -608,6 +626,9 @@ exports.trackOrder = async (req, res, next) => {
       };
     });
 
+    const canSelfCancel = !['DELIVERED', 'CANCELLED'].includes(order.status) &&
+      !order.subOrders.some(sub => ['dispatched', 'out_for_delivery', 'delivered'].includes(sub.status));
+
     res.status(200).json({
       success: true,
       data: {
@@ -621,6 +642,9 @@ exports.trackOrder = async (req, res, next) => {
         paymentStatus: order.paymentStatus,
         paymentDetails: order.paymentDetails,
         deliveryInstructions: order.deliveryInstructions,
+        canSelfCancel,
+        cancellationReason: order.cancellationReason || null,
+        cancelledAt: order.cancelledAt || null,
         subOrders: subOrdersTracking,
       },
     });

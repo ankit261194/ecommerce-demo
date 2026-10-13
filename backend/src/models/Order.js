@@ -108,6 +108,16 @@ const orderSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    // Point #28: 1-Click Self-Cancel Order Reason & Audit
+    cancellationReason: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

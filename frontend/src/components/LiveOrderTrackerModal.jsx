@@ -19,6 +19,9 @@ import {
   FastForward,
   User,
   ShoppingBag,
+  XCircle,
+  AlertTriangle,
+  RotateCcw,
 } from 'lucide-react';
 
 export default function LiveOrderTrackerModal({
@@ -35,6 +38,22 @@ export default function LiveOrderTrackerModal({
   const [copiedOtp, setCopiedOtp] = useState(false);
   const [copiedOrder, setCopiedOrder] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
+
+  // Point #28: 1-Click Self-Cancel Order State
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [selectedReason, setSelectedReason] = useState('Ordered by mistake');
+  const [customReason, setCustomReason] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
+
+  const cancellationReasons = [
+    'Ordered by mistake',
+    'Found a better price elsewhere',
+    'Need to change delivery address or phone',
+    'Need different size / color / variant',
+    'Delivery time is too long',
+    'Other reason',
+  ];
 
   useEffect(() => {
     if (isOpen) {
@@ -103,6 +122,39 @@ export default function LiveOrderTrackerModal({
     }
   };
 
+  // Point #28: 1-Click Self-Cancel Handler
+  const handleConfirmCancel = async () => {
+    if (!orderData?.rawOrderId) return;
+    setIsCancelling(true);
+    setCancelError(null);
+    try {
+      const token = localStorage.getItem('token') || 'demo-customer-token';
+      const finalReason = selectedReason === 'Other reason' && customReason.trim()
+        ? customReason.trim()
+        : selectedReason;
+
+      const res = await fetch(`${apiUrl}/orders/${orderData.rawOrderId}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason: finalReason }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Could not cancel order.');
+      }
+      setShowCancelModal(false);
+      // Refresh tracked order status
+      await fetchOrderTracking(orderData.orderId || orderData.rawOrderId);
+    } catch (err) {
+      setCancelError(err.message || 'Failed to cancel order.');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const copyToClipboard = (text, type) => {
     navigator.clipboard?.writeText(text);
     if (type === 'otp') {
@@ -118,6 +170,7 @@ export default function LiveOrderTrackerModal({
 
   const currentPackage = orderData?.subOrders?.[activePackageIndex] || orderData?.subOrders?.[0];
   const steps = currentPackage?.steps || [];
+  const isOrderCancelled = orderData?.status === 'CANCELLED';
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
@@ -129,16 +182,30 @@ export default function LiveOrderTrackerModal({
         {/* Modal Header */}
         <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-50 to-indigo-50/40 dark:from-slate-900 dark:to-slate-850">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/20">
-              <Truck className="w-5 h-5 animate-pulse" />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-md ${
+              isOrderCancelled
+                ? 'bg-rose-600 text-white shadow-rose-600/20'
+                : 'bg-indigo-600 text-white shadow-indigo-600/20'
+            }`}>
+              {isOrderCancelled ? (
+                <XCircle className="w-5 h-5" />
+              ) : (
+                <Truck className="w-5 h-5 animate-pulse" />
+              )}
             </div>
             <div>
               <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 Live Order Tracker
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-                  Real-time
-                </span>
+                {isOrderCancelled ? (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950/70 dark:text-rose-400 border border-rose-300 dark:border-rose-700">
+                    Cancelled
+                  </span>
+                ) : (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                    Real-time
+                  </span>
+                )}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Track parcel milestones, courier rider updates, and OTP verification
@@ -209,6 +276,27 @@ export default function LiveOrderTrackerModal({
         <div className="p-4 sm:p-6 overflow-y-auto space-y-6">
           {orderData ? (
             <>
+              {/* Point #28: Cancelled Order Alert Banner */}
+              {isOrderCancelled && (
+                <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-200 dark:border-rose-800 rounded-2xl flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                    <XCircle className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1 flex-1">
+                    <h4 className="text-sm font-bold text-rose-900 dark:text-rose-200">
+                      This Order Has Been Cancelled
+                    </h4>
+                    <p className="text-xs text-rose-700 dark:text-rose-300">
+                      Reason: <strong className="font-semibold">{orderData.cancellationReason || 'Cancelled before dispatch'}</strong>
+                    </p>
+                    <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      All reserved items have been auto-restored to live inventory. Any payments made have been marked for instant refund.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Order Overview Banner */}
               <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 border border-slate-200 dark:border-slate-700/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
@@ -224,7 +312,11 @@ export default function LiveOrderTrackerModal({
                     >
                       {copiedOrder ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                      isOrderCancelled
+                        ? 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                        : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+                    }`}>
                       {orderData.status || 'CONFIRMED'}
                     </span>
                   </div>
@@ -237,36 +329,55 @@ export default function LiveOrderTrackerModal({
                   </p>
                 </div>
 
-                {/* Secret Delivery OTP Card */}
-                {currentPackage?.deliveryOtp && (
-                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/30 border border-amber-300 dark:border-amber-700/60 rounded-xl p-3 flex items-center gap-3 shrink-0">
-                    <div className="w-9 h-9 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                      <ShieldCheck className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase font-bold tracking-wider text-amber-800 dark:text-amber-300">
-                        Delivery Handover OTP
-                      </p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xl font-black tracking-widest text-slate-900 dark:text-white font-mono bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-700">
-                          {currentPackage.deliveryOtp}
-                        </span>
-                        <button
-                          onClick={() => copyToClipboard(currentPackage.deliveryOtp, 'otp')}
-                          className="text-amber-700 dark:text-amber-300 hover:text-amber-900 text-xs flex items-center gap-1 font-medium transition"
-                        >
-                          {copiedOtp ? (
-                            <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                              <Check className="w-3 h-3" /> Copied
-                            </span>
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
-                          )}
-                        </button>
+                {/* Right Actions & Badges */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Point #28: 1-Click Self-Cancel Action Button */}
+                  {orderData.canSelfCancel && !isOrderCancelled && (
+                    <button
+                      onClick={() => {
+                        setSelectedReason('Ordered by mistake');
+                        setCustomReason('');
+                        setCancelError(null);
+                        setShowCancelModal(true);
+                      }}
+                      className="px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 text-xs font-bold border border-rose-200 dark:border-rose-800 flex items-center gap-1.5 transition shadow-sm active:scale-95"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      1-Click Cancel Order
+                    </button>
+                  )}
+
+                  {/* Secret Delivery OTP Card */}
+                  {currentPackage?.deliveryOtp && !isOrderCancelled && (
+                    <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/30 border border-amber-300 dark:border-amber-700/60 rounded-xl p-3 flex items-center gap-3 shrink-0">
+                      <div className="w-9 h-9 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                        <ShieldCheck className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase font-bold tracking-wider text-amber-800 dark:text-amber-300">
+                          Delivery Handover OTP
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xl font-black tracking-widest text-slate-900 dark:text-white font-mono bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-700">
+                            {currentPackage.deliveryOtp}
+                          </span>
+                          <button
+                            onClick={() => copyToClipboard(currentPackage.deliveryOtp, 'otp')}
+                            className="text-amber-700 dark:text-amber-300 hover:text-amber-900 text-xs flex items-center gap-1 font-medium transition"
+                          >
+                            {copiedOtp ? (
+                              <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                                <Check className="w-3 h-3" /> Copied
+                              </span>
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
               {/* Multi-Vendor Package Split Tabs (if multi-vendor) */}
@@ -287,14 +398,16 @@ export default function LiveOrderTrackerModal({
                           className={`px-3 py-2 rounded-xl text-xs font-medium border flex items-center gap-2 shrink-0 transition ${
                             isActive
                               ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750'
+                              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-755'
                           }`}
                         >
                           <Store className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                           <span>{vendorName}</span>
                           <span
                             className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-semibold ${
-                              isActive
+                              sub.status === 'cancelled'
+                                ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                                : isActive
                                 ? 'bg-indigo-700 text-white'
                                 : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
                             }`}
@@ -321,7 +434,13 @@ export default function LiveOrderTrackerModal({
                     )}
                   </h3>
                   <span className="text-xs text-slate-500 dark:text-slate-400">
-                    Est. Delivery: <strong className="text-slate-800 dark:text-slate-200">2-3 Business Days</strong>
+                    {isOrderCancelled ? (
+                      <span className="text-rose-600 dark:text-rose-400 font-semibold">Cancelled</span>
+                    ) : (
+                      <>
+                        Est. Delivery: <strong className="text-slate-800 dark:text-slate-200">2-3 Business Days</strong>
+                      </>
+                    )}
                   </span>
                 </div>
 
@@ -332,7 +451,6 @@ export default function LiveOrderTrackerModal({
                     {steps.map((step, idx) => {
                       const isCompleted = step.isCompleted;
                       const isCurrent = step.isCurrent;
-                      const isPending = !isCompleted && !isCurrent;
 
                       return (
                         <div key={step.key} className="relative flex md:flex-col items-start md:items-center text-left md:text-center gap-3 md:gap-2">
@@ -340,7 +458,9 @@ export default function LiveOrderTrackerModal({
                           {idx < steps.length - 1 && (
                             <div
                               className={`hidden md:block absolute top-4 left-1/2 w-full h-1 -z-0 transition-colors ${
-                                steps[idx + 1].isCompleted
+                                isOrderCancelled
+                                  ? 'bg-slate-200 dark:bg-slate-700'
+                                  : steps[idx + 1].isCompleted
                                   ? 'bg-emerald-500'
                                   : isCompleted
                                   ? 'bg-gradient-to-r from-emerald-500 to-indigo-500'
@@ -352,14 +472,18 @@ export default function LiveOrderTrackerModal({
                           {/* Step Circle Badge */}
                           <div
                             className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 z-10 transition-all ${
-                              isCompleted
+                              isOrderCancelled
+                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-300 dark:border-slate-700'
+                                : isCompleted
                                 ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
                                 : isCurrent
                                 ? 'bg-indigo-600 text-white ring-4 ring-indigo-100 dark:ring-indigo-950/60 shadow-md shadow-indigo-600/30 animate-pulse'
                                 : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-300 dark:border-slate-700'
                             }`}
                           >
-                            {isCompleted ? (
+                            {isOrderCancelled ? (
+                              <span className="text-xs font-bold">{step.stepIndex}</span>
+                            ) : isCompleted ? (
                               <CheckCircle2 className="w-5 h-5" />
                             ) : isCurrent ? (
                               idx === 1 ? (
@@ -380,7 +504,9 @@ export default function LiveOrderTrackerModal({
                           <div className="flex-1 md:mt-1">
                             <p
                               className={`text-xs font-bold leading-tight ${
-                                isCompleted
+                                isOrderCancelled
+                                  ? 'text-slate-400 dark:text-slate-500'
+                                  : isCompleted
                                   ? 'text-emerald-700 dark:text-emerald-400'
                                   : isCurrent
                                   ? 'text-indigo-600 dark:text-indigo-400'
@@ -406,6 +532,16 @@ export default function LiveOrderTrackerModal({
                     })}
                   </div>
                 </div>
+
+                {/* Dispatch / Transit Notice */}
+                {!orderData.canSelfCancel && !isOrderCancelled && orderData.status !== 'DELIVERED' && (
+                  <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 rounded-xl flex items-center gap-2.5 text-xs text-blue-800 dark:text-blue-300">
+                    <Truck className="w-4 h-4 shrink-0 text-blue-600" />
+                    <span>
+                      <strong>Package is in transit:</strong> Self-cancellation is now closed as the parcel is with our courier rider. You may request a Return/Refund upon doorstep delivery.
+                    </span>
+                  </div>
+                )}
 
                 {/* Courier Partner & Delivery Address Row */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
@@ -514,48 +650,50 @@ export default function LiveOrderTrackerModal({
                 )}
               </div>
 
-              {/* Demo Milestone Simulator Bar */}
-              <div className="bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 dark:from-slate-850 dark:via-indigo-950/20 dark:to-slate-850 border border-indigo-200 dark:border-indigo-800/60 rounded-xl p-3.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
-                    <FastForward className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                    Interactive Live Simulation Toolbar
-                  </p>
-                  <span className="text-[10px] font-medium text-indigo-600 dark:text-indigo-300">
-                    Fast-forward milestones for demo/testing
-                  </span>
+              {/* Demo Milestone Simulator Bar (Only when active and not cancelled) */}
+              {!isOrderCancelled && (
+                <div className="bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 dark:from-slate-850 dark:via-indigo-950/20 dark:to-slate-850 border border-indigo-200 dark:border-indigo-800/60 rounded-xl p-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
+                      <FastForward className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      Interactive Live Simulation Toolbar
+                    </p>
+                    <span className="text-[10px] font-medium text-indigo-600 dark:text-indigo-300">
+                      Fast-forward milestones for demo/testing
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handleSimulateStep('packed')}
+                      disabled={isSimulating}
+                      className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-755 text-slate-800 dark:text-slate-200 text-xs font-medium border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 transition disabled:opacity-50"
+                    >
+                      📦 Step 2: Mark Packed
+                    </button>
+                    <button
+                      onClick={() => handleSimulateStep('dispatched')}
+                      disabled={isSimulating}
+                      className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-755 text-slate-800 dark:text-slate-200 text-xs font-medium border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 transition disabled:opacity-50"
+                    >
+                      🚚 Step 3: Mark Shipped
+                    </button>
+                    <button
+                      onClick={() => handleSimulateStep('out_for_delivery')}
+                      disabled={isSimulating}
+                      className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-755 text-slate-800 dark:text-slate-200 text-xs font-medium border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 transition disabled:opacity-50"
+                    >
+                      🛵 Step 4: Out for Delivery
+                    </button>
+                    <button
+                      onClick={() => handleSimulateStep('delivered')}
+                      disabled={isSimulating}
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium flex items-center gap-1.5 transition disabled:opacity-50 shadow-sm"
+                    >
+                      ✅ Step 5: Mark Delivered
+                    </button>
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => handleSimulateStep('packed')}
-                    disabled={isSimulating}
-                    className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200 text-xs font-medium border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 transition disabled:opacity-50"
-                  >
-                    📦 Step 2: Mark Packed
-                  </button>
-                  <button
-                    onClick={() => handleSimulateStep('dispatched')}
-                    disabled={isSimulating}
-                    className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200 text-xs font-medium border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 transition disabled:opacity-50"
-                  >
-                    🚚 Step 3: Mark Shipped
-                  </button>
-                  <button
-                    onClick={() => handleSimulateStep('out_for_delivery')}
-                    disabled={isSimulating}
-                    className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200 text-xs font-medium border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 transition disabled:opacity-50"
-                  >
-                    🛵 Step 4: Out for Delivery
-                  </button>
-                  <button
-                    onClick={() => handleSimulateStep('delivered')}
-                    disabled={isSimulating}
-                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium flex items-center gap-1.5 transition disabled:opacity-50 shadow-sm"
-                  >
-                    ✅ Step 5: Mark Delivered
-                  </button>
-                </div>
-              </div>
+              )}
             </>
           ) : !loading && (
             <div className="py-12 text-center space-y-3">
@@ -574,9 +712,26 @@ export default function LiveOrderTrackerModal({
 
         {/* Modal Footer */}
         <div className="p-4 bg-slate-50 dark:bg-slate-850 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <span className="text-[11px] text-slate-400 dark:text-slate-500">
-            Powered by AuraMarket Express Logistics Engine
-          </span>
+          <div className="flex items-center gap-2">
+            {orderData?.canSelfCancel && !isOrderCancelled && (
+              <button
+                onClick={() => {
+                  setSelectedReason('Ordered by mistake');
+                  setCustomReason('');
+                  setCancelError(null);
+                  setShowCancelModal(true);
+                }}
+                className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-sm active:scale-95 flex items-center gap-1.5"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                Cancel Order
+              </button>
+            )}
+            <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline">
+              Powered by AuraMarket Express Logistics Engine
+            </span>
+          </div>
+
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-750 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition"
@@ -585,6 +740,115 @@ export default function LiveOrderTrackerModal({
           </button>
         </div>
       </div>
+
+      {/* Point #28: 1-Click Self-Cancel Confirmation Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-60 bg-black/70 backdrop-blur-sm flex items-center justify-center p-3">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Cancel Order #{orderData?.orderId}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Instant 1-Click self-cancellation before dispatch
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCancelModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {cancelError && (
+              <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{cancelError}</span>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                Please select a cancellation reason:
+              </label>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                {cancellationReasons.map((reason) => (
+                  <label
+                    key={reason}
+                    className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition ${
+                      selectedReason === reason
+                        ? 'border-rose-500 bg-rose-50/60 dark:bg-rose-950/30 text-rose-900 dark:text-rose-200 font-semibold'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="cancel_reason"
+                      value={reason}
+                      checked={selectedReason === reason}
+                      onChange={() => setSelectedReason(reason)}
+                      className="text-rose-600 focus:ring-rose-500"
+                    />
+                    <span>{reason}</span>
+                  </label>
+                ))}
+              </div>
+
+              {selectedReason === 'Other reason' && (
+                <div className="space-y-1">
+                  <textarea
+                    rows={2}
+                    value={customReason}
+                    onChange={(e) => setCustomReason(e.target.value)}
+                    placeholder="Tell us more about why you are cancelling..."
+                    className="w-full p-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+              )}
+
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                <RotateCcw className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                <span>
+                  <strong>Automatic Inventory Restoration:</strong> Items in this order will immediately be returned to available merchant stock.
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={() => setShowCancelModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+              >
+                Keep Order
+              </button>
+              <button
+                onClick={handleConfirmCancel}
+                disabled={isCancelling}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition disabled:opacity-50 shadow-md shadow-rose-600/20 flex items-center justify-center gap-1.5"
+              >
+                {isCancelling ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Cancelling...
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-3.5 h-3.5" />
+                    Confirm Cancellation
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

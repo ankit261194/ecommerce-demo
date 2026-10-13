@@ -95,6 +95,12 @@ const subOrderSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    // Point #28: 1-Click Self-Cancel SubOrder Reason
+    cancellationReason: {
+      type: String,
+      default: '',
+      trim: true,
+    },
   },
   { timestamps: true }
 );

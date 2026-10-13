@@ -1426,6 +1426,124 @@ const runTests = async () => {
       assert.strictEqual(dispatchedStep.isCurrent, true);
     });
 
+    await test('Point 28: 1-Click Self-Cancel Order (Before dispatch with inventory auto-restoration & reason tracking; rejected after dispatch)', async () => {
+      // 1. Check stock before placement
+      const prodBefore = await Product.findById(headphonesProduct._id);
+      const stockBefore = prodBefore.stock;
+
+      // 2. Place order before dispatch
+      const resOrder = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: headphonesProduct._id, quantity: 2, variantSku: 'APX-HEAD-BLK' }],
+          shippingAddress: {
+            recipientName: 'Aman Sharma',
+            phone: '9876543214',
+            street: 'Flat 402, Green Valley Apartments',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'COD',
+        }),
+      });
+      assert.strictEqual(resOrder.status, 201);
+      const dataOrder = await resOrder.json();
+      const orderId = dataOrder.data._id;
+      const orderNum = dataOrder.data.orderNumber;
+
+      // Stock should have decremented by 2
+      const prodPlaced = await Product.findById(headphonesProduct._id);
+      assert.strictEqual(prodPlaced.stock, stockBefore - 2);
+
+      // Verify tracker confirms self-cancel is eligible
+      const resTrackPre = await fetch(`${baseUrl}/orders/track/${orderNum}`);
+      const dataTrackPre = await resTrackPre.json();
+      assert.strictEqual(dataTrackPre.data.canSelfCancel, true);
+
+      // 3. Customer 1-Click Self-Cancel with reason
+      const resCancel = await fetch(`${baseUrl}/orders/${orderId}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ reason: 'Ordered by mistake — need different color' }),
+      });
+      assert.strictEqual(resCancel.status, 200);
+      const dataCancel = await resCancel.json();
+      assert.strictEqual(dataCancel.success, true);
+      assert.strictEqual(dataCancel.data.status, 'CANCELLED');
+      assert.strictEqual(dataCancel.data.cancellationReason, 'Ordered by mistake — need different color');
+
+      // Inventory auto-restoration check: stock returned to initial value
+      const prodRestored = await Product.findById(headphonesProduct._id);
+      assert.strictEqual(prodRestored.stock, stockBefore, 'Inventory must be automatically restored on self-cancellation');
+
+      // 4. Place another order and advance to DISPATCHED to test guardrail
+      const resOrder2 = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: headphonesProduct._id, quantity: 1, variantSku: 'APX-HEAD-BLK' }],
+          shippingAddress: {
+            recipientName: 'Aman Sharma',
+            phone: '9876543214',
+            street: 'Flat 402, Green Valley Apartments',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'COD',
+        }),
+      });
+      assert.strictEqual(resOrder2.status, 201);
+      const dataOrder2 = await resOrder2.json();
+      const orderId2 = dataOrder2.data._id;
+
+      // Advance to 'dispatched'
+      await fetch(`${baseUrl}/orders/${orderId2}/advance-step`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ step: 'dispatched' }),
+      });
+
+      // Verify tracker confirms self-cancel is now blocked
+      const resTrackPost = await fetch(`${baseUrl}/orders/track/${dataOrder2.data.orderNumber}`);
+      const dataTrackPost = await resTrackPost.json();
+      assert.strictEqual(dataTrackPost.data.canSelfCancel, false);
+
+      // Customer attempt to self-cancel must be rejected with 400
+      const resBlocked = await fetch(`${baseUrl}/orders/${orderId2}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ reason: 'Attempt late cancel' }),
+      });
+      assert.strictEqual(resBlocked.status, 400);
+      const dataBlocked = await resBlocked.json();
+      assert.strictEqual(dataBlocked.success, false);
+      assert.ok(dataBlocked.message.includes('after dispatch'));
+
+      // Admin cancels order2 to clean up stock
+      await fetch(`${baseUrl}/orders/${orderId2}/cancel`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

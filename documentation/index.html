@@ -1,8 +1,4 @@
-import os
-
-doc_path = r"C:\Users\hp\.gemini\antigravity\scratch\ecommerce-marketplace\documentation\index.html"
-
-html_content = """<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -1165,6 +1161,40 @@ flutter build appbundle --release</code></pre>
               <li>"Send for review" पर क्लिक करें। Google 1 से 3 दिन में ऐप लाइव कर देता है।</li>
             </ol>
           </div>
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇺🇸 Step 4: Apple App Store (iOS) Compilation & Publishing</div>
+            <p>Compiling for iOS requires macOS with Xcode installed:</p>
+            <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>cd mobile_app
+flutter clean
+flutter pub get
+flutter build ipa --release</code></pre>
+            <p>Or open the iOS project in Xcode:</p>
+            <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>open ios/Runner.xcworkspace</code></pre>
+            <ol>
+              <li>Select your Apple Developer Team in <strong>Signing & Capabilities</strong>.</li>
+              <li>Select destination: <strong>Any iOS Device (arm64)</strong>.</li>
+              <li>Click <strong>Product &gt; Archive</strong>.</li>
+              <li>In Organizer, click <strong>Distribute App &gt; App Store Connect &gt; Upload</strong>.</li>
+              <li>On <a href="https://appstoreconnect.apple.com" target="_blank" style="color: #2563eb;">appstoreconnect.apple.com</a>, configure App Privacy, Screenshots, and Submit for Review!</li>
+            </ol>
+          </div>
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 चरण 4: Apple App Store (iOS) पब्लिशिंग</div>
+            <p>iOS ऐप कंपाइल करने के लिए Mac (macOS) और Xcode की आवश्यकता होती है:</p>
+            <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>cd mobile_app
+flutter clean
+flutter pub get
+flutter build ipa --release</code></pre>
+            <p>या Xcode में प्रोजेक्ट खोलें:</p>
+            <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>open ios/Runner.xcworkspace</code></pre>
+            <ol>
+              <li>Xcode में अपनी Apple Developer Team और Bundle Identifier सेट करें।</li>
+              <li><strong>Product &gt; Archive</strong> पर क्लिक करके नया बिल्ड बनाएँ।</li>
+              <li><strong>Distribute App</strong> पर क्लिक करके सीधे <strong>App Store Connect</strong> पर अपलोड करें।</li>
+              <li><a href="https://appstoreconnect.apple.com" target="_blank" style="color: #2563eb;">appstoreconnect.apple.com</a> पर स्क्रीनशॉट, विवरण और प्राइवेसी पॉलिसी भरकर रिव्यू के लिए सबमिट कर दें!</li>
+            </ol>
+          </div>
         </div>
       </section>
 
@@ -1235,9 +1265,7 @@ echo "[$(date)] SUCCESS: MongoDB backup completed: auramarket_$DATE.gz"</code></
           <div class="bilingual-card bilingual-hi">
             <div class="lang-flag lang-flag-hi">🇮🇳 डेटाबेस रीस्टोर कैसे करें (10 Seconds Restore)</div>
             <p>अगर कभी सर्वर बदलना पड़े या पुराना डेटा वापस लाना हो, तो बस यह 1 कमांड चलाएं:</p>
-            <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>mongorestore --uri="mongodb://127.0.0.1:27017/auramarket" \
-  --archive="/var/backups/mongodb/auramarket_LATEST.gz" \
-  --gzip --drop</code></pre>
+            <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>mongorestore --uri="mongodb://127.0.0.1:27017/auramarket"   --archive="/var/backups/mongodb/auramarket_LATEST.gz"   --gzip --drop</code></pre>
             <p>पूरा डेटाबेस 10 सेकंड में हूबहू रीस्टोर हो जाता है!</p>
           </div>
         </div>
@@ -1794,9 +1822,3 @@ echo "[$(date)] SUCCESS: MongoDB backup completed: auramarket_$DATE.gz"</code></
   </script>
 </body>
 </html>
-"""
-
-with open(doc_path, "w", encoding="utf-8") as f:
-    f.write(html_content)
-
-print(f"Updated {doc_path} successfully ({os.path.getsize(doc_path)} bytes)!")

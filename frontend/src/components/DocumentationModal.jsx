@@ -22,20 +22,44 @@ import {
   Database,
   UploadCloud,
   Check,
+  Globe,
+  Settings,
+  Lock,
+  ArrowRight
 } from 'lucide-react';
 
 export const DocumentationModal = ({ isOpen, onClose }) => {
   const [lang, setLang] = useState('hi'); // 'hi' | 'en'
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'developer' | 'admin' | 'credentials'
-  const [copiedIndex, setCopiedIndex] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
 
   if (!isOpen) return null;
 
-  const copyToClipboard = (text, idx) => {
+  const copyToClipboard = (text, id) => {
     navigator.clipboard.writeText(text);
-    setCopiedIndex(idx);
-    setTimeout(() => setCopiedIndex(null), 2000);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
+
+  const renderCopyBtn = (text, id) => (
+    <button
+      onClick={() => copyToClipboard(text, id)}
+      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700 text-[11px] font-mono text-slate-200 border border-slate-700 transition-all flex-shrink-0"
+      title={lang === 'hi' ? 'क्लिक करके कॉपी करें' : 'Click to copy command'}
+    >
+      {copiedId === id ? (
+        <>
+          <Check className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="text-emerald-400 font-bold">{lang === 'hi' ? 'कॉपी हो गया!' : 'Copied!'}</span>
+        </>
+      ) : (
+        <>
+          <Copy className="w-3.5 h-3.5 text-slate-400" />
+          <span>{lang === 'hi' ? 'कॉपी' : 'Copy'}</span>
+        </>
+      )}
+    </button>
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-950/85 backdrop-blur-md animate-fade-in font-sans">
@@ -73,7 +97,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                   lang === 'hi' ? 'bg-amber-400 text-slate-950 font-black' : 'text-blue-200 hover:text-white'
                 }`}
               >
-                हिंदी
+                🇮🇳 हिंदी
               </button>
               <button
                 onClick={() => setLang('en')}
@@ -81,7 +105,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                   lang === 'en' ? 'bg-amber-400 text-slate-950 font-black' : 'text-blue-200 hover:text-white'
                 }`}
               >
-                English
+                🇺🇸 English
               </button>
             </div>
 
@@ -115,7 +139,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
             }`}
           >
             <span>🛠️</span>
-            <span>{lang === 'hi' ? 'डेवलपर की ज़रूरत (VPS, Play Store, Backups)' : 'Developer Required (VPS, Play Store, Backups)'}</span>
+            <span>{lang === 'hi' ? 'डेवलपर की ज़रूरत (VPS, Store Apps, Backups)' : 'Developer Required (VPS, Store Apps, Backups)'}</span>
           </button>
           <button
             onClick={() => setActiveTab('admin')}
@@ -126,7 +150,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
             }`}
           >
             <span>⚡</span>
-            <span>{lang === 'hi' ? 'एडमिन जीरो-कोड (SMS, Payments, SMTP)' : 'Admin Zero-Code (SMS, Payments, SMTP)'}</span>
+            <span>{lang === 'hi' ? 'एडमिन जीरो-कोड (SMS, Payments, SMTP, Cloud)' : 'Admin Zero-Code (SMS, Payments, SMTP, Cloud)'}</span>
           </button>
           <button
             onClick={() => setActiveTab('credentials')}
@@ -235,16 +259,38 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     </div>
                     <span className="text-emerald-400 font-semibold">SSH Connected</span>
                   </div>
-                  <div className="p-3.5 space-y-1.5 overflow-x-auto text-[11px]">
-                    <div className="text-slate-400"># 1. Point Domain A-Records to VPS IP (195.35.x.x)</div>
-                    <div className="text-amber-400">curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -</div>
-                    <div className="text-amber-400">sudo apt install -y nodejs nginx certbot python3-certbot-nginx</div>
-                    <div className="text-slate-400 pt-1"># 2. Start PM2 Process Daemon</div>
-                    <div className="text-amber-400">pm2 start backend/src/server.js --name auramarket-api</div>
-                    <div className="text-emerald-400">✔ [PM2] App auramarket-api launched (PID: 18492, Status: online)</div>
-                    <div className="text-slate-400 pt-1"># 3. Issue Free Let\'s Encrypt SSL (HTTPS)</div>
-                    <div className="text-amber-400">sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com</div>
-                    <div className="text-emerald-400 font-bold">✔ Congratulations! HTTPS is now active on https://yourdomain.com</div>
+                  <div className="p-3.5 space-y-2.5 text-[11px]">
+                    <div>
+                      <div className="text-slate-400 mb-1">
+                        {lang === 'hi' ? '# 1. Node.js 20, Nginx व Certbot इंस्टॉल करें:' : '# 1. Install Node.js 20, Nginx & Certbot:'}
+                      </div>
+                      <div className="flex items-center justify-between gap-2 bg-slate-900 p-2 rounded-lg border border-slate-800">
+                        <span className="text-amber-400 select-all overflow-x-auto">curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt install -y nodejs nginx certbot python3-certbot-nginx</span>
+                        {renderCopyBtn('curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt install -y nodejs nginx certbot python3-certbot-nginx', 'cmd-vps-install')}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-slate-400 mb-1">
+                        {lang === 'hi' ? '# 2. PM2 प्रोसेस मैनेजर से बैकएंड चालू करें (24/7 Uptime):' : '# 2. Launch Backend via PM2 Daemon (24/7 Uptime):'}
+                      </div>
+                      <div className="flex items-center justify-between gap-2 bg-slate-900 p-2 rounded-lg border border-slate-800">
+                        <span className="text-amber-400 select-all overflow-x-auto">pm2 start backend/src/server.js --name auramarket-api</span>
+                        {renderCopyBtn('pm2 start backend/src/server.js --name auramarket-api', 'cmd-vps-pm2')}
+                      </div>
+                      <div className="text-emerald-400 text-[10px] mt-1">✔ [PM2] App auramarket-api launched (PID: 18492, Status: online)</div>
+                    </div>
+
+                    <div>
+                      <div className="text-slate-400 mb-1">
+                        {lang === 'hi' ? '# 3. फ्री Let\'s Encrypt SSL (HTTPS) सर्टिफिकेट चालू करें:' : '# 3. Issue Free Let\'s Encrypt SSL (HTTPS):'}
+                      </div>
+                      <div className="flex items-center justify-between gap-2 bg-slate-900 p-2 rounded-lg border border-slate-800">
+                        <span className="text-amber-400 select-all overflow-x-auto">sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com</span>
+                        {renderCopyBtn('sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com', 'cmd-vps-certbot')}
+                      </div>
+                      <div className="text-emerald-400 font-bold text-[10px] mt-1">✔ Congratulations! HTTPS is now active on https://yourdomain.com</div>
+                    </div>
                   </div>
                 </div>
 
@@ -252,10 +298,21 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                   <div className="font-bold text-slate-900">
                     {lang === 'hi' ? '📌 स्टेप्स (Steps):' : '📌 Step-by-Step Procedure:'}
                   </div>
-                  <div>1. <strong>DNS Pointing:</strong> Hostinger / GoDaddy me <code>@</code> aur <code>www</code> ko VPS IP address par point karein.</div>
-                  <div>2. <strong>Dependencies:</strong> Node.js v20 LTS, Nginx aur Certbot install karein.</div>
-                  <div>3. <strong>Reverse Proxy:</strong> Nginx me <code>proxy_pass http://127.0.0.1:5000;</code> config karein.</div>
-                  <div>4. <strong>SSL (HTTPS):</strong> <code>sudo certbot --nginx</code> chalaayein, automatic auto-renewal enable ho jayega!</div>
+                  {lang === 'hi' ? (
+                    <>
+                      <div>1. <strong>DNS Pointing:</strong> Hostinger / GoDaddy में <code>@</code> और <code>www</code> को VPS IP एड्रेस पर पॉइंट करें।</div>
+                      <div>2. <strong>Dependencies:</strong> Node.js v20 LTS, Nginx और Certbot इंस्टॉल करें।</div>
+                      <div>3. <strong>Reverse Proxy:</strong> Nginx में <code>proxy_pass http://127.0.0.1:5000;</code> कॉन्फ़िगर करें।</div>
+                      <div>4. <strong>SSL (HTTPS):</strong> <code>sudo certbot --nginx</code> चलाएँ, आटोमेटिक रिन्यूअल सक्रिय हो जाएगा!</div>
+                    </>
+                  ) : (
+                    <>
+                      <div>1. <strong>DNS Pointing:</strong> Point <code>@</code> and <code>www</code> DNS A-records in GoDaddy/Hostinger to your VPS IP address.</div>
+                      <div>2. <strong>Dependencies:</strong> Install Node.js v20 LTS, Nginx, and Certbot utilities on Ubuntu 22.04.</div>
+                      <div>3. <strong>Reverse Proxy:</strong> Configure Nginx virtual host with <code>proxy_pass http://127.0.0.1:5000;</code>.</div>
+                      <div>4. <strong>SSL (HTTPS):</strong> Run <code>sudo certbot --nginx</code> for automatic free lifetime HTTPS encryption!</div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -269,16 +326,16 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     <h4 className="text-sm sm:text-base font-black text-slate-900 mt-1 flex items-center gap-2">
                       <Smartphone className="w-4 h-4 text-purple-600" />
                       {lang === 'hi'
-                        ? '2. Google Play Store व Apple App Store पब्लिशिंग (Flutter App Bundle)'
+                        ? '2. Google Play Store व Apple App Store पब्लिशिंग (Flutter App Bundle & iOS)'
                         : '2. Google Play Store & Apple App Store Compilation & Publishing'}
                     </h4>
                   </div>
-                  <span className="text-xs text-slate-500 font-medium">Target SDK 34 (Android 14)</span>
+                  <span className="text-xs text-slate-500 font-medium">Target SDK 34 (Android 14) + iOS</span>
                 </div>
 
                 <p className="text-xs text-slate-600">
                   {lang === 'hi'
-                    ? 'Play Store पर ऐप अपलोड करने के लिए Java keytool से डिजिटल की (Keystore) बनानी होती है और Flutter से .aab (App Bundle) फाइल कंपाइल करनी होती है। iOS के लिए Xcode पर Archive बनाकर App Store Connect पर सबमिट किया जाता है।'
+                    ? 'Play Store पर ऐप अपलोड करने के लिए Java keytool से डिजिटल की (Keystore) बनानी होती है और Flutter से .aab (App Bundle) फाइल कंपाइल करनी होती है। iOS के लिए macOS पर Xcode से Archive बनाकर App Store Connect पर सबमिट किया जाता है।'
                     : 'Google Play Console mandates an Android App Bundle (.aab) signed with a cryptographic Keystore (keytool). Apple requires Xcode on macOS, Developer Certificates, and App Store Connect review.'}
                 </p>
 
@@ -305,12 +362,41 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                   </div>
                 </div>
 
-                <div className="bg-slate-900 text-slate-100 p-3.5 rounded-xl font-mono text-xs space-y-1.5">
-                  <div className="text-slate-400"># 1. Keystore generate karein:</div>
-                  <div className="text-amber-400">keytool -genkey -v -keystore release-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias auramarket</div>
-                  <div className="text-slate-400 pt-1"># 2. Production .aab generate karein:</div>
-                  <div className="text-amber-400">cd mobile_app && flutter build appbundle --release</div>
-                  <div className="text-emerald-400">✔ Output: build/app/outputs/bundle/release/app-release.aab (Play Store ready!)</div>
+                {/* Android & iOS Compilation Commands with Copy buttons */}
+                <div className="bg-slate-900 text-slate-100 p-3.5 rounded-xl font-mono text-xs space-y-3">
+                  <div>
+                    <div className="text-slate-400 mb-1">
+                      {lang === 'hi' ? '# 1. Android Keystore डिजिटल की बनाएँ:' : '# 1. Generate Android Signing Keystore:'}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 bg-slate-950 p-2 rounded-lg border border-slate-800">
+                      <span className="text-amber-400 select-all overflow-x-auto">keytool -genkey -v -keystore release-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias auramarket</span>
+                      {renderCopyBtn('keytool -genkey -v -keystore release-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias auramarket', 'cmd-keystore')}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-slate-400 mb-1">
+                      {lang === 'hi' ? '# 2. Google Play Production .aab बंडल कंपाइल करें:' : '# 2. Compile Google Play Production .aab Bundle:'}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 bg-slate-950 p-2 rounded-lg border border-slate-800">
+                      <span className="text-amber-400 select-all overflow-x-auto">cd mobile_app && flutter build appbundle --release</span>
+                      {renderCopyBtn('cd mobile_app && flutter build appbundle --release', 'cmd-aab')}
+                    </div>
+                    <div className="text-emerald-400 text-[10px] mt-1">✔ Output: build/app/outputs/bundle/release/app-release.aab (Play Store ready!)</div>
+                  </div>
+
+                  <div>
+                    <div className="text-slate-400 mb-1">
+                      {lang === 'hi' ? '# 3. Apple App Store (iOS) .ipa कंपाइल करें:' : '# 3. Compile Apple App Store (iOS) .ipa Archive:'}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 bg-slate-950 p-2 rounded-lg border border-slate-800">
+                      <span className="text-amber-400 select-all overflow-x-auto">cd mobile_app && flutter build ipa --release</span>
+                      {renderCopyBtn('cd mobile_app && flutter build ipa --release', 'cmd-ipa')}
+                    </div>
+                    <div className="text-slate-400 text-[10px] mt-1">
+                      {lang === 'hi' ? 'Xcode में खोलें: open ios/Runner.xcworkspace &gt; Product &gt; Archive' : 'Open in Xcode: open ios/Runner.xcworkspace &gt; Product &gt; Archive'}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -337,11 +423,26 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     : 'A developer schedules a nightly Linux cron job that runs mongodump at 2:00 AM, compresses the database archive, automatically deletes snapshots older than 30 days, and logs status.'}
                 </p>
 
-                <div className="bg-slate-900 text-slate-100 p-3.5 rounded-xl font-mono text-xs space-y-1.5">
-                  <div className="text-slate-400"># Crontab me ye line add karein (sudo crontab -e):</div>
-                  <div className="text-amber-400">0 2 * * * mongodump --uri="mongodb://127.0.0.1:27017/auramarket" --archive="/var/backups/mongodb/auramarket_$(date +\\%F).gz" --gzip</div>
-                  <div className="text-slate-400 pt-1"># Instant 10-Second Restore Command:</div>
-                  <div className="text-emerald-400">mongorestore --uri="mongodb://127.0.0.1:27017/auramarket" --archive="/var/backups/mongodb/auramarket_LATEST.gz" --gzip --drop</div>
+                <div className="bg-slate-900 text-slate-100 p-3.5 rounded-xl font-mono text-xs space-y-2.5">
+                  <div>
+                    <div className="text-slate-400 mb-1">
+                      {lang === 'hi' ? '# Crontab में यह लाइन जोड़ें (sudo crontab -e):' : '# Add this scheduled job to crontab (sudo crontab -e):'}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 bg-slate-950 p-2 rounded-lg border border-slate-800">
+                      <span className="text-amber-400 select-all overflow-x-auto">0 2 * * * mongodump --uri="mongodb://127.0.0.1:27017/auramarket" --archive="/var/backups/mongodb/auramarket_$(date +\%F).gz" --gzip</span>
+                      {renderCopyBtn('0 2 * * * mongodump --uri="mongodb://127.0.0.1:27017/auramarket" --archive="/var/backups/mongodb/auramarket_$(date +\\%F).gz" --gzip', 'cmd-crontab')}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-slate-400 mb-1">
+                      {lang === 'hi' ? '# तुरंत 10-सेकंड में डेटाबेस रीस्टोर करने का कमांड:' : '# Instant 10-Second Database Disaster Recovery Restore:'}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 bg-slate-950 p-2 rounded-lg border border-slate-800">
+                      <span className="text-emerald-400 select-all overflow-x-auto">mongorestore --uri="mongodb://127.0.0.1:27017/auramarket" --archive="/var/backups/mongodb/auramarket_LATEST.gz" --gzip --drop</span>
+                      {renderCopyBtn('mongorestore --uri="mongodb://127.0.0.1:27017/auramarket" --archive="/var/backups/mongodb/auramarket_LATEST.gz" --gzip --drop', 'cmd-restore')}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -399,24 +500,34 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <div className="p-2.5 bg-white rounded-lg border border-slate-200">
-                      <div className="text-[11px] text-slate-500 font-medium">Provider:</div>
+                      <div className="text-[11px] text-slate-500 font-medium">{lang === 'hi' ? 'प्रोवाइडर:' : 'Provider:'}</div>
                       <div className="font-bold text-slate-900">Fast2SMS (Quick OTP India)</div>
                     </div>
                     <div className="p-2.5 bg-white rounded-lg border border-slate-200">
-                      <div className="text-[11px] text-slate-500 font-medium">API Auth Key:</div>
+                      <div className="text-[11px] text-slate-500 font-medium">{lang === 'hi' ? 'API Auth Key:' : 'API Auth Key:'}</div>
                       <div className="font-mono text-slate-700">••••••••••••••••3a8f</div>
                     </div>
                   </div>
                   <div className="p-2 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200 text-[11px] font-semibold flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                    <span>Test SMS verified: Delivery OTPs (e.g. 4821) dispatched in &lt; 3 seconds.</span>
+                    <span>{lang === 'hi' ? 'टेस्ट SMS सत्यापित: 4-अंकों का गुप्त डिलीवरी OTP (उदा. 4821) 3 सेकंड में प्राप्त होता है।' : 'Test SMS verified: Secret 4-digit handover OTP (e.g. 4821) dispatched in < 3 seconds.'}</span>
                   </div>
                 </div>
 
                 <div className="text-xs text-slate-600 space-y-1">
-                  <div><strong>Fast2SMS:</strong> fast2sms.com par jaakar Dev API se API Key lein aur paste karein.</div>
-                  <div><strong>MSG91:</strong> DLT AuthKey aur Sender ID (jaise AURAMK) daalein.</div>
-                  <div><strong>Twilio:</strong> Account SID, Auth Token aur phone number daalein.</div>
+                  {lang === 'hi' ? (
+                    <>
+                      <div><strong>Fast2SMS:</strong> fast2sms.com पर जाकर Dev API से API Key लें और पेस्ट करें।</div>
+                      <div><strong>MSG91:</strong> DLT AuthKey और Sender ID (जैसे AURAMK) दर्ज करें।</div>
+                      <div><strong>Twilio:</strong> Account SID, Auth Token और फ़ोन नंबर डालें।</div>
+                    </>
+                  ) : (
+                    <>
+                      <div><strong>Fast2SMS:</strong> Sign up at fast2sms.com, navigate to Dev API, copy Authorization Key, and paste into panel.</div>
+                      <div><strong>MSG91:</strong> Enter your MSG91 AuthKey and registered 6-character DLT Header (e.g., AURAMK).</div>
+                      <div><strong>Twilio:</strong> Paste Twilio Account SID, Auth Token, and Twilio phone number for global delivery.</div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -463,8 +574,8 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                       <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">ON</span>
                     </div>
                     <div className="text-[11px] text-slate-500">UPI ID: <code className="font-mono text-slate-800">8533955333@paytm</code></div>
-                    <div className="text-[11px] text-slate-500">Store Name: <span className="font-bold text-slate-800">AuraMarket</span></div>
-                    <div className="text-[10px] text-emerald-600 font-bold">✔ Instant Bank Credit (0% Deduction)</div>
+                    <div className="text-[11px] text-slate-500">{lang === 'hi' ? 'स्टोर का नाम:' : 'Store Name:'} <span className="font-bold text-slate-800">AuraMarket</span></div>
+                    <div className="text-[10px] text-emerald-600 font-bold">✔ {lang === 'hi' ? 'सीधे बैंक खाते में पैसा (0% कटौती)' : 'Instant Bank Credit (0% Deduction)'}</div>
                   </div>
                 </div>
               </div>
@@ -479,7 +590,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     <h4 className="text-sm sm:text-base font-black text-slate-900 mt-1 flex items-center gap-2">
                       <Mail className="w-4 h-4 text-purple-600" />
                       {lang === 'hi'
-                        ? '3. ईमेल व SMTP इनवॉइस सेटअप (Gmail App Password / Hostinger)'
+                        ? '3. ईमेल व SMTP इनवॉइस सेटअप (Gmail App Password / Hostinger Webmail)'
                         : '3. Email & SMTP Invoices Setup (Gmail App Password / Hostinger Webmail)'}
                     </h4>
                   </div>
@@ -494,10 +605,93 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     : 'Dispatch branded HTML invoices and receipts using Gmail with a 16-character Google App Password or Hostinger Webmail (smtp.hostinger.com, port 587).'}
                 </p>
 
+                {/* SMTP Mockup Card */}
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900 text-xs">✉️ SMTP Server Configuration Card</span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">CONNECTED</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                      <div className="text-[11px] text-slate-500 font-medium">SMTP Host:</div>
+                      <div className="font-mono font-bold text-slate-900">smtp.gmail.com (Port: 587)</div>
+                    </div>
+                    <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                      <div className="text-[11px] text-slate-500 font-medium">{lang === 'hi' ? 'ईमेल एड्रेस:' : 'Email Address:'}</div>
+                      <div className="font-mono text-slate-900">orders@yourdomain.com</div>
+                    </div>
+                  </div>
+                  <div className="p-2 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200 text-[11px] font-semibold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                    <span>{lang === 'hi' ? 'टेस्ट ईमेल सत्यापित: इनवॉइस रसीद सफलता से भेजी गई।' : 'Test Email verified: Order HTML invoice dispatched successfully.'}</span>
+                  </div>
+                </div>
+
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs text-slate-700 space-y-1">
-                  <div><strong>Gmail Host:</strong> <code>smtp.gmail.com</code> | <strong>Port:</strong> <code>587</code></div>
-                  <div><strong>Username:</strong> आपका Gmail एड्रेस (जैसे yourstore@gmail.com)</div>
-                  <div><strong>Password:</strong> Google Security &gt; App Passwords से बना 16-अक्षरों का कोड</div>
+                  {lang === 'hi' ? (
+                    <>
+                      <div><strong>Gmail Host:</strong> <code>smtp.gmail.com</code> | <strong>Port:</strong> <code>587</code></div>
+                      <div><strong>Username:</strong> आपका Gmail एड्रेस (जैसे yourstore@gmail.com)</div>
+                      <div><strong>Password:</strong> Google Security &gt; App Passwords से बना 16-अक्षरों का कोड</div>
+                    </>
+                  ) : (
+                    <>
+                      <div><strong>Gmail Host:</strong> <code>smtp.gmail.com</code> | <strong>Port:</strong> <code>587</code></div>
+                      <div><strong>Username:</strong> Your business Gmail address (e.g. yourstore@gmail.com)</div>
+                      <div><strong>Password:</strong> 16-character code from myaccount.google.com/security &gt; App Passwords</div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* MODULE G: CLOUD STORAGE */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      Module G • Admin Zero-Code
+                    </span>
+                    <h4 className="text-sm sm:text-base font-black text-slate-900 mt-1 flex items-center gap-2">
+                      <Cloud className="w-4 h-4 text-cyan-600" />
+                      {lang === 'hi'
+                        ? '4. क्लाउड मीडिया व प्रोडक्ट इमेज स्टोरेज (Local / Cloudinary / AWS S3)'
+                        : '4. Cloud Media & Product Image Storage (Local Disk / Cloudinary / AWS S3)'}
+                    </h4>
+                  </div>
+                  <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    Unlimited Scale
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-600">
+                  {lang === 'hi'
+                    ? 'प्रोडक्ट इमेज और वेंडर बैनर स्टोर करने के लिए डिफ़ॉल्ट रूप से सर्वर डिस्क (/uploads) चालू रहती है जिसमें कोई अतिरिक्त खर्च नहीं है। अगर लाखों प्रोडक्ट्स हों तो Super Admin में Cloudinary या AWS S3 की कीज डाल दें।'
+                    : 'Product pictures and seller banners store directly in server disk (/uploads) by default with zero monthly expense. For high enterprise scale, seamlessly toggle Cloudinary CDN or AWS S3 from Super Admin.'}
+                </p>
+
+                {/* Storage UI Mockup */}
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900 text-xs">☁️ Active Media Storage Provider</span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">ACTIVE</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                    <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                      <div className="text-[11px] text-slate-500 font-medium">{lang === 'hi' ? 'लोकल डिस्क (फ़्री):' : 'Local Disk (Free):'}</div>
+                      <div className="font-bold text-slate-900">/uploads folder</div>
+                      <div className="text-[10px] text-emerald-600 font-semibold">{lang === 'hi' ? '0 अतिरिक्त खर्च' : 'Zero extra cost'}</div>
+                    </div>
+                    <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                      <div className="text-[11px] text-slate-500 font-medium">Cloudinary CDN:</div>
+                      <div className="font-bold text-slate-900">Auto WebP Resize</div>
+                      <div className="text-[10px] text-blue-600 font-semibold">Global CDN</div>
+                    </div>
+                    <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                      <div className="text-[11px] text-slate-500 font-medium">Amazon AWS S3:</div>
+                      <div className="font-bold text-slate-900">S3 Bucket Storage</div>
+                      <div className="text-[10px] text-purple-600 font-semibold">Enterprise Scale</div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -511,8 +705,8 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     <h4 className="text-sm sm:text-base font-black text-slate-900 mt-1 flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-amber-500" />
                       {lang === 'hi'
-                        ? '4. स्टोर का नाम, लोगो, बैनर और फुटर कॉपीराइट बदलना'
-                        : '4. White-Label Branding, Logos, Banners & Footer Copyright'}
+                        ? '5. स्टोर का नाम, लोगो, बैनर और फुटर कॉपीराइट बदलना'
+                        : '5. White-Label Branding, Logos, Banners & Footer Copyright'}
                     </h4>
                   </div>
                   <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
@@ -552,7 +746,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     <span className="text-[10px] bg-amber-100 text-amber-800 font-black px-2 py-0.5 rounded-full">Owner</span>
                   </div>
                   <div className="text-xs text-slate-600 font-mono">admin@auramarket.com</div>
-                  <div className="text-xs text-slate-500">Pass: <code className="font-bold text-slate-800">admin123456</code></div>
+                  <div className="text-xs text-slate-500">{lang === 'hi' ? 'पासवर्ड:' : 'Pass:'} <code className="font-bold text-slate-800">admin123456</code></div>
                 </div>
 
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
@@ -561,7 +755,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     <span className="text-[10px] bg-blue-100 text-blue-800 font-black px-2 py-0.5 rounded-full">Seller</span>
                   </div>
                   <div className="text-xs text-slate-600 font-mono">apex@auramarket.com</div>
-                  <div className="text-xs text-slate-500">Pass: <code className="font-bold text-slate-800">vendor123456</code></div>
+                  <div className="text-xs text-slate-500">{lang === 'hi' ? 'पासवर्ड:' : 'Pass:'} <code className="font-bold text-slate-800">vendor123456</code></div>
                 </div>
 
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
@@ -570,7 +764,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     <span className="text-[10px] bg-purple-100 text-purple-800 font-black px-2 py-0.5 rounded-full">Delivery</span>
                   </div>
                   <div className="text-xs text-slate-600 font-mono">rider@auramarket.com</div>
-                  <div className="text-xs text-slate-500">Pass: <code className="font-bold text-slate-800">rider123456</code></div>
+                  <div className="text-xs text-slate-500">{lang === 'hi' ? 'पासवर्ड:' : 'Pass:'} <code className="font-bold text-slate-800">rider123456</code></div>
                 </div>
 
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
@@ -579,7 +773,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-2 py-0.5 rounded-full">Buyer</span>
                   </div>
                   <div className="text-xs text-slate-600 font-mono">customer@auramarket.com</div>
-                  <div className="text-xs text-slate-500">Pass: <code className="font-bold text-slate-800">customer123456</code></div>
+                  <div className="text-xs text-slate-500">{lang === 'hi' ? 'पासवर्ड:' : 'Pass:'} <code className="font-bold text-slate-800">customer123456</code></div>
                 </div>
               </div>
             </div>

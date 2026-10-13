@@ -49,6 +49,10 @@ const orderSchema = new mongoose.Schema(
       required: true,
       default: 0,
     },
+    shippingFee: {
+      type: Number,
+      default: 0,
+    },
     shippingAddress: {
       recipientName: { type: String, required: true },
       phone: { type: String, required: true },

@@ -35,6 +35,7 @@ import { ProductDetailModal } from '../components/ProductDetailModal';
 import WishlistDrawer from '../components/WishlistDrawer';
 import ProductCompareModal from '../components/ProductCompareModal';
 import ProductCompareDock from '../components/ProductCompareDock';
+import FreeShippingMeter from '../components/FreeShippingMeter';
 import CategorySidebar from '../components/CategorySidebar';
 import FlashSaleSection from '../components/FlashSaleSection';
 import StockUrgencyBadge from '../components/StockUrgencyBadge';
@@ -1648,6 +1649,13 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             </div>
           ) : (
             <>
+              {/* Point #19: Free Shipping Dynamic Progress Meter */}
+              <FreeShippingMeter
+                cartTotal={cartTotal}
+                threshold={uiConfig?.shipping?.freeShippingThreshold ?? 999}
+                defaultFee={uiConfig?.shipping?.defaultShippingFee ?? 99}
+              />
+
               {/* Multi-Vendor Order Splitting Notification */}
               {Object.keys(vendorBreakdown).length > 1 && (
                 <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold space-y-1">
@@ -1841,20 +1849,45 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   )}
                 </div>
 
-                {/* Grand Total & Place Order */}
-                <div className="pt-4 border-t border-slate-200 space-y-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-bold text-slate-600">Grand Total Payable:</span>
-                    <span className="text-2xl font-black text-slate-950">₹{cartTotal.toLocaleString('en-IN')}</span>
-                  </div>
+                {/* Point #19: Dynamic Bill Breakdown & Grand Total */}
+                {(() => {
+                  const freeThresh = uiConfig?.shipping?.freeShippingThreshold ?? 999;
+                  const defaultShipFee = uiConfig?.shipping?.defaultShippingFee ?? 99;
+                  const isFree = cartTotal >= freeThresh;
+                  const activeShipFee = isFree ? 0 : defaultShipFee;
+                  const grandTotalPayable = cartTotal + activeShipFee;
 
-                  <button
-                    onClick={handlePlaceOrder}
-                    className="w-full py-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm shadow-xl transition-all"
-                  >
-                    Confirm & Place Split Order
-                  </button>
-                </div>
+                  return (
+                    <div className="pt-4 border-t border-slate-200 space-y-2.5">
+                      <div className="flex items-center justify-between text-xs text-slate-600 font-bold">
+                        <span>Items Subtotal:</span>
+                        <span className="font-black text-slate-900">₹{cartTotal.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs font-bold">
+                        <span className="text-slate-600">Doorstep Express Delivery:</span>
+                        {isFree ? (
+                          <span className="text-emerald-700 font-black flex items-center gap-1.5">
+                            <span className="line-through text-slate-400 font-normal">₹{defaultShipFee}</span>
+                            <span>FREE 🎉</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-900 font-black">₹{defaultShipFee}</span>
+                        )}
+                      </div>
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-sm">
+                        <span className="font-black text-slate-900">Grand Total Payable:</span>
+                        <span className="text-2xl font-black text-slate-950">₹{grandTotalPayable.toLocaleString('en-IN')}</span>
+                      </div>
+
+                      <button
+                        onClick={handlePlaceOrder}
+                        className="w-full py-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm shadow-xl transition-all"
+                      >
+                        Confirm & Place Split Order
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             </>
           )}

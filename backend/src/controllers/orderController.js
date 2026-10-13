@@ -168,11 +168,22 @@ exports.createOrder = async (req, res, next) => {
       });
     }
 
-    // Step 2: Create Master Order
+    // Step 2: Point #19 Dynamic Shipping Calculation (Free Shipping above threshold)
+    const UIConfig = require('../models/UIConfig');
+    let uiConfigDoc = null;
+    try {
+      uiConfigDoc = await UIConfig.findOne();
+    } catch (e) {}
+    const freeThreshold = uiConfigDoc?.shipping?.freeShippingThreshold ?? 999;
+    const defaultFee = uiConfigDoc?.shipping?.defaultShippingFee ?? 99;
+    const shippingFee = totalOrderAmount >= freeThreshold ? 0 : defaultFee;
+    const finalTotalAmount = totalOrderAmount + shippingFee;
+
     const masterOrder = await Order.create({
       customer: req.user._id,
       items: validatedItems,
-      totalAmount: totalOrderAmount,
+      totalAmount: finalTotalAmount,
+      shippingFee,
       shippingAddress,
       paymentMethod: paymentMethod || 'COD',
       paymentStatus: paymentMethod === 'RAZORPAY' ? 'PAID' : 'PENDING',

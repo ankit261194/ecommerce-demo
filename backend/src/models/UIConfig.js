@@ -161,6 +161,24 @@ const uiConfigSchema = new mongoose.Schema(
       type: String,
       default: 'https://wa.me/918533955333?text=Hi%20Ankit,%20I%20want%20to%20purchase%20AuraMarket%20E-Commerce%20Platform',
     },
+    shipping: {
+      freeShippingThreshold: {
+        type: Number,
+        default: 999,
+      },
+      defaultShippingFee: {
+        type: Number,
+        default: 99,
+      },
+      expressShippingFee: {
+        type: Number,
+        default: 149,
+      },
+      enabled: {
+        type: Boolean,
+        default: true,
+      },
+    },
     integrations: {
       type: integrationsSchema,
       default: () => ({}),

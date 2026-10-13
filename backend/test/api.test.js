@@ -726,6 +726,40 @@ const runTests = async () => {
       assert.strictEqual(dataCompare.specsMatrix[0].values.length, 2, 'Each spec row must have value per product');
     });
 
+    await test('Point 19: Free Shipping Dynamic Progress Meter: GET /ui/config exposes shipping threshold and fee; order dynamically sets shippingFee', async () => {
+      // 1. Check UI Config exposes shipping threshold and default fee
+      const resConfig = await fetch(`${baseUrl}/ui/config`);
+      assert.strictEqual(resConfig.status, 200);
+      const dataConfig = await resConfig.json();
+      assert.strictEqual(dataConfig.success, true);
+      assert.ok(dataConfig.data.shipping, 'Must return shipping config');
+      assert.strictEqual(typeof dataConfig.data.shipping.freeShippingThreshold, 'number');
+      assert.strictEqual(typeof dataConfig.data.shipping.defaultShippingFee, 'number');
+      assert.ok(dataConfig.data.shipping.freeShippingThreshold >= 500);
+
+      // 2. Update shipping configuration as Super Admin
+      const updateRes = await fetch(`${baseUrl}/ui/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          shipping: {
+            freeShippingThreshold: 999,
+            defaultShippingFee: 99,
+            expressShippingFee: 149,
+            enabled: true,
+          },
+        }),
+      });
+      assert.strictEqual(updateRes.status, 200);
+      const updateData = await updateRes.json();
+      assert.strictEqual(updateData.success, true);
+      assert.strictEqual(updateData.data.shipping.freeShippingThreshold, 999);
+      assert.strictEqual(updateData.data.shipping.defaultShippingFee, 99);
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

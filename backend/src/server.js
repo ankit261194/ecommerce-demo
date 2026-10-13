@@ -131,6 +131,20 @@ const generateSitemap = async (req, res) => {
       }));
     } catch (_) {}
 
+    const escapeXml = unsafe => {
+      if (unsafe == null) return '';
+      return String(unsafe).replace(/[<>&'"]/g, c => {
+        switch (c) {
+          case '<': return '&lt;';
+          case '>': return '&gt;';
+          case '&': return '&amp;';
+          case '\'': return '&apos;';
+          case '"': return '&quot;';
+          default: return c;
+        }
+      });
+    };
+
     const allUrls = [...staticUrls, ...categoryUrls, ...productUrls];
 
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -138,10 +152,10 @@ const generateSitemap = async (req, res) => {
 ${allUrls
   .map(
     u => `  <url>
-    <loc>${u.loc}</loc>
-    <lastmod>${u.lastmod}</lastmod>
-    <changefreq>${u.changefreq}</changefreq>
-    <priority>${u.priority}</priority>
+    <loc>${escapeXml(u.loc)}</loc>
+    <lastmod>${escapeXml(u.lastmod)}</lastmod>
+    <changefreq>${escapeXml(u.changefreq)}</changefreq>
+    <priority>${escapeXml(u.priority)}</priority>
   </url>`
   )
   .join('\n')}

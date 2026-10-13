@@ -109,6 +109,7 @@ exports.updateUIConfig = async (req, res, next) => {
         ...curSeo,
         ...seo,
       };
+      config.markModified('seo');
     }
 
     if (integrations) {
@@ -120,6 +121,7 @@ exports.updateUIConfig = async (req, res, next) => {
         email: { ...(cur.email || {}), ...(integrations.email || {}) },
         storage: { ...(cur.storage || {}), ...(integrations.storage || {}) },
       };
+      config.markModified('integrations');
     }
 
     await config.save();

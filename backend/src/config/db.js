@@ -34,7 +34,11 @@ const connectDB = async () => {
     // 2. Graceful in-memory fallback using MongoMemoryServer
     try {
       const { MongoMemoryServer } = require('mongodb-memory-server');
-      mongoMemoryServer = await MongoMemoryServer.create();
+      mongoMemoryServer = await MongoMemoryServer.create({
+        instance: {
+          launchTimeout: 60000,
+        },
+      });
       const memoryUri = mongoMemoryServer.getUri();
       const conn = await mongoose.connect(memoryUri);
       isInMemory = true;

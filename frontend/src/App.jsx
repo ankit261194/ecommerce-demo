@@ -179,26 +179,61 @@ const MainLayout = () => {
     // 7. Google Analytics 4 (GA4) Script Injection
     if (seo.googleAnalyticsId && seo.googleAnalyticsId.trim() !== '') {
       const gaId = seo.googleAnalyticsId.trim();
-      if (!document.getElementById('ga4-script-tag')) {
-        const gaScript = document.createElement('script');
+      let gaScript = document.getElementById('ga4-script-tag');
+      if (!gaScript) {
+        gaScript = document.createElement('script');
         gaScript.id = 'ga4-script-tag';
         gaScript.async = true;
-        gaScript.src = `https://www.googletagmanager.com/gtag/js?id=${gaId}`;
         document.head.appendChild(gaScript);
+      }
+      gaScript.src = `https://www.googletagmanager.com/gtag/js?id=${gaId}`;
 
-        const initScript = document.createElement('script');
+      let initScript = document.getElementById('ga4-init-tag');
+      if (!initScript) {
+        initScript = document.createElement('script');
         initScript.id = 'ga4-init-tag';
-        initScript.innerHTML = `
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          gtag('js', new Date());
-          gtag('config', '${gaId}');
-        `;
         document.head.appendChild(initScript);
       }
+      initScript.innerHTML = `
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', '${gaId}');
+      `;
+    } else {
+      const gTag = document.getElementById('ga4-script-tag');
+      if (gTag) gTag.remove();
+      const gInit = document.getElementById('ga4-init-tag');
+      if (gInit) gInit.remove();
     }
 
-    // 8. JSON-LD Structured Data (WebSite + Organization Schema)
+    // 8. Facebook / Meta Pixel Script Injection
+    if (seo.facebookPixelId && seo.facebookPixelId.trim() !== '') {
+      const pixelId = seo.facebookPixelId.trim();
+      let fbScript = document.getElementById('fb-pixel-tag');
+      if (!fbScript) {
+        fbScript = document.createElement('script');
+        fbScript.id = 'fb-pixel-tag';
+        fbScript.innerHTML = `
+          !function(f,b,e,v,n,t,s)
+          {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+          n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+          if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+          n.queue=[];t=b.createElement(e);t.async=!0;
+          t.src=v;s=b.getElementsByTagName(e)[0];
+          s.parentNode.insertBefore(t,s)}(window, document,'script',
+          'https://connect.facebook.net/en_US/fbevents.js');
+          fbq('init', '${pixelId}');
+          fbq('track', 'PageView');
+        `;
+        document.head.appendChild(fbScript);
+      }
+    } else {
+      const fbScript = document.getElementById('fb-pixel-tag');
+      if (fbScript) fbScript.remove();
+    }
+
+    // 9. JSON-LD Structured Data (WebSite + Organization Schema)
     if (seo.enableRichSnippets !== false) {
       let webSiteSchemaTag = document.getElementById('jsonld-website-schema');
       if (!webSiteSchemaTag) {

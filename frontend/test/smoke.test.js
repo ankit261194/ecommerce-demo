@@ -32,6 +32,18 @@ test('Production build dist/index.html exists and contains mount root', () => {
   const content = fs.readFileSync(distHtmlPath, 'utf8');
   assert.ok(content.includes('<div id="root"></div>'), 'Root div must exist in index.html');
   assert.ok(content.includes('AuraMarket'), 'Title/Branding must exist');
+  assert.ok(content.includes('rel="canonical"'), 'Canonical link must exist in index.html');
+  assert.ok(content.includes('property="og:title"'), 'OG title meta tag must exist in index.html');
+});
+
+test('Public directory includes sitemap.xml and robots.txt for Vite distribution', () => {
+  const robotsPath = path.resolve(__dirname, '../public/robots.txt');
+  const sitemapPath = path.resolve(__dirname, '../public/sitemap.xml');
+  assert.ok(fs.existsSync(robotsPath), 'public/robots.txt must exist');
+  assert.ok(fs.existsSync(sitemapPath), 'public/sitemap.xml must exist');
+  const robotsContent = fs.readFileSync(robotsPath, 'utf8');
+  assert.ok(robotsContent.includes('User-agent: *'), 'robots.txt must contain User-agent: *');
+  assert.ok(robotsContent.includes('Sitemap:'), 'robots.txt must contain Sitemap directive');
 });
 
 test('Production build JS and CSS asset bundles are generated and non-empty', () => {

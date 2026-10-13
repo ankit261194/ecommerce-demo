@@ -242,11 +242,42 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     };
   }, [products, uiConfig?.seo?.enableRichSnippets]);
 
-  // Inject JSON-LD Product Schema and Dynamic Title when a Product is Selected
+  // Inject JSON-LD Product Schema and Dynamic Meta Tags when a Product is Selected
   useEffect(() => {
     if (selectedProduct) {
       const prevTitle = document.title;
-      document.title = `${selectedProduct.title} | ${uiConfig?.storeName || 'AuraMarket'}`;
+      const store = uiConfig?.storeName || 'AuraMarket';
+      document.title = `${selectedProduct.title} | ${store}`;
+
+      // Helper to update meta tag content
+      const setMeta = (attr, key, val) => {
+        if (!val) return;
+        let el = document.querySelector(`meta[${attr}="${key}"]`);
+        if (el) el.setAttribute('content', val);
+      };
+
+      const prevDesc = document.querySelector('meta[name="description"]')?.getAttribute('content');
+      const prevOgTitle = document.querySelector('meta[property="og:title"]')?.getAttribute('content');
+      const prevOgDesc = document.querySelector('meta[property="og:description"]')?.getAttribute('content');
+      const prevOgImage = document.querySelector('meta[property="og:image"]')?.getAttribute('content');
+      const prevTwTitle = document.querySelector('meta[name="twitter:title"]')?.getAttribute('content');
+      const prevTwDesc = document.querySelector('meta[name="twitter:description"]')?.getAttribute('content');
+      const prevTwImage = document.querySelector('meta[name="twitter:image"]')?.getAttribute('content');
+
+      const prodImg = selectedProduct.images?.[0] || selectedProduct.image || '';
+      const prodDesc = selectedProduct.description || '';
+
+      if (prodDesc) {
+        setMeta('name', 'description', prodDesc);
+        setMeta('property', 'og:description', prodDesc);
+        setMeta('name', 'twitter:description', prodDesc);
+      }
+      setMeta('property', 'og:title', `${selectedProduct.title} | ${store}`);
+      setMeta('name', 'twitter:title', `${selectedProduct.title} | ${store}`);
+      if (prodImg) {
+        setMeta('property', 'og:image', prodImg);
+        setMeta('name', 'twitter:image', prodImg);
+      }
 
       if (uiConfig?.seo?.enableRichSnippets !== false) {
         let singleSchema = document.getElementById('jsonld-selected-product');
@@ -260,8 +291,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           '@context': 'https://schema.org',
           '@type': 'Product',
           name: selectedProduct.title,
-          image: selectedProduct.images?.[0] || selectedProduct.image,
-          description: selectedProduct.description,
+          image: prodImg,
+          description: prodDesc,
           sku: selectedProduct.sku || selectedProduct._id,
           brand: {
             '@type': 'Brand',
@@ -278,6 +309,13 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
       return () => {
         document.title = prevTitle;
+        if (prevDesc) setMeta('name', 'description', prevDesc);
+        if (prevOgTitle) setMeta('property', 'og:title', prevOgTitle);
+        if (prevOgDesc) setMeta('property', 'og:description', prevOgDesc);
+        if (prevOgImage) setMeta('property', 'og:image', prevOgImage);
+        if (prevTwTitle) setMeta('name', 'twitter:title', prevTwTitle);
+        if (prevTwDesc) setMeta('name', 'twitter:description', prevTwDesc);
+        if (prevTwImage) setMeta('name', 'twitter:image', prevTwImage);
         const el = document.getElementById('jsonld-selected-product');
         if (el) el.remove();
       };

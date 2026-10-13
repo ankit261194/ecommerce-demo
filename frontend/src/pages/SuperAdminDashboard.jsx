@@ -2017,11 +2017,11 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-bold text-slate-700">Meta Title (Brand + Value Proposition)</label>
-                  <span className="text-[11px] font-mono text-slate-400">{seoConfig.metaTitle.length}/60 chars</span>
+                  <span className="text-[11px] font-mono text-slate-400">{(seoConfig.metaTitle || '').length}/60 chars</span>
                 </div>
                 <input
                   type="text"
-                  value={seoConfig.metaTitle}
+                  value={seoConfig.metaTitle || ''}
                   onChange={e => setSeoConfig({ ...seoConfig, metaTitle: e.target.value })}
                   placeholder="e.g. AuraMarket — The Next-Gen Multi-Vendor Commerce Platform"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 font-medium text-xs focus:outline-none focus:border-amber-500"
@@ -2031,11 +2031,11 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-bold text-slate-700">Meta Description</label>
-                  <span className="text-[11px] font-mono text-slate-400">{seoConfig.metaDescription.length}/160 chars</span>
+                  <span className="text-[11px] font-mono text-slate-400">{(seoConfig.metaDescription || '').length}/160 chars</span>
                 </div>
                 <textarea
                   rows="3"
-                  value={seoConfig.metaDescription}
+                  value={seoConfig.metaDescription || ''}
                   onChange={e => setSeoConfig({ ...seoConfig, metaDescription: e.target.value })}
                   placeholder="e.g. Discover top electronics, audio, fashion, and lifestyle brands from verified merchants with express delivery and OTP verification."
                   className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 font-medium text-xs focus:outline-none focus:border-amber-500"
@@ -2048,7 +2048,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
                 </label>
                 <input
                   type="text"
-                  value={seoConfig.metaKeywords}
+                  value={seoConfig.metaKeywords || ''}
                   onChange={e => setSeoConfig({ ...seoConfig, metaKeywords: e.target.value })}
                   placeholder="ecommerce, multi-vendor marketplace, online shopping, electronics"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 font-medium text-xs focus:outline-none focus:border-amber-500"
@@ -2061,7 +2061,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
                 </label>
                 <input
                   type="url"
-                  value={seoConfig.canonicalUrl}
+                  value={seoConfig.canonicalUrl || ''}
                   onChange={e => setSeoConfig({ ...seoConfig, canonicalUrl: e.target.value })}
                   placeholder="https://shribalajikripadham.online/ecommerce-demo/"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 font-mono text-xs focus:outline-none focus:border-amber-500"
@@ -2092,7 +2092,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
                 </label>
                 <input
                   type="url"
-                  value={seoConfig.ogImage}
+                  value={seoConfig.ogImage || ''}
                   onChange={e => setSeoConfig({ ...seoConfig, ogImage: e.target.value })}
                   placeholder="https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1200"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 font-mono text-xs focus:outline-none focus:border-amber-500"
@@ -2124,7 +2124,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
                 </label>
                 <input
                   type="text"
-                  value={seoConfig.facebookPixelId}
+                  value={seoConfig.facebookPixelId || ''}
                   onChange={e => setSeoConfig({ ...seoConfig, facebookPixelId: e.target.value })}
                   placeholder="e.g. 123456789012345"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 font-mono text-xs focus:outline-none focus:border-amber-500"
@@ -2155,7 +2155,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
                 </label>
                 <input
                   type="text"
-                  value={seoConfig.googleSiteVerification}
+                  value={seoConfig.googleSiteVerification || ''}
                   onChange={e => setSeoConfig({ ...seoConfig, googleSiteVerification: e.target.value })}
                   placeholder="e.g. google-site-verification=XXXXXXXXXXXXXXXXXXXXXXX"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 font-mono text-xs focus:outline-none focus:border-amber-500"
@@ -2171,7 +2171,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
                 </label>
                 <input
                   type="text"
-                  value={seoConfig.googleAnalyticsId}
+                  value={seoConfig.googleAnalyticsId || ''}
                   onChange={e => setSeoConfig({ ...seoConfig, googleAnalyticsId: e.target.value })}
                   placeholder="e.g. G-XXXXXXXXXX"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 font-mono text-xs focus:outline-none focus:border-amber-500"

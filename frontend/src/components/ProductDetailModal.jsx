@@ -23,6 +23,7 @@ import StockUrgencyBadge from './StockUrgencyBadge';
 import RecentPurchaseCounter from './RecentPurchaseCounter';
 import ProductReviewsSection from './ProductReviewsSection';
 import ProductQnASection from './ProductQnASection';
+import FrequentlyBoughtTogether from './FrequentlyBoughtTogether';
 
 export const ProductDetailModal = ({
   product,
@@ -630,6 +631,7 @@ export const ProductDetailModal = ({
             <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 pb-px">
               {[
                 { id: 'overview', label: '📖 Overview & Description' },
+                { id: 'bundle', label: '🎁 Combo Bundle & Save 10%' },
                 { id: 'specs', label: `⚙️ Specifications (${specs.length})` },
                 { id: 'reviews', label: `⭐ Reviews & Ratings (${sampleReviews.length})` },
                 { id: 'qna', label: '💬 Customer Q&A' },
@@ -681,6 +683,17 @@ export const ProductDetailModal = ({
                     </ul>
                   </div>
 
+                  {/* Point #20: Frequently Bought Together Combo Module */}
+                  <div className="pt-2">
+                    <FrequentlyBoughtTogether
+                      productId={product._id}
+                      mainProduct={product}
+                      onAddBundleToCart={(items) => {
+                        items.forEach(it => onAddToCart(it, null, 1));
+                      }}
+                    />
+                  </div>
+
                   <div className="text-[11px] text-slate-400">
                     <span className="font-bold text-slate-600">Tags: </span>
                     {product.tags?.map((t, idx) => (
@@ -692,7 +705,20 @@ export const ProductDetailModal = ({
                 </div>
               )}
 
-              {/* TAB 2: SPECIFICATIONS */}
+              {/* TAB 2: COMBO BUNDLE */}
+              {activeTab === 'bundle' && (
+                <div className="animate-fade-in py-2">
+                  <FrequentlyBoughtTogether
+                    productId={product._id}
+                    mainProduct={product}
+                    onAddBundleToCart={(items) => {
+                      items.forEach(it => onAddToCart(it, null, 1));
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* TAB 3: SPECIFICATIONS */}
               {activeTab === 'specs' && (
                 <div className="space-y-3 animate-fade-in">
                   <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm">

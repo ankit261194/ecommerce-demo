@@ -760,6 +760,22 @@ const runTests = async () => {
       assert.strictEqual(updateData.data.shipping.defaultShippingFee, 99);
     });
 
+    await test('Point 20: Frequently Bought Together: GET /products/:identifier/bundle returns bundle accessories, discount percentage, and bundled pricing', async () => {
+      const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}/bundle`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.mainProduct, 'Must return mainProduct');
+      assert.strictEqual(data.mainProduct.slug, headphonesProduct.slug);
+      assert.ok(Array.isArray(data.bundleItems), 'Must return bundle items array');
+      assert.ok(data.bundleItems.length >= 1, 'Must return at least 1 complementary item');
+      assert.ok(data.pricing, 'Must return bundle pricing object');
+      assert.strictEqual(data.pricing.bundleDiscountPercent, 10, 'Must apply 10% bundle discount');
+      assert.ok(data.pricing.bundleDiscountAmount > 0, 'Discount amount must be positive');
+      assert.ok(data.pricing.bundleFinalPrice < data.pricing.totalIndividualSellingPrice, 'Bundle final price must be cheaper than individual sum');
+      assert.ok(data.pricing.totalBundleSavings > 0, 'Must provide total bundle savings');
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

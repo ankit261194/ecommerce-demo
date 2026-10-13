@@ -703,5 +703,98 @@ exports.compareProducts = async (req, res, next) => {
   }
 };
 
+// Point #20: Frequently Bought Together (Bundle Discounts & combos)
+// @route GET /api/products/:identifier/bundle
+exports.getProductBundle = async (req, res, next) => {
+  try {
+    const { identifier } = req.params;
+    let mainProduct = null;
+
+    if (identifier.match(/^[0-9a-fA-F]{24}$/)) {
+      mainProduct = await Product.findById(identifier).populate('vendor', 'storeName rating');
+    }
+    if (!mainProduct) {
+      mainProduct = await Product.findOne({ slug: identifier }).populate('vendor', 'storeName rating');
+    }
+
+    if (!mainProduct) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found',
+      });
+    }
+
+    // Find complementary bundle products
+    let complementary = await Product.find({
+      _id: { $ne: mainProduct._id },
+      isPublished: true,
+      stock: { $gt: 0 },
+      $or: [
+        { category: mainProduct.category },
+        { vendor: mainProduct.vendor?._id },
+      ],
+    })
+      .limit(2)
+      .populate('vendor', 'storeName rating');
+
+    if (complementary.length < 2) {
+      const moreItems = await Product.find({
+        _id: { $ne: mainProduct._id, $nin: complementary.map(c => c._id) },
+        isPublished: true,
+        stock: { $gt: 0 },
+      })
+        .limit(2 - complementary.length)
+        .populate('vendor', 'storeName rating');
+      complementary = [...complementary, ...moreItems];
+    }
+
+    const allBundleProducts = [mainProduct, ...complementary];
+    const totalOriginalMrp = allBundleProducts.reduce((sum, p) => sum + (p.mrp || Math.round((p.sellingPrice || p.price) * 1.4)), 0);
+    const totalIndividualSellingPrice = allBundleProducts.reduce((sum, p) => sum + (p.sellingPrice || p.price || 0), 0);
+
+    // Bundle Discount: 10% off total selling price when bought together
+    const bundleDiscountPercent = 10;
+    const bundleDiscountAmount = Math.round((totalIndividualSellingPrice * bundleDiscountPercent) / 100);
+    const bundleFinalPrice = totalIndividualSellingPrice - bundleDiscountAmount;
+    const totalBundleSavings = totalOriginalMrp - bundleFinalPrice;
+
+    res.status(200).json({
+      success: true,
+      mainProduct: {
+        _id: mainProduct._id,
+        title: mainProduct.title,
+        slug: mainProduct.slug,
+        brand: mainProduct.brand,
+        image: mainProduct.images?.[0] || mainProduct.image,
+        sellingPrice: mainProduct.sellingPrice || mainProduct.price,
+        mrp: mainProduct.mrp || Math.round((mainProduct.sellingPrice || mainProduct.price) * 1.4),
+        stock: mainProduct.stock,
+      },
+      bundleItems: complementary.map(item => ({
+        _id: item._id,
+        title: item.title,
+        slug: item.slug,
+        brand: item.brand,
+        image: item.images?.[0] || item.image,
+        sellingPrice: item.sellingPrice || item.price,
+        mrp: item.mrp || Math.round((item.sellingPrice || item.price) * 1.4),
+        stock: item.stock,
+      })),
+      pricing: {
+        totalItems: allBundleProducts.length,
+        totalOriginalMrp,
+        totalIndividualSellingPrice,
+        bundleDiscountPercent,
+        bundleDiscountAmount,
+        bundleFinalPrice,
+        totalBundleSavings,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
 
 

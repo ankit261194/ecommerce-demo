@@ -27,7 +27,22 @@ exports.getUIConfig = async (req, res, next) => {
 // @route   PUT /api/ui/config
 exports.updateUIConfig = async (req, res, next) => {
   try {
-    const { storeName, tagline, primaryColor, secondaryColor, heroBanners, announcementText, showAnnouncement } = req.body;
+    const {
+      storeName,
+      tagline,
+      primaryColor,
+      secondaryColor,
+      heroBanners,
+      announcementText,
+      showAnnouncement,
+      footerText,
+      supportPhone,
+      supportEmail,
+      showDemoNotice,
+      demoModeActive,
+      demoNoticeContact,
+      demoWhatsAppUrl,
+    } = req.body;
 
     let config = await UIConfig.findOne();
     if (!config) {
@@ -41,6 +56,13 @@ exports.updateUIConfig = async (req, res, next) => {
     if (heroBanners) config.heroBanners = heroBanners;
     if (announcementText !== undefined) config.announcementText = announcementText;
     if (showAnnouncement !== undefined) config.showAnnouncement = showAnnouncement;
+    if (footerText !== undefined) config.footerText = footerText;
+    if (supportPhone !== undefined) config.supportPhone = supportPhone;
+    if (supportEmail !== undefined) config.supportEmail = supportEmail;
+    if (showDemoNotice !== undefined) config.showDemoNotice = showDemoNotice;
+    if (demoModeActive !== undefined) config.demoModeActive = demoModeActive;
+    if (demoNoticeContact !== undefined) config.demoNoticeContact = demoNoticeContact;
+    if (demoWhatsAppUrl !== undefined) config.demoWhatsAppUrl = demoWhatsAppUrl;
 
     await config.save();
 

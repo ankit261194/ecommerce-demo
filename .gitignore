@@ -19,3 +19,9 @@ mobile_app/build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Archives & Temporary Build Scripts
+*.zip
+dist_package/
+sync-demo.cjs
+package-codecanyon.cjs

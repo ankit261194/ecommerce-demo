@@ -680,6 +680,58 @@ const runTests = async () => {
       assert.ok(orderCount >= 1, 'Sample order must be restored');
     });
 
+    // 12. Security & Marketplace Robustness
+    await test('Undefined API routes return clean JSON 404 responses', async () => {
+      const res = await fetch(`${baseUrl}/undefined-endpoint-test-404`);
+      assert.strictEqual(res.status, 404);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('not found'));
+    });
+
+    await test('Super Admin can customize white-label footer and support settings via PUT /ui/config', async () => {
+      const res = await fetch(`${baseUrl}/ui/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          storeName: 'AuraMarket Pro',
+          footerText: '© 2026 AuraMarket Pro Enterprise Inc.',
+          supportPhone: '+1-800-AURA-SHOP',
+          supportEmail: 'customercare@auramarket.com',
+          showDemoNotice: false,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.storeName, 'AuraMarket Pro');
+      assert.strictEqual(data.data.footerText, '© 2026 AuraMarket Pro Enterprise Inc.');
+      assert.strictEqual(data.data.showDemoNotice, false);
+    });
+
+    await test('PATCH /admin/vendors/:id/status updates status via patch alias', async () => {
+      const vendorsRes = await fetch(`${baseUrl}/admin/vendors`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const vData = await vendorsRes.json();
+      const firstVendor = vData.data[0];
+
+      const res = await fetch(`${baseUrl}/admin/vendors/${firstVendor._id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ status: 'approved' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.data.status, 'approved');
+    });
+
   } finally {
     if (server) {
       server.close();

@@ -70,6 +70,10 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
     primaryColor: uiConfig?.primaryColor || '#F59E0B',
     bannerTitle: 'Spatial Audio Reinvented',
     bannerSubtitle: 'Immerse yourself in studio-grade acoustics.',
+    footerText: uiConfig?.footerText || '© 2026 AuraMarket — Enterprise Multi-Vendor Marketplace Platform. All rights reserved.',
+    supportPhone: uiConfig?.supportPhone || '+91 8533955333',
+    supportEmail: uiConfig?.supportEmail || 'support@auramarket.com',
+    showDemoNotice: uiConfig?.showDemoNotice ?? true,
   });
 
   const [actionMessage, setActionMessage] = useState(null);
@@ -161,6 +165,10 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       storeName: themeForm.storeName,
       announcementText: themeForm.announcementText,
       primaryColor: themeForm.primaryColor,
+      footerText: themeForm.footerText,
+      supportPhone: themeForm.supportPhone,
+      supportEmail: themeForm.supportEmail,
+      showDemoNotice: themeForm.showDemoNotice,
       heroBanners: [
         {
           title: themeForm.bannerTitle,
@@ -175,9 +183,9 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
     setIsThemeDrawerOpen(false);
     try {
       await api.put('/ui/config', updated);
-      setActionMessage({ type: 'success', text: '🎨 Visual Theme & Banners updated live across Storefront and Apps!' });
+      setActionMessage({ type: 'success', text: '🎨 Visual Theme, Branding & Footer updated live across Storefront and Apps!' });
     } catch (_) {
-      setActionMessage({ type: 'success', text: '🎨 Visual Theme & Banners updated live across Storefront and Apps!' });
+      setActionMessage({ type: 'success', text: '🎨 Visual Theme, Branding & Footer updated live across Storefront and Apps!' });
     }
   };
 
@@ -446,6 +454,65 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
               placeholder="Banner description"
               required
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+              Store Footer & Copyright Text
+            </label>
+            <input
+              type="text"
+              value={themeForm.footerText}
+              onChange={e => setThemeForm({ ...themeForm, footerText: e.target.value })}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 font-medium text-sm focus:outline-none focus:border-amber-500"
+              placeholder="e.g. © 2026 YourStore. All rights reserved."
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Support Helpline Phone
+              </label>
+              <input
+                type="text"
+                value={themeForm.supportPhone}
+                onChange={e => setThemeForm({ ...themeForm, supportPhone: e.target.value })}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 font-medium text-sm focus:outline-none focus:border-amber-500"
+                placeholder="+91 8533955333"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Support Email
+              </label>
+              <input
+                type="email"
+                value={themeForm.supportEmail}
+                onChange={e => setThemeForm({ ...themeForm, supportEmail: e.target.value })}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 font-medium text-sm focus:outline-none focus:border-amber-500"
+                placeholder="support@yourstore.com"
+              />
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+            <div className="flex items-center gap-2.5">
+              <input
+                type="checkbox"
+                id="showDemoNoticeToggle"
+                checked={themeForm.showDemoNotice}
+                onChange={e => setThemeForm({ ...themeForm, showDemoNotice: e.target.checked })}
+                className="w-4 h-4 text-amber-500 rounded border-slate-300 focus:ring-amber-400"
+              />
+              <label htmlFor="showDemoNoticeToggle" className="text-xs font-bold text-slate-800 cursor-pointer">
+                Display Showroom & Developer Purchase Box
+              </label>
+            </div>
+            <p className="text-[11px] text-slate-500 pl-6">
+              Enable when hosting a public live demo to allow visitors to purchase directly. Disable for 100% white-label client production stores.
+            </p>
           </div>
 
           <div className="pt-4 border-t border-slate-200">

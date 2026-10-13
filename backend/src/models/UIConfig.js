@@ -46,6 +46,30 @@ const uiConfigSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    footerText: {
+      type: String,
+      default: '© 2026 AuraMarket — Enterprise Multi-Vendor Marketplace Platform. All rights reserved.',
+    },
+    supportPhone: {
+      type: String,
+      default: '+1 (800) 555-0199',
+    },
+    supportEmail: {
+      type: String,
+      default: 'support@auramarket.com',
+    },
+    showDemoNotice: {
+      type: Boolean,
+      default: false,
+    },
+    demoNoticeContact: {
+      type: String,
+      default: '+91 8533955333',
+    },
+    demoWhatsAppUrl: {
+      type: String,
+      default: 'https://wa.me/918533955333?text=Hi%20Ankit,%20I%20want%20to%20purchase%20AuraMarket%20E-Commerce%20Platform',
+    },
   },
   { timestamps: true }
 );

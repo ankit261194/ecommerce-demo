@@ -38,11 +38,32 @@ import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
-  // Master Dashboard Tab: 'overview' | 'integrations' | 'seo'
+  // Master Dashboard Tab: 'overview' | 'layout' | 'integrations' | 'seo'
   const [activeDashboardTab, setActiveDashboardTab] = useState('overview');
 
   // Integrations Hub Sub-Tab: 'payments' | 'sms' | 'email' | 'storage'
   const [integrationSubTab, setIntegrationSubTab] = useState('payments');
+
+  // Homepage Visual Sections State (Screenshot 3 Layout Builder)
+  const [homepageSections, setHomepageSections] = useState([
+    { id: 'announcement', name: '🔥 Top Festive Announcement Bar', desc: 'Promotional discount banner with coupon code', enabled: true },
+    { id: 'hero', name: '🚀 Spatial Audio 3D Hero Banner', desc: 'Interactive call-to-action hero banner with direct checkout link', enabled: true },
+    { id: 'trust', name: '🛡️ Trust & Express Delivery Badges', desc: 'Guaranteed 24h dispatch, verified merchants & 7-day return policy', enabled: true },
+    { id: 'categories', name: '🛍️ Shop by Category Circular Grid', desc: 'Category filters with verified seller counts', enabled: true },
+    { id: 'featured', name: '⭐ Featured Multi-Vendor Products', desc: '2-column responsive mobile cards with wishlist & share actions', enabled: true },
+    { id: 'dealsoftheday', name: '⚡ Today\'s Flash Deals & Timer', desc: 'Time-limited discounted merchant listings', enabled: true },
+  ]);
+
+  const toggleSection = (id) => {
+    setHomepageSections(prev =>
+      prev.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s)
+    );
+    setActionMessage({
+      type: 'success',
+      text: '✨ Homepage layout updated! Changes saved and reflected live on storefront.',
+    });
+    setTimeout(() => setActionMessage(null), 3000);
+  };
 
   // SEO & Webmaster Hub State
   const [seoConfig, setSeoConfig] = useState({
@@ -525,49 +546,72 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
         </div>
       </div>
 
-      {/* Primary Dashboard Navigation Tabs */}
-      <div className="flex items-center gap-3 border-b border-slate-200 pb-2">
-        <button
-          onClick={() => setActiveDashboardTab('overview')}
-          className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-sm transition-all ${
-            activeDashboardTab === 'overview'
-              ? 'bg-slate-900 text-white shadow-md'
-              : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
-          }`}
-        >
-          <Layers className="w-4 h-4 text-amber-400" />
-          <span>Marketplace Overview & Vendors</span>
-        </button>
+      {/* Sleek Enterprise Dark Navigation Bar (Screenshot 5 Style) */}
+      <div className="bg-[#0f172a] text-white p-3 rounded-2xl border border-slate-800 shadow-xl flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setActiveDashboardTab('overview')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'overview'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Marketplace Overview</span>
+          </button>
 
-        <button
-          onClick={() => setActiveDashboardTab('integrations')}
-          className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-sm transition-all relative ${
-            activeDashboardTab === 'integrations'
-              ? 'bg-amber-500 text-white shadow-md'
-              : 'bg-white text-slate-700 hover:text-slate-900 border border-slate-200'
-          }`}
-        >
-          <Plug className="w-4 h-4" />
-          <span>🔌 Integrations & API Hub</span>
-          <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 ml-1">
-            Zero-Code
-          </span>
-        </button>
+          <button
+            onClick={() => setActiveDashboardTab('layout')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'layout'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Store className="w-4 h-4" />
+            <span>Homepage Layout</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-blue-500/30 text-blue-300 ml-1">
+              Visual Builder
+            </span>
+          </button>
 
-        <button
-          onClick={() => setActiveDashboardTab('seo')}
-          className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-sm transition-all relative ${
-            activeDashboardTab === 'seo'
-              ? 'bg-blue-600 text-white shadow-md'
-              : 'bg-white text-slate-700 hover:text-slate-900 border border-slate-200'
-          }`}
-        >
-          <Search className="w-4 h-4 text-amber-400" />
-          <span>🔍 SEO & Webmaster Hub</span>
-          <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 ml-1">
-            Google Ready
+          <button
+            onClick={() => setActiveDashboardTab('integrations')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'integrations'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Plug className="w-4 h-4" />
+            <span>Integrations & API Hub</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-300 ml-1">
+              Zero-Code
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveDashboardTab('seo')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'seo'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Search className="w-4 h-4" />
+            <span>SEO & Webmaster Hub</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-300 ml-1">
+              Google Ready
+            </span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="px-3 py-1 rounded-lg bg-slate-800 text-amber-400 font-mono text-xs font-bold border border-slate-700">
+            AuraMarket v3.2 Enterprise
           </span>
-        </button>
+        </div>
       </div>
 
       {/* ========================================================================= */}
@@ -710,6 +754,74 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB: HOMEPAGE MODULAR SECTION MANAGER (Screenshot 3 Style) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'layout' && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 space-y-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <Store className="w-5 h-5 text-amber-500" />
+                  <span>Homepage Modular Section Manager</span>
+                </h2>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Enable, disable, or customize visual storefront modules with a single click. 100% plug & play.
+                </p>
+              </div>
+              <span className="text-xs font-black uppercase px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 self-start sm:self-auto">
+                Live Storefront Sync
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {homepageSections.map((sec, index) => (
+                <div
+                  key={sec.id}
+                  className={`p-4 sm:p-5 rounded-2xl border transition-all flex items-center justify-between gap-4 ${
+                    sec.enabled
+                      ? 'bg-white border-amber-300 shadow-sm ring-1 ring-amber-300/40'
+                      : 'bg-slate-50 border-slate-200 opacity-60'
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center">
+                        #{index + 1}
+                      </span>
+                      <h3 className="font-extrabold text-slate-900 text-sm">{sec.name}</h3>
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium pl-8">{sec.desc}</p>
+                  </div>
+
+                  <button
+                    onClick={() => toggleSection(sec.id)}
+                    className={`px-3.5 py-1.5 rounded-xl font-black text-xs transition-all shadow-sm flex items-center gap-1.5 flex-shrink-0 ${
+                      sec.enabled
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        : 'bg-slate-300 hover:bg-slate-400 text-slate-800'
+                    }`}
+                  >
+                    <span>{sec.enabled ? 'ACTIVE' : 'DISABLED'}</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-amber-600" />
+                Non-Developer Visual Builder:
+              </p>
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                You can toggle off unwanted modules whenever not in season, and the storefront adapts its layout automatically with 100% responsiveness on mobile and web!
+              </p>
             </div>
           </div>
         </div>

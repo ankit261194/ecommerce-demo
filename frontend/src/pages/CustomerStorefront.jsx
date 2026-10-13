@@ -14,6 +14,12 @@ import {
   PackageCheck,
   Clock,
   Layers,
+  Heart,
+  Share2,
+  MessageCircle,
+  Check,
+  X,
+  MapPin,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { useCart } from '../context/CartContext';
@@ -28,6 +34,54 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [activeOrderConfirmation, setActiveOrderConfirmation] = useState(null);
+  const [toastMessage, setToastMessage] = useState(null);
+
+  // Wishlist state (persisted in localStorage)
+  const [wishlist, setWishlist] = useState(() => {
+    try {
+      const saved = localStorage.getItem('auramarket_wishlist');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleWishlist = (product, e) => {
+    if (e) e.stopPropagation();
+    setWishlist(prev => {
+      const exists = prev.includes(product._id);
+      const updated = exists ? prev.filter(id => id !== product._id) : [...prev, product._id];
+      localStorage.setItem('auramarket_wishlist', JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('auramarket_wishlist_update'));
+      setToastMessage(exists ? `Removed from Wishlist` : `Saved to Wishlist ❤️`);
+      setTimeout(() => setToastMessage(null), 2200);
+      return updated;
+    });
+  };
+
+  const handleShareProduct = (product, e) => {
+    if (e) e.stopPropagation();
+    const shareUrl = window.location.href;
+    if (navigator.share) {
+      navigator.share({
+        title: product.title,
+        text: `Check out ${product.title} on ${uiConfig?.storeName || 'AuraMarket'} for only ₹${product.sellingPrice}!`,
+        url: shareUrl,
+      }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(shareUrl);
+      setToastMessage('Product link copied! 📋');
+      setTimeout(() => setToastMessage(null), 2200);
+    }
+  };
+
+  useEffect(() => {
+    const handleOpenWishlist = () => {
+      setSelectedCategory('wishlist');
+    };
+    window.addEventListener('auramarket_open_wishlist', handleOpenWishlist);
+    return () => window.removeEventListener('auramarket_open_wishlist', handleOpenWishlist);
+  }, []);
 
   // Checkout address state
   const [address, setAddress] = useState({
@@ -179,10 +233,14 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     { id: 'electronics-audio', label: 'Electronics & Audio', icon: '🎧' },
     { id: 'fashion', label: 'Fashion & Apparel', icon: '👕' },
     { id: 'watches-accessories', label: 'Watches & Wearables', icon: '⌚' },
+    { id: 'wishlist', label: `My Wishlist (${wishlist.length})`, icon: '❤️' },
   ];
 
   // Filtering products
   const filteredProducts = products.filter(p => {
+    if (selectedCategory === 'wishlist') {
+      return wishlist.includes(p._id);
+    }
     const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
     const matchesSearch =
       !searchQuery ||
@@ -504,16 +562,23 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
             {filteredProducts.map(product => {
               const discount = Math.round(((product.mrp - product.sellingPrice) / product.mrp) * 100);
+              const isWishlisted = wishlist.includes(product._id);
               return (
                 <div
                   key={product._id}
-                  className="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group"
+                  className="bg-white rounded-2xl sm:rounded-3xl overflow-hidden border border-slate-200/90 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group relative"
                 >
                   {/* Product Image & Badges */}
-                  <div className="relative overflow-hidden aspect-square bg-slate-100">
+                  <div
+                    onClick={() => {
+                      setSelectedProduct(product);
+                      if (product.hasVariants) setSelectedVariant(product.variants[0]);
+                    }}
+                    className="relative overflow-hidden aspect-square bg-slate-100 cursor-pointer"
+                  >
                     <img
                       src={product.images[0]}
                       alt={product.title}
@@ -521,39 +586,76 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                       decoding="async"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
-                    <div className="absolute top-3 left-3 bg-red-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded shadow">
+
+                    {/* Discount Badge */}
+                    <div className="absolute top-2 left-2 sm:top-3 sm:left-3 bg-rose-600 text-white text-[9px] sm:text-[10px] font-black uppercase px-1.5 py-0.5 sm:px-2 rounded-md sm:rounded-lg shadow">
                       {discount}% OFF
                     </div>
-                    <div className="absolute bottom-3 right-3 bg-white/90 backdrop-blur px-2 py-0.5 rounded text-[11px] font-bold text-amber-600 flex items-center gap-1 shadow-sm">
-                      <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                      <span>{product.ratingsAverage}</span>
-                      <span className="text-slate-400 text-[10px]">({product.ratingsQuantity})</span>
+
+                    {/* Quick Actions: Share & Wishlist Heart */}
+                    <div className="absolute top-2 right-2 sm:top-3 sm:right-3 flex items-center gap-1 sm:gap-1.5 z-10">
+                      <button
+                        onClick={e => handleShareProduct(product, e)}
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/90 hover:bg-white text-slate-700 hover:text-slate-950 flex items-center justify-center shadow-md backdrop-blur transition-all active:scale-90"
+                        title="Share product"
+                      >
+                        <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      </button>
+                      <button
+                        onClick={e => toggleWishlist(product, e)}
+                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/90 hover:bg-white flex items-center justify-center shadow-md backdrop-blur transition-all active:scale-90 ${
+                          isWishlisted ? 'text-rose-600' : 'text-slate-400 hover:text-rose-500'
+                        }`}
+                        title={isWishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
+                      >
+                        <Heart className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isWishlisted ? 'fill-rose-600' : ''}`} />
+                      </button>
+                    </div>
+
+                    {/* Bottom Image Overlay: Multi-Angle Dots & Rating Pill */}
+                    <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between pointer-events-none">
+                      <div className="flex items-center gap-1 bg-black/40 backdrop-blur px-1.5 py-0.5 rounded-full">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                        <span className="w-1 h-1 rounded-full bg-white/70"></span>
+                        <span className="w-1 h-1 rounded-full bg-white/70"></span>
+                      </div>
+                      <div className="bg-white/95 backdrop-blur px-1.5 py-0.5 sm:px-2 rounded-md sm:rounded-lg text-[10px] sm:text-[11px] font-black text-amber-600 flex items-center gap-1 shadow-sm">
+                        <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                        <span>{product.ratingsAverage}</span>
+                        <span className="text-slate-400 text-[9px] hidden sm:inline">({product.ratingsQuantity})</span>
+                      </div>
                     </div>
                   </div>
 
                   {/* Product Content */}
-                  <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                  <div className="p-2.5 sm:p-4 space-y-2 sm:space-y-3 flex-1 flex flex-col justify-between">
                     <div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 uppercase font-black tracking-wider">
-                        <span>{product.brand}</span>
-                        <span className="text-amber-600 font-bold">🏪 {product.vendor.storeName}</span>
+                      <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400 uppercase font-black tracking-wider">
+                        <span className="truncate max-w-[90px]">{product.brand}</span>
+                        <span className="text-amber-600 font-bold truncate max-w-[100px]">🏪 {product.vendor.storeName}</span>
                       </div>
 
-                      <h3 className="font-extrabold text-slate-900 text-sm line-clamp-2 mt-1 leading-snug">
+                      <h3
+                        onClick={() => {
+                          setSelectedProduct(product);
+                          if (product.hasVariants) setSelectedVariant(product.variants[0]);
+                        }}
+                        className="font-extrabold text-slate-900 text-xs sm:text-sm line-clamp-2 mt-1 leading-snug cursor-pointer hover:text-blue-700 transition-colors"
+                      >
                         {product.title}
                       </h3>
                     </div>
 
                     {/* Price & Action */}
-                    <div className="pt-2 border-t border-slate-100 space-y-3">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-xl font-black text-slate-950">
+                    <div className="pt-2 border-t border-slate-100 space-y-2 sm:space-y-3">
+                      <div className="flex items-baseline gap-1.5 sm:gap-2 flex-wrap">
+                        <span className="text-base sm:text-xl font-black text-slate-950">
                           ₹{product.sellingPrice.toLocaleString('en-IN')}
                         </span>
-                        <span className="text-xs text-slate-400 line-through font-semibold">
+                        <span className="text-[10px] sm:text-xs text-slate-400 line-through font-semibold">
                           ₹{product.mrp.toLocaleString('en-IN')}
                         </span>
-                        <span className="text-xs font-black text-emerald-600 ml-auto">
+                        <span className="text-[10px] sm:text-xs font-black text-emerald-600 ml-auto hidden xs:inline">
                           Save ₹{(product.mrp - product.sellingPrice).toLocaleString('en-IN')}
                         </span>
                       </div>
@@ -564,16 +666,16 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                             setSelectedProduct(product);
                             setSelectedVariant(product.variants[0]);
                           }}
-                          className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow"
+                          className="w-full py-2 sm:py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-[11px] sm:text-xs font-bold transition-all shadow"
                         >
-                          Select Options / Sizes
+                          Select Options
                         </button>
                       ) : (
                         <button
                           onClick={() => addToCart(product)}
-                          className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black shadow flex items-center justify-center gap-2 transition-all transform active:scale-95"
+                          className="w-full py-2 sm:py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] sm:text-xs font-black shadow flex items-center justify-center gap-1.5 transition-all transform active:scale-95"
                         >
-                          <ShoppingBag className="w-4 h-4" />
+                          <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           <span>Add to Cart</span>
                         </button>
                       )}
@@ -931,6 +1033,52 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               Continue Shopping
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Floating Action Button: Quick WhatsApp Support */}
+      <a
+        href={uiConfig?.demoWhatsAppUrl || 'https://wa.me/918533955333?text=Hi%20Ankit,%20I%20have%20an%20inquiry%20about%20AuraMarket'}
+        target="_blank"
+        rel="noreferrer"
+        className="fixed bottom-16 right-3 sm:bottom-6 sm:right-6 z-40 w-12 h-12 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center shadow-2xl border-2 border-white transition-all transform hover:scale-110 active:scale-95 group"
+        title="Direct WhatsApp Support"
+      >
+        <MessageCircle className="w-6 h-6 fill-white" />
+        <span className="hidden group-hover:block absolute right-14 whitespace-nowrap bg-slate-900 text-white text-xs font-bold py-1 px-2.5 rounded-lg shadow-lg">
+          Chat on WhatsApp
+        </span>
+      </a>
+
+      {/* Mobile Floating Cart Summary Pill (Like eShop / Swiggy / Blinkit) */}
+      {cartItems.length > 0 && (
+        <div className="md:hidden fixed bottom-14 left-3 right-16 z-40 animate-slide-up">
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="w-full bg-slate-950 text-white px-3.5 py-2.5 rounded-2xl shadow-2xl flex items-center justify-between border border-amber-400/40 active:scale-98 transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-amber-400 text-slate-950 flex items-center justify-center font-black text-xs">
+                {cartItems.length}
+              </div>
+              <div className="text-left leading-tight">
+                <p className="text-xs font-black text-white">₹{cartTotal.toLocaleString('en-IN')}</p>
+                <p className="text-[9px] text-slate-400">View items in cart</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 text-amber-400 font-black text-xs">
+              <span>Cart</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* Interactive Toast Notification (For Wishlist & Share actions) */}
+      {toastMessage && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-2xl border border-slate-700 flex items-center gap-2 animate-bounce">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <span>{toastMessage}</span>
         </div>
       )}
     </div>

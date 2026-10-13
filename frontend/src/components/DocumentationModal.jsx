@@ -34,6 +34,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
   const [lang, setLang] = useState('hi'); // 'hi' | 'en'
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'developer' | 'admin' | 'credentials'
   const [copiedId, setCopiedId] = useState(null);
+  const [docsSearch, setDocsSearch] = useState('');
 
   if (!isOpen) return null;
 
@@ -166,11 +167,58 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
           </button>
         </div>
 
+        {/* Fast Search & Numbered Modules Index (Screenshot 4 Style) */}
+        <div className="px-5 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-300 w-full sm:max-w-md focus-within:ring-2 focus-within:ring-amber-400">
+            <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
+            <input
+              type="text"
+              placeholder={lang === 'hi' ? 'गाइड में सर्च करें (उदा. VPS, Play Store, Fast2SMS, Razorpay, SEO)...' : 'Search guide (e.g. VPS, Play Store, Fast2SMS, Razorpay, SEO)...'}
+              value={docsSearch}
+              onChange={e => setDocsSearch(e.target.value)}
+              className="w-full text-xs text-slate-800 placeholder:text-slate-400 bg-transparent focus:outline-none"
+            />
+            {docsSearch && (
+              <button onClick={() => setDocsSearch('')} className="text-slate-400 hover:text-slate-600">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* 8 Numbered Quick Jump Buttons */}
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 text-[11px] font-bold">
+            {[
+              { num: '1', id: 'sec-overview', label: 'Arch' },
+              { num: '2', id: 'sec-vps', label: 'VPS' },
+              { num: '3', id: 'sec-apps', label: 'PlayStore' },
+              { num: '4', id: 'sec-sms', label: 'SMS' },
+              { num: '5', id: 'sec-pay', label: 'Pay' },
+              { num: '6', id: 'sec-smtp', label: 'SMTP' },
+              { num: '7', id: 'sec-seo', label: 'SEO' },
+              { num: '8', id: 'sec-cron', label: 'Backups' },
+            ].map(btn => (
+              <button
+                key={btn.num}
+                onClick={() => {
+                  const el = document.getElementById(btn.id);
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="px-2 py-1 rounded-lg bg-white border border-slate-200 hover:border-amber-400 hover:bg-amber-50 text-slate-700 flex items-center gap-1 transition-all whitespace-nowrap shadow-sm"
+              >
+                <span className="w-4 h-4 rounded-full bg-slate-900 text-amber-400 text-[10px] flex items-center justify-center font-black">
+                  {btn.num}
+                </span>
+                <span>{btn.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-7 text-xs sm:text-sm leading-relaxed">
           
           {/* Author Callout Banner */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-amber-50 border-2 border-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+          <div id="sec-overview" className="p-4 sm:p-5 rounded-2xl bg-amber-50 border-2 border-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm scroll-mt-24">
             <div className="space-y-1">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black uppercase">
                 <Sparkles className="w-3 h-3" />
@@ -228,7 +276,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
               </div>
 
               {/* MODULE A: VPS & DOMAIN & SSL */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+              <div id="sec-vps" className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4 scroll-mt-24">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
                     <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
@@ -319,7 +367,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
               </div>
 
               {/* MODULE B: GOOGLE PLAY STORE & APPLE APP STORE */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+              <div id="sec-apps" className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4 scroll-mt-24">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
                     <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
@@ -403,7 +451,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
               </div>
 
               {/* MODULE F: DATABASE AUTO-BACKUPS */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+              <div id="sec-cron" className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4 scroll-mt-24">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
                     <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
@@ -470,7 +518,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
               </div>
 
               {/* MODULE C: SMS GATEWAYS & OTP */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+              <div id="sec-sms" className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4 scroll-mt-24">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
                     <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -534,7 +582,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
               </div>
 
               {/* MODULE D: PAYMENT GATEWAYS */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+              <div id="sec-pay" className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4 scroll-mt-24">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
                     <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -583,7 +631,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
               </div>
 
               {/* MODULE E: EMAIL & SMTP */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+              <div id="sec-smtp" className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4 scroll-mt-24">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
                     <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -724,7 +772,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
               </div>
 
               {/* MODULE H: MASTER E-COMMERCE SEO & WEBMASTER SUITE */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+              <div id="sec-seo" className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4 scroll-mt-24">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
                     <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">

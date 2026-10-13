@@ -116,6 +116,69 @@ exports.getCoupons = async (req, res, next) => {
   }
 };
 
+// Point #23: Gamified Scratch Card Reward Engine
+// @route   GET /api/coupons/scratch-card
+exports.getScratchCardCoupon = async (req, res, next) => {
+  try {
+    const pool = [
+      {
+        code: 'SCRATCH15',
+        title: 'Lucky Scratch 15% OFF',
+        description: 'Congratulations! You revealed 15% off up to ₹750 on your cart.',
+        discountType: 'PERCENTAGE',
+        discountValue: 15,
+        maxDiscountAmount: 750,
+        minOrderAmount: 499,
+      },
+      {
+        code: 'SCRATCH25',
+        title: 'Super Scratch 25% OFF',
+        description: 'Jackpot! You revealed an exclusive 25% discount up to ₹1,200.',
+        discountType: 'PERCENTAGE',
+        discountValue: 25,
+        maxDiscountAmount: 1200,
+        minOrderAmount: 999,
+      },
+      {
+        code: 'SCRATCH300',
+        title: 'Mega Cash ₹300 OFF',
+        description: 'Instant ₹300 cash discount on any order above ₹1,499.',
+        discountType: 'FLAT',
+        discountValue: 300,
+        minOrderAmount: 1499,
+      },
+    ];
+
+    const reward = pool[Math.floor(Math.random() * pool.length)];
+
+    let coupon = await Coupon.findOne({ code: reward.code });
+    if (!coupon) {
+      coupon = await Coupon.create({
+        ...reward,
+        isFeatured: false,
+        isActive: true,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      card: {
+        code: coupon.code,
+        title: coupon.title,
+        description: coupon.description,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+        minOrderAmount: coupon.minOrderAmount,
+        maxDiscountAmount: coupon.maxDiscountAmount,
+        badgeText: coupon.discountType === 'PERCENTAGE' ? `${coupon.discountValue}% OFF` : `₹${coupon.discountValue} OFF`,
+        expiresInHours: 48,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Create new Coupon (Admin / Manager)
 // @route   POST /api/coupons
 exports.createCoupon = async (req, res, next) => {

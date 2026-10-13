@@ -888,6 +888,30 @@ const runTests = async () => {
       });
     });
 
+    await test('Point 23: Interactive 1-Click Copy Coupons & Scratch Card: GET /coupons/scratch-card generates redeemable gamified reward', async () => {
+      // 1. Fetch mystery scratch card
+      const resScratch = await fetch(`${baseUrl}/coupons/scratch-card`);
+      assert.strictEqual(resScratch.status, 200);
+      const dataScratch = await resScratch.json();
+      assert.strictEqual(dataScratch.success, true);
+      assert.ok(dataScratch.card, 'Must return card reward object');
+      assert.ok(dataScratch.card.code.startsWith('SCRATCH'), 'Card code must start with SCRATCH');
+      assert.ok(dataScratch.card.discountValue > 0, 'Discount value must be positive');
+      assert.ok(dataScratch.card.badgeText, 'Card must have promotional badge text');
+
+      // 2. Validate that revealed scratch card code is immediately valid in checkout engine
+      const resValScratch = await fetch(`${baseUrl}/coupons/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: dataScratch.card.code, cartTotal: 2500 }),
+      });
+      assert.strictEqual(resValScratch.status, 200);
+      const dataValScratch = await resValScratch.json();
+      assert.strictEqual(dataValScratch.valid, true);
+      assert.strictEqual(dataValScratch.coupon.code, dataScratch.card.code);
+      assert.ok(dataValScratch.coupon.discountAmount > 0);
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

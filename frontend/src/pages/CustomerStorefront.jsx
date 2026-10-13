@@ -42,6 +42,8 @@ import StockUrgencyBadge from '../components/StockUrgencyBadge';
 import RecentPurchaseCounter from '../components/RecentPurchaseCounter';
 import SocialProofToast from '../components/SocialProofToast';
 import PromoCouponBox from '../components/PromoCouponBox';
+import StorefrontOffersHub from '../components/StorefrontOffersHub';
+import ScratchCardModal from '../components/ScratchCardModal';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -67,6 +69,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [compareList, setCompareList] = useState([]);
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [isOffersHubOpen, setIsOffersHubOpen] = useState(false);
+  const [isScratchCardOpen, setIsScratchCardOpen] = useState(false);
 
   // Wishlist state (persisted in localStorage + synced with backend /api/wishlist)
   const [wishlist, setWishlist] = useState(() => {
@@ -876,6 +880,35 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       </div>
 
       <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 space-y-6 sm:space-y-8">
+        {/* Point #23: Interactive 1-Click Copy Coupons & Scratch Card Strip */}
+        <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 px-4 py-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm border border-amber-300">
+          <div className="flex items-center gap-2.5 text-xs font-black">
+            <span className="p-1.5 rounded-lg bg-slate-950 text-amber-400 shadow-xs">🎁</span>
+            <span className="leading-tight">
+              FESTIVE VOUCHERS: Save up to 25% OFF or Flat ₹500 on all orders with 1-Click Coupons & Scratch Card!
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto justify-end">
+            <button
+              type="button"
+              onClick={() => setIsOffersHubOpen(true)}
+              className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-slate-950 hover:bg-slate-900 text-white font-black text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
+            >
+              <Tag className="w-3.5 h-3.5 text-amber-400" />
+              <span>View All Coupons</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsScratchCardOpen(true)}
+              className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-white hover:bg-amber-50 text-slate-950 font-black text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95 border border-amber-300"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+              <span>Scratch Card</span>
+            </button>
+          </div>
+        </div>
+
         {/* Vibrant Clean Hero Banner (Responsive Mobile & Desktop) */}
         <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-md bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 text-slate-950 min-h-[220px] sm:min-h-[280px] lg:min-h-[340px] flex items-center p-5 sm:p-8 lg:p-14 border border-amber-300">
           <div className="max-w-xl space-y-3 sm:space-y-4 z-10">
@@ -2064,6 +2097,51 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           }
         }}
         currency="₹"
+      />
+
+      {/* Point #23: Interactive 1-Click Copy Coupons & Gamified Scratch Card */}
+      <StorefrontOffersHub
+        isOpen={isOffersHubOpen}
+        onClose={() => setIsOffersHubOpen(false)}
+        onOpenScratchCard={() => {
+          setIsOffersHubOpen(false);
+          setIsScratchCardOpen(true);
+        }}
+        onApplyCouponToCart={(code) => {
+          setIsOffersHubOpen(false);
+          setIsCartOpen(true);
+          api.post('/coupons/validate', { code, cartTotal }).then(res => {
+            if (res.data?.success && res.data.coupon) {
+              setAppliedCoupon(res.data.coupon);
+              setToastMessage(`Coupon "${code}" applied to cart! 🎉`);
+              setTimeout(() => setToastMessage(null), 2500);
+            }
+          }).catch(err => {
+            const msg = err.response?.data?.message || 'Could not apply coupon';
+            setToastMessage(msg);
+            setTimeout(() => setToastMessage(null), 3000);
+          });
+        }}
+      />
+
+      <ScratchCardModal
+        isOpen={isScratchCardOpen}
+        onClose={() => setIsScratchCardOpen(false)}
+        onApplyCouponCode={(code) => {
+          setIsScratchCardOpen(false);
+          setIsCartOpen(true);
+          api.post('/coupons/validate', { code, cartTotal }).then(res => {
+            if (res.data?.success && res.data.coupon) {
+              setAppliedCoupon(res.data.coupon);
+              setToastMessage(`Revealed reward "${code}" applied to cart! 🎉`);
+              setTimeout(() => setToastMessage(null), 2500);
+            }
+          }).catch(err => {
+            const msg = err.response?.data?.message || 'Could not apply coupon';
+            setToastMessage(msg);
+            setTimeout(() => setToastMessage(null), 3000);
+          });
+        }}
       />
     </div>
   );

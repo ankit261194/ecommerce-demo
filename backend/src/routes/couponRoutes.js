@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   validateCoupon,
   getCoupons,
+  getScratchCardCoupon,
   createCoupon,
   updateCoupon,
   deleteCoupon,
@@ -11,6 +12,7 @@ const { protect, authorize } = require('../middlewares/auth');
 
 // Public storefront routes
 router.post('/validate', validateCoupon);
+router.get('/scratch-card', getScratchCardCoupon);
 router.get('/', getCoupons);
 
 // Admin management routes

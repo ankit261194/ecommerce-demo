@@ -1,30 +1,78 @@
+# ==============================================================================
+# Shri Balaji Kripa Dham - High-Speed Performance & Security Rules
+# ==============================================================================
+
+Options -Indexes
+
 <IfModule mod_rewrite.c>
-  RewriteEngine On
-  RewriteBase /
+    RewriteEngine On
 
-  # Ensure HTTP Authorization header is passed to PHP FastCGI/LiteSpeed
-  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
-
-  # 1. Direct download for Android APK
-  RewriteRule ^(download-apk|CyberCafe_Portal\.apk|app\.apk)$ CyberCafe_Portal.apk [L]
-
-  # 2. Route API calls to PHP API router
-  RewriteCond %{REQUEST_URI} ^/api/ [NC]
-  RewriteRule ^api/(.*)$ api/index.php?endpoint=$1 [QSA,L]
-
-  # 3. Serve physical files/directories directly (assets, uploads, images)
-  RewriteCond %{REQUEST_FILENAME} -f [OR]
-  RewriteCond %{REQUEST_FILENAME} -d
-  RewriteRule ^ - [L]
-
-  # 4. React Single Page Application (SPA) Client Routing
-  RewriteRule ^index\.html$ - [L]
-  RewriteRule . /index.html [L]
+    # Deliver physical APK file directly at full CDN speed without PHP overhead if exists
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^downloads/.*\.apk$ download.php [L]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^app\.apk$ download.php [L]
+    RewriteRule ^download/?$ download.php [L]
 </IfModule>
 
-# Security & Uploads Configuration
-Options -Indexes
-<FilesMatch "\.(sqlite|bak|log)$">
-  Order allow,deny
-  Deny from all
+# ------------------------------------------------------------------------------
+# 1. GZIP / DEFLATE Compression (Cuts HTML/CSS/JS size by ~80%)
+# ------------------------------------------------------------------------------
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE application/xhtml+xml
+    AddOutputFilterByType DEFLATE application/rss+xml
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/x-javascript
+    AddOutputFilterByType DEFLATE application/json
+    AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+# ------------------------------------------------------------------------------
+# 2. Browser Caching for Static Assets (Images, Fonts, CSS, JS)
+# ------------------------------------------------------------------------------
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresDefault "access plus 1 month"
+
+    # Images & Media: 7 days
+    ExpiresByType image/jpeg "access plus 7 days"
+    ExpiresByType image/jpg "access plus 7 days"
+    ExpiresByType image/png "access plus 7 days"
+    ExpiresByType image/webp "access plus 7 days"
+    ExpiresByType image/svg+xml "access plus 7 days"
+    ExpiresByType image/x-icon "access plus 30 days"
+
+    # Fonts: 30 days
+    ExpiresByType font/woff2 "access plus 30 days"
+    ExpiresByType font/woff "access plus 30 days"
+    ExpiresByType font/ttf "access plus 30 days"
+
+    # Styles & Scripts: 7 days
+    ExpiresByType text/css "access plus 7 days"
+    ExpiresByType application/javascript "access plus 7 days"
+
+    # Dynamic APIs & HTML: Revalidate
+    ExpiresByType text/html "access plus 0 seconds"
+    ExpiresByType application/json "access plus 0 seconds"
+</IfModule>
+
+# ------------------------------------------------------------------------------
+# 3. Security & CORS Headers
+# ------------------------------------------------------------------------------
+<IfModule mod_headers.c>
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+    Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, X-SBKD-API-KEY, x-sbkd-api-key"
+    Header set X-Content-Type-Options "nosniff"
+</IfModule>
+
+# Protect sensitive storage directories
+<FilesMatch "\.(jsonl|sql|log|lock)$">
+    Order allow,deny
+    Deny from all
 </FilesMatch>

@@ -39,6 +39,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
   const [selectedCategory, setSelectedCategory] = useState(activeCategoryFilter || 'all');
   const [selectedSubCategory, setSelectedSubCategory] = useState(null);
+  const [selectedBrand, setSelectedBrand] = useState('all');
   const [isOpenCategoryDrawer, setIsOpenCategoryDrawer] = useState(false);
   const [isCollapsedCategorySidebar, setIsCollapsedCategorySidebar] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -376,10 +377,50 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     return sub?.name || selectedSubCategory;
   }, [selectedSubCategory, activeCategoryObj]);
 
+  // Distinct Brands Directory with Logos & Product Counts (Point #5)
+  const brandsList = useMemo(() => {
+    const brandMetaMap = {
+      'AuraAudio': {
+        logo: 'https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=120',
+        origin: 'Acoustic Labs',
+      },
+      'AeroTech': {
+        logo: 'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=120',
+        origin: 'Smart Wearables',
+      },
+      'Vogue Urban': {
+        logo: 'https://images.unsplash.com/photo-1509967419530-da38b4704bc6?w=120',
+        origin: 'Streetwear Couture',
+      },
+      'Vogue Luxe': {
+        logo: 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=120',
+        origin: 'Luxury Tailoring',
+      },
+      'AuraLiving': {
+        logo: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=120',
+        origin: 'Smart Home & Living',
+      },
+    };
+
+    const counts = {};
+    products.forEach(p => {
+      const b = (p.brand || 'Generic').trim();
+      counts[b] = (counts[b] || 0) + 1;
+    });
+
+    return Object.keys(counts).map(name => ({
+      name,
+      slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      productCount: counts[name],
+      logo: brandMetaMap[name]?.logo || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=120',
+      origin: brandMetaMap[name]?.origin || 'Verified Partner',
+    }));
+  }, [products]);
+
   // Price Range Filter State (Point #3)
   const [priceRange, setPriceRange] = useState([0, 50000]);
 
-  // Filtering products with Multi-Level Category & Subcategory & Price Filters (Point #3 & #4)
+  // Filtering products with Multi-Level Category, Subcategory, Brand & Price Filters (Points #3, #4 & #5)
   const filteredProducts = products.filter(p => {
     if (selectedCategory === 'wishlist') {
       return wishlist.includes(p._id);
@@ -391,13 +432,17 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
     const matchesSubCategory = !selectedSubCategory || p.subCategory === selectedSubCategory;
 
+    const matchesBrand =
+      selectedBrand === 'all' ||
+      p.brand.toLowerCase() === selectedBrand.toLowerCase();
+
     const matchesSearch =
       !searchQuery ||
       p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.brand.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesPrice = p.sellingPrice >= priceRange[0] && p.sellingPrice <= priceRange[1];
 
-    return matchesCategory && matchesSubCategory && matchesSearch && matchesPrice;
+    return matchesCategory && matchesSubCategory && matchesBrand && matchesSearch && matchesPrice;
   });
 
   // Inject JSON-LD ItemList Schema for Product Catalog
@@ -699,6 +744,96 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           </div>
         </div>
 
+        {/* Brand Filter Bar with Brand Logos & Live Counts (Point #5) */}
+        <div className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600">
+                <ShieldCheck className="w-4 h-4 stroke-[2.5]" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-1.5">
+                  Filter by Brand Partner
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    Verified
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-400 font-medium">
+                  Click a brand to explore official certified manufacturers
+                </p>
+              </div>
+            </div>
+
+            {selectedBrand !== 'all' && (
+              <button
+                type="button"
+                onClick={() => setSelectedBrand('all')}
+                className="text-xs font-bold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2.5 py-1.5 rounded-xl transition-all border border-amber-200/60"
+              >
+                ✕ All Brands
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2.5 overflow-x-auto pb-1 custom-device-scrollbar">
+            {/* All Brands Pill */}
+            <button
+              type="button"
+              onClick={() => setSelectedBrand('all')}
+              className={`px-3 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all border flex items-center gap-2 ${
+                selectedBrand === 'all'
+                  ? 'bg-slate-900 text-amber-400 border-slate-900 shadow-md ring-2 ring-amber-400/30'
+                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-white hover:border-slate-300'
+              }`}
+            >
+              <span>✨</span>
+              <span>All Brands</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${
+                  selectedBrand === 'all'
+                    ? 'bg-amber-400 text-slate-950'
+                    : 'bg-slate-200 text-slate-600'
+                }`}
+              >
+                {products.length}
+              </span>
+            </button>
+
+            {/* Individual Brand Cards */}
+            {brandsList.map(brand => {
+              const isSelected = selectedBrand.toLowerCase() === brand.name.toLowerCase();
+              return (
+                <button
+                  key={brand.name}
+                  type="button"
+                  onClick={() => setSelectedBrand(isSelected ? 'all' : brand.name)}
+                  className={`px-3 py-1.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all border flex items-center gap-2.5 group ${
+                    isSelected
+                      ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-md ring-2 ring-amber-400/40 font-black'
+                      : 'bg-white text-slate-800 border-slate-200 hover:border-amber-300 hover:shadow-xs'
+                  }`}
+                >
+                  <img
+                    src={brand.logo}
+                    alt={brand.name}
+                    className="w-5 h-5 rounded-full object-cover border border-slate-200/80 shadow-inner group-hover:scale-105 transition-transform"
+                  />
+                  <span>{brand.name}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${
+                      isSelected
+                        ? 'bg-slate-950 text-amber-400'
+                        : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
+                    }`}
+                  >
+                    {brand.productCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Interactive Dual-Handle Price Range Slider & Budget Filter (Point #3) */}
         <div className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 shadow-sm space-y-3.5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
@@ -820,6 +955,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             onResetAll={() => {
               setSelectedCategory('all');
               setSelectedSubCategory(null);
+              setSelectedBrand('all');
             }}
             totalProductsCount={products.length}
             isOpenMobile={isOpenCategoryDrawer}
@@ -827,6 +963,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             isCollapsedDesktop={isCollapsedCategorySidebar}
             onToggleCollapseDesktop={() => setIsCollapsedCategorySidebar(prev => !prev)}
             wishlistCount={wishlist.length}
+            brandsList={brandsList}
+            selectedBrand={selectedBrand}
+            onSelectBrand={bName => setSelectedBrand(bName)}
           />
 
           {/* Catalog Content Area */}
@@ -859,15 +998,17 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                 </span>
               </div>
 
-              {/* Active Filter Breadcrumb (Point #4) */}
-              {(selectedCategory !== 'all' || selectedSubCategory) && (
+              {/* Active Filter Breadcrumb (Point #4 & #5) */}
+              {(selectedCategory !== 'all' || selectedSubCategory || selectedBrand !== 'all') && (
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-xs shadow-xs animate-in fade-in duration-200">
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 font-bold text-slate-800">
                     <FolderTree className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                    <span className="text-slate-500 text-[11px] uppercase tracking-wider">Filtered by:</span>
-                    <span className="font-extrabold text-amber-950 bg-amber-200/70 px-2 py-0.5 rounded-md text-xs">
-                      {activeCategoryLabel}
-                    </span>
+                    <span className="text-slate-500 text-[11px] uppercase tracking-wider">Filtered:</span>
+                    {selectedCategory !== 'all' && (
+                      <span className="font-extrabold text-amber-950 bg-amber-200/70 px-2 py-0.5 rounded-md text-xs">
+                        {activeCategoryLabel}
+                      </span>
+                    )}
                     {activeSubCategoryLabel && (
                       <>
                         <ChevronRight className="w-3.5 h-3.5 text-amber-600" />
@@ -875,6 +1016,12 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                           {activeSubCategoryLabel}
                         </span>
                       </>
+                    )}
+                    {selectedBrand !== 'all' && (
+                      <span className="font-extrabold text-slate-950 bg-white px-2 py-0.5 rounded-md shadow-xs border border-amber-300 text-xs flex items-center gap-1.5">
+                        <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Brand: {selectedBrand}</span>
+                      </span>
                     )}
                     <span className="text-slate-500 font-semibold text-[11px]">
                       ({filteredProducts.length} {filteredProducts.length === 1 ? 'item' : 'items'} found)
@@ -885,10 +1032,11 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                     onClick={() => {
                       setSelectedCategory('all');
                       setSelectedSubCategory(null);
+                      setSelectedBrand('all');
                     }}
                     className="font-black text-[11px] text-amber-800 hover:text-amber-950 bg-amber-200/70 hover:bg-amber-300/80 px-2.5 py-1 rounded-xl transition-all flex items-center gap-1"
                   >
-                    ✕ Clear
+                    ✕ Clear All
                   </button>
                 </div>
               )}
@@ -911,6 +1059,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                     onClick={() => {
                       setSelectedCategory('all');
                       setSelectedSubCategory(null);
+                      setSelectedBrand('all');
                       setPriceRange([0, 50000]);
                     }}
                     className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md transition-all"

@@ -5,9 +5,18 @@ const Category = require('../models/Category');
 // @route   GET /api/products
 exports.getProducts = async (req, res, next) => {
   try {
-    const { category, subCategory, search, minPrice, maxPrice, featured, sort, page = 1, limit = 20 } = req.query;
+    const { category, subCategory, brand, search, minPrice, maxPrice, featured, sort, page = 1, limit = 20 } = req.query;
 
     const query = { isPublished: true };
+
+    if (brand && brand !== 'all') {
+      const brandList = brand.split(',').map(b => b.trim()).filter(Boolean);
+      if (brandList.length === 1) {
+        query.brand = new RegExp(`^${brandList[0]}$`, 'i');
+      } else if (brandList.length > 1) {
+        query.brand = { $in: brandList.map(b => new RegExp(`^${b}$`, 'i')) };
+      }
+    }
 
     if (subCategory) {
       const subCat = await Category.findOne({
@@ -192,4 +201,64 @@ exports.getCategoryTree = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Get Distinct Brands with product counts and brand logos (Point #5)
+// @route   GET /api/products/brands
+exports.getBrands = async (req, res, next) => {
+  try {
+    const publishedProducts = await Product.find({ isPublished: true }).select('brand').lean();
+
+    const brandCounts = {};
+    publishedProducts.forEach(p => {
+      const b = (p.brand || 'Generic').trim();
+      brandCounts[b] = (brandCounts[b] || 0) + 1;
+    });
+
+    const brandMetaMap = {
+      'AuraAudio': {
+        logo: 'https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=100',
+        color: '#F59E0B',
+        origin: 'Acoustic Labs',
+      },
+      'AeroTech': {
+        logo: 'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=100',
+        color: '#3B82F6',
+        origin: 'Smart Wearables',
+      },
+      'Vogue Urban': {
+        logo: 'https://images.unsplash.com/photo-1509967419530-da38b4704bc6?w=100',
+        color: '#10B981',
+        origin: 'Streetwear Couture',
+      },
+      'Vogue Luxe': {
+        logo: 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=100',
+        color: '#8B5CF6',
+        origin: 'Luxury Tailoring',
+      },
+      'AuraLiving': {
+        logo: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=100',
+        color: '#EC4899',
+        origin: 'Smart Home & Living',
+      },
+    };
+
+    const brands = Object.keys(brandCounts).map(brandName => ({
+      name: brandName,
+      slug: brandName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      productCount: brandCounts[brandName],
+      logo: brandMetaMap[brandName]?.logo || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100',
+      color: brandMetaMap[brandName]?.color || '#64748B',
+      origin: brandMetaMap[brandName]?.origin || 'Verified Brand Partner',
+    }));
+
+    res.status(200).json({
+      success: true,
+      count: brands.length,
+      data: brands,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 

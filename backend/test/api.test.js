@@ -231,6 +231,30 @@ const runTests = async () => {
       assert.ok(filterData.data.some(p => p.sku === 'APX-HEAD-001'));
     });
 
+    await test('Point 5: GET /products/brands returns brand directory and GET /products?brand filters items by brand', async () => {
+      const res = await fetch(`${baseUrl}/products/brands`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data), 'Brands must be an array');
+      assert.ok(data.data.length >= 3, 'Must have at least 3 distinct brands');
+
+      const auraAudio = data.data.find(b => b.name === 'AuraAudio');
+      assert.ok(auraAudio, 'AuraAudio brand must exist in brand directory');
+      assert.ok(auraAudio.productCount >= 1, 'AuraAudio must have at least 1 product');
+      assert.ok(auraAudio.logo, 'Brand must have logo image');
+
+      // Test brand filter on products route
+      const filterRes = await fetch(`${baseUrl}/products?brand=AuraAudio`);
+      assert.strictEqual(filterRes.status, 200);
+      const filterData = await filterRes.json();
+      assert.strictEqual(filterData.success, true);
+      assert.ok(filterData.data.length >= 1, 'Must find products for AuraAudio');
+      for (const prod of filterData.data) {
+        assert.strictEqual(prod.brand, 'AuraAudio', 'All filtered products must match brand AuraAudio');
+      }
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

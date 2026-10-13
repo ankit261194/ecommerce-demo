@@ -15,6 +15,7 @@ import {
   SlidersHorizontal,
   Tag,
   Radio,
+  ShieldCheck,
 } from 'lucide-react';
 
 const CATEGORY_ICON_MAP = {
@@ -37,6 +38,9 @@ export default function CategorySidebar({
   isCollapsedDesktop = false,
   onToggleCollapseDesktop = () => {},
   wishlistCount = 0,
+  brandsList = [],
+  selectedBrand = 'all',
+  onSelectBrand = () => {},
 }) {
   // Keep track of which parent categories are expanded in accordion
   const [expandedParents, setExpandedParents] = useState({
@@ -272,13 +276,74 @@ export default function CategorySidebar({
             </div>
           );
         })}
+
+        {/* Verified Brands Filter Section (Point #5) */}
+        {brandsList && brandsList.length > 0 && (
+          <div className="pt-3 pb-1">
+            <div className="h-px bg-slate-100 mb-2" />
+            <div className="flex items-center justify-between px-2 pb-1.5">
+              <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
+                Brands
+              </span>
+              {selectedBrand && selectedBrand !== 'all' && (
+                <button
+                  type="button"
+                  onClick={() => onSelectBrand('all')}
+                  className="text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              {brandsList.map(brand => {
+                const isBrandActive = selectedBrand === brand.name;
+                return (
+                  <button
+                    key={brand.name}
+                    type="button"
+                    onClick={() => {
+                      onSelectBrand(isBrandActive ? 'all' : brand.name);
+                      if (isOpenMobile) onCloseMobile();
+                    }}
+                    className={`w-full group text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-between ${
+                      isBrandActive
+                        ? 'bg-amber-500 text-slate-950 font-black shadow-sm ring-1 ring-amber-400'
+                        : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <img
+                        src={brand.logo}
+                        alt={brand.name}
+                        className="w-4 h-4 rounded-full object-cover border border-slate-200 flex-shrink-0"
+                      />
+                      <span className="truncate">{brand.name}</span>
+                    </div>
+                    <span
+                      className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
+                        isBrandActive
+                          ? 'bg-slate-950 text-amber-400'
+                          : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
+                      }`}
+                    >
+                      {brand.productCount}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Footer Info Box */}
       <div className="p-3 border-t border-slate-100 bg-slate-50/60 text-[11px] text-slate-400 flex items-center justify-between">
         <span className="flex items-center gap-1.5">
           <Tag className="w-3 h-3 text-amber-500" />
-          <span>Point #4 Verified Hierarchy</span>
+          <span>Point #4 & #5 Catalog</span>
         </span>
         <span className="font-bold text-slate-600">{totalProductsCount} Items</span>
       </div>

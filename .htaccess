@@ -1,0 +1,30 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Ensure HTTP Authorization header is passed to PHP FastCGI/LiteSpeed
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+  # 1. Direct download for Android APK
+  RewriteRule ^(download-apk|CyberCafe_Portal\.apk|app\.apk)$ CyberCafe_Portal.apk [L]
+
+  # 2. Route API calls to PHP API router
+  RewriteCond %{REQUEST_URI} ^/api/ [NC]
+  RewriteRule ^api/(.*)$ api/index.php?endpoint=$1 [QSA,L]
+
+  # 3. Serve physical files/directories directly (assets, uploads, images)
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # 4. React Single Page Application (SPA) Client Routing
+  RewriteRule ^index\.html$ - [L]
+  RewriteRule . /index.html [L]
+</IfModule>
+
+# Security & Uploads Configuration
+Options -Indexes
+<FilesMatch "\.(sqlite|bak|log)$">
+  Order allow,deny
+  Deny from all
+</FilesMatch>

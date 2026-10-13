@@ -22,6 +22,7 @@ import {
 import StockUrgencyBadge from './StockUrgencyBadge';
 import RecentPurchaseCounter from './RecentPurchaseCounter';
 import ProductReviewsSection from './ProductReviewsSection';
+import ProductQnASection from './ProductQnASection';
 
 export const ProductDetailModal = ({
   product,
@@ -631,6 +632,7 @@ export const ProductDetailModal = ({
                 { id: 'overview', label: '📖 Overview & Description' },
                 { id: 'specs', label: `⚙️ Specifications (${specs.length})` },
                 { id: 'reviews', label: `⭐ Reviews & Ratings (${sampleReviews.length})` },
+                { id: 'qna', label: '💬 Customer Q&A' },
                 { id: 'seller', label: '🏪 Merchant Information' },
               ].map(tab => (
                 <button
@@ -729,7 +731,17 @@ export const ProductDetailModal = ({
                 </div>
               )}
 
-              {/* TAB 4: SELLER INFORMATION */}
+              {/* TAB 4: CUSTOMER Q&A (Point #16) */}
+              {activeTab === 'qna' && (
+                <div className="animate-fade-in">
+                  <ProductQnASection
+                    productId={product._id}
+                    productTitle={product.title}
+                  />
+                </div>
+              )}
+
+              {/* TAB 5: SELLER INFORMATION */}
               {activeTab === 'seller' && (
                 <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4 animate-fade-in text-xs">
                   <div className="flex items-center gap-3">

@@ -530,6 +530,61 @@ const runTests = async () => {
       assert.strictEqual(dataHelpful.helpfulCount, 2, 'Helpful count should increment');
     });
 
+    await test('Point 16: GET /questions/product/:productId returns Q&A list; POST creates question; POST /:id/answer posts vendor reply; POST /:id/upvote upvotes question', async () => {
+      // 1. GET product questions
+      const resGet = await fetch(`${baseUrl}/questions/product/${headphonesProduct._id}`);
+      assert.strictEqual(resGet.status, 200);
+      const dataGet = await resGet.json();
+      assert.strictEqual(dataGet.success, true);
+      assert.ok(Array.isArray(dataGet.data), 'Data must be array of questions');
+      assert.ok(dataGet.data.length >= 1, 'Must have at least 1 question');
+
+      // 2. POST new customer question
+      const resPost = await fetch(`${baseUrl}/questions/product/${headphonesProduct._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          question: 'Does this headphone have active latency mode for competitive mobile gaming?',
+          askedBy: 'GamerX Rahul',
+        }),
+      });
+      assert.strictEqual(resPost.status, 201);
+      const dataPost = await resPost.json();
+      assert.strictEqual(dataPost.success, true);
+      assert.ok(dataPost.data._id);
+      const questionId = dataPost.data._id;
+
+      // 3. POST vendor answer
+      const resAns = await fetch(`${baseUrl}/questions/${questionId}/answer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({
+          answer: 'Yes! It features an ultra-low 38ms Gaming Mode that can be toggled by triple-tapping the right ear cup.',
+          answeredBy: 'Apex Audio Official Engineer',
+          isVendor: true,
+        }),
+      });
+      assert.strictEqual(resAns.status, 201);
+      const dataAns = await resAns.json();
+      assert.strictEqual(dataAns.success, true);
+
+      // 4. POST upvote
+      const resUp = await fetch(`${baseUrl}/questions/${questionId}/upvote`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resUp.status, 200);
+      const dataUp = await resUp.json();
+      assert.strictEqual(dataUp.success, true);
+      assert.ok(dataUp.upvotes >= 2);
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

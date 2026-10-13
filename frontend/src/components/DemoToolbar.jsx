@@ -10,6 +10,9 @@ import {
   Truck,
   Sparkles,
   LayoutGrid,
+  BookOpen,
+  Phone,
+  MessageCircle,
 } from 'lucide-react';
 
 export const DemoToolbar = ({
@@ -21,6 +24,7 @@ export const DemoToolbar = ({
   onResetDemo,
   isBarCollapsed,
   setIsBarCollapsed,
+  onOpenDocs,
 }) => {
   const portals = [
     { id: 'customer', label: 'Storefront', icon: ShoppingBag, role: 'customer' },
@@ -58,13 +62,19 @@ export const DemoToolbar = ({
             <span>← All Portals Hub</span>
           </button>
 
-          <div className="h-5 w-px bg-slate-300 hidden sm:block" />
+          <button
+            onClick={onOpenDocs}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-bold text-xs shadow-sm transition-all"
+            title="A to Z Setup & Developer Guide (Hindi & English)"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+            <span>📖 Setup Guide / कैसे यूज़ करें</span>
+          </button>
 
-          <span className="font-black text-slate-900 text-xs hidden sm:inline">
+          <div className="h-5 w-px bg-slate-300 hidden xl:block" />
+
+          <span className="font-black text-slate-900 text-xs hidden xl:inline">
             AuraMarket Demo
-          </span>
-          <span className="hidden xl:inline text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-            ● 4 Portals Live
           </span>
         </div>
 
@@ -93,7 +103,7 @@ export const DemoToolbar = ({
           })}
         </div>
 
-        {/* Right: Device Viewport Switcher & Reset Button */}
+        {/* Right: Device Switcher & Developer WhatsApp / Purchase CTA */}
         <div className="flex items-center gap-2">
           {/* Device Switcher */}
           <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-300 shadow-sm">
@@ -137,9 +147,21 @@ export const DemoToolbar = ({
             </button>
           </div>
 
+          {/* Direct Buy / WhatsApp Ankit CTA Button */}
+          <a
+            href="https://wa.me/918533955333?text=Hi%20Ankit,%20I%20want%20to%20purchase%20AuraMarket%20E-Commerce%20Platform"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-sm transition-all"
+            title="Purchase Code from Ankit Chaudhary (8533955333)"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Buy: 8533955333</span>
+          </a>
+
           <button
             onClick={onResetDemo}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold transition-all active:scale-95 text-xs shadow-sm"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold transition-all active:scale-95 text-xs shadow-sm"
             title="Reset demo data to initial showroom state"
           >
             <RotateCcw className="w-3.5 h-3.5 text-amber-500" />

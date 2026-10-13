@@ -4,17 +4,19 @@ import { CartProvider, useCart } from './context/CartContext';
 import { Navbar } from './components/Navbar';
 import { DemoToolbar } from './components/DemoToolbar';
 import { DemoHub } from './components/DemoHub';
+import { DocumentationModal } from './components/DocumentationModal';
 import { CustomerStorefront } from './pages/CustomerStorefront';
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { VendorPortal } from './pages/VendorPortal';
 import { CourierDashboard } from './pages/CourierDashboard';
-import { ShoppingBag, Flame, Layers, User, LayoutGrid } from 'lucide-react';
+import { ShoppingBag, Flame, Layers, LayoutGrid, MessageCircle, Phone, BookOpen } from 'lucide-react';
 
 const MainLayout = () => {
   // 'hub' | 'customer' | 'superadmin' | 'vendor' | 'courier'
   const [activeTab, setActiveTab] = useState('hub');
   const [deviceMode, setDeviceMode] = useState('desktop'); // 'desktop' | 'tablet' | 'mobile'
   const [isBarCollapsed, setIsBarCollapsed] = useState(false);
+  const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const { switchPersona } = useAuth();
@@ -124,10 +126,45 @@ const MainLayout = () => {
         </div>
       )}
 
-      {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white py-8 px-4 text-center text-xs text-slate-500">
-        <p>© 2026 {uiConfig.storeName} — Enterprise Multi-Vendor Marketplace Platform.</p>
-        <p className="mt-1 font-medium">B2B + B2C Architecture • Powered by React, Node.js, Express & Flutter.</p>
+      {/* Commercial Author & Developer Purchase Footer (Ankit Chaudhary) */}
+      <footer className="border-t border-slate-200 bg-white py-10 px-4 text-center text-xs text-slate-600 space-y-3">
+        <div className="max-w-xl mx-auto p-4 rounded-2xl bg-amber-50 border border-amber-300 space-y-2">
+          <p className="font-black text-slate-950 text-sm">
+            Developed by Ankit Chaudhary (8533955333)
+          </p>
+          <p className="text-xs text-slate-700 font-semibold">
+            अगर purchase करना है तो इस नंबर पर संपर्क करें: <strong className="text-slate-950 font-black">+91 8533955333</strong>
+          </p>
+          <div className="flex items-center justify-center gap-3 pt-1">
+            <a
+              href="https://wa.me/918533955333?text=Hi%20Ankit,%20I%20want%20to%20purchase%20AuraMarket%20E-Commerce%20Platform"
+              target="_blank"
+              rel="noreferrer"
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-1.5 shadow"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span>WhatsApp: 8533955333</span>
+            </a>
+            <a
+              href="tel:8533955333"
+              className="px-4 py-2 rounded-xl bg-[#0f2444] hover:bg-[#1a3a6b] text-white font-bold text-xs flex items-center gap-1.5 shadow"
+            >
+              <Phone className="w-4 h-4 text-amber-400" />
+              <span>Call: 8533955333</span>
+            </a>
+            <button
+              onClick={() => setIsDocsOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold text-xs flex items-center gap-1.5 shadow-sm"
+            >
+              <BookOpen className="w-4 h-4 text-blue-600" />
+              <span>Setup Guide</span>
+            </button>
+          </div>
+        </div>
+
+        <p className="text-slate-400 font-medium">
+          © 2026 {uiConfig.storeName} — Enterprise Multi-Vendor Marketplace Platform (React, Node.js & Flutter).
+        </p>
       </footer>
     </div>
   );
@@ -135,10 +172,17 @@ const MainLayout = () => {
   // If in Demo Hub mode, show the CodeCanyon Master Showcase Landing Page
   if (activeTab === 'hub') {
     return (
-      <DemoHub
-        onSelectPortal={handleSelectPortalFromHub}
-        uiConfig={uiConfig}
-      />
+      <>
+        <DemoHub
+          onSelectPortal={handleSelectPortalFromHub}
+          uiConfig={uiConfig}
+          onOpenDocs={() => setIsDocsOpen(true)}
+        />
+        <DocumentationModal
+          isOpen={isDocsOpen}
+          onClose={() => setIsDocsOpen(false)}
+        />
+      </>
     );
   }
 
@@ -155,6 +199,7 @@ const MainLayout = () => {
         onResetDemo={handleResetDemo}
         isBarCollapsed={isBarCollapsed}
         setIsBarCollapsed={setIsBarCollapsed}
+        onOpenDocs={() => setIsDocsOpen(true)}
       />
 
       {/* Interactive Device Viewport Simulator */}
@@ -194,6 +239,12 @@ const MainLayout = () => {
           </div>
         </div>
       )}
+
+      {/* Documentation Modal */}
+      <DocumentationModal
+        isOpen={isDocsOpen}
+        onClose={() => setIsDocsOpen(false)}
+      />
     </div>
   );
 };

@@ -6,19 +6,16 @@ import {
   Truck,
   Smartphone,
   ArrowRight,
-  ExternalLink,
-  KeyRound,
-  Layers,
   Sparkles,
   CheckCircle2,
   Lock,
-  Cpu,
-  Monitor,
-  Tablet,
   BadgeCheck,
+  BookOpen,
+  MessageCircle,
+  Phone,
 } from 'lucide-react';
 
-export const DemoHub = ({ onSelectPortal, uiConfig }) => {
+export const DemoHub = ({ onSelectPortal, uiConfig, onOpenDocs }) => {
   const portals = [
     {
       id: 'customer',
@@ -116,10 +113,10 @@ export const DemoHub = ({ onSelectPortal, uiConfig }) => {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-16">
       {/* CodeCanyon / Envato Master Showcase Header */}
-      <header className="bg-slate-900 text-white border-b border-slate-800 shadow-md">
+      <header className="bg-[#0f2444] text-white border-b border-blue-900 shadow-md">
         <div className="max-w-7xl mx-auto px-4 lg:px-8 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center font-black text-slate-950 text-lg shadow">
+            <div className="w-8 h-8 rounded-lg bg-amber-400 flex items-center justify-center font-black text-slate-950 text-lg shadow">
               A
             </div>
             <div>
@@ -128,59 +125,100 @@ export const DemoHub = ({ onSelectPortal, uiConfig }) => {
                   {uiConfig?.storeName || 'AuraMarket'}
                 </span>
                 <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-wider">
-                  CodeCanyon Demo Hub
+                  Demo Showcase
                 </span>
-                <span className="hidden md:inline text-[11px] text-slate-400">v2.4 Enterprise</span>
+                <span className="text-[11px] text-blue-200 font-bold">
+                  • Developed by Ankit Chaudhary (8533955333)
+                </span>
               </div>
-              <p className="text-[10px] text-slate-400">Multi-Vendor B2B + B2C Marketplace Script (React + Node.js + Flutter)</p>
+              <p className="text-[10px] text-blue-200 font-medium">
+                Multi-Vendor B2B + B2C Marketplace Script (React + Node.js + Flutter)
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              All 4 Live Services Online
-            </span>
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={onOpenDocs}
+              className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs flex items-center gap-1.5 transition-colors"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+              <span>📖 Setup Guide / कैसे यूज़ करें</span>
+            </button>
+
+            <a
+              href="https://wa.me/918533955333?text=Hi%20Ankit,%20I%20want%20to%20purchase%20AuraMarket%20E-Commerce%20Platform"
+              target="_blank"
+              rel="noreferrer"
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs flex items-center gap-1.5 shadow"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>Buy: 8533955333</span>
+            </a>
           </div>
         </div>
       </header>
 
       {/* Hero Showcase Section */}
-      <section className="bg-gradient-to-b from-white to-slate-50 border-b border-slate-200 py-12 lg:py-16 px-4 lg:px-8">
+      <section className="bg-gradient-to-b from-white to-slate-50 border-b border-slate-200 py-10 lg:py-14 px-4 lg:px-8">
         <div className="max-w-4xl mx-auto text-center space-y-4">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-black uppercase tracking-wider shadow-sm">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-900 text-xs font-black uppercase tracking-wider shadow-sm">
             <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            <span>Interactive Multi-Role Showcase</span>
+            <span>Official Commercial Marketplace Demo</span>
           </div>
 
           <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
             Select a Portal to Test the Demo
           </h1>
 
-          <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
+          <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed font-medium">
             Just like official CodeCanyon commercial scripts, every user role runs in its own dedicated,
             fully authentic interface. Choose which portal you would like to test below:
           </p>
 
-          <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2 text-xs font-bold text-slate-600">
-            <span className="px-3 py-1 rounded-full bg-white border border-slate-200 shadow-sm">
-              ✓ Multi-Vendor Split Orders
-            </span>
-            <span className="px-3 py-1 rounded-full bg-white border border-slate-200 shadow-sm">
-              ✓ 4-Digit Handover Delivery OTP
-            </span>
-            <span className="px-3 py-1 rounded-full bg-white border border-slate-200 shadow-sm">
-              ✓ Vendor Commission Ledger
-            </span>
-            <span className="px-3 py-1 rounded-full bg-white border border-slate-200 shadow-sm">
-              ✓ Mobile Device Simulator
-            </span>
+          {/* Prominent Developer & Purchase Callout Banner */}
+          <div className="max-w-3xl mx-auto p-4 sm:p-5 rounded-2xl bg-amber-50 border-2 border-amber-300 text-slate-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 text-left">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="font-black text-slate-900 text-sm sm:text-base">
+                  👨‍💻 Developed by Ankit Chaudhary
+                </span>
+                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-400 text-slate-950">
+                  Author
+                </span>
+              </div>
+              <p className="text-xs text-slate-700 font-semibold">
+                अगर purchase करना है तो इस नंबर पर संपर्क करें: <strong className="text-slate-950 font-black">+91 8533955333</strong>
+              </p>
+              <p className="text-[11px] text-slate-500">
+                To purchase complete source code (Web, Android APK, iOS & Backend), contact the author directly.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto flex-shrink-0">
+              <a
+                href="https://wa.me/918533955333?text=Hi%20Ankit,%20I%20want%20to%20purchase%20AuraMarket%20E-Commerce%20Platform"
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>WhatsApp</span>
+              </a>
+              <a
+                href="tel:8533955333"
+                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-850 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow"
+              >
+                <Phone className="w-4 h-4 text-amber-400" />
+                <span>8533955333</span>
+              </a>
+            </div>
           </div>
         </div>
       </section>
 
       {/* The 4 Distinct Portal Cards */}
-      <main className="max-w-7xl mx-auto px-4 lg:px-8 -mt-6">
+      <main className="max-w-7xl mx-auto px-4 lg:px-8 mt-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {portals.map(portal => {
             const Icon = portal.icon;
@@ -250,7 +288,7 @@ export const DemoHub = ({ onSelectPortal, uiConfig }) => {
                 <div className="pt-6 border-t border-slate-100 space-y-2 mt-6">
                   <button
                     onClick={() => onSelectPortal(portal.id, 'desktop')}
-                    className="w-full py-3.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs shadow-md flex items-center justify-center gap-2 transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+                    className="w-full py-3.5 px-4 rounded-xl bg-[#0f2444] hover:bg-[#1a3a6b] text-white font-black text-xs shadow-md flex items-center justify-center gap-2 transition-all transform hover:-translate-y-0.5 active:translate-y-0"
                   >
                     <span>{portal.actionText} (Full Desktop)</span>
                     <ArrowRight className="w-4 h-4 text-amber-400" />
@@ -268,7 +306,7 @@ export const DemoHub = ({ onSelectPortal, uiConfig }) => {
                       onClick={() => onSelectPortal(portal.id, 'tablet')}
                       className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
                     >
-                      <Tablet className="w-3.5 h-3.5 text-slate-500" />
+                      <Smartphone className="w-3.5 h-3.5 text-slate-500" />
                       <span>iPad View</span>
                     </button>
                   </div>
@@ -349,10 +387,45 @@ export const DemoHub = ({ onSelectPortal, uiConfig }) => {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="mt-12 text-center text-xs text-slate-400 font-medium space-y-1">
-        <p>© 2026 {uiConfig?.storeName || 'AuraMarket'} • CodeCanyon Commercial Multi-Vendor Showcase</p>
-        <p>Built with Node.js, Express, React, Tailwind CSS & Flutter</p>
+      {/* Prominent Footer with Developer & Purchase Contact */}
+      <footer className="mt-14 border-t border-slate-200 bg-white py-10 px-4 text-center text-xs text-slate-600 space-y-4">
+        <div className="max-w-xl mx-auto p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+          <p className="font-black text-slate-900 text-sm">
+            Developed by Ankit Chaudhary • Call / WhatsApp: +91 8533955333
+          </p>
+          <p className="text-xs text-slate-600 font-medium">
+            अगर purchase करना है तो इस नंबर पर संपर्क करें (8533955333) — कंप्लीट सोर्स कोड और लाइफटाइम लाइसेंस उपलब्ध।
+          </p>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <a
+              href="https://wa.me/918533955333?text=Hi%20Ankit,%20I%20want%20to%20purchase%20AuraMarket%20E-Commerce%20Platform"
+              target="_blank"
+              rel="noreferrer"
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-1.5 shadow"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span>WhatsApp: 8533955333</span>
+            </a>
+            <a
+              href="tel:8533955333"
+              className="px-4 py-2 rounded-xl bg-[#0f2444] hover:bg-[#1a3a6b] text-white font-bold text-xs flex items-center gap-1.5 shadow"
+            >
+              <Phone className="w-4 h-4 text-amber-400" />
+              <span>Call: 8533955333</span>
+            </a>
+            <button
+              onClick={onOpenDocs}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold text-xs flex items-center gap-1.5 shadow-sm"
+            >
+              <BookOpen className="w-4 h-4 text-blue-600" />
+              <span>Setup Guide</span>
+            </button>
+          </div>
+        </div>
+
+        <p className="text-slate-400 font-medium">
+          © 2026 {uiConfig?.storeName || 'AuraMarket'} • Commercial Multi-Vendor Marketplace Showcase
+        </p>
       </footer>
     </div>
   );

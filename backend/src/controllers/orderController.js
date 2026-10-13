@@ -42,7 +42,31 @@ exports.createOrder = async (req, res, next) => {
         return res.status(404).json({ success: false, message: `Product '${item.title || item.productId}' is no longer available` });
       }
 
-      // Check stock
+      let variantMatch = null;
+      let itemPrice = product.sellingPrice;
+      let variantName = item.variantName || 'Standard';
+
+      if (product.hasVariants && product.variants?.length > 0) {
+        if (item.variantSku) {
+          variantMatch = product.variants.find(v => v.sku === item.variantSku);
+        }
+        if (!variantMatch) {
+          variantMatch = product.variants[0];
+        }
+
+        if (variantMatch) {
+          if (variantMatch.stock < qty) {
+            return res.status(400).json({
+              success: false,
+              message: `Insufficient stock for variant '${variantMatch.name}' of '${product.title}'. Only ${variantMatch.stock} units remaining.`,
+            });
+          }
+          itemPrice = product.sellingPrice + (variantMatch.additionalPrice || 0);
+          variantName = variantMatch.name;
+        }
+      }
+
+      // Check general stock
       if (product.stock < qty) {
         return res.status(400).json({
           success: false,
@@ -50,19 +74,22 @@ exports.createOrder = async (req, res, next) => {
         });
       }
 
-      const itemPrice = product.sellingPrice;
       const itemTotalPrice = itemPrice * qty;
       totalOrderAmount += itemTotalPrice;
 
-      productsToDecrement.push({ product, quantity: qty });
+      productsToDecrement.push({
+        product,
+        variantSku: variantMatch ? variantMatch.sku : null,
+        quantity: qty,
+      });
 
       const validatedItem = {
         product: product._id,
         vendor: product.vendor._id,
         title: product.title,
         image: product.images[0] || '',
-        variantSku: item.variantSku || product.sku,
-        variantName: item.variantName || 'Standard',
+        variantSku: variantMatch ? variantMatch.sku : (item.variantSku || product.sku),
+        variantName: variantName,
         quantity: qty,
         price: itemPrice,
         totalPrice: itemTotalPrice,
@@ -86,16 +113,47 @@ exports.createOrder = async (req, res, next) => {
     // Step 1b: Execute atomic stock decrements with rollback protection
     const decrementedList = [];
     for (const entry of productsToDecrement) {
-      const updated = await Product.findOneAndUpdate(
-        { _id: entry.product._id, stock: { $gte: entry.quantity }, isPublished: true },
-        { $inc: { stock: -entry.quantity } },
-        { new: true }
-      );
+      let updated;
+      if (entry.variantSku && entry.product.hasVariants) {
+        updated = await Product.findOneAndUpdate(
+          {
+            _id: entry.product._id,
+            stock: { $gte: entry.quantity },
+            variants: {
+              $elemMatch: {
+                sku: entry.variantSku,
+                stock: { $gte: entry.quantity },
+              },
+            },
+            isPublished: true,
+          },
+          {
+            $inc: {
+              stock: -entry.quantity,
+              'variants.$.stock': -entry.quantity,
+            },
+          },
+          { new: true }
+        );
+      } else {
+        updated = await Product.findOneAndUpdate(
+          { _id: entry.product._id, stock: { $gte: entry.quantity }, isPublished: true },
+          { $inc: { stock: -entry.quantity } },
+          { new: true }
+        );
+      }
 
       if (!updated) {
         // Rollback already decremented products to avoid stock leak
         for (const prev of decrementedList) {
-          await Product.findByIdAndUpdate(prev.productId, { $inc: { stock: prev.quantity } });
+          if (prev.variantSku) {
+            await Product.findOneAndUpdate(
+              { _id: prev.productId, variants: { $elemMatch: { sku: prev.variantSku } } },
+              { $inc: { stock: prev.quantity, 'variants.$.stock': prev.quantity } }
+            );
+          } else {
+            await Product.findByIdAndUpdate(prev.productId, { $inc: { stock: prev.quantity } });
+          }
         }
         return res.status(400).json({
           success: false,
@@ -103,7 +161,11 @@ exports.createOrder = async (req, res, next) => {
         });
       }
 
-      decrementedList.push({ productId: entry.product._id, quantity: entry.quantity });
+      decrementedList.push({
+        productId: entry.product._id,
+        variantSku: entry.variantSku,
+        quantity: entry.quantity,
+      });
     }
 
     // Step 2: Create Master Order
@@ -317,10 +379,20 @@ exports.cancelOrder = async (req, res, next) => {
         });
         await sub.save();
 
-        // 1. Restore stock for each item in the suborder
+        // 1. Restore stock for each item in the suborder (both product and variant stock)
         if (sub.items && sub.items.length > 0) {
           for (const item of sub.items) {
-            await Product.findByIdAndUpdate(item.product, { $inc: { stock: item.quantity } });
+            if (item.variantSku) {
+              const res = await Product.findOneAndUpdate(
+                { _id: item.product, variants: { $elemMatch: { sku: item.variantSku } } },
+                { $inc: { stock: item.quantity, 'variants.$.stock': item.quantity } }
+              );
+              if (!res) {
+                await Product.findByIdAndUpdate(item.product, { $inc: { stock: item.quantity } });
+              }
+            } else {
+              await Product.findByIdAndUpdate(item.product, { $inc: { stock: item.quantity } });
+            }
           }
         }
 

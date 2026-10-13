@@ -54,6 +54,74 @@ export const ProductDetailModal = ({
   // Hover zoom coordinates
   const [zoomStyle, setZoomStyle] = useState({ display: 'none' });
 
+  // Multi-Attribute Matrix Extraction (Colors, Sizes, Attributes)
+  const availableColors = React.useMemo(() => {
+    if (!product.variants || product.variants.length === 0) return [];
+    const set = new Set();
+    product.variants.forEach(v => {
+      const c = v.attributes?.color;
+      if (c) set.add(c);
+      else if (v.name) {
+        const lower = v.name.toLowerCase();
+        if (lower.includes('black')) set.add('Black');
+        else if (lower.includes('silver')) set.add('Silver');
+        else if (lower.includes('white')) set.add('White');
+        else if (lower.includes('blue')) set.add('Blue');
+        else if (lower.includes('red')) set.add('Red');
+        else if (lower.includes('obsidian')) set.add('Obsidian');
+      }
+    });
+    return Array.from(set);
+  }, [product.variants]);
+
+  const availableSizes = React.useMemo(() => {
+    if (!product.variants || product.variants.length === 0) return [];
+    const set = new Set();
+    product.variants.forEach(v => {
+      const s = v.attributes?.size || v.attributes?.storage;
+      if (s) set.add(s);
+      else if (v.name) {
+        if (v.name.includes('Medium') || v.name.includes('/ M') || v.name.includes('M /')) set.add('M');
+        if (v.name.includes('Large') || v.name.includes('/ L') || v.name.includes('L /')) set.add('L');
+        if (v.name.includes('XL')) set.add('XL');
+        if (v.name.includes('Small') || v.name.includes('/ S') || v.name.includes('S /')) set.add('S');
+      }
+    });
+    return Array.from(set);
+  }, [product.variants]);
+
+  const getColorHex = colorName => {
+    const c = (colorName || '').toLowerCase();
+    if (c.includes('black') || c.includes('obsidian')) return '#0f172a';
+    if (c.includes('silver') || c.includes('grey') || c.includes('gray')) return '#94a3b8';
+    if (c.includes('white')) return '#f8fafc';
+    if (c.includes('red') || c.includes('crimson')) return '#ef4444';
+    if (c.includes('blue') || c.includes('navy')) return '#3b82f6';
+    if (c.includes('green') || c.includes('olive')) return '#10b981';
+    if (c.includes('gold') || c.includes('yellow')) return '#f59e0b';
+    return '#64748b';
+  };
+
+  const handleSelectColor = col => {
+    const currentSize = selectedVariant?.attributes?.size;
+    const match = product.variants.find(v => {
+      const vColor = v.attributes?.color || v.name;
+      const vSize = v.attributes?.size;
+      return vColor?.toLowerCase().includes(col.toLowerCase()) && (!currentSize || vSize === currentSize);
+    }) || product.variants.find(v => (v.attributes?.color || v.name)?.toLowerCase().includes(col.toLowerCase()));
+    if (match) setSelectedVariant(match);
+  };
+
+  const handleSelectSize = sz => {
+    const currentColor = selectedVariant?.attributes?.color;
+    const match = product.variants.find(v => {
+      const vColor = v.attributes?.color;
+      const vSize = v.attributes?.size || v.name;
+      return vSize?.includes(sz) && (!currentColor || vColor === currentColor);
+    }) || product.variants.find(v => (v.attributes?.size || v.name)?.includes(sz));
+    if (match) setSelectedVariant(match);
+  };
+
   // Reset states when product changes
   useEffect(() => {
     setActiveImageIndex(0);
@@ -373,45 +441,120 @@ export const ProductDetailModal = ({
                 )}
               </div>
 
-              {/* Variants Selector */}
+              {/* Multi-Attribute Product Variants Matrix (Point #2) */}
               {product.hasVariants && product.variants?.length > 0 && (
-                <div className="space-y-2.5 pt-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-black uppercase tracking-wider text-slate-700">
-                      Select Variant / Option:
-                    </span>
-                    <span className="text-amber-600 font-bold">
-                      {selectedVariant?.name || 'Please select'}
-                    </span>
+                <div className="space-y-3.5 pt-1 p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200">
+                  
+                  {/* 1. Color Swatches Row (if colors present) */}
+                  {availableColors.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-black uppercase tracking-wider text-slate-700">
+                          Color Swatch:
+                        </span>
+                        <span className="text-amber-600 font-extrabold">
+                          {selectedVariant?.attributes?.color || selectedVariant?.name || 'Selected'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {availableColors.map(col => {
+                          const isSelected = (selectedVariant?.attributes?.color || selectedVariant?.name || '').toLowerCase().includes(col.toLowerCase());
+                          const hex = getColorHex(col);
+                          return (
+                            <button
+                              key={col}
+                              type="button"
+                              onClick={() => handleSelectColor(col)}
+                              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                                isSelected
+                                  ? 'border-amber-500 bg-amber-50 text-slate-950 ring-2 ring-amber-400/40 shadow-sm scale-105'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                              }`}
+                            >
+                              <span
+                                className="w-3.5 h-3.5 rounded-full border border-slate-300 shadow-inner flex-shrink-0"
+                                style={{ backgroundColor: hex }}
+                              />
+                              <span>{col}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 2. Size / Capacity Chips Row (if sizes present) */}
+                  {availableSizes.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-black uppercase tracking-wider text-slate-700">
+                          Size / Option:
+                        </span>
+                        <span className="text-amber-600 font-extrabold">
+                          {selectedVariant?.attributes?.size || 'Standard Fit'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {availableSizes.map(sz => {
+                          const isSelected = (selectedVariant?.attributes?.size || selectedVariant?.name || '').includes(sz);
+                          return (
+                            <button
+                              key={sz}
+                              type="button"
+                              onClick={() => handleSelectSize(sz)}
+                              className={`min-w-[48px] px-3.5 py-1.5 rounded-xl border text-xs font-black text-center transition-all ${
+                                isSelected
+                                  ? 'border-slate-900 bg-slate-900 text-amber-400 ring-2 ring-amber-400/30 shadow-md scale-105'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                              }`}
+                            >
+                              {sz}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3. Comprehensive Variant Options Cards */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold">
+                      <span>All Available Combinations:</span>
+                      <span className="text-slate-700 font-black">Active SKU: {selectedVariant?.sku}</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {product.variants.map(variant => {
+                        const isSelected = selectedVariant?.sku === variant.sku;
+                        const varPrice = basePrice + (variant.additionalPrice || 0);
+                        const isOutOfStock = variant.stock <= 0;
+                        return (
+                          <button
+                            key={variant.sku}
+                            type="button"
+                            onClick={() => setSelectedVariant(variant)}
+                            disabled={isOutOfStock}
+                            className={`p-2.5 rounded-xl border text-left flex items-center justify-between text-xs font-bold transition-all ${
+                              isSelected
+                                ? 'border-amber-500 bg-white text-slate-950 ring-2 ring-amber-400/30 shadow-sm'
+                                : 'border-slate-200 bg-white/70 text-slate-700 hover:border-slate-300 hover:bg-white'
+                            } ${isOutOfStock ? 'opacity-40 cursor-not-allowed bg-slate-100' : ''}`}
+                          >
+                            <div className="min-w-0 pr-2">
+                              <span className="font-extrabold block truncate text-slate-900">{variant.name}</span>
+                              <span className={`text-[10px] font-bold ${variant.stock <= 5 ? 'text-amber-600' : 'text-slate-400'}`}>
+                                {isOutOfStock ? 'Out of Stock' : `${variant.stock} in stock`}
+                              </span>
+                            </div>
+                            <span className="font-black text-slate-900 flex-shrink-0">
+                              ₹{varPrice.toLocaleString('en-IN')}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {product.variants.map(variant => {
-                      const isSelected = selectedVariant?.sku === variant.sku;
-                      const varPrice = basePrice + (variant.additionalPrice || 0);
-                      return (
-                        <button
-                          key={variant.sku}
-                          onClick={() => setSelectedVariant(variant)}
-                          className={`p-3 rounded-xl border text-left flex items-center justify-between text-xs font-bold transition-all ${
-                            isSelected
-                              ? 'border-amber-500 bg-amber-50/80 text-slate-950 ring-2 ring-amber-400/30 shadow-sm'
-                              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                          }`}
-                        >
-                          <div>
-                            <span className="font-extrabold block">{variant.name}</span>
-                            <span className="text-[10px] text-slate-400 font-medium">
-                              Stock: {variant.stock} left
-                            </span>
-                          </div>
-                          <span className="font-black text-slate-900">
-                            ₹{varPrice.toLocaleString('en-IN')}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
                 </div>
               )}
 

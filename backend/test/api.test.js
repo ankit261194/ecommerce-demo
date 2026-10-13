@@ -322,11 +322,80 @@ const runTests = async () => {
       const expectedTotal = headphonesProduct.sellingPrice * 2 + hoodieProduct.sellingPrice * 1;
       assert.strictEqual(placedOrder.totalAmount, expectedTotal);
 
-      // Verify atomic stock decrement in DB
+      // Verify atomic stock decrement in DB (both total product stock and variant stock)
       const updatedHeadphones = await Product.findById(headphonesProduct._id);
       const updatedHoodie = await Product.findById(hoodieProduct._id);
       assert.strictEqual(updatedHeadphones.stock, initialHeadphonesStock - 2);
       assert.strictEqual(updatedHoodie.stock, initialHoodieStock - 1);
+      const blkVariant = updatedHeadphones.variants.find(v => v.sku === 'APX-HEAD-BLK');
+      assert.strictEqual(blkVariant.stock, 25 - 2);
+    });
+
+    await test('Point 2: Multi-Attribute Variant Matrix adjusts pricing, decrements variant stock and rejects over-stock variant orders', async () => {
+      // Find Silver variant with additionalPrice: 500
+      const hp = await Product.findById(headphonesProduct._id);
+      const silverVariant = hp.variants.find(v => v.sku === 'APX-HEAD-SLV');
+      const prevSilverStock = silverVariant.stock;
+
+      // 1. Order with Silver variant
+      const res = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [
+            { productId: hp._id, quantity: 1, variantSku: 'APX-HEAD-SLV' },
+          ],
+          shippingAddress: {
+            recipientName: 'Aman Sharma',
+            phone: '9876543214',
+            street: 'Flat 402, Green Valley Apartments',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'COD',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.totalAmount, hp.sellingPrice + 500);
+
+      // Verify variant-specific stock decremented
+      const reloadedHp = await Product.findById(hp._id);
+      const updatedSilver = reloadedHp.variants.find(v => v.sku === 'APX-HEAD-SLV');
+      assert.strictEqual(updatedSilver.stock, prevSilverStock - 1);
+
+      // 2. Reject order when variant stock exceeded
+      const failRes = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [
+            { productId: hp._id, quantity: 9999, variantSku: 'APX-HEAD-SLV' },
+          ],
+          shippingAddress: {
+            recipientName: 'Aman Sharma',
+            phone: '9876543214',
+            street: 'Flat 402, Green Valley Apartments',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'COD',
+        }),
+      });
+      assert.strictEqual(failRes.status, 400);
+      const failData = await failRes.json();
+      assert.strictEqual(failData.success, false);
+      assert.ok(failData.message.includes('Insufficient stock for variant'));
     });
 
     // 7. Verify Customer Order Tracking & Delivery OTP

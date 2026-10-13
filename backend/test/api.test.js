@@ -481,6 +481,55 @@ const runTests = async () => {
       assert.ok(firstAct.product.sellingPrice, 'Activity product must include sellingPrice');
     });
 
+    await test('Point 15: GET /reviews/product/:productId returns rating breakdown, customer photos, and review list; POST creates verified review and updates product stats; helpful upvotes work', async () => {
+      // 1. GET reviews & breakdown
+      const resGet = await fetch(`${baseUrl}/reviews/product/${headphonesProduct._id}`);
+      assert.strictEqual(resGet.status, 200);
+      const dataGet = await resGet.json();
+      assert.strictEqual(dataGet.success, true);
+      assert.ok(Array.isArray(dataGet.breakdown), 'Must return 5-star distribution breakdown');
+      assert.strictEqual(dataGet.breakdown.length, 5, 'Must have 5 star breakdown levels');
+      assert.ok(dataGet.averageRating > 0, 'Must have positive average rating');
+      assert.ok(Array.isArray(dataGet.data) && dataGet.data.length >= 1, 'Must return reviews array');
+
+      // 2. POST new customer review with rating & photo
+      const newReviewPayload = {
+        rating: 5,
+        title: 'Sensational spatial audio clarity!',
+        comment: 'Crystal clear highs and deep rumbling bass without any distortion. Arrived in sealed packaging with 1-year brand warranty card.',
+        photos: ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500'],
+        userName: 'Aarav Mehta',
+      };
+
+      const resPost = await fetch(`${baseUrl}/reviews/product/${headphonesProduct._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify(newReviewPayload),
+      });
+
+      assert.strictEqual(resPost.status, 201);
+      const dataPost = await resPost.json();
+      assert.strictEqual(dataPost.success, true);
+      assert.ok(dataPost.data._id);
+      assert.strictEqual(dataPost.data.rating, 5);
+      assert.strictEqual(dataPost.data.isVerifiedPurchase, true);
+      assert.ok(dataPost.updatedProductStats.ratingsQuantity >= 1);
+
+      // 3. POST helpful upvote
+      const reviewId = dataPost.data._id;
+      const resHelpful = await fetch(`${baseUrl}/reviews/${reviewId}/helpful`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resHelpful.status, 200);
+      const dataHelpful = await resHelpful.json();
+      assert.strictEqual(dataHelpful.success, true);
+      assert.strictEqual(dataHelpful.helpfulCount, 2, 'Helpful count should increment');
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

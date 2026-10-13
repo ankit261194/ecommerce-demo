@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import StockUrgencyBadge from './StockUrgencyBadge';
 import RecentPurchaseCounter from './RecentPurchaseCounter';
+import ProductReviewsSection from './ProductReviewsSection';
 
 export const ProductDetailModal = ({
   product,
@@ -716,82 +717,15 @@ export const ProductDetailModal = ({
                 </div>
               )}
 
-              {/* TAB 3: REVIEWS & RATINGS */}
+              {/* TAB 3: REVIEWS & RATINGS (Point #15) */}
               {activeTab === 'reviews' && (
-                <div className="space-y-6 animate-fade-in">
-                  {/* Reviews Summary Stats */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-5 rounded-2xl bg-slate-50 border border-slate-200">
-                    <div className="text-center sm:text-left sm:border-r border-slate-200 sm:pr-4">
-                      <div className="text-4xl font-black text-slate-900">
-                        {product.ratingsAverage || 4.8}
-                      </div>
-                      <div className="flex items-center justify-center sm:justify-start gap-1 my-1 text-amber-500">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} className="w-4 h-4 fill-current" />
-                        ))}
-                      </div>
-                      <p className="text-[11px] text-slate-500 font-bold">
-                        Based on {product.ratingsQuantity || 42} verified customer reviews
-                      </p>
-                    </div>
-
-                    <div className="sm:col-span-2 space-y-1.5 text-[11px] font-bold text-slate-600">
-                      {[
-                        { star: 5, pct: '82%' },
-                        { star: 4, pct: '12%' },
-                        { star: 3, pct: '4%' },
-                        { star: 2, pct: '1%' },
-                        { star: 1, pct: '1%' },
-                      ].map(bar => (
-                        <div key={bar.star} className="flex items-center gap-2">
-                          <span className="w-8">{bar.star} ★</span>
-                          <div className="flex-1 h-2 rounded-full bg-slate-200 overflow-hidden">
-                            <div className="h-full bg-amber-500 rounded-full" style={{ width: bar.pct }} />
-                          </div>
-                          <span className="w-8 text-right text-slate-400">{bar.pct}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Customer Review Cards */}
-                  <div className="space-y-3">
-                    {sampleReviews.map(rev => (
-                      <div key={rev.id} className="p-4 rounded-2xl border border-slate-200 bg-white space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-900 font-black flex items-center justify-center text-xs">
-                              {rev.author[0]}
-                            </div>
-                            <div>
-                              <span className="font-extrabold text-slate-900">{rev.author}</span>
-                              {rev.verified && (
-                                <span className="ml-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
-                                  ✓ Verified Buyer
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <span className="text-[11px] text-slate-400">{rev.date}</span>
-                        </div>
-
-                        <div className="flex items-center gap-1 text-amber-500">
-                          {[...Array(rev.rating)].map((_, i) => (
-                            <Star key={i} className="w-3.5 h-3.5 fill-current" />
-                          ))}
-                        </div>
-
-                        <h5 className="font-extrabold text-slate-900 text-xs">{rev.title}</h5>
-                        <p className="text-xs text-slate-600 leading-relaxed">{rev.comment}</p>
-
-                        <div className="flex items-center gap-2 pt-1 text-[11px] text-slate-400">
-                          <button className="flex items-center gap-1 hover:text-slate-700">
-                            <ThumbsUp className="w-3 h-3" /> Helpful ({rev.likes})
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                <div className="animate-fade-in">
+                  <ProductReviewsSection
+                    productId={product._id}
+                    productTitle={product.title}
+                    initialAverageRating={product.ratingsAverage || 4.8}
+                    initialTotalReviews={product.ratingsQuantity || 42}
+                  />
                 </div>
               )}
 

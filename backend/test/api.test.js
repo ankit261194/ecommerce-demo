@@ -1373,6 +1373,59 @@ const runTests = async () => {
       });
     });
 
+    await test('Point 27: Live Visual Step-by-Step Order Tracker (GET /orders/track/:identifier & POST /orders/:id/advance-step)', async () => {
+      // 1. Track by orderNumber (public endpoint, no auth required)
+      const resTrack = await fetch(`${baseUrl}/orders/track/${placedOrder.orderNumber}`);
+      assert.strictEqual(resTrack.status, 200);
+      const dataTrack = await resTrack.json();
+      assert.strictEqual(dataTrack.success, true);
+      assert.strictEqual(dataTrack.data.orderId, placedOrder.orderNumber);
+      assert.ok(Array.isArray(dataTrack.data.subOrders));
+      assert.ok(dataTrack.data.subOrders.length >= 1);
+
+      const firstSub = dataTrack.data.subOrders[0];
+      assert.ok(Array.isArray(firstSub.steps), 'Must return 5-step milestone array');
+      assert.strictEqual(firstSub.steps.length, 5, 'Must contain all 5 lifecycle steps');
+      assert.strictEqual(firstSub.steps[0].key, 'placed');
+      assert.strictEqual(firstSub.steps[0].isCompleted, true);
+      assert.strictEqual(firstSub.deliveryOtp.length, 4, 'Must expose delivery OTP');
+      assert.ok(firstSub.deliveryPartner.name, 'Must include courier partner name');
+
+      // 2. Track by MongoDB _id
+      const resById = await fetch(`${baseUrl}/orders/track/${placedOrder._id}`);
+      assert.strictEqual(resById.status, 200);
+      const dataById = await resById.json();
+      assert.strictEqual(dataById.data.rawOrderId.toString(), placedOrder._id.toString());
+
+      // 3. Track non-existent order
+      const res404 = await fetch(`${baseUrl}/orders/track/INVALID_REF_9999`);
+      assert.strictEqual(res404.status, 404);
+      const data404 = await res404.json();
+      assert.strictEqual(data404.success, false);
+
+      // 4. Advance milestone simulation (POST /orders/:id/advance-step)
+      const resAdvance = await fetch(`${baseUrl}/orders/${placedOrder._id}/advance-step`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ step: 'dispatched' }),
+      });
+      assert.strictEqual(resAdvance.status, 200);
+      const dataAdvance = await resAdvance.json();
+      assert.strictEqual(dataAdvance.success, true);
+
+      // Verify that tracked order now has dispatched milestone completed
+      const resTrackUpdated = await fetch(`${baseUrl}/orders/track/${placedOrder.orderNumber}`);
+      const dataTrackUpdated = await resTrackUpdated.json();
+      const updatedSub = dataTrackUpdated.data.subOrders[0];
+      const dispatchedStep = updatedSub.steps.find(s => s.key === 'dispatched');
+      assert.ok(dispatchedStep);
+      assert.strictEqual(dispatchedStep.isCompleted, true);
+      assert.strictEqual(dispatchedStep.isCurrent, true);
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Search, MapPin, Sparkles, ChevronDown, Heart, X, Check } from 'lucide-react';
+import { ShoppingBag, Search, MapPin, Sparkles, ChevronDown, Heart, X, Check, Truck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import LiveSearchAutocomplete from './LiveSearchAutocomplete';
@@ -131,6 +131,17 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
                 )}
               </button>
 
+              {/* Track Order Link Mobile */}
+              <button
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('auramarket_open_order_tracker'));
+                }}
+                className="relative p-2 rounded-lg bg-white/10 text-emerald-400 hover:text-emerald-300 transition-colors"
+                title="Track Order"
+              >
+                <Truck className="w-4 h-4" />
+              </button>
+
               <button
                 onClick={() => setIsCartOpen(true)}
                 className="relative flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow transition-all active:scale-95"
@@ -166,6 +177,18 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
 
           {/* Desktop Right Header Navigation: Location, Wishlist, Account & Cart */}
           <div className={`${isMobileMode ? 'hidden' : 'hidden md:flex'} items-center gap-3.5 flex-shrink-0`}>
+            {/* Live Order Tracker */}
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('auramarket_open_order_tracker'));
+              }}
+              className="relative p-2 rounded-xl bg-white/10 hover:bg-white/15 text-white transition-all flex items-center gap-1.5"
+              title="Track Order"
+            >
+              <Truck className="w-4 h-4 text-emerald-400" />
+              <span className="text-xs font-bold hidden lg:inline">Track Order</span>
+            </button>
+
             {/* Wishlist Link */}
             <button
               onClick={() => {

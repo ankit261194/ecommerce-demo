@@ -47,6 +47,7 @@ import StorefrontOffersHub from '../components/StorefrontOffersHub';
 import ScratchCardModal from '../components/ScratchCardModal';
 import AddressBookModal from '../components/AddressBookModal';
 import DynamicCheckoutPayment from '../components/DynamicCheckoutPayment';
+import LiveOrderTrackerModal from '../components/LiveOrderTrackerModal';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -74,6 +75,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [isOffersHubOpen, setIsOffersHubOpen] = useState(false);
   const [isScratchCardOpen, setIsScratchCardOpen] = useState(false);
+  const [isOrderTrackerOpen, setIsOrderTrackerOpen] = useState(false);
+  const [trackedOrderId, setTrackedOrderId] = useState(null);
 
   // Wishlist state (persisted in localStorage + synced with backend /api/wishlist)
   const [wishlist, setWishlist] = useState(() => {
@@ -217,13 +220,22 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       }
     };
 
+    const handleOpenOrderTracker = e => {
+      if (e?.detail) {
+        setTrackedOrderId(e.detail);
+      }
+      setIsOrderTrackerOpen(true);
+    };
+
     window.addEventListener('auramarket_open_wishlist', handleOpenWishlist);
+    window.addEventListener('auramarket_open_order_tracker', handleOpenOrderTracker);
     window.addEventListener('auramarket_select_category', handleSelectCategory);
     window.addEventListener('auramarket_select_brand', handleSelectBrand);
     window.addEventListener('auramarket_open_product_pdp', handleOpenProductPDP);
 
     return () => {
       window.removeEventListener('auramarket_open_wishlist', handleOpenWishlist);
+      window.removeEventListener('auramarket_open_order_tracker', handleOpenOrderTracker);
       window.removeEventListener('auramarket_select_category', handleSelectCategory);
       window.removeEventListener('auramarket_select_brand', handleSelectBrand);
       window.removeEventListener('auramarket_open_product_pdp', handleOpenProductPDP);
@@ -858,8 +870,10 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
       if (res.data?.success && res.data?.data) {
         const order = res.data.data;
+        const placedOrderId = order.orderNumber || order._id;
+        localStorage.setItem('last_placed_order_id', placedOrderId);
         setActiveOrderConfirmation({
-          orderId: order.orderNumber || order._id,
+          orderId: placedOrderId,
           subOrders: (order.subOrders || []).map(so => ({
             subOrderId: so._id ? `SUB-${so._id.toString().slice(-4)}` : 'SUB-001',
             vendorName: so.vendor?.storeName || 'Verified Partner Store',
@@ -892,6 +906,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     const couponDiscount = appliedCoupon?.discountAmount || 0;
     const fallbackTotal = Math.max(0, cartTotal - couponDiscount + activeShipFee);
 
+    localStorage.setItem('last_placed_order_id', fallbackOrderId);
     setActiveOrderConfirmation({
       orderId: fallbackOrderId,
       subOrders: fallbackSubOrdersList,
@@ -2134,12 +2149,25 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               </div>
             </div>
 
-            <button
-              onClick={() => setActiveOrderConfirmation(null)}
-              className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md"
-            >
-              Continue Shopping
-            </button>
+            <div className="flex gap-2.5">
+              <button
+                onClick={() => {
+                  setTrackedOrderId(activeOrderConfirmation.orderId);
+                  setIsOrderTrackerOpen(true);
+                  setActiveOrderConfirmation(null);
+                }}
+                className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 flex items-center justify-center gap-1.5 transition active:scale-95"
+              >
+                <Truck className="w-4 h-4" />
+                Track Order Live
+              </button>
+              <button
+                onClick={() => setActiveOrderConfirmation(null)}
+                className="flex-1 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition active:scale-95"
+              >
+                Continue Shopping
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2267,6 +2295,14 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           setToastMessage(`Delivering to ${selected.recipientName} (${selected.type || 'HOME'}) 📍`);
           setTimeout(() => setToastMessage(null), 2200);
         }}
+      />
+
+      {/* Point #27: Live Visual Step-by-Step Order Tracker Modal */}
+      <LiveOrderTrackerModal
+        isOpen={isOrderTrackerOpen}
+        onClose={() => setIsOrderTrackerOpen(false)}
+        initialOrderId={trackedOrderId}
+        apiUrl="/api"
       />
     </div>
   );

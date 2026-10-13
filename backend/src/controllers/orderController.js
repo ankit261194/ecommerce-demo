@@ -513,4 +513,156 @@ exports.cancelOrder = async (req, res, next) => {
   }
 };
 
+// @desc    Track Order Step-by-Step (Point #27 Live Visual Stepper)
+// @route   GET /api/orders/track/:identifier
+exports.trackOrder = async (req, res, next) => {
+  try {
+    const { identifier } = req.params;
+    const mongoose = require('mongoose');
+    let order = null;
+
+    // 1. Try finding by MongoDB ObjectId or orderNumber
+    if (mongoose.Types.ObjectId.isValid(identifier)) {
+      order = await Order.findById(identifier);
+    }
+    if (!order) {
+      order = await Order.findOne({ orderNumber: identifier });
+    }
+    if (!order) {
+      // 2. Try finding by SubOrder ID
+      const sub = mongoose.Types.ObjectId.isValid(identifier)
+        ? await SubOrder.findById(identifier)
+        : null;
+      if (sub) {
+        order = await Order.findById(sub.parentOrder);
+      }
+    }
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: `No active order found with tracking reference '${identifier}'`,
+      });
+    }
+
+    // Populate sub-orders with vendor and courier partner details
+    await order.populate([
+      { path: 'customer', select: 'name phone' },
+      {
+        path: 'subOrders',
+        populate: [
+          { path: 'vendor', select: 'storeName storeLogo pickupAddress phone' },
+          { path: 'deliveryPartner', select: 'name phone' },
+        ],
+      },
+    ]);
+
+    // Standard 5-step lifecycle stages:
+    // 1. placed (Ordered)
+    // 2. packed (Packaging)
+    // 3. dispatched (In Transit / Shipped)
+    // 4. out_for_delivery (Out for Delivery)
+    // 5. delivered (Delivered)
+    const stageOrder = ['placed', 'packed', 'dispatched', 'out_for_delivery', 'delivered'];
+    const stageLabels = {
+      placed: { title: 'Order Confirmed', desc: 'Order received and verified by AuraMarket' },
+      packed: { title: 'Packed & Barcoded', desc: 'Merchant prepared parcel with shipping slip' },
+      dispatched: { title: 'Handed to Express Courier', desc: 'Parcel left fulfillment hub and is in transit' },
+      out_for_delivery: { title: 'Out for Doorstep Delivery', desc: 'Courier rider is on the way to your destination' },
+      delivered: { title: 'Delivered Successfully', desc: 'Handed over at doorstep with verified OTP' },
+    };
+
+    const subOrdersTracking = (order.subOrders || []).map(sub => {
+      const currentStatus = sub.status || 'placed';
+      const isCancelled = currentStatus === 'cancelled';
+      const currentIndex = stageOrder.indexOf(currentStatus);
+
+      const steps = stageOrder.map((stageKey, idx) => {
+        const histItem = (sub.trackingHistory || []).find(h => h.status === stageKey);
+        const isCompleted = !isCancelled && (currentIndex >= idx);
+        const isCurrent = !isCancelled && (currentIndex === idx);
+
+        return {
+          stepIndex: idx + 1,
+          key: stageKey,
+          label: stageLabels[stageKey].title,
+          description: histItem?.note || stageLabels[stageKey].desc,
+          isCompleted,
+          isCurrent,
+          timestamp: histItem?.timestamp || (isCompleted ? sub.createdAt : null),
+        };
+      });
+
+      return {
+        subOrderId: sub._id ? `SUB-${sub._id.toString().slice(-4)}` : 'SUB-001',
+        rawSubOrderId: sub._id,
+        vendor: sub.vendor,
+        items: sub.items,
+        subTotal: sub.subTotal,
+        status: currentStatus,
+        isCancelled,
+        deliveryOtp: sub.deliveryOtp || '4821',
+        deliveryPartner: sub.deliveryPartner || { name: 'Vikram Singh', phone: '9876543210' },
+        steps,
+        deliveryInstructions: sub.deliveryInstructions || order.deliveryInstructions || '',
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        orderId: order.orderNumber || order._id,
+        rawOrderId: order._id,
+        createdAt: order.createdAt,
+        totalAmount: order.totalAmount,
+        status: order.status,
+        shippingAddress: order.shippingAddress,
+        paymentMethod: order.paymentMethod,
+        paymentStatus: order.paymentStatus,
+        paymentDetails: order.paymentDetails,
+        deliveryInstructions: order.deliveryInstructions,
+        subOrders: subOrdersTracking,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Simulate/Advance Order Milestone for Demo/Testing
+// @route   POST /api/orders/:id/advance-step
+exports.simulateOrderStep = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { step } = req.body; // 'packed' | 'dispatched' | 'out_for_delivery' | 'delivered'
+    const order = await Order.findById(id).populate('subOrders');
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const nextStep = step || 'packed';
+    for (const sub of order.subOrders) {
+      sub.status = nextStep;
+      sub.trackingHistory.push({
+        status: nextStep,
+        timestamp: new Date(),
+        note: `Milestone advanced to ${nextStep}`,
+      });
+      await sub.save();
+    }
+
+    if (nextStep === 'delivered') {
+      order.status = 'DELIVERED';
+      order.paymentStatus = 'PAID';
+    } else {
+      order.status = 'IN_PROGRESS';
+    }
+    await order.save();
+
+    res.status(200).json({ success: true, message: `Order milestone advanced to ${nextStep}` });
+  } catch (error) {
+    next(error);
+  }
+};
+
 

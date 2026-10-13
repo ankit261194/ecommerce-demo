@@ -260,6 +260,98 @@ exports.updateOrderStatus = async (req, res, next) => {
   }
 };
 
+// @desc    Get Multi-Vendor Commission Split Inspector per Order (Point #33)
+// @route   GET /api/admin/orders/:id/commission-split
+exports.getOrderCommissionSplit = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Search by Mongo ObjectId or Order Number
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(id);
+    const query = isObjectId ? { _id: id } : { orderNumber: id };
+
+    const order = await Order.findOne(query)
+      .populate('customer', 'name email phone')
+      .populate({
+        path: 'subOrders',
+        populate: { path: 'vendor', select: 'storeName storeLogo commissionRate user walletBalance' },
+      });
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found for commission inspection' });
+    }
+
+    const vendorSplits = [];
+    for (const sub of order.subOrders || []) {
+      const vendorSubtotal = sub.subTotal || 0;
+      const commissionRate = sub.platformCommissionRate || (sub.vendor && sub.vendor.commissionRate) || 10;
+      const platformCommissionCut = sub.platformCommissionAmount !== undefined
+        ? sub.platformCommissionAmount
+        : Math.round((vendorSubtotal * commissionRate) / 100);
+      const netVendorPayable = sub.vendorEarning !== undefined
+        ? sub.vendorEarning
+        : vendorSubtotal - platformCommissionCut;
+
+      const ledgerEntries = await Ledger.find({ subOrder: sub._id }).select('transactionId type amount balanceAfter status createdAt');
+
+      vendorSplits.push({
+        subOrderId: sub._id,
+        subOrderStatus: sub.status,
+        vendorId: sub.vendor?._id,
+        storeName: sub.vendor?.storeName || 'Partner Store',
+        storeLogo: sub.vendor?.storeLogo || '',
+        commissionRatePercent: commissionRate,
+        vendorSubtotal,
+        platformCommissionCut,
+        netVendorPayable,
+        items: sub.items || [],
+        deliveryOtp: sub.deliveryOtp,
+        payoutStatus:
+          sub.status === 'delivered'
+            ? 'SETTLED_TO_WALLET'
+            : sub.status === 'cancelled'
+            ? 'CANCELLED_REVERSED'
+            : 'ESCROW_PENDING_DELIVERY',
+        ledgerEntries,
+      });
+    }
+
+    const grossOrderAmount = (order.totalAmount || 0) + (order.discountAmount || 0);
+    const discountAmount = order.discountAmount || 0;
+    const netCustomerPaid = order.totalAmount || 0;
+    const totalVendorPayouts = vendorSplits.reduce((sum, s) => sum + s.netVendorPayable, 0);
+    const totalPlatformCommissions = vendorSplits.reduce((sum, s) => sum + s.platformCommissionCut, 0);
+    const reconciliationDelta = Math.abs((totalVendorPayouts + totalPlatformCommissions) - grossOrderAmount);
+    const isPennyPerfectReconciled = reconciliationDelta <= 1;
+
+    res.status(200).json({
+      success: true,
+      message: `Commission split breakdown for Order #${order.orderNumber}`,
+      data: {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        createdAt: order.createdAt,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        paymentMethod: order.paymentMethod,
+        customer: order.customer,
+        financials: {
+          grossOrderAmount,
+          discountAmount,
+          netCustomerPaid,
+          totalVendorPayouts,
+          totalPlatformCommissions,
+          reconciliationDelta,
+          isPennyPerfectReconciled,
+        },
+        vendorSplits,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Get Platform Financial Ledger
 // @route   GET /api/admin/ledger
 exports.getPlatformLedger = async (req, res, next) => {

@@ -1875,6 +1875,55 @@ const runTests = async () => {
       assert.strictEqual(dataUpdate.data.paymentStatus, 'PAID');
     });
 
+    await test('Point 33: Multi-Vendor Commission Split Inspector per order (GET /admin/orders/:id/commission-split)', async () => {
+      // 1. Inspect commission split for placedOrder
+      const resSplit = await fetch(`${baseUrl}/admin/orders/${placedOrder._id}/commission-split`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resSplit.status, 200);
+      const dataSplit = await resSplit.json();
+      assert.strictEqual(dataSplit.success, true);
+      assert.strictEqual(dataSplit.data.orderId.toString(), placedOrder._id.toString());
+      assert.strictEqual(dataSplit.data.orderNumber, placedOrder.orderNumber);
+
+      // Verify financials & double-entry reconciliation
+      const { financials, vendorSplits } = dataSplit.data;
+      assert.ok(typeof financials.grossOrderAmount === 'number');
+      assert.ok(typeof financials.totalVendorPayouts === 'number');
+      assert.ok(typeof financials.totalPlatformCommissions === 'number');
+      assert.strictEqual(financials.isPennyPerfectReconciled, true, 'Must verify penny-perfect double-entry reconciliation');
+      assert.ok(financials.reconciliationDelta <= 1, 'Reconciliation delta must be <= 1 INR');
+
+      // Verify vendor split array
+      assert.ok(Array.isArray(vendorSplits) && vendorSplits.length >= 1, 'Must contain vendor split entries');
+      const firstSplit = vendorSplits[0];
+      assert.ok(firstSplit.storeName, 'Must include vendor store name');
+      assert.ok(typeof firstSplit.commissionRatePercent === 'number', 'Must include commission rate');
+      assert.ok(typeof firstSplit.vendorSubtotal === 'number');
+      assert.ok(typeof firstSplit.platformCommissionCut === 'number');
+      assert.ok(typeof firstSplit.netVendorPayable === 'number');
+      assert.strictEqual(
+        firstSplit.vendorSubtotal,
+        firstSplit.platformCommissionCut + firstSplit.netVendorPayable,
+        'Vendor subtotal must equal platform cut plus net vendor payout'
+      );
+
+      // 2. Lookup by Order Number string
+      const resByNumber = await fetch(`${baseUrl}/admin/orders/${placedOrder.orderNumber}/commission-split`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resByNumber.status, 200);
+      const dataByNumber = await resByNumber.json();
+      assert.strictEqual(dataByNumber.success, true);
+      assert.strictEqual(dataByNumber.data.orderNumber, placedOrder.orderNumber);
+
+      // 3. Non-existent order returns 404
+      const resNotFound = await fetch(`${baseUrl}/admin/orders/ord_non_existent/commission-split`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resNotFound.status, 404);
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

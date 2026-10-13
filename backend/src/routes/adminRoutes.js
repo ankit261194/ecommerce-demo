@@ -6,6 +6,7 @@ const {
   updateVendorStatus,
   getAllOrders,
   updateOrderStatus,
+  getOrderCommissionSplit,
   getPlatformLedger,
   triggerWipeDemo,
   triggerSeedDemo,
@@ -28,6 +29,7 @@ router.patch('/vendors/:id/commission', updateVendorStatus);
 router.get('/orders', getAllOrders);
 router.put('/orders/:id/status', updateOrderStatus);
 router.patch('/orders/:id/status', updateOrderStatus);
+router.get('/orders/:id/commission-split', getOrderCommissionSplit);
 router.get('/ledger', getPlatformLedger);
 
 // Integrations & API Hub

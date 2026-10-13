@@ -585,6 +585,103 @@ const runTests = async () => {
       assert.ok(dataUp.upvotes >= 2);
     });
 
+    await test('Point 17: Wishlist System: GET /wishlist, POST /wishlist/toggle, DELETE /wishlist/item/:id, DELETE /wishlist/clear', async () => {
+      // 1. Initial GET wishlist
+      const resGetInit = await fetch(`${baseUrl}/wishlist`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resGetInit.status, 200);
+      const dataGetInit = await resGetInit.json();
+      assert.strictEqual(dataGetInit.success, true);
+      assert.ok(Array.isArray(dataGetInit.items));
+
+      // 2. Toggle item into wishlist (add)
+      const resToggleAdd = await fetch(`${baseUrl}/wishlist/toggle`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ productId: headphonesProduct._id }),
+      });
+      assert.strictEqual(resToggleAdd.status, 200);
+      const dataToggleAdd = await resToggleAdd.json();
+      assert.strictEqual(dataToggleAdd.success, true);
+      assert.strictEqual(dataToggleAdd.isWishlisted, true);
+      assert.strictEqual(dataToggleAdd.action, 'added');
+      assert.ok(dataToggleAdd.count >= 1);
+      assert.ok(dataToggleAdd.items.some(i => i.product._id.toString() === headphonesProduct._id.toString()));
+
+      // 3. GET wishlist populated
+      const resGetPopulated = await fetch(`${baseUrl}/wishlist`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resGetPopulated.status, 200);
+      const dataGetPopulated = await resGetPopulated.json();
+      assert.strictEqual(dataGetPopulated.success, true);
+      const item = dataGetPopulated.items.find(i => i.product._id.toString() === headphonesProduct._id.toString());
+      assert.ok(item, 'Item must exist in populated wishlist');
+      assert.strictEqual(item.product.title, headphonesProduct.title);
+      assert.ok(item.product.sellingPrice > 0);
+
+      // 4. Toggle item again (remove)
+      const resToggleRemove = await fetch(`${baseUrl}/wishlist/toggle`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ productId: headphonesProduct._id }),
+      });
+      assert.strictEqual(resToggleRemove.status, 200);
+      const dataToggleRemove = await resToggleRemove.json();
+      assert.strictEqual(dataToggleRemove.success, true);
+      assert.strictEqual(dataToggleRemove.isWishlisted, false);
+      assert.strictEqual(dataToggleRemove.action, 'removed');
+
+      // 5. Re-add and then test DELETE /wishlist/item/:productId
+      await fetch(`${baseUrl}/wishlist/toggle`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ productId: headphonesProduct._id }),
+      });
+
+      const resDelete = await fetch(`${baseUrl}/wishlist/item/${headphonesProduct._id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resDelete.status, 200);
+      const dataDelete = await resDelete.json();
+      assert.strictEqual(dataDelete.success, true);
+      assert.ok(!dataDelete.items.some(i => i.product._id.toString() === headphonesProduct._id.toString()));
+
+      // 6. Test guest wishlist with x-guest-id header
+      const guestHeader = { 'x-guest-id': 'guest_test_session_123' };
+      const resGuestAdd = await fetch(`${baseUrl}/wishlist/toggle`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...guestHeader,
+        },
+        body: JSON.stringify({ productId: headphonesProduct._id }),
+      });
+      assert.strictEqual(resGuestAdd.status, 200);
+      const dataGuestAdd = await resGuestAdd.json();
+      assert.strictEqual(dataGuestAdd.isWishlisted, true);
+
+      // 7. Clear guest wishlist
+      const resClear = await fetch(`${baseUrl}/wishlist/clear`, {
+        method: 'DELETE',
+        headers: guestHeader,
+      });
+      assert.strictEqual(resClear.status, 200);
+      const dataClear = await resClear.json();
+      assert.strictEqual(dataClear.count, 0);
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

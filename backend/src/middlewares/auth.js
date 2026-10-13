@@ -89,4 +89,40 @@ const authorize = (...roles) => {
   };
 };
 
-module.exports = { protect, authorize };
+// Optional authentication - attach req.user if token valid, but do not block if absent
+const optionalAuth = async (req, res, next) => {
+  let token;
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (!token) {
+    return next();
+  }
+
+  const allowDemoTokens = process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEMO_TOKENS === 'true';
+  if (allowDemoTokens && (token.startsWith('mock_jwt_') || token.startsWith('demo_'))) {
+    try {
+      const user = await User.findOne({ role: 'customer' });
+      if (user) req.user = user;
+    } catch (e) {}
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || 'production_grade_super_secret_jwt_key_2026_obsidian_amber'
+    );
+    const user = await User.findById(decoded.id);
+    if (user && user.isActive) {
+      req.user = user;
+    }
+  } catch (err) {
+    // Ignore invalid token in optionalAuth
+  }
+  next();
+};
+
+module.exports = { protect, authorize, optionalAuth };
+

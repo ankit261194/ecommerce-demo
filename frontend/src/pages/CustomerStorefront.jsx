@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
+import WishlistDrawer from '../components/WishlistDrawer';
 import CategorySidebar from '../components/CategorySidebar';
 import FlashSaleSection from '../components/FlashSaleSection';
 import StockUrgencyBadge from '../components/StockUrgencyBadge';
@@ -57,8 +58,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [activeOrderConfirmation, setActiveOrderConfirmation] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
+  const [isWishlistDrawerOpen, setIsWishlistDrawerOpen] = useState(false);
 
-  // Wishlist state (persisted in localStorage)
+  // Wishlist state (persisted in localStorage + synced with backend /api/wishlist)
   const [wishlist, setWishlist] = useState(() => {
     try {
       const saved = localStorage.getItem('auramarket_wishlist');
@@ -68,17 +70,73 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     }
   });
 
+  // Initial sync with backend wishlist
+  useEffect(() => {
+    api.get('/wishlist')
+      .then(res => {
+        if (res.data?.success && Array.isArray(res.data.items) && res.data.items.length > 0) {
+          const backendIds = res.data.items.map(i => i.product?._id || i.product).filter(Boolean);
+          setWishlist(prev => {
+            const merged = Array.from(new Set([...prev, ...backendIds]));
+            localStorage.setItem('auramarket_wishlist', JSON.stringify(merged));
+            window.dispatchEvent(new CustomEvent('auramarket_wishlist_update'));
+            return merged;
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const toggleWishlist = (product, e) => {
     if (e) e.stopPropagation();
+    const prodId = product._id || product.id;
     setWishlist(prev => {
-      const exists = prev.includes(product._id);
-      const updated = exists ? prev.filter(id => id !== product._id) : [...prev, product._id];
+      const exists = prev.includes(prodId);
+      const updated = exists ? prev.filter(id => id !== prodId) : [...prev, prodId];
       localStorage.setItem('auramarket_wishlist', JSON.stringify(updated));
       window.dispatchEvent(new CustomEvent('auramarket_wishlist_update'));
       setToastMessage(exists ? `Removed from Wishlist` : `Saved to Wishlist ❤️`);
       setTimeout(() => setToastMessage(null), 2200);
       return updated;
     });
+
+    // Backend sync
+    api.post('/wishlist/toggle', { productId: prodId }).catch(() => {});
+  };
+
+  const handleMoveToCartFromWishlist = (product) => {
+    const prodId = product._id || product.id;
+    addToCart(product, 1);
+    setWishlist(prev => {
+      const updated = prev.filter(id => id !== prodId);
+      localStorage.setItem('auramarket_wishlist', JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('auramarket_wishlist_update'));
+      return updated;
+    });
+    api.delete(`/wishlist/item/${prodId}`).catch(() => {});
+    setToastMessage(`Moved "${product.title}" to Cart 🛍️`);
+    setTimeout(() => setToastMessage(null), 2200);
+  };
+
+  const handleRemoveFromWishlist = (productId) => {
+    setWishlist(prev => {
+      const updated = prev.filter(id => id !== productId);
+      localStorage.setItem('auramarket_wishlist', JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('auramarket_wishlist_update'));
+      return updated;
+    });
+    api.delete(`/wishlist/item/${productId}`).catch(() => {});
+    setToastMessage('Item removed from Wishlist');
+    setTimeout(() => setToastMessage(null), 2200);
+  };
+
+  const handleClearWishlist = () => {
+    setWishlist([]);
+    localStorage.setItem('auramarket_wishlist', JSON.stringify([]));
+    window.dispatchEvent(new CustomEvent('auramarket_wishlist_update'));
+    api.delete('/wishlist/clear').catch(() => {});
+    setToastMessage('Wishlist cleared');
+    setTimeout(() => setToastMessage(null), 2200);
   };
 
   const handleShareProduct = (product, e) => {
@@ -99,7 +157,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
   useEffect(() => {
     const handleOpenWishlist = () => {
-      setSelectedCategory('wishlist');
+      setIsWishlistDrawerOpen(true);
     };
     const handleSelectCategory = e => {
       if (e.detail) {
@@ -1487,6 +1545,23 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         }}
         isWishlisted={selectedProduct ? wishlist.includes(selectedProduct._id) : false}
         onToggleWishlist={toggleWishlist}
+      />
+
+      {/* Point #17: Dedicated Wishlist Slide-Over Drawer */}
+      <WishlistDrawer
+        isOpen={isWishlistDrawerOpen}
+        onClose={() => setIsWishlistDrawerOpen(false)}
+        wishlist={wishlist}
+        products={products}
+        onMoveToCart={handleMoveToCartFromWishlist}
+        onRemoveItem={handleRemoveFromWishlist}
+        onClearWishlist={handleClearWishlist}
+        onOpenProduct={prod => {
+          setSelectedProduct(prod);
+          if (prod.hasVariants && prod.variants?.length > 0) {
+            setSelectedVariant(prod.variants[0]);
+          }
+        }}
       />
 
       {/* Cart & Multi-Vendor Split Checkout SlideOver Drawer */}

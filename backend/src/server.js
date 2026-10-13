@@ -16,6 +16,7 @@ const deliveryRoutes = require('./routes/deliveryRoutes');
 const uiRoutes = require('./routes/uiRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const questionRoutes = require('./routes/questionRoutes');
+const wishlistRoutes = require('./routes/wishlistRoutes');
 
 const app = express();
 
@@ -92,6 +93,7 @@ app.use('/api/delivery', deliveryRoutes);
 app.use('/api/ui', uiRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/questions', questionRoutes);
+app.use('/api/wishlist', wishlistRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

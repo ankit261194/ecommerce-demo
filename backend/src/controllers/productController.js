@@ -5,9 +5,19 @@ const Category = require('../models/Category');
 // @route   GET /api/products
 exports.getProducts = async (req, res, next) => {
   try {
-    const { category, subCategory, brand, minRating, rating, search, minPrice, maxPrice, featured, sort, page = 1, limit = 20 } = req.query;
+    const { category, subCategory, brand, minRating, rating, search, minPrice, maxPrice, inStock, onSale, featured, sort, page = 1, limit = 20 } = req.query;
 
     const query = { isPublished: true };
+
+    // Point 7: In-Stock Only filter
+    if (inStock === 'true' || inStock === true) {
+      query.stock = { $gt: 0 };
+    }
+
+    // Point 7: On-Sale / Discounted Only filter (mrp > sellingPrice)
+    if (onSale === 'true' || onSale === true) {
+      query.$expr = { $gt: ['$mrp', '$sellingPrice'] };
+    }
 
     const ratingThreshold = minRating || rating;
     if (ratingThreshold && !isNaN(Number(ratingThreshold))) {

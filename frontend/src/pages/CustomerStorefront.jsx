@@ -25,6 +25,8 @@ import {
   FolderTree,
   ChevronRight,
   Filter,
+  Flame,
+  BadgePercent,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
@@ -41,6 +43,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [selectedSubCategory, setSelectedSubCategory] = useState(null);
   const [selectedBrand, setSelectedBrand] = useState('all');
   const [minRating, setMinRating] = useState(0);
+  const [inStockOnly, setInStockOnly] = useState(false);
+  const [onSaleOnly, setOnSaleOnly] = useState(false);
   const [isOpenCategoryDrawer, setIsOpenCategoryDrawer] = useState(false);
   const [isCollapsedCategorySidebar, setIsCollapsedCategorySidebar] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -428,10 +432,14 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     };
   }, [products]);
 
+  // Availability & Deals Live Counts (Point #7)
+  const inStockCount = useMemo(() => products.filter(p => p.stock > 0).length, [products]);
+  const onSaleCount = useMemo(() => products.filter(p => p.mrp > p.sellingPrice).length, [products]);
+
   // Price Range Filter State (Point #3)
   const [priceRange, setPriceRange] = useState([0, 50000]);
 
-  // Filtering products with Multi-Level Category, Subcategory, Brand, Price & Customer Rating Filters (Points #3, #4, #5 & #6)
+  // Filtering products with Multi-Level Category, Subcategory, Brand, Price, Rating, In-Stock & Deals (Points #3, #4, #5, #6 & #7)
   const filteredProducts = products.filter(p => {
     if (selectedCategory === 'wishlist') {
       return wishlist.includes(p._id);
@@ -453,8 +461,19 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       p.brand.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesPrice = p.sellingPrice >= priceRange[0] && p.sellingPrice <= priceRange[1];
     const matchesRating = minRating === 0 || p.ratingsAverage >= minRating;
+    const matchesInStock = !inStockOnly || p.stock > 0;
+    const matchesOnSale = !onSaleOnly || p.mrp > p.sellingPrice;
 
-    return matchesCategory && matchesSubCategory && matchesBrand && matchesSearch && matchesPrice && matchesRating;
+    return (
+      matchesCategory &&
+      matchesSubCategory &&
+      matchesBrand &&
+      matchesSearch &&
+      matchesPrice &&
+      matchesRating &&
+      matchesInStock &&
+      matchesOnSale
+    );
   });
 
   // Inject JSON-LD ItemList Schema for Product Catalog
@@ -969,6 +988,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               setSelectedSubCategory(null);
               setSelectedBrand('all');
               setMinRating(0);
+              setInStockOnly(false);
+              setOnSaleOnly(false);
             }}
             totalProductsCount={products.length}
             isOpenMobile={isOpenCategoryDrawer}
@@ -982,6 +1003,12 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             minRating={minRating}
             onSelectRating={r => setMinRating(r)}
             ratingsCounts={ratingsCounts}
+            inStockOnly={inStockOnly}
+            onToggleInStock={setInStockOnly}
+            onSaleOnly={onSaleOnly}
+            onToggleOnSale={setOnSaleOnly}
+            inStockCount={inStockCount}
+            onSaleCount={onSaleCount}
           />
 
           {/* Catalog Content Area */}
@@ -1009,13 +1036,38 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   </div>
                 </div>
 
-                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full self-start sm:self-auto">
-                  ✓ In Stock & Dispatch Ready
-                </span>
+                {/* Point #7 Quick Availability & Deals Toggle Pills */}
+                <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setInStockOnly(prev => !prev)}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-all flex items-center gap-1.5 cursor-pointer ${
+                      inStockOnly
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                        : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${inStockOnly ? 'bg-white' : 'bg-emerald-500 animate-pulse'}`} />
+                    <span>In-Stock Only ({inStockCount})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setOnSaleOnly(prev => !prev)}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-all flex items-center gap-1.5 cursor-pointer ${
+                      onSaleOnly
+                        ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                        : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'
+                    }`}
+                  >
+                    <Flame className={`w-3.5 h-3.5 ${onSaleOnly ? 'text-white fill-white' : 'text-rose-500 fill-rose-500'}`} />
+                    <span>Deals & On Sale ({onSaleCount})</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Active Filter Breadcrumb (Point #4, #5 & #6) */}
-              {(selectedCategory !== 'all' || selectedSubCategory || selectedBrand !== 'all' || minRating > 0) && (
+              {/* Active Filter Breadcrumb (Point #4, #5, #6 & #7) */}
+              {(selectedCategory !== 'all' || selectedSubCategory || selectedBrand !== 'all' || minRating > 0 || inStockOnly || onSaleOnly) && (
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-xs shadow-xs animate-in fade-in duration-200">
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 font-bold text-slate-800">
                     <FolderTree className="w-4 h-4 text-amber-600 flex-shrink-0" />
@@ -1053,6 +1105,34 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                         </button>
                       </span>
                     )}
+                    {inStockOnly && (
+                      <span className="font-extrabold text-slate-950 bg-white px-2 py-0.5 rounded-md shadow-xs border border-emerald-300 text-xs flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <span>In-Stock Only</span>
+                        <button
+                          type="button"
+                          onClick={() => setInStockOnly(false)}
+                          className="hover:text-red-500 ml-1 text-slate-400 font-bold"
+                          title="Remove in-stock filter"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    )}
+                    {onSaleOnly && (
+                      <span className="font-extrabold text-slate-950 bg-white px-2 py-0.5 rounded-md shadow-xs border border-rose-300 text-xs flex items-center gap-1.5">
+                        <Flame className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
+                        <span>On Sale / Deals</span>
+                        <button
+                          type="button"
+                          onClick={() => setOnSaleOnly(false)}
+                          className="hover:text-red-500 ml-1 text-slate-400 font-bold"
+                          title="Remove on-sale filter"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    )}
                     <span className="text-slate-500 font-semibold text-[11px]">
                       ({filteredProducts.length} {filteredProducts.length === 1 ? 'item' : 'items'} found)
                     </span>
@@ -1064,6 +1144,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                       setSelectedSubCategory(null);
                       setSelectedBrand('all');
                       setMinRating(0);
+                      setInStockOnly(false);
+                      setOnSaleOnly(false);
                     }}
                     className="font-black text-[11px] text-amber-800 hover:text-amber-950 bg-amber-200/70 hover:bg-amber-300/80 px-2.5 py-1 rounded-xl transition-all flex items-center gap-1"
                   >
@@ -1092,6 +1174,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                       setSelectedSubCategory(null);
                       setSelectedBrand('all');
                       setPriceRange([0, 50000]);
+                      setMinRating(0);
+                      setInStockOnly(false);
+                      setOnSaleOnly(false);
                     }}
                     className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md transition-all"
                   >

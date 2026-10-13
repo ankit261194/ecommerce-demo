@@ -276,6 +276,31 @@ const runTests = async () => {
       assert.ok(data4.data.length >= data.data.length, 'Rating 4.0 threshold should return more or equal products');
     });
 
+    await test('Point 7: GET /products with inStock=true and onSale=true filters by stock availability and discount', async () => {
+      // In-stock filter
+      const resInStock = await fetch(`${baseUrl}/products?inStock=true`);
+      assert.strictEqual(resInStock.status, 200);
+      const dataInStock = await resInStock.json();
+      assert.strictEqual(dataInStock.success, true);
+      assert.ok(dataInStock.data.length >= 1, 'Should find in-stock products');
+      for (const prod of dataInStock.data) {
+        assert.ok(prod.stock > 0, `Product '${prod.title}' stock must be > 0`);
+      }
+
+      // On-sale filter (mrp > sellingPrice)
+      const resOnSale = await fetch(`${baseUrl}/products?onSale=true`);
+      assert.strictEqual(resOnSale.status, 200);
+      const dataOnSale = await resOnSale.json();
+      assert.strictEqual(dataOnSale.success, true);
+      assert.ok(dataOnSale.data.length >= 1, 'Should find on-sale discounted products');
+      for (const prod of dataOnSale.data) {
+        assert.ok(
+          prod.mrp > prod.sellingPrice,
+          `Product '${prod.title}' MRP (₹${prod.mrp}) must be greater than sellingPrice (₹${prod.sellingPrice})`
+        );
+      }
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

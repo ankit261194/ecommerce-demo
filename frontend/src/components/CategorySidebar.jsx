@@ -17,6 +17,9 @@ import {
   Radio,
   ShieldCheck,
   Star,
+  Flame,
+  BadgePercent,
+  CheckCircle2,
 } from 'lucide-react';
 
 const CATEGORY_ICON_MAP = {
@@ -45,6 +48,12 @@ export default function CategorySidebar({
   minRating = 0,
   onSelectRating = () => {},
   ratingsCounts = {},
+  inStockOnly = false,
+  onToggleInStock = () => {},
+  onSaleOnly = false,
+  onToggleOnSale = () => {},
+  inStockCount = 0,
+  onSaleCount = 0,
 }) {
   // Keep track of which parent categories are expanded in accordion
   const [expandedParents, setExpandedParents] = useState({
@@ -413,13 +422,113 @@ export default function CategorySidebar({
             })}
           </div>
         </div>
+
+        {/* Availability & Deals Section (Point #7) */}
+        <div className="pt-3 pb-1">
+          <div className="h-px bg-slate-100 mb-2" />
+          <div className="flex items-center justify-between px-2 pb-1.5">
+            <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <BadgePercent className="w-3.5 h-3.5 text-rose-500" />
+              Availability & Deals
+            </span>
+            {(inStockOnly || onSaleOnly) && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (inStockOnly) onToggleInStock(false);
+                  if (onSaleOnly) onToggleOnSale(false);
+                }}
+                className="text-[10px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            {/* In-Stock Only Toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                onToggleInStock(!inStockOnly);
+                if (isOpenMobile) onCloseMobile();
+              }}
+              className={`w-full group text-left px-2.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-between ${
+                inStockOnly
+                  ? 'bg-emerald-500 text-white font-black shadow-sm ring-1 ring-emerald-400'
+                  : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900'
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className={`w-4 h-4 rounded-md flex items-center justify-center text-[10px] font-black border transition-all ${
+                    inStockOnly
+                      ? 'bg-white text-emerald-600 border-white'
+                      : 'border-slate-300 text-transparent bg-white group-hover:border-emerald-500'
+                  }`}
+                >
+                  ✓
+                </span>
+                <span className="text-[11px] truncate font-bold">In Stock Only</span>
+              </div>
+              <span
+                className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
+                  inStockOnly
+                    ? 'bg-emerald-950 text-emerald-200'
+                    : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
+                }`}
+              >
+                {inStockCount}
+              </span>
+            </button>
+
+            {/* On-Sale / Discounted Deals Toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                onToggleOnSale(!onSaleOnly);
+                if (isOpenMobile) onCloseMobile();
+              }}
+              className={`w-full group text-left px-2.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-between ${
+                onSaleOnly
+                  ? 'bg-rose-500 text-white font-black shadow-sm ring-1 ring-rose-400'
+                  : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900'
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className={`w-4 h-4 rounded-md flex items-center justify-center text-[10px] font-black border transition-all ${
+                    onSaleOnly
+                      ? 'bg-white text-rose-600 border-white'
+                      : 'border-slate-300 text-transparent bg-white group-hover:border-rose-500'
+                  }`}
+                >
+                  ✓
+                </span>
+                <span className="text-[11px] truncate font-bold flex items-center gap-1">
+                  <span>On Sale / Deals</span>
+                  <Flame className="w-3 h-3 text-amber-300 fill-amber-300" />
+                </span>
+              </div>
+              <span
+                className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
+                  onSaleOnly
+                    ? 'bg-rose-950 text-rose-200'
+                    : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
+                }`}
+              >
+                {onSaleCount}
+              </span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Footer Info Box */}
       <div className="p-3 border-t border-slate-100 bg-slate-50/60 text-[11px] text-slate-400 flex items-center justify-between">
         <span className="flex items-center gap-1.5">
           <Tag className="w-3 h-3 text-amber-500" />
-          <span>Point #4, #5 & #6 Catalog</span>
+          <span>Point #4, #5, #6 & #7 Catalog</span>
         </span>
         <span className="font-bold text-slate-600">{totalProductsCount} Items</span>
       </div>

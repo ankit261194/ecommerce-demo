@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Search, MapPin, Sparkles, ChevronDown, Heart, X, Check, Truck } from 'lucide-react';
+import { ShoppingBag, Search, MapPin, Sparkles, ChevronDown, Heart, X, Check, Truck, Wallet, Coins } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import LiveSearchAutocomplete from './LiveSearchAutocomplete';
@@ -41,6 +41,27 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
       window.removeEventListener('auramarket_wishlist_update', handleWishlistChange);
       window.removeEventListener('storage', handleWishlistChange);
     };
+  }, []);
+
+  // Point #31: Wallet & Coins preview state
+  const [walletPreview, setWalletPreview] = useState(() => {
+    try {
+      const saved = localStorage.getItem('auramarket_wallet_preview');
+      return saved ? JSON.parse(saved) : { coins: 500, balance: 250 };
+    } catch {
+      return { coins: 500, balance: 250 };
+    }
+  });
+
+  useEffect(() => {
+    const handleWalletUpdate = (e) => {
+      if (e.detail) {
+        setWalletPreview(e.detail);
+        localStorage.setItem('auramarket_wallet_preview', JSON.stringify(e.detail));
+      }
+    };
+    window.addEventListener('auramarket_wallet_update', handleWalletUpdate);
+    return () => window.removeEventListener('auramarket_wallet_update', handleWalletUpdate);
   }, []);
 
   const handleSaveLocation = (loc) => {
@@ -142,6 +163,17 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
                 <Truck className="w-4 h-4" />
               </button>
 
+              {/* Point #31: In-App Wallet & Coins Mobile */}
+              <button
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('auramarket_open_wallet'));
+                }}
+                className="relative p-2 rounded-lg bg-white/10 text-amber-400 hover:text-amber-300 transition-colors"
+                title="Rewards & Wallet"
+              >
+                <Wallet className="w-4 h-4" />
+              </button>
+
               <button
                 onClick={() => setIsCartOpen(true)}
                 className="relative flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow transition-all active:scale-95"
@@ -204,6 +236,21 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
                   {wishlistCount}
                 </span>
               )}
+            </button>
+
+            {/* Point #31: In-App Wallet & Coins Desktop */}
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('auramarket_open_wallet'));
+              }}
+              className="relative p-2 rounded-xl bg-white/10 hover:bg-white/15 text-white transition-all flex items-center gap-1.5"
+              title="AuraMarket Wallet & Reward Coins"
+            >
+              <Wallet className="w-4 h-4 text-amber-400" />
+              <div className="text-left hidden lg:block leading-tight">
+                <span className="text-[10px] text-amber-300 font-bold block">Rewards & Wallet</span>
+                <span className="text-xs font-black text-white">{walletPreview.coins} 🪙</span>
+              </div>
             </button>
 
             {/* Account / User */}

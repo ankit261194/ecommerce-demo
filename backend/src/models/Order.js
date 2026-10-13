@@ -118,6 +118,22 @@ const orderSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Point #31: Wallet / Coins Payment Details & Cashback
+    walletCoinsUsed: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    walletAmountDebited: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    cashbackEarned: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   { timestamps: true }
 );

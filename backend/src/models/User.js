@@ -53,6 +53,17 @@ const userSchema = new mongoose.Schema(
         isDefault: { type: Boolean, default: false },
       },
     ],
+    // Point #31: In-App Wallet Balance & Reward Coins
+    walletBalance: {
+      type: Number,
+      default: 250, // INR Welcome wallet balance
+      min: 0,
+    },
+    walletCoins: {
+      type: Number,
+      default: 500, // Welcome reward coins (1 coin = ₹1 discount)
+      min: 0,
+    },
   },
   { timestamps: true }
 );

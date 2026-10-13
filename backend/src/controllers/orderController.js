@@ -5,6 +5,7 @@ const SubOrder = require('../models/SubOrder');
 const DeliveryTask = require('../models/DeliveryTask');
 const Ledger = require('../models/Ledger');
 const User = require('../models/User');
+const WalletTransaction = require('../models/WalletTransaction');
 const smsService = require('../services/smsService');
 const mailService = require('../services/mailService');
 
@@ -214,11 +215,54 @@ exports.createOrder = async (req, res, next) => {
     const freeThreshold = uiConfigDoc?.shipping?.freeShippingThreshold ?? 999;
     const defaultFee = uiConfigDoc?.shipping?.defaultShippingFee ?? 99;
     const shippingFee = totalOrderAmount >= freeThreshold ? 0 : defaultFee;
-    const finalTotalAmount = Math.max(0, totalOrderAmount - couponDiscountAmount + shippingFee);
 
-    // Point #26: Resolve Payment Gateway & Verification
+    // Point #31: Customer In-App Wallet & Reward Coins Redemption
+    const coinsToRedeem = Number(req.body.coinsToRedeem || req.body.walletCoinsUsed || 0);
+    let coinDiscount = 0;
+    let customerUser = await User.findById(req.user._id);
+
+    if (coinsToRedeem > 0 && customerUser) {
+      const availableCoins = customerUser.walletCoins || 0;
+      if (coinsToRedeem > availableCoins) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot redeem ${coinsToRedeem} coins. You only have ${availableCoins} reward coins available.`,
+        });
+      }
+      // 1 Coin = ₹1 discount (cannot exceed net payable order total)
+      const maxRedeemable = Math.max(0, totalOrderAmount - couponDiscountAmount + shippingFee);
+      coinDiscount = Math.min(coinsToRedeem, maxRedeemable);
+    }
+
+    const finalTotalAmount = Math.max(0, totalOrderAmount - couponDiscountAmount + shippingFee - coinDiscount);
+
+    // Point #26 & #31: Resolve Payment Gateway & Verification
     const validMethods = ['COD', 'RAZORPAY', 'STRIPE', 'UPI', 'WALLET'];
     const activePaymentMethod = validMethods.includes(paymentMethod) ? paymentMethod : 'COD';
+
+    let walletAmountDebited = 0;
+    if (activePaymentMethod === 'WALLET' && customerUser) {
+      if ((customerUser.walletBalance || 0) < finalTotalAmount) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient in-app wallet balance. You have ₹${customerUser.walletBalance || 0}, but order total is ₹${finalTotalAmount}.`,
+        });
+      }
+      walletAmountDebited = finalTotalAmount;
+      customerUser.walletBalance = Math.max(0, (customerUser.walletBalance || 0) - walletAmountDebited);
+    }
+
+    if (coinDiscount > 0 && customerUser) {
+      customerUser.walletCoins = Math.max(0, (customerUser.walletCoins || 0) - coinDiscount);
+    }
+
+    // Point #31: 5% Cashback Reward on completed orders (minimum 10 coins)
+    const cashbackEarned = Math.max(10, Math.round(finalTotalAmount * 0.05));
+    if (customerUser) {
+      customerUser.walletCoins = (customerUser.walletCoins || 0) + cashbackEarned;
+      await customerUser.save();
+    }
+
     const isPrepaid = ['RAZORPAY', 'STRIPE', 'UPI', 'WALLET'].includes(activePaymentMethod);
     const resolvedPaymentStatus = isPrepaid ? 'PAID' : 'PENDING';
     const resolvedPaymentId =
@@ -230,8 +274,11 @@ exports.createOrder = async (req, res, next) => {
       customer: req.user._id,
       items: validatedItems,
       subtotal: totalOrderAmount,
-      discountAmount: couponDiscountAmount,
+      discountAmount: couponDiscountAmount + coinDiscount,
       coupon: appliedCoupon,
+      walletCoinsUsed: coinDiscount,
+      walletAmountDebited,
+      cashbackEarned,
       totalAmount: finalTotalAmount,
       shippingFee,
       shippingAddress,
@@ -343,6 +390,57 @@ exports.createOrder = async (req, res, next) => {
       balanceAfter: totalPlatformCommission,
       status: 'COMPLETED',
     });
+
+    // Point #31: Record Wallet & Coin Transactions
+    if (customerUser) {
+      if (coinDiscount > 0) {
+        await WalletTransaction.create({
+          user: customerUser._id,
+          type: 'DEBIT',
+          currency: 'COINS',
+          amount: coinDiscount,
+          category: 'COIN_REDEMPTION',
+          title: '🪙 Coins Redeemed at Checkout',
+          description: `Applied ${coinDiscount} coins discount on Order #${masterOrder.orderNumber}`,
+          order: masterOrder._id,
+          orderNumber: masterOrder.orderNumber,
+          balanceAfter: customerUser.walletBalance || 0,
+          coinsAfter: customerUser.walletCoins || 0,
+        });
+      }
+
+      if (walletAmountDebited > 0) {
+        await WalletTransaction.create({
+          user: customerUser._id,
+          type: 'DEBIT',
+          currency: 'INR',
+          amount: walletAmountDebited,
+          category: 'WALLET_PAYMENT',
+          title: '💵 In-App Wallet Payment',
+          description: `Paid ₹${walletAmountDebited} for Order #${masterOrder.orderNumber}`,
+          order: masterOrder._id,
+          orderNumber: masterOrder.orderNumber,
+          balanceAfter: customerUser.walletBalance || 0,
+          coinsAfter: customerUser.walletCoins || 0,
+        });
+      }
+
+      if (cashbackEarned > 0) {
+        await WalletTransaction.create({
+          user: customerUser._id,
+          type: 'CREDIT',
+          currency: 'COINS',
+          amount: cashbackEarned,
+          category: 'CASHBACK',
+          title: '🎁 5% Cashback Reward Coins',
+          description: `Earned ${cashbackEarned} cashback coins on Order #${masterOrder.orderNumber}`,
+          order: masterOrder._id,
+          orderNumber: masterOrder.orderNumber,
+          balanceAfter: customerUser.walletBalance || 0,
+          coinsAfter: customerUser.walletCoins || 0,
+        });
+      }
+    }
 
     const populatedOrder = await Order.findById(masterOrder._id).populate({
       path: 'subOrders',

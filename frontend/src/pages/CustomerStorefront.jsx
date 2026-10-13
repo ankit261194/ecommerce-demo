@@ -31,6 +31,8 @@ import {
   ArrowLeftRight,
   FileText,
   Printer,
+  Wallet,
+  Coins,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
@@ -50,6 +52,7 @@ import AddressBookModal from '../components/AddressBookModal';
 import DynamicCheckoutPayment from '../components/DynamicCheckoutPayment';
 import LiveOrderTrackerModal from '../components/LiveOrderTrackerModal';
 import TaxInvoiceModal from '../components/TaxInvoiceModal';
+import WalletDrawer from '../components/WalletDrawer';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -81,6 +84,39 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [trackedOrderId, setTrackedOrderId] = useState(null);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [invoiceOrderId, setInvoiceOrderId] = useState(null);
+
+  // Point #31: In-App Wallet & Reward Coins State
+  const [isWalletOpen, setIsWalletOpen] = useState(false);
+  const [redeemedCoins, setRedeemedCoins] = useState(0);
+  const [customerWallet, setCustomerWallet] = useState({ coins: 500, balance: 250 });
+
+  // Sync wallet on mount & listen to custom open event
+  useEffect(() => {
+    const fetchWalletState = () => {
+      api.get('/wallet')
+        .then(res => {
+          if (res.data?.success && res.data.data) {
+            setCustomerWallet({
+              coins: res.data.data.walletCoins ?? 500,
+              balance: res.data.data.walletBalance ?? 250,
+            });
+            window.dispatchEvent(new CustomEvent('auramarket_wallet_update', {
+              detail: {
+                coins: res.data.data.walletCoins ?? 500,
+                balance: res.data.data.walletBalance ?? 250,
+              }
+            }));
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchWalletState();
+
+    const handleOpenWallet = () => setIsWalletOpen(true);
+    window.addEventListener('auramarket_open_wallet', handleOpenWallet);
+    return () => window.removeEventListener('auramarket_open_wallet', handleOpenWallet);
+  }, []);
 
   // Wishlist state (persisted in localStorage + synced with backend /api/wishlist)
   const [wishlist, setWishlist] = useState(() => {
@@ -288,15 +324,16 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   // Point #26: Multi-Gateway Dynamic Checkout Payment Details State
   const [paymentDetails, setPaymentDetails] = useState({ gateway: 'COD' });
 
-  // Point #19, #22, #26: Dynamic Grand Total Payable
+  // Point #19, #22, #26, #31: Dynamic Grand Total Payable
   const grandTotalPayable = useMemo(() => {
     const freeThresh = uiConfig?.shipping?.freeShippingThreshold ?? 999;
     const defaultShipFee = uiConfig?.shipping?.defaultShippingFee ?? 99;
     const isFree = cartTotal >= freeThresh;
     const activeShipFee = isFree ? 0 : defaultShipFee;
     const couponDiscount = appliedCoupon?.discountAmount || 0;
-    return Math.max(0, cartTotal - couponDiscount + activeShipFee);
-  }, [cartTotal, appliedCoupon, uiConfig]);
+    const coinDiscount = Number(redeemedCoins || 0);
+    return Math.max(0, cartTotal - couponDiscount + activeShipFee - coinDiscount);
+  }, [cartTotal, appliedCoupon, uiConfig, redeemedCoins]);
 
   // Dynamic Payment Gateways from Super Admin Integrations Hub
   const paymentSettings = uiConfig?.integrations?.payments || {
@@ -340,6 +377,14 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         subtext: 'International cards, Apple Pay & Google Pay',
       });
     }
+    // Point #31: In-App Wallet Balance Gateway Option
+    active.push({
+      id: 'WALLET',
+      name: `In-App Wallet (₹${customerWallet.balance || 0})`,
+      badge: '🪙 Instant 0-Fee',
+      subtext: `Pay using your in-app cash balance (Available: ₹${customerWallet.balance || 0})`,
+    });
+
     return active.length > 0
       ? active
       : [{ id: 'COD', name: 'Cash on Delivery (COD)', badge: '💵 Doorstep Cash', subtext: 'Pay upon delivery' }];
@@ -870,6 +915,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         paymentDetails,
         couponCode: appliedCoupon?.code || undefined,
         deliveryInstructions: deliveryInstructions || undefined,
+        coinsToRedeem: redeemedCoins > 0 ? redeemedCoins : undefined,
       });
 
       if (res.data?.success && res.data?.data) {
@@ -887,6 +933,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             status: 'placed',
           })),
           totalAmount: order.totalAmount,
+          walletCoinsUsed: order.walletCoinsUsed || redeemedCoins,
+          cashbackEarned: order.cashbackEarned || Math.max(10, Math.round(order.totalAmount * 0.05)),
           address,
           paymentMethod,
           paymentDetails: order.paymentDetails || paymentDetails,
@@ -895,8 +943,26 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         });
         clearCart();
         setAppliedCoupon(null);
+        setRedeemedCoins(0);
         setDeliveryInstructions('');
         setIsCartOpen(false);
+
+        // Sync fresh wallet balance & coins after order
+        api.get('/wallet').then(wRes => {
+          if (wRes.data?.data) {
+            setCustomerWallet({
+              coins: wRes.data.data.walletCoins,
+              balance: wRes.data.data.walletBalance,
+            });
+            window.dispatchEvent(new CustomEvent('auramarket_wallet_update', {
+              detail: {
+                coins: wRes.data.data.walletCoins,
+                balance: wRes.data.data.walletBalance,
+              }
+            }));
+          }
+        }).catch(() => {});
+
         return;
       }
     } catch (_) {
@@ -1997,14 +2063,76 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   />
                 </div>
 
-                {/* Point #19 & Point #22: Dynamic Bill Breakdown & Grand Total */}
+                {/* Point #31: In-App Wallet Reward Coins Redemption */}
+                {customerWallet.coins > 0 && cartTotal > 0 && (
+                  <div className="pt-3">
+                    <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-300 space-y-2 shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-amber-400 text-slate-950 flex items-center justify-center font-black text-xs shadow-xs">
+                            <Coins className="w-3.5 h-3.5" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-black text-amber-950 block leading-tight">
+                              Redeem Reward Coins
+                            </span>
+                            <span className="text-[10px] text-amber-700 font-semibold">
+                              1 Coin = ₹1 instant discount
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-950 border border-amber-300">
+                          {customerWallet.coins} Available
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-600 font-bold">Applied Discount:</span>
+                          <span className="font-black text-amber-800 font-mono">
+                            -₹{redeemedCoins} ({redeemedCoins} Coins)
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={Math.min(customerWallet.coins, Math.max(0, cartTotal - (appliedCoupon?.discountAmount || 0)))}
+                          step={10}
+                          value={redeemedCoins}
+                          onChange={(e) => setRedeemedCoins(Number(e.target.value))}
+                          className="w-full accent-amber-500 cursor-pointer"
+                        />
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="text-slate-500">₹0 OFF</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRedeemedCoins(
+                                Math.min(
+                                  customerWallet.coins,
+                                  Math.max(0, cartTotal - (appliedCoupon?.discountAmount || 0))
+                                )
+                              )
+                            }
+                            className="font-black text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                          >
+                            Apply Max (₹{Math.min(customerWallet.coins, Math.max(0, cartTotal - (appliedCoupon?.discountAmount || 0)))})
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Point #19 & Point #22 & Point #31: Dynamic Bill Breakdown & Grand Total */}
                 {(() => {
                   const freeThresh = uiConfig?.shipping?.freeShippingThreshold ?? 999;
                   const defaultShipFee = uiConfig?.shipping?.defaultShippingFee ?? 99;
                   const isFree = cartTotal >= freeThresh;
                   const activeShipFee = isFree ? 0 : defaultShipFee;
                   const couponDiscount = appliedCoupon?.discountAmount || 0;
-                  const grandTotalPayable = Math.max(0, cartTotal - couponDiscount + activeShipFee);
+                  const coinDiscount = Number(redeemedCoins || 0);
+                  const grandTotalPayable = Math.max(0, cartTotal - couponDiscount + activeShipFee - coinDiscount);
 
                   return (
                     <div className="pt-4 border-t border-slate-200 space-y-2.5">
@@ -2025,6 +2153,16 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                         </div>
                       )}
 
+                      {redeemedCoins > 0 && (
+                        <div className="flex items-center justify-between text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1.5 rounded-xl border border-amber-200">
+                          <span className="flex items-center gap-1.5">
+                            <Coins className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Reward Coins Discount:</span>
+                          </span>
+                          <span className="font-black">-₹{redeemedCoins.toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between text-xs font-bold">
                         <span className="text-slate-600">Doorstep Express Delivery:</span>
                         {isFree ? (
@@ -2040,9 +2178,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-sm">
                         <div>
                           <span className="font-black text-slate-900 block leading-tight">Grand Total Payable:</span>
-                          {couponDiscount > 0 && (
+                          {(couponDiscount > 0 || redeemedCoins > 0) && (
                             <span className="text-[10px] text-emerald-600 font-bold">
-                              Total Savings: ₹{couponDiscount.toLocaleString('en-IN')}
+                              You save ₹{(couponDiscount + redeemedCoins).toLocaleString('en-IN')} on this order!
                             </span>
                           )}
                         </div>
@@ -2151,6 +2289,22 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   ₹{activeOrderConfirmation.totalAmount?.toLocaleString('en-IN')}
                 </span>
               </div>
+            </div>
+
+            {/* Point #31: Cashback Reward Notification */}
+            <div className="p-3 rounded-2xl bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-300 flex items-center justify-between text-xs text-amber-950">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black">
+                  <Coins className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold block leading-tight">5% Cashback Coins Awarded!</span>
+                  <span className="text-[11px] text-amber-800 font-medium">Added directly to your rewards wallet</span>
+                </div>
+              </div>
+              <span className="text-xs font-black text-amber-900 bg-amber-200/80 px-2 py-1 rounded-lg font-mono">
+                +{activeOrderConfirmation.cashbackEarned || Math.max(10, Math.round((activeOrderConfirmation.totalAmount || 0) * 0.05))} 🪙
+              </span>
             </div>
 
             {/* Point #30: 1-Click Tax Invoice Download Button */}
@@ -2328,6 +2482,22 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         onClose={() => setIsInvoiceModalOpen(false)}
         orderId={invoiceOrderId}
         apiUrl="/api"
+      />
+
+      {/* Point #31: Customer In-App Wallet & Reward Coins Drawer */}
+      <WalletDrawer
+        isOpen={isWalletOpen}
+        onClose={() => {
+          setIsWalletOpen(false);
+          api.get('/wallet').then((res) => {
+            if (res.data?.data) {
+              setCustomerWallet({
+                coins: res.data.data.walletCoins ?? 500,
+                balance: res.data.data.walletBalance ?? 250,
+              });
+            }
+          }).catch(() => {});
+        }}
       />
     </div>
   );

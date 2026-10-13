@@ -1723,6 +1723,107 @@ const runTests = async () => {
       assert.strictEqual(res404.status, 404);
     });
 
+    await test('Point 31: Customer In-App Wallet & Reward Coins system (Cashback on purchases & checkout coin redemption)', async () => {
+      // 1. Fetch wallet balance & transaction ledger
+      const resWallet = await fetch(`${baseUrl}/wallet`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resWallet.status, 200);
+      const dataWallet = await resWallet.json();
+      assert.strictEqual(dataWallet.success, true);
+      assert.ok(typeof dataWallet.data.walletBalance === 'number');
+      assert.ok(typeof dataWallet.data.walletCoins === 'number');
+      assert.ok(Array.isArray(dataWallet.data.transactions));
+      assert.ok(dataWallet.data.transactions.length >= 1);
+
+      const initialCoins = dataWallet.data.walletCoins;
+      const initialBalance = dataWallet.data.walletBalance;
+
+      // 2. Claim daily check-in (+50 coins)
+      const resCheckin = await fetch(`${baseUrl}/wallet/daily-checkin`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCheckin.status, 200);
+      const dataCheckin = await resCheckin.json();
+      assert.strictEqual(dataCheckin.success, true);
+      assert.strictEqual(dataCheckin.data.walletCoins, initialCoins + 50);
+
+      // Duplicate check-in within 24h should be rejected
+      const resDupCheckin = await fetch(`${baseUrl}/wallet/daily-checkin`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resDupCheckin.status, 400);
+
+      // 3. Convert / redeem coins into wallet cash (e.g. 50 coins = ₹50 cash)
+      const resRedeem = await fetch(`${baseUrl}/wallet/redeem-coins`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ coins: 50 }),
+      });
+      assert.strictEqual(resRedeem.status, 200);
+      const dataRedeem = await resRedeem.json();
+      assert.strictEqual(dataRedeem.data.walletCoins, initialCoins); // initial + 50 - 50 = initial
+      assert.strictEqual(dataRedeem.data.walletBalance, initialBalance + 50);
+
+      // Rejects redeeming more coins than user has
+      const resExcess = await fetch(`${baseUrl}/wallet/redeem-coins`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ coins: 999999 }),
+      });
+      assert.strictEqual(resExcess.status, 400);
+
+      // 4. Place an order redeeming 100 coins directly at checkout and earning 5% cashback
+      const resOrder = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: headphonesProduct._id, quantity: 1, variantSku: 'APX-HEAD-BLK' }],
+          shippingAddress: {
+            recipientName: 'Aman Sharma',
+            phone: '9876543214',
+            street: 'Flat 402, Green Valley Apartments',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'COD',
+          coinsToRedeem: 100, // ₹100 discount via 100 reward coins
+        }),
+      });
+      assert.strictEqual(resOrder.status, 201);
+      const dataOrder = await resOrder.json();
+      assert.strictEqual(dataOrder.data.walletCoinsUsed, 100);
+      assert.ok(dataOrder.data.cashbackEarned >= 10, 'Must award 5% cashback coins');
+
+      // Verify customer wallet transactions include COIN_REDEMPTION and CASHBACK
+      const resWalletAfter = await fetch(`${baseUrl}/wallet`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      const dataWalletAfter = await resWalletAfter.json();
+      const hasRedemption = dataWalletAfter.data.transactions.some(t => t.category === 'COIN_REDEMPTION' && t.type === 'DEBIT');
+      const hasCashback = dataWalletAfter.data.transactions.some(t => t.category === 'CASHBACK' && t.type === 'CREDIT');
+      assert.ok(hasRedemption, 'Wallet must log coin redemption DEBIT transaction');
+      assert.ok(hasCashback, 'Wallet must log cashback CREDIT transaction');
+
+      // Cancel test order to restore inventory
+      await fetch(`${baseUrl}/orders/${dataOrder.data._id}/cancel`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

@@ -255,6 +255,27 @@ const runTests = async () => {
       }
     });
 
+    await test('Point 6: GET /products with minRating filters catalog by customer ratings threshold', async () => {
+      const res = await fetch(`${baseUrl}/products?minRating=4.8`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.length >= 1, 'Should find products with rating >= 4.8');
+      for (const prod of data.data) {
+        assert.ok(
+          prod.ratingsAverage >= 4.8,
+          `Product '${prod.title}' rating ${prod.ratingsAverage} must be >= 4.8`
+        );
+      }
+
+      // Test lower threshold
+      const res4 = await fetch(`${baseUrl}/products?minRating=4.0`);
+      assert.strictEqual(res4.status, 200);
+      const data4 = await res4.json();
+      assert.strictEqual(data4.success, true);
+      assert.ok(data4.data.length >= data.data.length, 'Rating 4.0 threshold should return more or equal products');
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

@@ -5,9 +5,14 @@ const Category = require('../models/Category');
 // @route   GET /api/products
 exports.getProducts = async (req, res, next) => {
   try {
-    const { category, subCategory, brand, search, minPrice, maxPrice, featured, sort, page = 1, limit = 20 } = req.query;
+    const { category, subCategory, brand, minRating, rating, search, minPrice, maxPrice, featured, sort, page = 1, limit = 20 } = req.query;
 
     const query = { isPublished: true };
+
+    const ratingThreshold = minRating || rating;
+    if (ratingThreshold && !isNaN(Number(ratingThreshold))) {
+      query.ratingsAverage = { $gte: Number(ratingThreshold) };
+    }
 
     if (brand && brand !== 'all') {
       const brandList = brand.split(',').map(b => b.trim()).filter(Boolean);

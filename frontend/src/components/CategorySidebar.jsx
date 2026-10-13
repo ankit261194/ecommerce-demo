@@ -16,6 +16,7 @@ import {
   Tag,
   Radio,
   ShieldCheck,
+  Star,
 } from 'lucide-react';
 
 const CATEGORY_ICON_MAP = {
@@ -41,6 +42,9 @@ export default function CategorySidebar({
   brandsList = [],
   selectedBrand = 'all',
   onSelectBrand = () => {},
+  minRating = 0,
+  onSelectRating = () => {},
+  ratingsCounts = {},
 }) {
   // Keep track of which parent categories are expanded in accordion
   const [expandedParents, setExpandedParents] = useState({
@@ -337,13 +341,85 @@ export default function CategorySidebar({
             </div>
           </div>
         )}
+
+        {/* Customer Ratings Filter Section (Point #6) */}
+        <div className="pt-3 pb-1">
+          <div className="h-px bg-slate-100 mb-2" />
+          <div className="flex items-center justify-between px-2 pb-1.5">
+            <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
+              Ratings
+            </span>
+            {minRating > 0 && (
+              <button
+                type="button"
+                onClick={() => onSelectRating(0)}
+                className="text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            {[
+              { threshold: 4.8, label: '4.8★ & up', stars: 5 },
+              { threshold: 4.5, label: '4.5★ & up', stars: 4 },
+              { threshold: 4.0, label: '4.0★ & up', stars: 4 },
+              { threshold: 3.0, label: '3.0★ & up', stars: 3 },
+            ].map(tier => {
+              const isActive = minRating === tier.threshold;
+              const count = ratingsCounts[tier.threshold] || 0;
+              return (
+                <button
+                  key={tier.threshold}
+                  type="button"
+                  onClick={() => {
+                    onSelectRating(isActive ? 0 : tier.threshold);
+                    if (isOpenMobile) onCloseMobile();
+                  }}
+                  className={`w-full group text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-between ${
+                    isActive
+                      ? 'bg-amber-500 text-slate-950 font-black shadow-sm ring-1 ring-amber-400'
+                      : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="flex items-center text-amber-400 flex-shrink-0">
+                      {[1, 2, 3, 4, 5].map(s => (
+                        <Star
+                          key={s}
+                          className={`w-2.5 h-2.5 ${
+                            s <= tier.stars
+                              ? 'text-amber-400 fill-amber-400'
+                              : 'text-slate-200 fill-slate-200'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-[11px] truncate font-bold">{tier.label}</span>
+                  </div>
+                  <span
+                    className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
+                      isActive
+                        ? 'bg-slate-950 text-amber-400'
+                        : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Footer Info Box */}
       <div className="p-3 border-t border-slate-100 bg-slate-50/60 text-[11px] text-slate-400 flex items-center justify-between">
         <span className="flex items-center gap-1.5">
           <Tag className="w-3 h-3 text-amber-500" />
-          <span>Point #4 & #5 Catalog</span>
+          <span>Point #4, #5 & #6 Catalog</span>
         </span>
         <span className="font-bold text-slate-600">{totalProductsCount} Items</span>
       </div>

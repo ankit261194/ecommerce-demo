@@ -40,6 +40,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [selectedCategory, setSelectedCategory] = useState(activeCategoryFilter || 'all');
   const [selectedSubCategory, setSelectedSubCategory] = useState(null);
   const [selectedBrand, setSelectedBrand] = useState('all');
+  const [minRating, setMinRating] = useState(0);
   const [isOpenCategoryDrawer, setIsOpenCategoryDrawer] = useState(false);
   const [isCollapsedCategorySidebar, setIsCollapsedCategorySidebar] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -417,10 +418,20 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     }));
   }, [products]);
 
+  // Ratings Threshold Product Counts (Point #6)
+  const ratingsCounts = useMemo(() => {
+    return {
+      4.8: products.filter(p => p.ratingsAverage >= 4.8).length,
+      4.5: products.filter(p => p.ratingsAverage >= 4.5).length,
+      4.0: products.filter(p => p.ratingsAverage >= 4.0).length,
+      3.0: products.filter(p => p.ratingsAverage >= 3.0).length,
+    };
+  }, [products]);
+
   // Price Range Filter State (Point #3)
   const [priceRange, setPriceRange] = useState([0, 50000]);
 
-  // Filtering products with Multi-Level Category, Subcategory, Brand & Price Filters (Points #3, #4 & #5)
+  // Filtering products with Multi-Level Category, Subcategory, Brand, Price & Customer Rating Filters (Points #3, #4, #5 & #6)
   const filteredProducts = products.filter(p => {
     if (selectedCategory === 'wishlist') {
       return wishlist.includes(p._id);
@@ -441,8 +452,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.brand.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesPrice = p.sellingPrice >= priceRange[0] && p.sellingPrice <= priceRange[1];
+    const matchesRating = minRating === 0 || p.ratingsAverage >= minRating;
 
-    return matchesCategory && matchesSubCategory && matchesBrand && matchesSearch && matchesPrice;
+    return matchesCategory && matchesSubCategory && matchesBrand && matchesSearch && matchesPrice && matchesRating;
   });
 
   // Inject JSON-LD ItemList Schema for Product Catalog
@@ -956,6 +968,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               setSelectedCategory('all');
               setSelectedSubCategory(null);
               setSelectedBrand('all');
+              setMinRating(0);
             }}
             totalProductsCount={products.length}
             isOpenMobile={isOpenCategoryDrawer}
@@ -966,6 +979,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             brandsList={brandsList}
             selectedBrand={selectedBrand}
             onSelectBrand={bName => setSelectedBrand(bName)}
+            minRating={minRating}
+            onSelectRating={r => setMinRating(r)}
+            ratingsCounts={ratingsCounts}
           />
 
           {/* Catalog Content Area */}
@@ -998,8 +1014,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                 </span>
               </div>
 
-              {/* Active Filter Breadcrumb (Point #4 & #5) */}
-              {(selectedCategory !== 'all' || selectedSubCategory || selectedBrand !== 'all') && (
+              {/* Active Filter Breadcrumb (Point #4, #5 & #6) */}
+              {(selectedCategory !== 'all' || selectedSubCategory || selectedBrand !== 'all' || minRating > 0) && (
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-xs shadow-xs animate-in fade-in duration-200">
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 font-bold text-slate-800">
                     <FolderTree className="w-4 h-4 text-amber-600 flex-shrink-0" />
@@ -1023,6 +1039,20 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                         <span>Brand: {selectedBrand}</span>
                       </span>
                     )}
+                    {minRating > 0 && (
+                      <span className="font-extrabold text-slate-950 bg-white px-2 py-0.5 rounded-md shadow-xs border border-amber-300 text-xs flex items-center gap-1.5">
+                        <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                        <span>Rating: {minRating}★ & above</span>
+                        <button
+                          type="button"
+                          onClick={() => setMinRating(0)}
+                          className="hover:text-red-500 ml-1 text-slate-400 font-bold"
+                          title="Remove rating filter"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    )}
                     <span className="text-slate-500 font-semibold text-[11px]">
                       ({filteredProducts.length} {filteredProducts.length === 1 ? 'item' : 'items'} found)
                     </span>
@@ -1033,6 +1063,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                       setSelectedCategory('all');
                       setSelectedSubCategory(null);
                       setSelectedBrand('all');
+                      setMinRating(0);
                     }}
                     className="font-black text-[11px] text-amber-800 hover:text-amber-950 bg-amber-200/70 hover:bg-amber-300/80 px-2.5 py-1 rounded-xl transition-all flex items-center gap-1"
                   >

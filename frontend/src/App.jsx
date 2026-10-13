@@ -210,32 +210,51 @@ const MainLayout = () => {
       )}
 
       {deviceMode === 'tablet' && (
-        <div className="flex-1 py-10 px-4 flex justify-center items-start bg-slate-200/80 overflow-y-auto">
-          <div className="w-[768px] min-h-[900px] rounded-[36px] p-4 bg-slate-900 border-4 border-slate-800 shadow-2xl relative overflow-hidden flex flex-col animate-scale-up">
-            <div className="w-20 h-1 bg-slate-600 rounded-full mx-auto mb-3" />
-            <div className="flex-1 rounded-2xl overflow-y-auto bg-slate-50 shadow-inner">
+        <div className="flex-1 py-4 sm:py-6 px-3 flex justify-center items-start bg-slate-200/90">
+          <div className="w-full max-w-[768px] h-[calc(100vh-85px)] min-h-[580px] rounded-3xl p-3 bg-slate-900 border-4 border-slate-700 shadow-2xl relative flex flex-col animate-scale-up">
+            {/* Tablet Status Header */}
+            <div className="flex items-center justify-between px-4 py-1.5 text-[11px] font-bold text-slate-400 bg-slate-950/80 rounded-t-xl mb-1 select-none">
+              <span className="text-blue-400 font-extrabold flex items-center gap-1.5">
+                💻 iPad View (768px)
+              </span>
+              <span className="text-amber-400 font-extrabold bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/30">
+                ↕ Scroll to Explore Entire Store
+              </span>
+              <span>100% 🔋</span>
+            </div>
+
+            {/* Inner Tablet Canvas with ALWAYS VISIBLE DRAGGABLE SCROLLBAR */}
+            <div className="flex-1 rounded-2xl overflow-y-scroll overflow-x-hidden bg-slate-50 shadow-inner custom-device-scrollbar">
               {renderAppContent()}
             </div>
+
+            {/* Bottom Home Indicator Bar */}
+            <div className="w-36 h-1.5 bg-slate-600 rounded-full mx-auto mt-2" />
           </div>
         </div>
       )}
 
       {deviceMode === 'mobile' && (
-        <div className="flex-1 py-8 px-4 flex justify-center items-start bg-slate-200/80 overflow-y-auto">
-          {/* Realistic Smartphone Frame Mockup with Dynamic Island / Speaker */}
-          <div className="w-[390px] h-[820px] rounded-[48px] p-3.5 bg-slate-900 border-4 border-slate-800 shadow-2xl relative flex flex-col animate-scale-up">
-            {/* Dynamic Island Pill */}
-            <div className="absolute top-5 left-1/2 -translate-x-1/2 w-28 h-5 bg-black rounded-full z-50 flex items-center justify-end pr-2.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 animate-pulse" />
+        <div className="flex-1 py-4 sm:py-6 px-3 flex justify-center items-start bg-slate-200/90">
+          <div className="w-full max-w-[414px] h-[calc(100vh-85px)] min-h-[580px] rounded-3xl p-3 bg-slate-900 border-4 border-slate-700 shadow-2xl relative flex flex-col animate-scale-up">
+            {/* Mobile Status Header (Clean & Unobstructed!) */}
+            <div className="flex items-center justify-between px-3 py-1.5 text-[11px] font-bold text-slate-400 bg-slate-950/80 rounded-t-xl mb-1 select-none">
+              <span className="text-emerald-400 font-extrabold flex items-center gap-1.5">
+                📱 iPhone View (414px)
+              </span>
+              <span className="text-amber-400 font-extrabold bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/30">
+                ↕ Scroll to Explore Entire Store
+              </span>
+              <span>5G • 100% 🔋</span>
             </div>
 
-            {/* Inner Mobile Canvas */}
-            <div className="flex-1 rounded-[38px] overflow-y-auto overflow-x-hidden bg-slate-50 scrollbar-none pt-2 shadow-inner">
+            {/* Inner Mobile Canvas with ALWAYS VISIBLE DRAGGABLE SCROLLBAR */}
+            <div className="flex-1 rounded-2xl overflow-y-scroll overflow-x-hidden bg-slate-50 shadow-inner custom-device-scrollbar">
               {renderAppContent()}
             </div>
 
             {/* Bottom Home Indicator Bar */}
-            <div className="w-32 h-1 bg-white/40 rounded-full mx-auto mt-2" />
+            <div className="w-28 h-1.5 bg-slate-600 rounded-full mx-auto mt-2" />
           </div>
         </div>
       )}

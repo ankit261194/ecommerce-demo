@@ -13,8 +13,8 @@
 
 /* Sleek subtle scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: #f1f5f9;
@@ -25,6 +25,28 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #f59e0b;
+}
+
+/* High-Visibility Custom Device Scrollbar (Always visible & draggable in Simulator) */
+.custom-device-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.custom-device-scrollbar::-webkit-scrollbar-track {
+  background: #e2e8f0;
+  border-radius: 9999px;
+}
+.custom-device-scrollbar::-webkit-scrollbar-thumb {
+  background: #0f2444;
+  border-radius: 9999px;
+  border: 1px solid #cbd5e1;
+}
+.custom-device-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #f59e0b;
+}
+.custom-device-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #0f2444 #e2e8f0;
 }
 
 /* Crisp Clean Card Styles (Replacing dark glassmorphism) */

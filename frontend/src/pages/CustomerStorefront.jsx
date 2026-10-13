@@ -46,6 +46,7 @@ import PromoCouponBox from '../components/PromoCouponBox';
 import StorefrontOffersHub from '../components/StorefrontOffersHub';
 import ScratchCardModal from '../components/ScratchCardModal';
 import AddressBookModal from '../components/AddressBookModal';
+import DynamicCheckoutPayment from '../components/DynamicCheckoutPayment';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -268,6 +269,18 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   // Point #25: Order Delivery Instructions / Rider Notes State
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('COD');
+  // Point #26: Multi-Gateway Dynamic Checkout Payment Details State
+  const [paymentDetails, setPaymentDetails] = useState({ gateway: 'COD' });
+
+  // Point #19, #22, #26: Dynamic Grand Total Payable
+  const grandTotalPayable = useMemo(() => {
+    const freeThresh = uiConfig?.shipping?.freeShippingThreshold ?? 999;
+    const defaultShipFee = uiConfig?.shipping?.defaultShippingFee ?? 99;
+    const isFree = cartTotal >= freeThresh;
+    const activeShipFee = isFree ? 0 : defaultShipFee;
+    const couponDiscount = appliedCoupon?.discountAmount || 0;
+    return Math.max(0, cartTotal - couponDiscount + activeShipFee);
+  }, [cartTotal, appliedCoupon, uiConfig]);
 
   // Dynamic Payment Gateways from Super Admin Integrations Hub
   const paymentSettings = uiConfig?.integrations?.payments || {
@@ -838,6 +851,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           pincode: address.pincode || '110001',
         },
         paymentMethod,
+        paymentDetails,
         couponCode: appliedCoupon?.code || undefined,
         deliveryInstructions: deliveryInstructions || undefined,
       });
@@ -857,6 +871,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           totalAmount: order.totalAmount,
           address,
           paymentMethod,
+          paymentDetails: order.paymentDetails || paymentDetails,
+          paymentStatus: order.paymentStatus || (paymentMethod === 'COD' ? 'PENDING' : 'PAID'),
           deliveryInstructions: order.deliveryInstructions || deliveryInstructions,
         });
         clearCart();
@@ -882,6 +898,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       totalAmount: fallbackTotal,
       address,
       paymentMethod,
+      paymentDetails,
+      paymentStatus: paymentMethod === 'COD' ? 'PENDING' : 'PAID',
       deliveryInstructions,
     });
 
@@ -1930,91 +1948,17 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">
-                      Payment Method
-                    </h3>
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                      {validGateways.length} Gateways Active
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {validGateways.map(gw => (
-                      <button
-                        key={gw.id}
-                        type="button"
-                        onClick={() => setPaymentMethod(gw.id)}
-                        className={`p-3 rounded-xl border text-left transition-all ${
-                          paymentMethod === gw.id
-                            ? 'border-amber-500 bg-amber-50 text-slate-950 ring-2 ring-amber-400/20'
-                            : 'border-slate-200 text-slate-600 bg-white hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-slate-900">{gw.name}</span>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
-                            {gw.badge}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">{gw.subtext}</p>
-                      </button>
-                    ))}
-                  </div>
-                  {paymentMethod === 'UPI' && (
-                    <div className="p-3 rounded-xl bg-purple-50 border border-purple-200 text-xs text-purple-900 space-y-1">
-                      <div className="font-bold flex items-center justify-between">
-                        <span>Scan & Pay via any UPI App</span>
-                        <span className="font-mono text-purple-700 font-bold">{paymentSettings.upi?.upiId || '8533955333@paytm'}</span>
-                      </div>
-                      <p className="text-[11px] text-purple-700">
-                        Payee: {paymentSettings.upi?.merchantName || 'AuraMarket Store'}. GPay, PhonePe, Paytm, or BHIM.
-                      </p>
-                    </div>
-                  )}
-
-                  {paymentMethod === 'RAZORPAY' && (
-                    <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 space-y-1">
-                      <div className="font-bold flex items-center justify-between">
-                        <span>Razorpay Official Gateway</span>
-                        <span className="font-mono text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded">
-                          {paymentSettings.razorpay?.keyId?.startsWith('rzp_test') ? '🧪 TEST MODE' : '🔒 256-BIT SECURE'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-blue-700">
-                        Supports all Indian Credit/Debit Cards, NetBanking (50+ banks), UPI Apps, and EMI.
-                      </p>
-                    </div>
-                  )}
-
-                  {paymentMethod === 'STRIPE' && (
-                    <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-900 space-y-1">
-                      <div className="font-bold flex items-center justify-between">
-                        <span>Stripe Worldwide Checkout</span>
-                        <span className="font-mono text-[10px] text-indigo-700 font-bold bg-indigo-100 px-2 py-0.5 rounded">
-                          {paymentSettings.stripe?.publishableKey?.startsWith('pk_test') ? '🧪 TEST MODE' : '🌐 GLOBAL LIVE'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-indigo-700">
-                        Worldwide multi-currency processing for Visa, MasterCard, Amex, Apple Pay & Google Pay.
-                      </p>
-                    </div>
-                  )}
-
-                  {paymentMethod === 'COD' && (
-                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-1">
-                      <div className="font-bold flex items-center justify-between">
-                        <span>Cash on Delivery</span>
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                          DOORSTEP VERIFICATION
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-emerald-700">
-                        Pay cash or UPI upon package arrival. A confidential 4-digit OTP will be required by your courier partner.
-                      </p>
-                    </div>
-                  )}
-                </div>
+                {/* Point #26: Multi-Gateway Dynamic Checkout UI (COD, Razorpay, Stripe, Direct UPI QR) */}
+                <DynamicCheckoutPayment
+                  activeGateway={paymentMethod}
+                  onChangeGateway={setPaymentMethod}
+                  validGateways={validGateways}
+                  paymentSettings={paymentSettings}
+                  amountPayable={grandTotalPayable}
+                  user={user}
+                  onPaymentDetailsChange={setPaymentDetails}
+                  paymentDetails={paymentDetails}
+                />
 
                 {/* Point #22: Real Promo Code / Coupon Engine at Checkout */}
                 <div className="pt-3">
@@ -2159,6 +2103,36 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                 </p>
               </div>
             )}
+
+            {/* Point #26: Payment Method & Transaction Reference in Confirmation */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
+              <div>
+                <span className="text-[10px] font-black uppercase text-slate-400 block">Payment Mode</span>
+                <span className="font-black text-slate-900">{activeOrderConfirmation.paymentMethod}</span>
+                {activeOrderConfirmation.paymentDetails?.transactionId && (
+                  <span className="text-[10px] font-mono text-slate-500 block truncate max-w-[200px]">
+                    Ref: {activeOrderConfirmation.paymentDetails.transactionId}
+                  </span>
+                )}
+                {activeOrderConfirmation.paymentDetails?.upiUtr && (
+                  <span className="text-[10px] font-mono text-purple-700 font-bold block">
+                    UTR: {activeOrderConfirmation.paymentDetails.upiUtr}
+                  </span>
+                )}
+              </div>
+              <div className="text-right">
+                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                  activeOrderConfirmation.paymentStatus === 'PAID'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    : 'bg-amber-100 text-amber-800 border border-amber-200'
+                }`}>
+                  {activeOrderConfirmation.paymentStatus === 'PAID' ? '✓ PAID PREPAID' : '💵 COD PAY AT DOOR'}
+                </span>
+                <span className="block text-slate-900 font-black text-sm mt-0.5">
+                  ₹{activeOrderConfirmation.totalAmount?.toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
 
             <button
               onClick={() => setActiveOrderConfirmation(null)}

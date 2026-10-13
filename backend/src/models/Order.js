@@ -77,7 +77,7 @@ const orderSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['COD', 'RAZORPAY', 'WALLET'],
+      enum: ['COD', 'RAZORPAY', 'STRIPE', 'UPI', 'WALLET'],
       default: 'COD',
     },
     paymentStatus: {
@@ -93,6 +93,14 @@ const orderSchema = new mongoose.Schema(
     paymentId: {
       type: String,
       default: null,
+    },
+    // Point #26: Multi-Gateway Dynamic Payment Details
+    paymentDetails: {
+      gateway: { type: String, default: null },
+      transactionId: { type: String, default: null },
+      upiUtr: { type: String, default: null },
+      cardLast4: { type: String, default: null },
+      paidAt: { type: Date, default: null },
     },
     // Point #25: Order Delivery Instructions / Rider Notes
     deliveryInstructions: {

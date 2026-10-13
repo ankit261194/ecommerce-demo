@@ -1292,6 +1292,87 @@ const runTests = async () => {
       assert.strictEqual(dt.deliveryInstructions, 'Leave with security guard. Ring bell once.');
     });
 
+    await test('Point 26: Multi-Gateway Dynamic Checkout UI (COD, Razorpay, Stripe, Direct UPI QR)', async () => {
+      // 1. Direct UPI Order
+      const resUpi = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: headphonesProduct._id, quantity: 1, variantSku: 'APX-HEAD-BLK' }],
+          shippingAddress: {
+            recipientName: 'Aman Sharma',
+            phone: '9876543214',
+            street: 'Flat 402, Green Valley Apartments',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'UPI',
+          paymentDetails: {
+            gateway: 'UPI',
+            upiUtr: '987654321098',
+          },
+        }),
+      });
+      assert.strictEqual(resUpi.status, 201);
+      const dataUpi = await resUpi.json();
+      assert.strictEqual(dataUpi.data.paymentMethod, 'UPI');
+      assert.strictEqual(dataUpi.data.paymentStatus, 'PAID');
+      assert.strictEqual(dataUpi.data.paymentDetails.upiUtr, '987654321098');
+
+      // Verify delivery task for prepaid UPI order has amountToCollect = 0
+      const upiTask = await DeliveryTask.findOne({ subOrder: dataUpi.data.subOrders[0]._id });
+      assert.ok(upiTask);
+      assert.strictEqual(upiTask.isCod, false);
+      assert.strictEqual(upiTask.amountToCollect, 0);
+
+      // Cancel to restore stock for subsequent tests
+      await fetch(`${baseUrl}/orders/${dataUpi.data._id}/cancel`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+
+      // 2. Stripe Global Card Order
+      const resStripe = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: headphonesProduct._id, quantity: 1, variantSku: 'APX-HEAD-BLK' }],
+          shippingAddress: {
+            recipientName: 'Aman Sharma',
+            phone: '9876543214',
+            street: 'Flat 402, Green Valley Apartments',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'STRIPE',
+          paymentDetails: {
+            gateway: 'STRIPE',
+            transactionId: 'ch_test_4242stripe',
+            cardLast4: '4242',
+          },
+        }),
+      });
+      assert.strictEqual(resStripe.status, 201);
+      const dataStripe = await resStripe.json();
+      assert.strictEqual(dataStripe.data.paymentMethod, 'STRIPE');
+      assert.strictEqual(dataStripe.data.paymentStatus, 'PAID');
+      assert.strictEqual(dataStripe.data.paymentDetails.cardLast4, '4242');
+
+      // Cancel to restore stock
+      await fetch(`${baseUrl}/orders/${dataStripe.data._id}/cancel`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

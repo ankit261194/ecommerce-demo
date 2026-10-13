@@ -12,7 +12,7 @@ const mailService = require('../services/mailService');
 // @route   POST /api/orders
 exports.createOrder = async (req, res, next) => {
   try {
-    const { items, shippingAddress, paymentMethod, couponCode, deliveryInstructions } = req.body;
+    const { items, shippingAddress, paymentMethod, couponCode, deliveryInstructions, paymentDetails } = req.body;
 
     if (!items || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Cart items are required to place an order' });
@@ -216,6 +216,16 @@ exports.createOrder = async (req, res, next) => {
     const shippingFee = totalOrderAmount >= freeThreshold ? 0 : defaultFee;
     const finalTotalAmount = Math.max(0, totalOrderAmount - couponDiscountAmount + shippingFee);
 
+    // Point #26: Resolve Payment Gateway & Verification
+    const validMethods = ['COD', 'RAZORPAY', 'STRIPE', 'UPI', 'WALLET'];
+    const activePaymentMethod = validMethods.includes(paymentMethod) ? paymentMethod : 'COD';
+    const isPrepaid = ['RAZORPAY', 'STRIPE', 'UPI', 'WALLET'].includes(activePaymentMethod);
+    const resolvedPaymentStatus = isPrepaid ? 'PAID' : 'PENDING';
+    const resolvedPaymentId =
+      paymentDetails?.transactionId ||
+      paymentDetails?.upiUtr ||
+      (isPrepaid ? `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}` : null);
+
     const masterOrder = await Order.create({
       customer: req.user._id,
       items: validatedItems,
@@ -226,8 +236,16 @@ exports.createOrder = async (req, res, next) => {
       shippingFee,
       shippingAddress,
       deliveryInstructions: deliveryInstructions || '',
-      paymentMethod: paymentMethod || 'COD',
-      paymentStatus: paymentMethod === 'RAZORPAY' ? 'PAID' : 'PENDING',
+      paymentMethod: activePaymentMethod,
+      paymentStatus: resolvedPaymentStatus,
+      paymentId: resolvedPaymentId,
+      paymentDetails: {
+        gateway: activePaymentMethod,
+        transactionId: resolvedPaymentId,
+        upiUtr: paymentDetails?.upiUtr || null,
+        cardLast4: paymentDetails?.cardLast4 || null,
+        paidAt: isPrepaid ? new Date() : null,
+      },
     });
 
     // Step 3: Create Sub-Orders per Vendor (Order Splitting)
@@ -306,8 +324,8 @@ exports.createOrder = async (req, res, next) => {
             address: `${shippingAddress.street}, ${shippingAddress.city}, ${shippingAddress.state}`,
             pincode: shippingAddress.pincode,
           },
-          isCod: paymentMethod === 'COD',
-          amountToCollect: paymentMethod === 'COD' ? vendorGroup.subTotal : 0,
+          isCod: activePaymentMethod === 'COD',
+          amountToCollect: activePaymentMethod === 'COD' ? vendorGroup.subTotal : 0,
         });
       }
     }

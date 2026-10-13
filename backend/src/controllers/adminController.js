@@ -102,19 +102,159 @@ exports.updateVendorStatus = async (req, res, next) => {
   }
 };
 
-// @desc    Get All Orders across all vendors
+// @desc    Get All Orders across all vendors with multi-status filters, search, and counts
 // @route   GET /api/admin/orders
 exports.getAllOrders = async (req, res, next) => {
   try {
-    const orders = await Order.find()
+    const { status, paymentStatus, paymentMethod, search, dateRange } = req.query;
+    const query = {};
+
+    // 1. Status Filter
+    if (status && status !== 'ALL') {
+      if (status === 'IN_PROGRESS') {
+        query.status = { $in: ['IN_PROGRESS', 'PARTIALLY_DELIVERED'] };
+      } else {
+        query.status = status.toUpperCase();
+      }
+    }
+
+    // 2. Payment Status Filter
+    if (paymentStatus && paymentStatus !== 'ALL') {
+      query.paymentStatus = paymentStatus.toUpperCase();
+    }
+
+    // 3. Payment Method Filter
+    if (paymentMethod && paymentMethod !== 'ALL') {
+      query.paymentMethod = paymentMethod.toUpperCase();
+    }
+
+    // 4. Date Range Filter
+    if (dateRange && dateRange !== 'ALL') {
+      const now = new Date();
+      if (dateRange === 'today') {
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        query.createdAt = { $gte: startOfDay };
+      } else if (dateRange === 'yesterday') {
+        const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+        const endOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        query.createdAt = { $gte: startOfYesterday, $lt: endOfYesterday };
+      } else if (dateRange === 'this_week') {
+        const startOfWeek = new Date(now.setDate(now.getDate() - 7));
+        query.createdAt = { $gte: startOfWeek };
+      } else if (dateRange === 'this_month') {
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        query.createdAt = { $gte: startOfMonth };
+      }
+    }
+
+    // 5. Search by Order Number or Customer
+    if (search && search.trim()) {
+      const term = search.trim();
+      const customerMatches = await User.find({
+        $or: [
+          { name: { $regex: term, $options: 'i' } },
+          { phone: { $regex: term, $options: 'i' } },
+          { email: { $regex: term, $options: 'i' } },
+        ],
+      }).select('_id');
+
+      const customerIds = customerMatches.map(c => c._id);
+      query.$or = [
+        { orderNumber: { $regex: term, $options: 'i' } },
+        { customer: { $in: customerIds } },
+      ];
+    }
+
+    const orders = await Order.find(query)
       .populate('customer', 'name email phone')
       .populate({
         path: 'subOrders',
-        populate: { path: 'vendor', select: 'storeName' },
+        populate: { path: 'vendor', select: 'storeName storeLogo' },
       })
       .sort({ createdAt: -1 });
 
-    res.status(200).json({ success: true, count: orders.length, data: orders });
+    // Aggregate real-time Status Counts for Super Admin tabs
+    const [allCount, placedCount, inProgressCount, deliveredCount, cancelledCount] = await Promise.all([
+      Order.countDocuments(),
+      Order.countDocuments({ status: 'PLACED' }),
+      Order.countDocuments({ status: { $in: ['IN_PROGRESS', 'PARTIALLY_DELIVERED'] } }),
+      Order.countDocuments({ status: 'DELIVERED' }),
+      Order.countDocuments({ status: 'CANCELLED' }),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      count: orders.length,
+      statusCounts: {
+        all: allCount,
+        placed: placedCount,
+        in_progress: inProgressCount,
+        delivered: deliveredCount,
+        cancelled: cancelledCount,
+      },
+      data: orders,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update Order Status from Super Admin Command Center (Point #32)
+// @route   PUT /api/admin/orders/:id/status
+exports.updateOrderStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status, paymentStatus, note } = req.body;
+
+    const order = await Order.findById(id).populate('subOrders');
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const previousStatus = order.status;
+    if (status) order.status = status;
+    if (paymentStatus) order.paymentStatus = paymentStatus;
+
+    // If marked DELIVERED, advance sub-orders and mark PAID
+    if (status === 'DELIVERED') {
+      order.paymentStatus = 'PAID';
+      for (const sub of order.subOrders || []) {
+        sub.status = 'delivered';
+        await sub.save();
+      }
+    }
+
+    // If marked CANCELLED and was not previously cancelled, auto-restore stock
+    if (status === 'CANCELLED' && previousStatus !== 'CANCELLED') {
+      const Product = require('../models/Product');
+      for (const item of order.items || []) {
+        if (item.variantSku) {
+          await Product.findOneAndUpdate(
+            { _id: item.product, 'variants.sku': item.variantSku },
+            { $inc: { stock: item.quantity, 'variants.$.stock': item.quantity } }
+          );
+        } else {
+          await Product.findByIdAndUpdate(item.product, { $inc: { stock: item.quantity } });
+        }
+      }
+      order.cancellationReason = note || 'Admin Order Cancellation';
+      order.cancelledAt = new Date();
+    }
+
+    await order.save();
+
+    const updated = await Order.findById(order._id)
+      .populate('customer', 'name email phone')
+      .populate({
+        path: 'subOrders',
+        populate: { path: 'vendor', select: 'storeName storeLogo' },
+      });
+
+    res.status(200).json({
+      success: true,
+      message: `Order #${order.orderNumber} status updated to ${order.status}`,
+      data: updated,
+    });
   } catch (error) {
     next(error);
   }

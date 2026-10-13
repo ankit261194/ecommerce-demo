@@ -5,6 +5,7 @@ const {
   getAllVendors,
   updateVendorStatus,
   getAllOrders,
+  updateOrderStatus,
   getPlatformLedger,
   triggerWipeDemo,
   triggerSeedDemo,
@@ -25,6 +26,8 @@ router.put('/vendors/:id/status', updateVendorStatus);
 router.patch('/vendors/:id/status', updateVendorStatus);
 router.patch('/vendors/:id/commission', updateVendorStatus);
 router.get('/orders', getAllOrders);
+router.put('/orders/:id/status', updateOrderStatus);
+router.patch('/orders/:id/status', updateOrderStatus);
 router.get('/ledger', getPlatformLedger);
 
 // Integrations & API Hub

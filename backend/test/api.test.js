@@ -1824,6 +1824,57 @@ const runTests = async () => {
       });
     });
 
+    await test('Point 32: Complete Order Management Center with multi-status filters & status update (GET /admin/orders & PUT /admin/orders/:id/status)', async () => {
+      // 1. Fetch all orders with real-time status counts
+      const resAll = await fetch(`${baseUrl}/admin/orders`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resAll.status, 200);
+      const dataAll = await resAll.json();
+      assert.strictEqual(dataAll.success, true);
+      assert.ok(typeof dataAll.statusCounts === 'object');
+      assert.ok(typeof dataAll.statusCounts.all === 'number');
+      assert.ok(typeof dataAll.statusCounts.placed === 'number');
+      assert.ok(Array.isArray(dataAll.data));
+
+      // 2. Filter by status=PLACED
+      const resPlaced = await fetch(`${baseUrl}/admin/orders?status=PLACED`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resPlaced.status, 200);
+      const dataPlaced = await resPlaced.json();
+      assert.strictEqual(dataPlaced.success, true);
+      for (const ord of dataPlaced.data) {
+        assert.strictEqual(ord.status, 'PLACED');
+      }
+
+      // 3. Search by customer / phone / orderNumber
+      const resSearch = await fetch(`${baseUrl}/admin/orders?search=Aman`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resSearch.status, 200);
+      const dataSearch = await resSearch.json();
+      assert.strictEqual(dataSearch.success, true);
+
+      // 4. Update order status from Super Admin (PUT /admin/orders/:id/status)
+      const resUpdate = await fetch(`${baseUrl}/admin/orders/${placedOrder._id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          status: 'DELIVERED',
+          note: 'Admin verified doorstep handover',
+        }),
+      });
+      assert.strictEqual(resUpdate.status, 200);
+      const dataUpdate = await resUpdate.json();
+      assert.strictEqual(dataUpdate.success, true);
+      assert.strictEqual(dataUpdate.data.status, 'DELIVERED');
+      assert.strictEqual(dataUpdate.data.paymentStatus, 'PAID');
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

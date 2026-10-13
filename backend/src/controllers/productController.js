@@ -1,6 +1,22 @@
 const Product = require('../models/Product');
 const Category = require('../models/Category');
 
+// Point #12: Stock Urgency Level calculation helper
+const calculateStockUrgency = (stock) => {
+  const num = Number(stock) || 0;
+  if (num <= 0) {
+    return { level: 'OUT_OF_STOCK', text: 'Out of Stock', isAvailable: false, unitsLeft: 0 };
+  }
+  if (num <= 5) {
+    return { level: 'CRITICAL', text: `Only ${num} left in stock!`, isAvailable: true, unitsLeft: num };
+  }
+  if (num <= 15) {
+    return { level: 'LOW', text: `Low stock: Only ${num} left`, isAvailable: true, unitsLeft: num };
+  }
+  return { level: 'IN_STOCK', text: 'In Stock — Ready to ship', isAvailable: true, unitsLeft: num };
+};
+exports.calculateStockUrgency = calculateStockUrgency;
+
 // @desc    Get All Public Products with filtering, search & sorting
 // @route   GET /api/products
 exports.getProducts = async (req, res, next) => {
@@ -112,13 +128,25 @@ exports.getProducts = async (req, res, next) => {
 
     const total = await Product.countDocuments(query);
 
+    const enrichedProducts = products.map(p => {
+      const pObj = p.toObject ? p.toObject() : p;
+      pObj.stockUrgency = calculateStockUrgency(pObj.stock);
+      if (Array.isArray(pObj.variants)) {
+        pObj.variants = pObj.variants.map(v => ({
+          ...v,
+          stockUrgency: calculateStockUrgency(v.stock),
+        }));
+      }
+      return pObj;
+    });
+
     res.status(200).json({
       success: true,
-      count: products.length,
+      count: enrichedProducts.length,
       total,
       page: Number(page),
       pages: Math.ceil(total / Number(limit)),
-      data: products,
+      data: enrichedProducts,
     });
   } catch (error) {
     next(error);
@@ -143,7 +171,16 @@ exports.getProductBySlug = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
-    res.status(200).json({ success: true, data: product });
+    const pObj = product.toObject ? product.toObject() : product;
+    pObj.stockUrgency = calculateStockUrgency(pObj.stock);
+    if (Array.isArray(pObj.variants)) {
+      pObj.variants = pObj.variants.map(v => ({
+        ...v,
+        stockUrgency: calculateStockUrgency(v.stock),
+      }));
+    }
+
+    res.status(200).json({ success: true, data: pObj });
   } catch (error) {
     next(error);
   }

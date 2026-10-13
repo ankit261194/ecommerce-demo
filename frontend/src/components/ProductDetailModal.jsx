@@ -19,6 +19,7 @@ import {
   ThumbsUp,
   MessageSquare,
 } from 'lucide-react';
+import StockUrgencyBadge from './StockUrgencyBadge';
 
 export const ProductDetailModal = ({
   product,
@@ -421,24 +422,9 @@ export const ProductDetailModal = ({
                 </p>
               </div>
 
-              {/* Real-time Stock Status */}
+              {/* Real-time Stock Urgency Status (Point #12) */}
               <div>
-                {currentStock > 10 ? (
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>In Stock — Ready to ship from local fulfillment hub</span>
-                  </div>
-                ) : currentStock > 0 ? (
-                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
-                    <AlertCircle className="w-4 h-4 text-amber-600" />
-                    <span>🔥 Hurry! Only {currentStock} items left in stock — order soon!</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-xl border border-red-200">
-                    <AlertCircle className="w-4 h-4 text-red-600" />
-                    <span>Currently Out of Stock. Join waitlist to get notified.</span>
-                  </div>
-                )}
+                <StockUrgencyBadge stock={currentStock} variant="detailed" />
               </div>
 
               {/* Multi-Attribute Product Variants Matrix (Point #2) */}
@@ -542,9 +528,9 @@ export const ProductDetailModal = ({
                           >
                             <div className="min-w-0 pr-2">
                               <span className="font-extrabold block truncate text-slate-900">{variant.name}</span>
-                              <span className={`text-[10px] font-bold ${variant.stock <= 5 ? 'text-amber-600' : 'text-slate-400'}`}>
-                                {isOutOfStock ? 'Out of Stock' : `${variant.stock} in stock`}
-                              </span>
+                              <div className="mt-0.5">
+                                <StockUrgencyBadge stock={variant.stock} variant="compact" showPulse={false} />
+                              </div>
                             </div>
                             <span className="font-black text-slate-900 flex-shrink-0">
                               ₹{varPrice.toLocaleString('en-IN')}

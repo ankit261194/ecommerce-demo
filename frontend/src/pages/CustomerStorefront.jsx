@@ -33,6 +33,7 @@ import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
 import CategorySidebar from '../components/CategorySidebar';
 import FlashSaleSection from '../components/FlashSaleSection';
+import StockUrgencyBadge from '../components/StockUrgencyBadge';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -1327,9 +1328,14 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
 
-                    {/* Discount Badge */}
-                    <div className="absolute top-2 left-2 sm:top-3 sm:left-3 bg-rose-600 text-white text-[9px] sm:text-[10px] font-black uppercase px-1.5 py-0.5 sm:px-2 rounded-md sm:rounded-lg shadow">
-                      {discount}% OFF
+                    {/* Discount Badge & Stock Urgency Badge */}
+                    <div className="absolute top-2 left-2 sm:top-3 sm:left-3 flex flex-col gap-1 items-start z-10 pointer-events-none">
+                      <div className="bg-rose-600 text-white text-[9px] sm:text-[10px] font-black uppercase px-1.5 py-0.5 sm:px-2 rounded-md sm:rounded-lg shadow">
+                        {discount}% OFF
+                      </div>
+                      {product.stock <= 5 && (
+                        <StockUrgencyBadge stock={product.stock} variant="badge" />
+                      )}
                     </div>
 
                     {/* Quick Actions: Quick View Eye, Share & Wishlist Heart */}
@@ -1411,7 +1417,19 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                         </span>
                       </div>
 
-                      {product.hasVariants ? (
+                      {/* Real-time Stock Urgency Badge (Point #12) */}
+                      <div className="pt-0.5">
+                        <StockUrgencyBadge stock={product.stock} variant="compact" />
+                      </div>
+
+                      {product.stock <= 0 ? (
+                        <button
+                          disabled
+                          className="w-full py-2 sm:py-2.5 rounded-xl bg-slate-200 text-slate-500 text-[11px] sm:text-xs font-bold cursor-not-allowed flex items-center justify-center gap-1.5"
+                        >
+                          <span>Out of Stock</span>
+                        </button>
+                      ) : product.hasVariants ? (
                         <button
                           onClick={() => {
                             setSelectedProduct(product);

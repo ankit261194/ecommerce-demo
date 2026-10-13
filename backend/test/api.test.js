@@ -415,6 +415,34 @@ const runTests = async () => {
       assert.ok(firstDeal.claimedPercent >= 0 && firstDeal.claimedPercent <= 100, 'Claimed percent must be between 0 and 100');
     });
 
+    await test('Point 12: GET /products and /products/:slug return real-time stock urgency badges metadata (CRITICAL, LOW, IN_STOCK, OUT_OF_STOCK)', async () => {
+      // 1. Check getProducts returns stockUrgency metadata on each product
+      const resList = await fetch(`${baseUrl}/products`);
+      assert.strictEqual(resList.status, 200);
+      const dataList = await resList.json();
+      assert.strictEqual(dataList.success, true);
+      assert.ok(dataList.data.length >= 1);
+
+      const p = dataList.data[0];
+      assert.ok(p.stockUrgency, 'Product must have stockUrgency object');
+      assert.ok(['CRITICAL', 'LOW', 'IN_STOCK', 'OUT_OF_STOCK'].includes(p.stockUrgency.level), 'Urgency level must be valid enum');
+      assert.ok(typeof p.stockUrgency.isAvailable === 'boolean');
+      assert.ok(typeof p.stockUrgency.unitsLeft === 'number');
+
+      // 2. Check getProductBySlug returns stockUrgency on main product and all variant items
+      const resSlug = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
+      assert.strictEqual(resSlug.status, 200);
+      const dataSlug = await resSlug.json();
+      assert.strictEqual(dataSlug.success, true);
+      assert.ok(dataSlug.data.stockUrgency);
+      assert.ok(dataSlug.data.variants && dataSlug.data.variants.length > 0);
+
+      const v = dataSlug.data.variants[0];
+      assert.ok(v.stockUrgency, 'Variant must have individual stockUrgency');
+      assert.ok(typeof v.stockUrgency.level === 'string');
+      assert.strictEqual(v.stockUrgency.unitsLeft, v.stock);
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

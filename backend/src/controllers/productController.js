@@ -598,4 +598,110 @@ exports.getSocialProofActivities = async (req, res, next) => {
   }
 };
 
+// Point #18: Side-by-Side Product Comparison Tool (Compare 2 to 4 items)
+// @route POST /api/products/compare
+exports.compareProducts = async (req, res, next) => {
+  try {
+    const { productIds } = req.body;
+    if (!Array.isArray(productIds) || productIds.length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide an array of at least 2 product IDs to compare (max 4).',
+      });
+    }
+
+    if (productIds.length > 4) {
+      return res.status(400).json({
+        success: false,
+        message: 'You can compare up to 4 products simultaneously.',
+      });
+    }
+
+    const products = await Product.find({ _id: { $in: productIds } })
+      .populate('vendor', 'storeName rating isVerified')
+      .populate('category', 'name slug');
+
+    if (products.length < 2) {
+      return res.status(404).json({
+        success: false,
+        message: 'Could not find at least 2 matching products to compare.',
+      });
+    }
+
+    // Preserve the order of requested IDs
+    const orderedProducts = [];
+    productIds.forEach(id => {
+      const match = products.find(p => p._id.toString() === id.toString());
+      if (match) orderedProducts.push(match);
+    });
+
+    // Extract all unique specification keys across all products
+    const specKeysSet = new Set();
+    ['Brand', 'Category', 'Warranty', 'Return Policy', 'Delivery Speed', 'Ratings & Score'].forEach(k => specKeysSet.add(k));
+
+    orderedProducts.forEach(prod => {
+      if (prod.specifications) {
+        if (prod.specifications instanceof Map) {
+          for (let key of prod.specifications.keys()) specKeysSet.add(key);
+        } else if (typeof prod.specifications === 'object') {
+          Object.keys(prod.specifications).forEach(k => specKeysSet.add(k));
+        }
+      }
+    });
+
+    const allSpecKeys = Array.from(specKeysSet);
+
+    // Build specsMatrix mapping each spec key to array of values
+    const specsMatrix = allSpecKeys.map(key => {
+      const values = orderedProducts.map(prod => {
+        if (key === 'Brand') return prod.brand || 'AuraMarket Direct';
+        if (key === 'Category') return prod.category?.name || prod.category || 'General';
+        if (key === 'Warranty') return '1 Year Manufacturer Official Warranty';
+        if (key === 'Return Policy') return '7-Day Easy Replacement';
+        if (key === 'Delivery Speed') return 'Express 48h Delivery with OTP';
+        if (key === 'Ratings & Score') return `${prod.ratingsAverage || 4.5} ★ (${prod.ratingsQuantity || 12} reviews)`;
+
+        let val = null;
+        if (prod.specifications) {
+          if (prod.specifications instanceof Map) val = prod.specifications.get(key);
+          else val = prod.specifications[key];
+        }
+        return val || '—';
+      });
+
+      const isDifferent = new Set(values).size > 1;
+
+      return {
+        attribute: key,
+        values,
+        isDifferent,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      count: orderedProducts.length,
+      products: orderedProducts.map(p => ({
+        _id: p._id,
+        title: p.title,
+        slug: p.slug,
+        brand: p.brand,
+        image: p.images?.[0] || p.image || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400',
+        sellingPrice: p.sellingPrice || p.price,
+        mrp: p.mrp || Math.round((p.sellingPrice || p.price) * 1.4),
+        stock: p.stock,
+        inStock: (p.stock || 0) > 0,
+        ratingsAverage: p.ratingsAverage || 4.5,
+        ratingsQuantity: p.ratingsQuantity || 12,
+        vendor: p.vendor,
+        stockUrgency: calculateStockUrgency(p.stock),
+      })),
+      specsMatrix,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
 

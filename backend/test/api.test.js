@@ -682,6 +682,50 @@ const runTests = async () => {
       assert.strictEqual(dataClear.count, 0);
     });
 
+    await test('Point 18: Side-by-Side Product Comparison Tool: POST /products/compare validates 2-4 products and returns specsMatrix', async () => {
+      // 1. Fetch products to get 2 IDs
+      const resList = await fetch(`${baseUrl}/products`);
+      const dataList = await resList.json();
+      assert.ok(dataList.data.length >= 2, 'Need at least 2 products in catalog for comparison');
+      const prodA = dataList.data[0];
+      const prodB = dataList.data[1];
+
+      // 2. Reject less than 2 products
+      const resBad = await fetch(`${baseUrl}/products/compare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productIds: [prodA._id] }),
+      });
+      assert.strictEqual(resBad.status, 400);
+
+      // 3. Reject more than 4 products
+      const resTooMany = await fetch(`${baseUrl}/products/compare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productIds: [prodA._id, prodB._id, prodA._id, prodB._id, prodA._id] }),
+      });
+      assert.strictEqual(resTooMany.status, 400);
+
+      // 4. Valid compare with 2 products
+      const resCompare = await fetch(`${baseUrl}/products/compare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productIds: [prodA._id, prodB._id] }),
+      });
+      assert.strictEqual(resCompare.status, 200);
+      const dataCompare = await resCompare.json();
+      assert.strictEqual(dataCompare.success, true);
+      assert.strictEqual(dataCompare.count, 2);
+      assert.ok(Array.isArray(dataCompare.products));
+      assert.strictEqual(dataCompare.products[0]._id, prodA._id);
+      assert.strictEqual(dataCompare.products[1]._id, prodB._id);
+      assert.ok(Array.isArray(dataCompare.specsMatrix));
+      assert.ok(dataCompare.specsMatrix.length >= 4, 'Must have at least 4 comparison attributes');
+      assert.ok(dataCompare.specsMatrix.some(m => m.attribute === 'Brand'));
+      assert.ok(dataCompare.specsMatrix.some(m => m.attribute === 'Category'));
+      assert.strictEqual(dataCompare.specsMatrix[0].values.length, 2, 'Each spec row must have value per product');
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

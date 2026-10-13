@@ -28,10 +28,13 @@ import {
   Flame,
   BadgePercent,
   ArrowUpDown,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
 import WishlistDrawer from '../components/WishlistDrawer';
+import ProductCompareModal from '../components/ProductCompareModal';
+import ProductCompareDock from '../components/ProductCompareDock';
 import CategorySidebar from '../components/CategorySidebar';
 import FlashSaleSection from '../components/FlashSaleSection';
 import StockUrgencyBadge from '../components/StockUrgencyBadge';
@@ -59,6 +62,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [activeOrderConfirmation, setActiveOrderConfirmation] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
   const [isWishlistDrawerOpen, setIsWishlistDrawerOpen] = useState(false);
+  const [compareList, setCompareList] = useState([]);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
 
   // Wishlist state (persisted in localStorage + synced with backend /api/wishlist)
   const [wishlist, setWishlist] = useState(() => {
@@ -102,6 +107,28 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
     // Backend sync
     api.post('/wishlist/toggle', { productId: prodId }).catch(() => {});
+  };
+
+  const toggleCompare = (product, e) => {
+    if (e) e.stopPropagation();
+    const prodId = product._id || product.id;
+    setCompareList(prev => {
+      const exists = prev.includes(prodId);
+      if (exists) {
+        setToastMessage(`Removed from comparison`);
+        setTimeout(() => setToastMessage(null), 2000);
+        return prev.filter(id => id !== prodId);
+      }
+      if (prev.length >= 4) {
+        setToastMessage(`You can compare up to 4 products at once`);
+        setTimeout(() => setToastMessage(null), 2500);
+        return prev;
+      }
+      const updated = [...prev, prodId];
+      setToastMessage(`Added to comparison (${updated.length}/4) ⚖️`);
+      setTimeout(() => setToastMessage(null), 2000);
+      return updated;
+    });
   };
 
   const handleMoveToCartFromWishlist = (product) => {
@@ -1367,6 +1394,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             {sortedProducts.map(product => {
               const discount = Math.round(((product.mrp - product.sellingPrice) / product.mrp) * 100);
               const isWishlisted = wishlist.includes(product._id);
+              const isCompared = compareList.includes(product._id);
               return (
                 <div
                   key={product._id}
@@ -1417,6 +1445,17 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                         title="Share product"
                       >
                         <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      </button>
+                      <button
+                        onClick={e => toggleCompare(product, e)}
+                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shadow-md backdrop-blur transition-all active:scale-90 ${
+                          isCompared
+                            ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-400/50 shadow-amber-200'
+                            : 'bg-white/90 hover:bg-white text-slate-700 hover:text-amber-600'
+                        }`}
+                        title={isCompared ? 'Remove from comparison' : 'Compare with other products'}
+                      >
+                        <ArrowLeftRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                       </button>
                       <button
                         onClick={e => toggleWishlist(product, e)}
@@ -1557,6 +1596,36 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         onRemoveItem={handleRemoveFromWishlist}
         onClearWishlist={handleClearWishlist}
         onOpenProduct={prod => {
+          setSelectedProduct(prod);
+          if (prod.hasVariants && prod.variants?.length > 0) {
+            setSelectedVariant(prod.variants[0]);
+          }
+        }}
+      />
+
+      {/* Point #18: Floating Product Comparison Dock */}
+      <ProductCompareDock
+        compareIds={compareList}
+        allProducts={products}
+        onRemoveItem={id => setCompareList(prev => prev.filter(item => item !== id))}
+        onClearAll={() => setCompareList([])}
+        onOpenModal={() => setIsCompareModalOpen(true)}
+      />
+
+      {/* Point #18: Side-by-Side Product Comparison Modal */}
+      <ProductCompareModal
+        isOpen={isCompareModalOpen}
+        onClose={() => setIsCompareModalOpen(false)}
+        productIds={compareList}
+        allProducts={products}
+        onRemoveProduct={id => setCompareList(prev => prev.filter(item => item !== id))}
+        onClearAll={() => setCompareList([])}
+        onAddToCart={prod => {
+          addToCart(prod, 1);
+          setToastMessage(`Added "${prod.title}" to cart! 🛍️`);
+          setTimeout(() => setToastMessage(null), 2200);
+        }}
+        onOpenProductPDP={prod => {
           setSelectedProduct(prod);
           if (prod.hasVariants && prod.variants?.length > 0) {
             setSelectedVariant(prod.variants[0]);

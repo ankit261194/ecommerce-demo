@@ -1,9 +1,13 @@
-<!DOCTYPE html>
+import os
+
+doc_path = r"C:\Users\hp\.gemini\antigravity\scratch\ecommerce-marketplace\documentation\index.html"
+
+html_content = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AuraMarket — Documentation & Setup Guide | Envato CodeCanyon</title>
+  <title>AuraMarket — Master Documentation & Step-by-Step Developer Guide | Envato CodeCanyon</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23F59E0B'><path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,7 +28,7 @@
       --slate-800: #1e293b;
       --slate-900: #0f172a;
       --emerald: #10b981;
-      --sidebar-width: 280px;
+      --sidebar-width: 290px;
     }
     * {
       box-sizing: border-box;
@@ -58,12 +62,12 @@
       flex-direction: column;
     }
     .sidebar-brand {
-      padding: 24px 20px;
+      padding: 22px 20px;
       border-bottom: 1px solid rgba(255,255,255,0.08);
       background: var(--navy);
     }
     .brand-title {
-      font-size: 1.15rem;
+      font-size: 1.2rem;
       font-weight: 800;
       color: #fff;
       display: flex;
@@ -86,7 +90,7 @@
       margin-top: 6px;
     }
     .sidebar-nav {
-      padding: 20px 12px;
+      padding: 16px 12px;
       flex: 1;
     }
     .nav-section-title {
@@ -95,7 +99,7 @@
       color: #64748b;
       text-transform: uppercase;
       letter-spacing: 1px;
-      padding: 12px 12px 6px;
+      padding: 14px 12px 6px;
     }
     .nav-link {
       display: flex;
@@ -104,7 +108,7 @@
       padding: 8px 12px;
       color: #cbd5e1;
       text-decoration: none;
-      font-size: 0.85rem;
+      font-size: 0.84rem;
       font-weight: 600;
       border-radius: 8px;
       transition: all 0.15s ease;
@@ -126,16 +130,18 @@
       margin-left: var(--sidebar-width);
       flex: 1;
       max-width: calc(100vw - var(--sidebar-width));
-      padding: 40px 60px 80px;
+      padding: 36px 50px 80px;
     }
     /* Top Bar */
     .top-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 24px;
-      margin-bottom: 32px;
+      padding-bottom: 20px;
+      margin-bottom: 28px;
       border-bottom: 1px solid var(--slate-200);
+      flex-wrap: wrap;
+      gap: 16px;
     }
     .badge-pill {
       display: inline-flex;
@@ -186,24 +192,31 @@
       box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }
     .section-title {
-      font-size: 1.5rem;
+      font-size: 1.55rem;
       font-weight: 800;
       color: var(--navy-dark);
       margin-bottom: 8px;
       display: flex;
       align-items: center;
       gap: 12px;
+      flex-wrap: wrap;
     }
     .section-subtitle {
       font-size: 0.95rem;
       color: var(--slate-600);
-      margin-bottom: 24px;
+      margin-bottom: 22px;
     }
     h3 {
-      font-size: 1.15rem;
+      font-size: 1.18rem;
       font-weight: 700;
       color: var(--navy);
       margin: 28px 0 12px;
+    }
+    h4 {
+      font-size: 1.02rem;
+      font-weight: 700;
+      color: var(--slate-800);
+      margin: 18px 0 8px;
     }
     p {
       margin-bottom: 14px;
@@ -221,7 +234,7 @@
     }
     /* Code Blocks */
     pre {
-      background: var(--navy-dark);
+      background: #0b1329;
       color: #f8fafc;
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.82rem;
@@ -230,7 +243,7 @@
       overflow-x: auto;
       margin: 16px 0 24px;
       position: relative;
-      line-height: 1.5;
+      line-height: 1.55;
       border: 1px solid rgba(255,255,255,0.08);
     }
     code {
@@ -251,17 +264,19 @@
       position: absolute;
       top: 10px;
       right: 10px;
-      background: rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.14);
       border: none;
       color: #cbd5e1;
-      padding: 4px 10px;
+      padding: 5px 12px;
       border-radius: 6px;
       font-size: 0.75rem;
       cursor: pointer;
       font-family: sans-serif;
+      font-weight: 600;
+      transition: all 0.15s ease;
     }
     .copy-btn:hover {
-      background: rgba(255,255,255,0.25);
+      background: rgba(255,255,255,0.28);
       color: #fff;
     }
     /* Tables */
@@ -314,6 +329,335 @@
       border-left: 4px solid var(--primary);
       color: #92400e;
     }
+
+    /* ========================================================================= */
+    /* REALISTIC UI MOCKUP CARDS & SCREENSHOTS (CSS ENGINE) */
+    /* ========================================================================= */
+    .mockup-window {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 4px 10px rgba(0, 0, 0, 0.05);
+      margin: 22px 0 28px;
+    }
+    .mockup-header-bar {
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      font-weight: 700;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .mockup-header-dark {
+      background: #0f172a;
+      color: #94a3b8;
+      border-bottom: 1px solid #1e293b;
+    }
+    .mockup-header-light {
+      background: #f1f5f9;
+      color: #334155;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .mockup-header-play {
+      background: #1a73e8;
+      color: #ffffff;
+      border-bottom: 1px solid #1557b0;
+    }
+    .mockup-dots {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .mockup-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .dot-red { background: #ef4444; }
+    .dot-yellow { background: #f59e0b; }
+    .dot-green { background: #10b981; }
+
+    .mockup-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+      letter-spacing: 0.3px;
+    }
+    .mockup-badge {
+      font-size: 0.68rem;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-dev {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+    .badge-admin {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #86efac;
+    }
+    .badge-play {
+      background: rgba(255,255,255,0.25);
+      color: #ffffff;
+      border: 1px solid rgba(255,255,255,0.4);
+    }
+
+    /* Terminal Screen */
+    .mockup-terminal-screen {
+      background: #070d1a;
+      color: #e2e8f0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.81rem;
+      line-height: 1.6;
+      padding: 20px 22px;
+      overflow-x: auto;
+    }
+    .term-row {
+      margin-bottom: 4px;
+    }
+    .term-prompt { color: #34d399; font-weight: 700; }
+    .term-dir { color: #38bdf8; }
+    .term-cmd { color: #f8fafc; font-weight: 700; }
+    .term-comment { color: #64748b; font-style: italic; }
+    .term-highlight { color: #f59e0b; }
+    .term-cyan { color: #38bdf8; }
+    .term-success { color: #10b981; font-weight: 700; }
+    .term-muted { color: #94a3b8; }
+    .term-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 0.77rem;
+    }
+    .term-table th, .term-table td {
+      border: 1px solid #1e293b;
+      padding: 6px 10px;
+      text-align: left;
+    }
+    .term-table th { background: #0f172a; color: #38bdf8; }
+    .status-online { color: #34d399; font-weight: 700; }
+
+    /* Admin UI Mockup Screen */
+    .mockup-admin-screen {
+      background: #f8fafc;
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .ui-annotated-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+    .ui-annotated-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .ui-annotated-card-title {
+      font-weight: 800;
+      font-size: 0.92rem;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ui-switch {
+      display: inline-flex;
+      align-items: center;
+      width: 44px;
+      height: 24px;
+      background: #10b981;
+      border-radius: 9999px;
+      padding: 2px;
+    }
+    .ui-switch-circle {
+      width: 20px;
+      height: 20px;
+      background: #ffffff;
+      border-radius: 50%;
+      transform: translateX(20px);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .ui-input-group {
+      margin-top: 10px;
+    }
+    .ui-input-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #475569;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .ui-input-field {
+      width: 100%;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: #1e293b;
+    }
+    .ui-action-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid #f1f5f9;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .ui-btn-action {
+      background: #0f2444;
+      color: #f59e0b;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-weight: 800;
+      font-size: 0.78rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: default;
+    }
+    .ui-toast-msg {
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      color: #065f46;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Bilingual Structured Blocks */
+    .bilingual-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 18px 0;
+    }
+    @media (max-width: 880px) {
+      .bilingual-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .bilingual-card {
+      padding: 18px;
+      border-radius: 12px;
+      font-size: 0.88rem;
+      line-height: 1.6;
+    }
+    .bilingual-en {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-left: 4px solid #3b82f6;
+    }
+    .bilingual-hi {
+      background: #fffdf5;
+      border: 1px solid #fef3c7;
+      border-left: 4px solid #f59e0b;
+    }
+    .lang-flag {
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .lang-flag-en { color: #2563eb; }
+    .lang-flag-hi { color: #d97706; }
+
+    /* Role Badges */
+    .role-badge-dev {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+    .role-badge-admin {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #86efac;
+    }
+    .step-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #0f2444;
+      color: #f59e0b;
+      font-weight: 800;
+      font-size: 0.8rem;
+      margin-right: 8px;
+    }
+
+    /* Language View Toggle Filter */
+    .lang-filter-bar {
+      display: inline-flex;
+      gap: 4px;
+      align-items: center;
+      background: #e2e8f0;
+      padding: 4px;
+      border-radius: 12px;
+      margin-bottom: 22px;
+    }
+    .lang-filter-btn {
+      border: none;
+      background: transparent;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.82rem;
+      color: #475569;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .lang-filter-btn.active {
+      background: #ffffff;
+      color: #0f172a;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+    }
+    body.show-en-only .bilingual-hi { display: none !important; }
+    body.show-hi-only .bilingual-en { display: none !important; }
+    body.show-en-only .bilingual-grid { grid-template-columns: 1fr !important; }
+    body.show-hi-only .bilingual-grid { grid-template-columns: 1fr !important; }
+
     /* Responsive */
     @media (max-width: 992px) {
       .sidebar {
@@ -345,21 +689,27 @@
         <a href="#requirements" class="nav-link">⚙️ 2. System Requirements</a>
         <a href="#credentials" class="nav-link">🔑 3. Demo Credentials</a>
 
-        <div class="nav-section-title">Installation</div>
+        <div class="nav-section-title">Local Development</div>
         <a href="#backend-setup" class="nav-link">🖥️ 4. Backend (Node.js/Mongo)</a>
         <a href="#frontend-setup" class="nav-link">🌐 5. Frontend (React 18)</a>
-        <a href="#mobile-setup" class="nav-link">📱 6. Mobile Apps (Flutter)</a>
-        <a href="#deployment" class="nav-link">🚀 7. VPS & cPanel Hosting</a>
 
-        <div class="nav-section-title">Configuration</div>
-        <a href="#customization" class="nav-link">🎨 8. White-Label & Theme</a>
-        <a href="#integrations-hub" class="nav-link">🔌 8b. Integrations Hub (Non-Dev)</a>
-        <a href="#otp-system" class="nav-link">🔒 9. 4-Digit Handover OTP</a>
-        <a href="#api-reference" class="nav-link">📡 10. REST API Reference</a>
+        <div class="nav-section-title">🧑‍💻 Developer Required Guides</div>
+        <a href="#vps-deployment" class="nav-link">🚀 6. VPS, Nginx & SSL (Module A)</a>
+        <a href="#mobile-publishing" class="nav-link">📱 7. Play Store & App Store (Module B)</a>
+        <a href="#database-backups" class="nav-link">💾 8. Database Auto-Backups (Module F)</a>
+
+        <div class="nav-section-title">⚡ Admin Zero-Code Hub</div>
+        <a href="#customization" class="nav-link">🎨 9. White-Label & Theme Engine</a>
+        <a href="#sms-gateways" class="nav-link">📱 10. SMS & OTP Setup (Module C)</a>
+        <a href="#payment-gateways" class="nav-link">💳 11. Payment Gateways (Module D)</a>
+        <a href="#email-smtp" class="nav-link">✉️ 12. Email & SMTP Setup (Module E)</a>
+        <a href="#cloud-storage" class="nav-link">☁️ 13. Cloud & Media Storage</a>
+        <a href="#otp-system" class="nav-link">🔒 14. 4-Digit Handover OTP</a>
+        <a href="#api-reference" class="nav-link">📡 15. REST API Reference</a>
 
         <div class="nav-section-title">Assistance</div>
-        <a href="#troubleshooting" class="nav-link">🛠️ 11. Troubleshooting & FAQs</a>
-        <a href="#support" class="nav-link">💬 12. Author Support</a>
+        <a href="#troubleshooting" class="nav-link">🛠️ 16. Troubleshooting & FAQs</a>
+        <a href="#support" class="nav-link">💬 17. Author Support</a>
       </nav>
 
       <div class="sidebar-footer">
@@ -372,19 +722,27 @@
     <main class="main-content">
       <div class="top-bar">
         <div>
-          <span class="badge-pill">Official CodeCanyon Documentation</span>
-          <h1 style="font-size: 1.8rem; font-weight: 800; color: var(--navy-dark); margin-top: 6px;">
+          <span class="badge-pill">Official CodeCanyon Documentation & Step-by-Step Guide</span>
+          <h1 style="font-size: 1.85rem; font-weight: 800; color: var(--navy-dark); margin-top: 6px;">
             AuraMarket Setup & Developer Guide
           </h1>
         </div>
-        <div style="display: flex; gap: 10px;">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
           <a href="https://wa.me/918533955333?text=Hi%20Ankit,%20I%20need%20support%20with%20AuraMarket" target="_blank" class="btn btn-whatsapp">
-            💬 Author WhatsApp
+            💬 Author WhatsApp (+91 8533955333)
           </a>
           <a href="tel:8533955333" class="btn btn-primary">
             📞 Call Support: 8533955333
           </a>
         </div>
+      </div>
+
+      <!-- Language Selector Bar -->
+      <div class="lang-filter-bar">
+        <span style="font-size: 0.75rem; font-weight: 800; color: #475569; padding-left: 8px;">🌐 भाषा / Language:</span>
+        <button class="lang-filter-btn active" onclick="setLanguageFilter('all', this)">All (Bilingual / दोनों)</button>
+        <button class="lang-filter-btn" onclick="setLanguageFilter('hi', this)">हिंदी में</button>
+        <button class="lang-filter-btn" onclick="setLanguageFilter('en', this)">English Only</button>
       </div>
 
       <!-- 1. Overview -->
@@ -428,7 +786,7 @@
               <tr>
                 <td><strong>Cross-Platform Mobile Apps</strong></td>
                 <td>Shoppers & Delivery</td>
-                <td>Native Flutter 3.x codebase for Android (Release APK) and iOS with seamless REST API sync and offline caching.</td>
+                <td>Native Flutter 3.x codebase for Android (Release APK & AAB) and iOS with seamless REST API sync and offline caching.</td>
               </tr>
             </tbody>
           </table>
@@ -444,8 +802,8 @@
           <li><strong>Node.js:</strong> Version 18.x or 20.x LTS (Recommended)</li>
           <li><strong>Database:</strong> MongoDB 6.0+ (Local MongoDB Community Server or free MongoDB Atlas Cloud cluster). Note: Backend also includes a zero-dependency In-Memory MongoDB engine for instant showroom demonstrations.</li>
           <li><strong>Package Manager:</strong> npm v9.x+ or yarn v1.22+</li>
-          <li><strong>Flutter SDK (Optional for mobile apps):</strong> Flutter 3.19+ and Dart 3.3+ with Android SDK tools.</li>
-          <li><strong>Web Server (Production):</strong> Any Linux VPS (Ubuntu 22.04 LTS), Hostinger, cPanel, Apache, Nginx, or Docker.</li>
+          <li><strong>Flutter SDK (For mobile apps):</strong> Flutter 3.19+ and Dart 3.3+ with Android SDK tools.</li>
+          <li><strong>Web Server (Production):</strong> Any Linux VPS (Ubuntu 22.04 LTS), Hostinger, AWS, cPanel, Apache, Nginx, or Docker.</li>
         </ul>
       </section>
 
@@ -502,15 +860,15 @@
 
       <!-- 4. Backend Setup -->
       <section id="backend-setup" class="doc-section">
-        <h2 class="section-title">4. Backend Installation & Setup (Node.js + MongoDB)</h2>
-        <p class="section-subtitle">Follow these quick steps to launch the enterprise API gateway:</p>
+        <h2 class="section-title">4. Backend Local Setup (Node.js + MongoDB)</h2>
+        <p class="section-subtitle">Quick steps for local development and testing:</p>
 
         <h3>Step 1: Install Dependencies</h3>
         <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>cd backend
 npm install</code></pre>
 
         <h3>Step 2: Environment Variables (.env)</h3>
-        <p>Create a <code>.env</code> file inside the <code>backend/</code> folder (or copy <code>.env.example</code>):</p>
+        <p>Create a <code>.env</code> file inside <code>backend/</code>:</p>
         <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>PORT=5000
 NODE_ENV=development
 MONGO_URI=mongodb://127.0.0.1:27017/ecommerce_marketplace
@@ -523,77 +881,373 @@ CORS_ORIGIN=*</code></pre>
         </div>
 
         <h3>Step 3: Seed Catalog & Start Server</h3>
-        <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code># Run database seeder (Optional, auto-seeded on first run)
-npm run seed
-
-# Start API Server
-npm start</code></pre>
+        <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>npm start</code></pre>
         <p>Verify that your API is running by opening <code>http://localhost:5000/api/health</code> in your browser.</p>
       </section>
 
       <!-- 5. Frontend Setup -->
       <section id="frontend-setup" class="doc-section">
-        <h2 class="section-title">5. Frontend Installation & Setup (React 18 + Vite)</h2>
+        <h2 class="section-title">5. Frontend Local Setup (React 18 + Vite)</h2>
         <p class="section-subtitle">Launching the modern Tailwind CSS user interface:</p>
 
         <h3>Step 1: Install Dependencies</h3>
         <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>cd frontend
 npm install</code></pre>
 
-        <h3>Step 2: Environment Configuration (.env)</h3>
-        <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>VITE_API_BASE_URL=http://localhost:5000/api</code></pre>
-
-        <h3>Step 3: Run Development Server</h3>
+        <h3>Step 2: Run Development Server</h3>
         <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>npm run dev</code></pre>
         <p>Open <code>http://localhost:3000</code> to view the full showroom!</p>
 
-        <h3>Step 4: Build for Production Deployment</h3>
+        <h3>Step 3: Build for Production Deployment</h3>
         <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>npm run build</code></pre>
         <p>The compiled production build will be generated in <code>frontend/dist/</code>.</p>
       </section>
 
-      <!-- 6. Mobile App Setup -->
-      <section id="mobile-setup" class="doc-section">
-        <h2 class="section-title">6. Flutter Mobile App Compilation (Android & iOS)</h2>
-        <p class="section-subtitle">The native Flutter app codebase is located in <code>mobile_app/</code>:</p>
+      <!-- ========================================================================= -->
+      <!-- MODULE A: ONE-TIME VPS SERVER & DOMAIN DEPLOYMENT (DEVELOPER REQUIRED) -->
+      <!-- ========================================================================= -->
+      <section id="vps-deployment" class="doc-section">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+          <h2 class="section-title" style="margin-bottom: 0;">
+            🚀 6. One-Time VPS Server & Domain Deployment (Module A)
+          </h2>
+          <span class="role-badge-dev">🛠️ DEVELOPER REQUIRED / डेवलपर आवश्यक</span>
+        </div>
 
-        <h3>Step 1: Load Flutter Packages</h3>
-        <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>cd mobile_app
-flutter pub get</code></pre>
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇺🇸 Why a Developer is Needed (English)</div>
+            <p>
+              Setting up a custom domain on a Linux VPS (Hostinger KVM, AWS EC2, DigitalOcean, Ubuntu 22.04 LTS) requires root SSH commands, configuring DNS A-records, installing Node.js 20 & MongoDB, running PM2 process daemon for 24/7 uptime, configuring Nginx as a reverse proxy, and obtaining free SSL certificates via Certbot.
+            </p>
+            <p><strong>Note:</strong> Once completed (takes ~30 mins), the Super Admin never needs a developer again for daily operations!</p>
+          </div>
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 डेवलपर की जरूरत क्यों होगी? (हिंदी)</div>
+            <p>
+              अपने डोमेन (जैसे <code>yourstore.com</code>) को VPS सर्वर (Hostinger, AWS, Ubuntu) से जोड़ने के लिए Linux Terminal (SSH), DNS A-Record, Nginx Reverse Proxy, और Let's Encrypt SSL (HTTPS) कमांड्स की आवश्यकता होती है।
+            </p>
+            <p><strong>ध्यान दें:</strong> यह काम केवल एक बार (लगभग 30 मिनट) का होता है। इसके बाद सुपर एडमिन को कभी डेवलपर की जरूरत नहीं पड़ती!</p>
+          </div>
+        </div>
 
-        <h3>Step 2: Configure API Endpoint</h3>
-        <p>Open <code>mobile_app/lib/services/api_service.dart</code> and set your live API domain:</p>
-        <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>static const String baseUrl = 'https://yourdomain.com/api';</code></pre>
+        <!-- Visual Mockup 1: Terminal VPS Setup & Certbot SSL -->
+        <div class="mockup-window">
+          <div class="mockup-header-bar mockup-header-dark">
+            <div class="mockup-dots">
+              <span class="mockup-dot dot-red"></span>
+              <span class="mockup-dot dot-yellow"></span>
+              <span class="mockup-dot dot-green"></span>
+            </div>
+            <span class="mockup-title">root@auramarket-vps:~ (Ubuntu 22.04 LTS x86_64)</span>
+            <span class="mockup-badge badge-dev">SSH: 195.35.42.118</span>
+          </div>
+          <div class="mockup-terminal-screen">
+            <div class="term-row"><span class="term-prompt">root@auramarket-vps:~#</span> <span class="term-cmd">curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && apt install -y nodejs nginx certbot python3-certbot-nginx</span></div>
+            <div class="term-row"><span class="term-comment"># Node.js v20.18.0 & Nginx 1.18.0 installed successfully</span></div>
+            <div class="term-row"><span class="term-prompt">root@auramarket-vps:~#</span> <span class="term-cmd">pm2 start /var/www/auramarket/backend/src/server.js --name auramarket-api</span></div>
+            <div class="term-row">
+              <table class="term-table">
+                <thead>
+                  <tr><th>App Name</th><th>id</th><th>version</th><th>mode</th><th>pid</th><th>status</th><th>restart</th><th>cpu</th><th>memory</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>auramarket-api</td><td>0</td><td>2.4.0</td><td>fork</td><td>18492</td><td class="status-online">online</td><td>0</td><td>0%</td><td>52.4 MB</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="term-row"><span class="term-prompt">root@auramarket-vps:~#</span> <span class="term-cmd">sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com</span></div>
+            <div class="term-row"><span class="term-cyan">Requesting a certificate for yourdomain.com and www.yourdomain.com</span></div>
+            <div class="term-row"><span class="term-success">✔ Successfully received certificate.</span></div>
+            <div class="term-row"><span class="term-muted">Certificate is saved at: /etc/letsencrypt/live/yourdomain.com/fullchain.pem</span></div>
+            <div class="term-row"><span class="term-success">✔ Congratulations! HTTPS is now active on https://yourdomain.com</span></div>
+          </div>
+        </div>
 
-        <h3>Step 3: Compile Release APK for Android</h3>
-        <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>flutter build apk --release</code></pre>
-        <p>Your production APK is ready at: <code>build/app/outputs/flutter-apk/app-release.apk</code>.</p>
+        <h3>Step-by-Step Instructions (चरणबद्ध गाइड):</h3>
+
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇺🇸 Step 1: DNS A-Record Pointing</div>
+            <p>Log in to your domain registrar (Hostinger, GoDaddy, Namecheap, Cloudflare):</p>
+            <ul>
+              <li>Add <strong>A Record</strong>: Name = <code>@</code>, Value = <code>YOUR_VPS_IP</code>, TTL = <code>300</code></li>
+              <li>Add <strong>A Record</strong>: Name = <code>www</code>, Value = <code>YOUR_VPS_IP</code>, TTL = <code>300</code></li>
+            </ul>
+            <p class="term-comment">Wait 5-10 minutes for DNS propagation.</p>
+          </div>
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 चरण 1: डोमेन में A-Record सेट करें</div>
+            <p>अपने डोमेन प्रोवाइडर (Hostinger / GoDaddy / Cloudflare) में लॉगिन करें:</p>
+            <ul>
+              <li><strong>A Record</strong> जोड़ें: Name = <code>@</code>, Value = <code>अपने VPS का IP</code>, TTL = <code>300</code></li>
+              <li><strong>A Record</strong> जोड़ें: Name = <code>www</code>, Value = <code>अपने VPS का IP</code>, TTL = <code>300</code></li>
+            </ul>
+            <p class="term-comment">DNS को सक्रिय होने में 5 से 10 मिनट लगते हैं।</p>
+          </div>
+        </div>
+
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇺🇸 Step 2: SSH Login & Packages</div>
+            <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>ssh root@YOUR_VPS_IP
+sudo apt update && sudo apt upgrade -y
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs nginx certbot python3-certbot-nginx
+npm install -g pm2</code></pre>
+          </div>
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 चरण 2: SSH लॉगिन व ज़रूरी पैकेज</div>
+            <p>अपने टर्मिनल में ऊपर दिए गए कमांड चलाएँ जिससे Node.js 20, Nginx वेब सर्वर, PM2 और SSL टूल इंस्टॉल हो जाएँ।</p>
+          </div>
+        </div>
+
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇺🇸 Step 3: Nginx Reverse Proxy Config</div>
+            <p>Create configuration file <code>/etc/nginx/sites-available/auramarket</code>:</p>
+            <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>server {
+    server_name yourdomain.com www.yourdomain.com;
+
+    location / {
+        root /var/www/auramarket/frontend/dist;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}</code></pre>
+            <p>Enable & reload: <code>sudo ln -s /etc/nginx/sites-available/auramarket /etc/nginx/sites-enabled/ && sudo nginx -t && sudo systemctl restart nginx</code></p>
+          </div>
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 चरण 3: Nginx रिवर्स प्रॉक्सी सेट करें</div>
+            <p>यह कॉन्फ़िगरेशन फाइल यूज़र के रिक्वेस्ट को पोर्ट 5000 पर चल रहे Node.js बैकएंड और React फ्रंटएंड पर फॉरवर्ड करती है।</p>
+            <p>कॉन्फ़िगरेशन सेव करके Nginx को रीस्टार्ट करें: <code>sudo systemctl restart nginx</code></p>
+          </div>
+        </div>
+
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇺🇸 Step 4: Free Lifetime SSL (HTTPS)</div>
+            <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com</code></pre>
+            <p>Certbot automatically writes SSL certificate directives into Nginx and configures a daily auto-renewal cron job!</p>
+          </div>
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 चरण 4: फ्री SSL सर्टिफिकेट (HTTPS)</div>
+            <p>ऊपर दिया गया Certbot कमांड आपके डोमेन पर 100% फ्री ग्रीन पैडलॉक SSL सर्टिफिकेट चालू कर देता है और यह हर 90 दिन में अपने आप रिन्यू होता रहता है।</p>
+          </div>
+        </div>
       </section>
 
-      <!-- 7. Production Deployment -->
-      <section id="deployment" class="doc-section">
-        <h2 class="section-title">7. Production Deployment (VPS, cPanel, Hostinger)</h2>
-        <p class="section-subtitle">AuraMarket supports multiple deployment topologies:</p>
+      <!-- ========================================================================= -->
+      <!-- MODULE B: GOOGLE PLAY STORE & APPLE APP STORE PUBLISHING (DEVELOPER REQUIRED) -->
+      <!-- ========================================================================= -->
+      <section id="mobile-publishing" class="doc-section">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+          <h2 class="section-title" style="margin-bottom: 0;">
+            📱 7. Google Play Store & Apple App Store Publishing (Module B)
+          </h2>
+          <span class="role-badge-dev">🛠️ DEVELOPER REQUIRED / डेवलपर आवश्यक</span>
+        </div>
 
-        <h3>Option A: Standalone Showroom Demo (Hostinger / cPanel)</h3>
-        <p>If you wish to deploy the interactive CodeCanyon demo showroom to any shared hosting:</p>
-        <ol>
-          <li>Upload the <code>ecommerce-demo/</code> folder directly into your <code>public_html/</code> directory.</li>
-          <li>Access the demo immediately at: <code>https://yourdomain.com/ecommerce-demo/</code>.</li>
-          <li>It runs with zero external path dependencies and zero server-side rendering errors!</li>
-        </ol>
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇺🇸 Why a Developer is Needed (English)</div>
+            <p>
+              Google Play Console requires an Android App Bundle (<code>.aab</code>) signed with a cryptographic Java Keystore (<code>keytool</code>). Apple App Store requires Xcode on a Mac, an Apple Developer Certificate, and an App Store Connect provisioning profile. A developer compiles the Flutter code, creates signing keys, and configures target SDK 34 (Android 14).
+            </p>
+          </div>
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 डेवलपर की जरूरत क्यों होगी? (हिंदी)</div>
+            <p>
+              Google Play Store और Apple App Store पर ऐप डालने के लिए कोड कंपाइल करना पड़ता है। इसके लिए Java <code>keytool</code> से डिजिटल की (Keystore) बनानी होती है और <code>flutter build appbundle --release</code> चलाकर <code>.aab</code> फाइल बनानी होती है। इसके बाद Play Console पर प्राइवेसी पालिसी, डेटा सेफ्टी फॉर्म भरकर ऐप सबमिट करना होता है।
+            </p>
+          </div>
+        </div>
 
-        <h3>Option B: Full VPS Deployment (PM2 + Nginx)</h3>
-        <p>Use PM2 to manage the backend Node.js process:</p>
-        <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>npm install -g pm2
-pm2 start backend/src/server.js --name auramarket-api
-pm2 startup
-pm2 save</code></pre>
+        <!-- Visual Mockup 2: Google Play Console Release Dashboard Card -->
+        <div class="mockup-window">
+          <div class="mockup-header-bar mockup-header-play">
+            <div class="mockup-dots">
+              <span class="mockup-dot dot-red"></span>
+              <span class="mockup-dot dot-yellow"></span>
+              <span class="mockup-dot dot-green"></span>
+            </div>
+            <span class="mockup-title">Google Play Console &gt; AuraMarket Store &gt; Production</span>
+            <span class="mockup-badge badge-play">Track: Production</span>
+          </div>
+          <div style="background: #f8fafc; padding: 22px;">
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin-bottom: 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span style="font-weight: 800; font-size: 0.95rem; color: #1e293b;">App bundles and APKs</span>
+                <span style="background: #ecfdf5; color: #065f46; font-size: 0.72rem; font-weight: 800; padding: 3px 10px; border-radius: 9999px; border: 1px solid #a7f3d0;">
+                  ✔ Verified Target SDK 34 (Android 14)
+                </span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 14px; background: #f1f5f9; padding: 14px; border-radius: 10px; border: 1px dashed #cbd5e1;">
+                <span style="font-size: 2rem;">📦</span>
+                <div style="flex: 1;">
+                  <div style="font-weight: 800; font-size: 0.85rem; color: #0f172a; font-family: monospace;">app-release.aab (Version code 1, v2.4.0)</div>
+                  <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">File size: 32.4 MB • Architectures: arm64-v8a, armeabi-v7a, x86_64 • Signed with Play App Signing</div>
+                </div>
+                <span style="background: #2563eb; color: #ffffff; font-size: 0.75rem; font-weight: 700; padding: 6px 14px; border-radius: 8px;">
+                  Uploaded
+                </span>
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+              <div style="font-size: 0.8rem; color: #475569;">
+                <strong>Rollout:</strong> 100% Production • Status: <span style="color: #059669; font-weight: 700;">Ready for review</span>
+              </div>
+              <button style="background: #1a73e8; color: #ffffff; border: none; padding: 8px 18px; border-radius: 8px; font-weight: 700; font-size: 0.82rem; cursor: pointer;">
+                Send 1 change for review →
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <h3>Compilation & Publishing Commands (कमांड्स व स्टेप्स):</h3>
+
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇺🇸 Step 1: Generate Release Keystore</div>
+            <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>keytool -genkey -v -keystore release-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias auramarket</code></pre>
+            <p>Save password securely. Configure <code>mobile_app/android/key.properties</code>:</p>
+            <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>storePassword=YourKeystorePassword
+keyPassword=YourKeyPassword
+keyAlias=auramarket
+storeFile=/path/to/release-keystore.jks</code></pre>
+          </div>
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 चरण 1: डिजिटल साइनिंग की (Keystore) बनाएँ</div>
+            <p>ऊपर दिया गया Java <code>keytool</code> कमांड चलाएं। यह आपसे एक पासवर्ड मांगेगा। इस पासवर्ड और <code>.jks</code> फाइल को संभालकर रखें क्योंकि ऐप अपडेट करने के लिए हमेशा इसी की जरूरत होगी।</p>
+          </div>
+        </div>
+
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇺🇸 Step 2: Compile App Bundle (.aab)</div>
+            <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>cd mobile_app
+flutter clean
+flutter pub get
+flutter build appbundle --release</code></pre>
+            <p>Output file ready for Google Play: <code>build/app/outputs/bundle/release/app-release.aab</code></p>
+          </div>
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 चरण 2: .aab बंडल फ़ाइल बनाएँ</div>
+            <p><code>flutter build appbundle --release</code> कमांड चलाएं। 2 मिनट में आपकी प्रोडक्शन <code>app-release.aab</code> फ़ाइल बनकर तैयार हो जाएगी। यही फ़ाइल Play Console पर अपलोड करनी होती है।</p>
+          </div>
+        </div>
+
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇺🇸 Step 3: Google Play Console Submission</div>
+            <ol>
+              <li>Log in to <a href="https://play.google.com/console" target="_blank" style="color: #2563eb;">play.google.com/console</a> and create an app.</li>
+              <li>Under <strong>Testing &gt; Production</strong>, click <strong>Create New Release</strong>.</li>
+              <li>Upload <code>app-release.aab</code>. Fill Release Notes.</li>
+              <li>Complete Store Listing: App Title, Description, Screenshots, and Privacy Policy URL.</li>
+              <li>Submit for review. Google typically reviews within 24-72 hours.</li>
+            </ol>
+          </div>
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 चरण 3: Play Console पर सबमिट करें</div>
+            <ol>
+              <li>Play Console में ऐप का नाम, प्राइवेसी पालिसी URL और स्क्रीनशॉट डालें।</li>
+              <li>Production ट्रैक में जाकर <code>app-release.aab</code> फ़ाइल ड्रैग-एंड-ड्रॉप करें।</li>
+              <li>"Send for review" पर क्लिक करें। Google 1 से 3 दिन में ऐप लाइव कर देता है।</li>
+            </ol>
+          </div>
+        </div>
       </section>
 
-      <!-- 8. White-Label Customization -->
+      <!-- ========================================================================= -->
+      <!-- MODULE F: DATABASE AUTO-BACKUPS & MAINTENANCE (DEVELOPER REQUIRED) -->
+      <!-- ========================================================================= -->
+      <section id="database-backups" class="doc-section">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+          <h2 class="section-title" style="margin-bottom: 0;">
+            💾 8. Database Auto-Backups & Server Maintenance (Module F)
+          </h2>
+          <span class="role-badge-dev">🛠️ DEVELOPER REQUIRED / डेवलपर आवश्यक</span>
+        </div>
+
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇺🇸 Why a Developer is Needed (English)</div>
+            <p>
+              To safeguard your store catalog, user orders, and vendor wallets against disk crashes or human errors, a developer configures a daily automated Linux cron job that runs <code>mongodump</code> at 2:00 AM, compresses the database archive, automatically purges backups older than 30 days, and logs results.
+            </p>
+          </div>
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 डेवलपर की जरूरत क्यों होगी? (हिंदी)</div>
+            <p>
+              डेटाबेस का ऑटो-बैकअप हर रोज़ रात 2:00 बजे अपने आप चलना चाहिए ताकि कभी भी सर्वर खराब होने पर आपका 1 सेकंड का भी डेटा न खोए। इसके लिए Linux Crontab में <code>mongodump</code> ऑटोमैटिक बैकअप स्क्रिप्ट लगानी होती है।
+            </p>
+          </div>
+        </div>
+
+        <!-- Visual Mockup 3: Crontab & Auto Backup Terminal -->
+        <div class="mockup-window">
+          <div class="mockup-header-bar mockup-header-dark">
+            <div class="mockup-dots">
+              <span class="mockup-dot dot-red"></span>
+              <span class="mockup-dot dot-yellow"></span>
+              <span class="mockup-dot dot-green"></span>
+            </div>
+            <span class="mockup-title">root@auramarket-vps:~ (crontab & backups)</span>
+            <span class="mockup-badge badge-dev">Automated Cron</span>
+          </div>
+          <div class="mockup-terminal-screen">
+            <div class="term-row"><span class="term-prompt">root@auramarket-vps:~#</span> <span class="term-cmd">crontab -l</span></div>
+            <div class="term-row"><span class="term-comment"># Daily Nightly AuraMarket Database Snapshot at 02:00 AM</span></div>
+            <div class="term-row"><span class="term-highlight">0 2 * * * /usr/local/bin/backup-auramarket.sh &gt;&gt; /var/log/auramarket-backup.log 2&gt;&amp;1</span></div>
+            <div class="term-row"><span class="term-prompt">root@auramarket-vps:~#</span> <span class="term-cmd">ls -lh /var/backups/mongodb/</span></div>
+            <div class="term-row"><span class="term-muted">-rw-r--r-- 1 root root  42M Oct 13 02:00 auramarket_2026-10-13_020000.gz</span></div>
+            <div class="term-row"><span class="term-muted">-rw-r--r-- 1 root root  41M Oct 12 02:00 auramarket_2026-10-12_020000.gz</span></div>
+            <div class="term-row"><span class="term-muted">-rw-r--r-- 1 root root  39M Oct 11 02:00 auramarket_2026-10-11_020000.gz</span></div>
+            <div class="term-row"><span class="term-prompt">root@auramarket-vps:~#</span> <span class="term-cmd">tail -n 2 /var/log/auramarket-backup.log</span></div>
+            <div class="term-row"><span class="term-success">[2026-10-13 02:00:14] SUCCESS: MongoDB backup completed (42 MB). 0 errors.</span></div>
+          </div>
+        </div>
+
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇺🇸 Automated Backup Shell Script</div>
+            <p>Save to <code>/usr/local/bin/backup-auramarket.sh</code>:</p>
+            <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>#!/bin/bash
+BACKUP_DIR="/var/backups/mongodb"
+DATE=$(date +%Y-%m-%d_%H%M%S)
+mkdir -p $BACKUP_DIR
+mongodump --uri="mongodb://127.0.0.1:27017/auramarket" --archive="$BACKUP_DIR/auramarket_$DATE.gz" --gzip
+# Auto-delete archives older than 30 days
+find $BACKUP_DIR -type f -name "auramarket_*.gz" -mtime +30 -exec rm {} +
+echo "[$(date)] SUCCESS: MongoDB backup completed: auramarket_$DATE.gz"</code></pre>
+            <p>Make executable: <code>sudo chmod +x /usr/local/bin/backup-auramarket.sh</code></p>
+          </div>
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 डेटाबेस रीस्टोर कैसे करें (10 Seconds Restore)</div>
+            <p>अगर कभी सर्वर बदलना पड़े या पुराना डेटा वापस लाना हो, तो बस यह 1 कमांड चलाएं:</p>
+            <pre><button class="copy-btn" onclick="copySnippet(this)">Copy</button><code>mongorestore --uri="mongodb://127.0.0.1:27017/auramarket" \
+  --archive="/var/backups/mongodb/auramarket_LATEST.gz" \
+  --gzip --drop</code></pre>
+            <p>पूरा डेटाबेस 10 सेकंड में हूबहू रीस्टोर हो जाता है!</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================================= -->
+      <!-- MODULE 9: WHITE-LABEL CUSTOMIZATION -->
+      <!-- ========================================================================= -->
       <section id="customization" class="doc-section">
-        <h2 class="section-title">8. White-Label Customization & Theme Engine</h2>
+        <h2 class="section-title">9. White-Label Customization & Theme Engine</h2>
         <p class="section-subtitle">Customize the platform for your company or your clients without touching complex code:</p>
 
         <h3>Method 1: From the Live Super Admin Panel (Recommended)</h3>
@@ -626,168 +1280,330 @@ pm2 save</code></pre>
 });</code></pre>
       </section>
 
-      <!-- 8b. Master Integrations & API Hub (Non-Developer Plug-and-Play Guide) -->
-      <section id="integrations-hub" class="doc-section">
-        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; padding: 24px; border-radius: 14px; margin-bottom: 24px;">
-          <span style="background: #f59e0b; color: #0f172a; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 9999px; text-transform: uppercase;">Non-Developer Zero-Code Guide</span>
-          <h2 style="color: #ffffff; font-size: 1.6rem; font-weight: 800; margin: 10px 0 6px;">8b. Master Integrations & API Hub (A to Z Admin Panel Configuration)</h2>
-          <p style="color: #cbd5e1; font-size: 0.92rem; margin: 0;">
-            <strong>बधाई हो!</strong> AuraMarket को खास तौर पर इस तरह बनाया गया है कि अगर आप या आपका क्लाइंट कोई कोडिंग नहीं जानता, तो भी आप बिना किसी डेवलपर की मदद के <strong>SMS Gateway, Payment Gateway, SMTP Email, और Cloud Storage</strong> सिर्फ 2 मिनट में Super Admin Panel से चालू कर सकते हैं।
-          </p>
+      <!-- ========================================================================= -->
+      <!-- MODULE C: SMS GATEWAYS & OTP (NO DEVELOPER NEEDED) -->
+      <!-- ========================================================================= -->
+      <section id="sms-gateways" class="doc-section">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+          <h2 class="section-title" style="margin-bottom: 0;">
+            📱 10. SMS Gateways & 4-Digit Handover OTP Setup (Module C)
+          </h2>
+          <span class="role-badge-admin">⚡ NO DEVELOPER NEEDED / बिना डेवलपर के</span>
         </div>
 
-        <div class="callout callout-success">
-          <strong>⚡ 100% Plug-and-Play Guarantee:</strong> You never have to touch backend JavaScript, Node.js files, or terminal environments to configure external services. Simply paste your API credentials into the <strong>"🔌 Integrations & API Hub"</strong> tab in the Super Admin panel, click <strong>Save</strong>, and your live storefront & checkout will adapt dynamically!
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇺🇸 100% Zero-Code Setup (English)</div>
+            <p>
+              Customer order confirmations and 4-digit secret delivery handover OTPs are dispatched via SMS. The Super Admin connects Fast2SMS, MSG91, or Twilio directly from the Admin Panel without touching a single line of backend code.
+            </p>
+          </div>
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 बिना कोडिंग के 2 मिनट में चालू करें (हिंदी)</div>
+            <p>
+              कस्टमर का ऑर्डर बुकिंग SMS और 4-अंकों का गुप्त डिलीवरी OTP एसएमएस गेटवे से जाता है। सुपर एडमिन इसे <strong>Super Admin Dashboard &gt; 🔌 Integrations &amp; API Hub &gt; 📱 SMS Gateways</strong> में जाकर सिर्फ API Key पेस्ट करके चालू कर सकता है।
+            </p>
+          </div>
         </div>
 
-        <!-- 1. Payment Gateways Guide -->
-        <h3 style="color: #0f2444; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px;">💳 1. Payment Gateways Setup (पेमेंट गेटवे कैसे शुरू करें)</h3>
-        <p>In Super Admin Dashboard &gt; <strong>🔌 Integrations & API Hub</strong> &gt; <strong>💳 Payment Gateways</strong>:</p>
-
-        <div class="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Gateway</th>
-                <th>Where to Get API Keys? (कहाँ से कीज़ मिलेंगी?)</th>
-                <th>How to Configure in Super Admin</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>Cash on Delivery (COD)</strong></td>
-                <td>Zero setup needed! Pre-configured by default.</td>
-                <td>Toggle the switch <strong>ON/OFF</strong>. You can customize the checkout label (e.g. <em>"Cash on Delivery"</em>).</td>
-              </tr>
-              <tr>
-                <td><strong>Direct UPI / Dynamic QR</strong></td>
-                <td>Your existing UPI ID (e.g. <code>8533955333@paytm</code>, <code>yourstore@icici</code>, Google Pay, PhonePe).</td>
-                <td>Toggle <strong>ON</strong>, paste your <strong>Merchant UPI ID</strong> and enter your <strong>Store Name</strong>. Customers can scan &amp; pay with 0% gateway commission!</td>
-              </tr>
-              <tr>
-                <td><strong>Razorpay (India's #1 Gateway)</strong></td>
-                <td>
-                  1. Visit <a href="https://dashboard.razorpay.com" target="_blank" style="color: #2563eb; font-weight: bold;">dashboard.razorpay.com</a> and sign in.<br>
-                  2. Navigate to <strong>Settings &gt; API Keys</strong>.<br>
-                  3. Click <strong>Generate Key</strong>.<br>
-                  4. Copy <strong>Key ID</strong> and <strong>Key Secret</strong>.
-                </td>
-                <td>
-                  1. Paste <code>Key ID</code> into the Razorpay Key ID field.<br>
-                  2. Paste <code>Key Secret</code> into the Key Secret field.<br>
-                  3. Toggle Razorpay <strong>ON</strong> and click Save. Checkout activates Razorpay immediately!
-                </td>
-              </tr>
-              <tr>
-                <td><strong>Stripe (Global International)</strong></td>
-                <td>
-                  1. Visit <a href="https://dashboard.stripe.com/apikeys" target="_blank" style="color: #2563eb; font-weight: bold;">dashboard.stripe.com/apikeys</a>.<br>
-                  2. Copy your <strong>Publishable key</strong> (starts with <code>pk_live_...</code> or <code>pk_test_...</code>).<br>
-                  3. Reveal and copy your <strong>Secret key</strong> (starts with <code>sk_live_...</code>).
-                </td>
-                <td>
-                  1. Paste <code>Publishable Key</code> and <code>Secret Key</code> into Super Admin.<br>
-                  2. Toggle Stripe <strong>ON</strong> and click Save.<br>
-                  3. International customers can now pay via Credit/Debit cards &amp; Apple Pay!
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <!-- Visual Mockup 4: Super Admin SMS Gateways Card -->
+        <div class="mockup-window">
+          <div class="mockup-header-bar mockup-header-light">
+            <div class="mockup-dots">
+              <span class="mockup-dot dot-red"></span>
+              <span class="mockup-dot dot-yellow"></span>
+              <span class="mockup-dot dot-green"></span>
+            </div>
+            <span class="mockup-title">Super Admin Panel &gt; Integrations & API Hub &gt; SMS Gateways</span>
+            <span class="mockup-badge badge-admin">Zero-Code GUI</span>
+          </div>
+          <div class="mockup-admin-screen">
+            <div class="ui-annotated-card">
+              <div class="ui-annotated-card-header">
+                <span class="ui-annotated-card-title">📱 SMS Provider Configuration</span>
+                <div class="ui-switch"><div class="ui-switch-circle"></div></div>
+              </div>
+              <div class="ui-input-group">
+                <label class="ui-input-label">Select Active SMS Gateway Provider</label>
+                <div class="ui-input-field" style="font-weight: 700; color: #0f172a;">Fast2SMS (Quick OTP India - Recommended)</div>
+              </div>
+              <div class="ui-input-group">
+                <label class="ui-input-label">Fast2SMS API Authorization Key</label>
+                <input class="ui-input-field" type="password" value="VzY294aKLOP0981249301ksl929310" readonly>
+              </div>
+              <div class="ui-action-row">
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <input class="ui-input-field" style="width: 170px;" value="+91 8533955333" readonly>
+                  <span class="ui-btn-action">⚡ Send Test SMS</span>
+                </div>
+                <div class="ui-toast-msg">✔ Test SMS delivered successfully via Fast2SMS gateway!</div>
+              </div>
+            </div>
+          </div>
         </div>
-
-        <p><strong>🎯 Dynamic Checkout Reactive Engine:</strong> If you turn OFF Razorpay and Stripe, the customer checkout screen instantly hides those options and shows only Cash on Delivery and Direct UPI. If you turn all gateways ON, customers can choose any method freely!</p>
-
-        <!-- 2. SMS Gateways Guide -->
-        <h3 style="color: #0f2444; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; margin-top: 32px;">📱 2. SMS Gateway & OTP Setup (एसएमएस और डिलीवरी ओटीपी गेटवे)</h3>
-        <p>Customer order bookings and 4-digit secret delivery handover OTPs are dispatched automatically via SMS. Select your preferred provider in Super Admin:</p>
 
         <div class="table-wrapper">
           <table>
             <thead>
               <tr>
                 <th>Provider</th>
-                <th>Credentials Required</th>
-                <th>Where to Get &amp; Setup Steps</th>
+                <th>Where to Get API Keys? (कहाँ से कीज मिलेंगी?)</th>
+                <th>How to Configure in Super Admin</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td><strong>In-App Mock Tester (Free)</strong></td>
-                <td>None (Zero setup)</td>
-                <td>Default showroom mode. Orders and OTPs log cleanly to the system without requiring any paid SMS balance or DLT approval!</td>
+                <td>Zero setup needed! Pre-configured by default.</td>
+                <td>All OTPs log directly to order screen and console. Zero cost, no SMS balance needed.</td>
               </tr>
               <tr>
                 <td><strong>Fast2SMS (Quick OTP India)</strong></td>
-                <td>API Authorization Key</td>
                 <td>
-                  1. Create an account at <a href="https://www.fast2sms.com" target="_blank" style="color: #2563eb; font-weight: bold;">fast2sms.com</a>.<br>
-                  2. Go to <strong>Dev API</strong> in the left sidebar.<br>
-                  3. Copy your <strong>API Authorization Key</strong>.<br>
-                  4. In Super Admin, set Active Provider to <strong>Fast2SMS</strong>, paste the API key, and test via the <strong>Send Test SMS</strong> button!
+                  1. Visit <a href="https://www.fast2sms.com" target="_blank" style="color: #2563eb; font-weight: bold;">fast2sms.com</a> and sign up.<br>
+                  2. Click <strong>Dev API</strong> in left navigation.<br>
+                  3. Copy your <strong>API Authorization Key</strong>.
+                </td>
+                <td>
+                  1. Select Fast2SMS in dropdown.<br>
+                  2. Paste API Key.<br>
+                  3. Enter phone number and click <strong>Send Test SMS</strong>!
                 </td>
               </tr>
               <tr>
                 <td><strong>MSG91 Enterprise (DLT)</strong></td>
-                <td>AuthKey &amp; DLT Sender ID</td>
-                <td>
-                  1. Sign up at <a href="https://msg91.com" target="_blank" style="color: #2563eb; font-weight: bold;">msg91.com</a>.<br>
-                  2. Create an API Key in MSG91 dashboard.<br>
-                  3. Paste AuthKey and your approved 6-character DLT Header (e.g. <code>AURAMK</code>) into Super Admin.
-                </td>
+                <td>Sign up at <a href="https://msg91.com" target="_blank" style="color: #2563eb; font-weight: bold;">msg91.com</a>. Create AuthKey.</td>
+                <td>Paste AuthKey and enter your approved 6-character DLT Header (e.g. <code>AURAMK</code>).</td>
               </tr>
               <tr>
                 <td><strong>Twilio (Worldwide)</strong></td>
-                <td>Account SID, Auth Token &amp; Phone</td>
-                <td>
-                  1. Sign up at <a href="https://www.twilio.com/console" target="_blank" style="color: #2563eb; font-weight: bold;">twilio.com/console</a>.<br>
-                  2. Copy <strong>Account SID</strong> and <strong>Auth Token</strong> from Console Home.<br>
-                  3. Paste into Super Admin, enter your Twilio sender number, and test instantly!
-                </td>
+                <td>Visit <a href="https://www.twilio.com/console" target="_blank" style="color: #2563eb; font-weight: bold;">twilio.com/console</a>. Copy Account SID & Auth Token.</td>
+                <td>Paste SID, Token, and sender phone number. Save.</td>
               </tr>
             </tbody>
           </table>
         </div>
+      </section>
 
-        <!-- 3. Email & SMTP Guide -->
-        <h3 style="color: #0f2444; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; margin-top: 32px;">✉️ 3. Email / SMTP Notifications Setup (ईमेल और बिलिंग रसीद)</h3>
-        <p>Send branded HTML invoices, delivery OTP confirmations, and vendor alerts using standard email protocols:</p>
+      <!-- ========================================================================= -->
+      <!-- MODULE D: PAYMENT GATEWAYS SETUP (NO DEVELOPER NEEDED) -->
+      <!-- ========================================================================= -->
+      <section id="payment-gateways" class="doc-section">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+          <h2 class="section-title" style="margin-bottom: 0;">
+            💳 11. Payment Gateways Setup (Module D)
+          </h2>
+          <span class="role-badge-admin">⚡ NO DEVELOPER NEEDED / बिना डेवलपर के</span>
+        </div>
 
-        <h4>Option A: Hostinger / cPanel / Webmail (Most Common)</h4>
-        <ul>
-          <li><strong>SMTP Host:</strong> <code>smtp.hostinger.com</code> (or <code>mail.yourdomain.com</code> for cPanel)</li>
-          <li><strong>Port:</strong> <code>587</code> (or <code>465</code> for SSL)</li>
-          <li><strong>Username:</strong> Your professional business email (e.g. <code>orders@yourdomain.com</code>)</li>
-          <li><strong>Password:</strong> Your email inbox password</li>
-          <li><strong>From Email:</strong> <code>orders@yourdomain.com</code> | <strong>From Name:</strong> <code>Your Store Name</code></li>
-        </ul>
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇺🇸 Dynamic Checkout Engine (English)</div>
+            <p>
+              Toggling payment methods in the Super Admin immediately updates the customer checkout screen. Enable Razorpay for India, Stripe for international cards, Direct UPI for 0% commission instant QR scan, or Cash on Delivery (COD).
+            </p>
+          </div>
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 लाइव पेमेंट गेटवे टॉगल (हिंदी)</div>
+            <p>
+              सुपर एडमिन पैनल से आप जिस भी पेमेंट गेटवे का टॉगल <strong>ON</strong> करेंगे, वह कस्टमर को शॉपिंग कार्ट चेकआउट पर तुरंत दिखने लगेगा। Direct UPI QR से आप बिना किसी गेटवे चार्ज के 0% फीस पर सीधे अपने बैंक में पैसे पा सकते हैं!
+            </p>
+          </div>
+        </div>
 
-        <h4>Option B: Gmail Account (Free with App Password)</h4>
-        <ol>
-          <li>Open your Google Account Security settings (<a href="https://myaccount.google.com/security" target="_blank" style="color: #2563eb;">myaccount.google.com/security</a>).</li>
-          <li>Enable <strong>2-Step Verification</strong> if not already enabled.</li>
-          <li>Search for <strong>"App Passwords"</strong>. Generate a new password named <em>"AuraMarket Store"</em>.</li>
-          <li>Google will provide a 16-character code (e.g. <code>abcd efgh ijkl mnop</code>).</li>
-          <li>In Super Admin: Host = <code>smtp.gmail.com</code>, Port = <code>587</code>, Username = your Gmail address, Password = the 16-character app password.</li>
-          <li>Click <strong>Send Test Email</strong> in Super Admin to verify connection!</li>
-        </ol>
+        <!-- Visual Mockup 5: Super Admin Payment Gateways Card -->
+        <div class="mockup-window">
+          <div class="mockup-header-bar mockup-header-light">
+            <div class="mockup-dots">
+              <span class="mockup-dot dot-red"></span>
+              <span class="mockup-dot dot-yellow"></span>
+              <span class="mockup-dot dot-green"></span>
+            </div>
+            <span class="mockup-title">Super Admin Panel &gt; Integrations & API Hub &gt; Payment Gateways</span>
+            <span class="mockup-badge badge-admin">Zero-Code GUI</span>
+          </div>
+          <div class="mockup-admin-screen">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+              
+              <!-- Razorpay Card -->
+              <div class="ui-annotated-card">
+                <div class="ui-annotated-card-header">
+                  <span class="ui-annotated-card-title">💳 Razorpay (India #1)</span>
+                  <div class="ui-switch"><div class="ui-switch-circle"></div></div>
+                </div>
+                <div class="ui-input-group">
+                  <label class="ui-input-label">Key ID</label>
+                  <input class="ui-input-field" value="rzp_live_9a8B7c6D5e4F3g" readonly>
+                </div>
+                <div class="ui-input-group">
+                  <label class="ui-input-label">Key Secret</label>
+                  <input class="ui-input-field" type="password" value="••••••••••••••••••••••••" readonly>
+                </div>
+                <div style="margin-top: 10px; font-size: 0.72rem; color: #059669; font-weight: 700;">
+                  ✔ Live at Checkout (UPI, Cards, Netbanking)
+                </div>
+              </div>
 
-        <!-- 4. Media Storage Guide -->
-        <h3 style="color: #0f2444; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; margin-top: 32px;">☁️ 4. Cloud Storage & Media Manager (प्रोडक्ट फोटो और मीडिया)</h3>
-        <p>AuraMarket supports 3 storage backends depending on your server infrastructure:</p>
-        <ul>
-          <li><strong>Local Server Storage (Recommended Default):</strong> Free and pre-configured. Product images upload directly to your web server disk in <code>/uploads</code>. Zero extra costs.</li>
-          <li><strong>Cloudinary CDN:</strong> Paste your Cloud Name, API Key, and API Secret from <a href="https://cloudinary.com" target="_blank" style="color: #2563eb;">cloudinary.com</a> for global CDN image acceleration and automatic image resizing.</li>
-          <li><strong>Amazon AWS S3:</strong> Paste your S3 Bucket Name, AWS Region (e.g. <code>ap-south-1</code>), AWS Access Key ID, and AWS Secret Key.</li>
-        </ul>
+              <!-- Direct UPI Card -->
+              <div class="ui-annotated-card">
+                <div class="ui-annotated-card-header">
+                  <span class="ui-annotated-card-title">📱 Direct UPI / Dynamic QR (0% Fee)</span>
+                  <div class="ui-switch"><div class="ui-switch-circle"></div></div>
+                </div>
+                <div class="ui-input-group">
+                  <label class="ui-input-label">Merchant UPI ID</label>
+                  <input class="ui-input-field" value="8533955333@paytm" readonly>
+                </div>
+                <div class="ui-input-group">
+                  <label class="ui-input-label">Payee Business Name</label>
+                  <input class="ui-input-field" value="AuraMarket Store" readonly>
+                </div>
+                <div style="margin-top: 10px; font-size: 0.72rem; color: #059669; font-weight: 700;">
+                  ✔ Direct Bank Settlement (Zero Commission)
+                </div>
+              </div>
 
-        <div class="callout callout-info" style="margin-top: 24px;">
-          <strong>📞 Live WhatsApp Author Help:</strong> If you ever get stuck or need help obtaining your live credentials, contact lead developer <strong>Ankit Chaudhary</strong> directly on WhatsApp at <strong>+91 8533955333</strong>. We will configure your payment and SMS gateways for you at zero extra charge!
+            </div>
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Gateway</th>
+                <th>Setup Steps (कहाँ से कीज मिलेंगी)</th>
+                <th>Fee</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Cash on Delivery (COD)</strong></td>
+                <td>Zero setup! Just toggle ON/OFF in Super Admin.</td>
+                <td>0%</td>
+              </tr>
+              <tr>
+                <td><strong>Direct UPI QR</strong></td>
+                <td>Toggle ON, enter your existing UPI ID (e.g. <code>8533955333@paytm</code>) and Merchant Name. Shoppers scan dynamic QR with PhonePe/GPay!</td>
+                <td>0% (Instant Bank Credit)</td>
+              </tr>
+              <tr>
+                <td><strong>Razorpay</strong></td>
+                <td>Log into <a href="https://dashboard.razorpay.com" target="_blank" style="color: #2563eb;">dashboard.razorpay.com</a> &gt; Settings &gt; API Keys &gt; Generate Key. Paste Key ID & Secret into Admin panel.</td>
+                <td>Standard ~2%</td>
+              </tr>
+              <tr>
+                <td><strong>Stripe</strong></td>
+                <td>Log into <a href="https://dashboard.stripe.com/apikeys" target="_blank" style="color: #2563eb;">dashboard.stripe.com/apikeys</a>. Copy Publishable Key & Secret Key. Paste into Admin panel.</td>
+                <td>International Cards</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
-      <!-- 9. 4-Digit Handover OTP -->
+      <!-- ========================================================================= -->
+      <!-- MODULE E: EMAIL & SMTP SETUP (NO DEVELOPER NEEDED) -->
+      <!-- ========================================================================= -->
+      <section id="email-smtp" class="doc-section">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+          <h2 class="section-title" style="margin-bottom: 0;">
+            ✉️ 12. Email & SMTP Notifications Setup (Module E)
+          </h2>
+          <span class="role-badge-admin">⚡ NO DEVELOPER NEEDED / बिना डेवलपर के</span>
+        </div>
+
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇺🇸 Automatic Order Invoices (English)</div>
+            <p>
+              Send branded HTML customer invoices, order confirmations, vendor wallet alerts, and courier pickup notices using any standard email provider (Gmail or Hostinger Webmail).
+            </p>
+          </div>
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 ऑटोमैटिक ईमेल बिलिंग व रसीद (हिंदी)</div>
+            <p>
+              कस्टमर को आर्डर होते ही ब्रांडेड ईमेल इनवॉइस और रसीद भेजने के लिए आप अपनी बिज़नेस ईमेल (Hostinger Webmail) या फ़्री Gmail अकाउंट सिर्फ 1 मिनट में जोड़ सकते हैं।
+            </p>
+          </div>
+        </div>
+
+        <!-- Visual Mockup 6: Super Admin SMTP Card -->
+        <div class="mockup-window">
+          <div class="mockup-header-bar mockup-header-light">
+            <div class="mockup-dots">
+              <span class="mockup-dot dot-red"></span>
+              <span class="mockup-dot dot-yellow"></span>
+              <span class="mockup-dot dot-green"></span>
+            </div>
+            <span class="mockup-title">Super Admin Panel &gt; Integrations & API Hub &gt; Email & SMTP</span>
+            <span class="mockup-badge badge-admin">Zero-Code GUI</span>
+          </div>
+          <div class="mockup-admin-screen">
+            <div class="ui-annotated-card">
+              <div class="ui-annotated-card-header">
+                <span class="ui-annotated-card-title">✉️ SMTP Mail Server Configuration</span>
+                <div class="ui-switch"><div class="ui-switch-circle"></div></div>
+              </div>
+              <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px;">
+                <div class="ui-input-group">
+                  <label class="ui-input-label">SMTP Host</label>
+                  <input class="ui-input-field" value="smtp.gmail.com (or smtp.hostinger.com)" readonly>
+                </div>
+                <div class="ui-input-group">
+                  <label class="ui-input-label">Port</label>
+                  <input class="ui-input-field" value="587 (TLS)" readonly>
+                </div>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="ui-input-group">
+                  <label class="ui-input-label">Username / Email</label>
+                  <input class="ui-input-field" value="orders@auramarket.com" readonly>
+                </div>
+                <div class="ui-input-group">
+                  <label class="ui-input-label">Password (16-char Google App Password)</label>
+                  <input class="ui-input-field" type="password" value="••••••••••••••••" readonly>
+                </div>
+              </div>
+              <div class="ui-action-row">
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <input class="ui-input-field" style="width: 220px;" value="admin@auramarket.com" readonly>
+                  <span class="ui-btn-action">⚡ Send Test Email</span>
+                </div>
+                <div class="ui-toast-msg">✔ Connected to SMTP server! Test email dispatched successfully.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <h3>Gmail Setup Instructions (Google App Password):</h3>
+        <ol>
+          <li>Open your Google Account Security settings (<a href="https://myaccount.google.com/security" target="_blank" style="color: #2563eb;">myaccount.google.com/security</a>).</li>
+          <li>Turn on <strong>2-Step Verification</strong>.</li>
+          <li>Search for <strong>"App Passwords"</strong>. Enter App Name: <em>AuraMarket</em> and click Generate.</li>
+          <li>Google displays a 16-character code (e.g., <code>abcd efgh ijkl mnop</code>).</li>
+          <li>In Super Admin: Host = <code>smtp.gmail.com</code>, Port = <code>587</code>, Username = your Gmail, Password = 16-character App Password.</li>
+          <li>Click <strong>Send Test Email</strong> to verify!</li>
+        </ol>
+      </section>
+
+      <!-- ========================================================================= -->
+      <!-- MODULE 13: CLOUD STORAGE -->
+      <!-- ========================================================================= -->
+      <section id="cloud-storage" class="doc-section">
+        <h2 class="section-title">13. Cloud & Media Storage (Module G)</h2>
+        <p class="section-subtitle">Store product images, vendor banners, and packaging slips:</p>
+
+        <ul>
+          <li><strong>Local Server Disk (Default Free):</strong> Images store directly in <code>/uploads</code> on your server disk. Zero extra fees.</li>
+          <li><strong>Cloudinary CDN:</strong> Global CDN image optimization with automatic WebP conversion and responsive resizing. Paste Cloud Name, API Key, and Secret in Super Admin.</li>
+          <li><strong>Amazon AWS S3:</strong> Enterprise high-scale storage bucket. Paste Bucket Name, Region (e.g. <code>ap-south-1</code>), AWS Access Key ID, and Secret Key.</li>
+        </ul>
+      </section>
+
+      <!-- 14. 4-Digit Handover OTP -->
       <section id="otp-system" class="doc-section">
-        <h2 class="section-title">9. 4-Digit Secret Delivery OTP System</h2>
+        <h2 class="section-title">14. 4-Digit Secret Delivery OTP System</h2>
         <p class="section-subtitle">How AuraMarket prevents delivery fraud and ensures customer satisfaction:</p>
 
         <ol>
@@ -800,9 +1616,9 @@ pm2 save</code></pre>
         </ol>
       </section>
 
-      <!-- 10. API Reference -->
+      <!-- 15. API Reference -->
       <section id="api-reference" class="doc-section">
-        <h2 class="section-title">10. REST API Reference</h2>
+        <h2 class="section-title">15. REST API Reference</h2>
         <p class="section-subtitle">Clean, RESTful endpoints with JWT bearer authentication:</p>
 
         <div class="table-wrapper">
@@ -877,6 +1693,30 @@ pm2 save</code></pre>
                 <td>Gross sales, platform commission, ledger</td>
               </tr>
               <tr>
+                <td><code>GET</code></td>
+                <td><code>/api/admin/integrations</code></td>
+                <td>SuperAdmin</td>
+                <td>Read external payment, SMS, SMTP configuration</td>
+              </tr>
+              <tr>
+                <td><code>PUT</code></td>
+                <td><code>/api/admin/integrations</code></td>
+                <td>SuperAdmin</td>
+                <td>Update payment, SMS, SMTP configuration live</td>
+              </tr>
+              <tr>
+                <td><code>POST</code></td>
+                <td><code>/api/admin/integrations/test-sms</code></td>
+                <td>SuperAdmin</td>
+                <td>Dispatch simulated live test SMS</td>
+              </tr>
+              <tr>
+                <td><code>POST</code></td>
+                <td><code>/api/admin/integrations/test-email</code></td>
+                <td>SuperAdmin</td>
+                <td>Dispatch simulated live test Email</td>
+              </tr>
+              <tr>
                 <td><code>POST</code></td>
                 <td><code>/api/admin/wipe-demo</code></td>
                 <td>SuperAdmin</td>
@@ -899,24 +1739,24 @@ pm2 save</code></pre>
         </div>
       </section>
 
-      <!-- 11. Troubleshooting -->
+      <!-- 16. Troubleshooting -->
       <section id="troubleshooting" class="doc-section">
-        <h2 class="section-title">11. Troubleshooting & Frequently Asked Questions</h2>
+        <h2 class="section-title">16. Troubleshooting & Frequently Asked Questions</h2>
         <p class="section-subtitle">Common questions and step-by-step diagnostic fixes:</p>
 
         <h3>Q: MongoDB connection error on backend startup?</h3>
         <p><strong>Fix:</strong> Ensure your local MongoDB service is running (<code>net start MongoDB</code> on Windows, or <code>sudo systemctl start mongod</code> on Linux). Alternatively, provide your MongoDB Atlas Cloud connection string in <code>backend/.env</code>. The server will also automatically initiate in-memory mode if external MongoDB is unreachable.</p>
 
         <h3>Q: How do I change the currency symbol?</h3>
-        <p><strong>Fix:</strong> The default currency is formatted in Indian Rupee (₹) or USD ($). You can easily update the currency formatter in <code>frontend/src/utils/formatters.js</code> or <code>CustomerStorefront.jsx</code>.</p>
+        <p><strong>Fix:</strong> The default currency is formatted in Indian Rupee (₹) or USD ($). You can update the currency formatter in <code>frontend/src/utils/formatters.js</code> or <code>CustomerStorefront.jsx</code>.</p>
 
         <h3>Q: Can I run this with Docker?</h3>
         <p><strong>Fix:</strong> Yes! A <code>docker-compose.yml</code> file is provided in the root directory to spin up the entire stack with a single <code>docker compose up</code> command.</p>
       </section>
 
-      <!-- 12. Support -->
+      <!-- 17. Support -->
       <section id="support" class="doc-section">
-        <h2 class="section-title">12. Author Support & Commercial Inquiries</h2>
+        <h2 class="section-title">17. Author Support & Commercial Inquiries</h2>
         <p class="section-subtitle">Need help with installation, customization, or extra features?</p>
 
         <div class="callout callout-warning">
@@ -940,6 +1780,23 @@ pm2 save</code></pre>
       btn.innerText = 'Copied!';
       setTimeout(() => { btn.innerText = 'Copy'; }, 2000);
     }
+
+    function setLanguageFilter(lang, btn) {
+      document.querySelectorAll('.lang-filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.body.classList.remove('show-en-only', 'show-hi-only');
+      if (lang === 'en') {
+        document.body.classList.add('show-en-only');
+      } else if (lang === 'hi') {
+        document.body.classList.add('show-hi-only');
+      }
+    }
   </script>
 </body>
 </html>
+"""
+
+with open(doc_path, "w", encoding="utf-8") as f:
+    f.write(html_content)
+
+print(f"Updated {doc_path} successfully ({os.path.getsize(doc_path)} bytes)!")

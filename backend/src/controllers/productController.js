@@ -74,10 +74,19 @@ exports.getProducts = async (req, res, next) => {
       query.isFeatured = true;
     }
 
+    // Point 8: Smart Product Sorting (Popularity, Price Low-High, Price High-Low, Newest, Rating)
     let sortOption = { createdAt: -1 };
-    if (sort === 'price_asc') sortOption = { sellingPrice: 1 };
-    if (sort === 'price_desc') sortOption = { sellingPrice: -1 };
-    if (sort === 'rating') sortOption = { ratingsAverage: -1 };
+    if (sort === 'popularity') {
+      sortOption = { ratingsQuantity: -1, ratingsAverage: -1 };
+    } else if (sort === 'price_asc' || sort === 'price_low_high') {
+      sortOption = { sellingPrice: 1 };
+    } else if (sort === 'price_desc' || sort === 'price_high_low') {
+      sortOption = { sellingPrice: -1 };
+    } else if (sort === 'rating' || sort === 'rating_high_low') {
+      sortOption = { ratingsAverage: -1, ratingsQuantity: -1 };
+    } else if (sort === 'newest') {
+      sortOption = { createdAt: -1 };
+    }
 
     const skip = (Number(page) - 1) * Number(limit);
 

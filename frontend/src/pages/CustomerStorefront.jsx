@@ -27,6 +27,7 @@ import {
   Filter,
   Flame,
   BadgePercent,
+  ArrowUpDown,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
@@ -45,6 +46,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [minRating, setMinRating] = useState(0);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [onSaleOnly, setOnSaleOnly] = useState(false);
+  const [sortBy, setSortBy] = useState('popularity');
   const [isOpenCategoryDrawer, setIsOpenCategoryDrawer] = useState(false);
   const [isCollapsedCategorySidebar, setIsCollapsedCategorySidebar] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -475,6 +477,45 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       matchesOnSale
     );
   });
+
+  // Smart Product Sorting Options & Computation (Point #8)
+  const SORT_OPTIONS = [
+    { id: 'popularity', label: '🔥 Most Popular', desc: 'Highest sales & customer reviews' },
+    { id: 'newest', label: '✨ New Arrivals', desc: 'Latest products in store' },
+    { id: 'price_asc', label: '💰 Price: Low to High', desc: 'Budget-friendly deals first' },
+    { id: 'price_desc', label: '💎 Price: High to Low', desc: 'Premium flagship items first' },
+    { id: 'rating', label: '⭐ Highest Rating', desc: 'Top 4.8★ & 4.9★ rated items' },
+    { id: 'discount', label: '🏷️ Biggest Discount %', desc: 'Maximum deal savings' },
+  ];
+
+  const sortedProducts = useMemo(() => {
+    const list = [...filteredProducts];
+    if (sortBy === 'price_asc') {
+      return list.sort((a, b) => a.sellingPrice - b.sellingPrice);
+    }
+    if (sortBy === 'price_desc') {
+      return list.sort((a, b) => b.sellingPrice - a.sellingPrice);
+    }
+    if (sortBy === 'rating') {
+      return list.sort((a, b) => (b.ratingsAverage || 0) - (a.ratingsAverage || 0));
+    }
+    if (sortBy === 'newest') {
+      return list.sort((a, b) => b._id.localeCompare(a._id));
+    }
+    if (sortBy === 'discount') {
+      return list.sort((a, b) => {
+        const discA = ((a.mrp - a.sellingPrice) / a.mrp) || 0;
+        const discB = ((b.mrp - b.sellingPrice) / b.mrp) || 0;
+        return discB - discA;
+      });
+    }
+    // Default 'popularity': sort by reviews count and rating
+    return list.sort((a, b) => {
+      const popA = (a.ratingsQuantity || 0) * (a.ratingsAverage || 4.5);
+      const popB = (b.ratingsQuantity || 0) * (b.ratingsAverage || 4.5);
+      return popB - popA;
+    });
+  }, [filteredProducts, sortBy]);
 
   // Inject JSON-LD ItemList Schema for Product Catalog
   useEffect(() => {
@@ -1036,7 +1077,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   </div>
                 </div>
 
-                {/* Point #7 Quick Availability & Deals Toggle Pills */}
+                {/* Point #7 Quick Availability & Deals Toggle Pills + Point #8 Smart Sort */}
                 <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
                   <button
                     type="button"
@@ -1048,7 +1089,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                     }`}
                   >
                     <span className={`w-2 h-2 rounded-full ${inStockOnly ? 'bg-white' : 'bg-emerald-500 animate-pulse'}`} />
-                    <span>In-Stock Only ({inStockCount})</span>
+                    <span>In-Stock ({inStockCount})</span>
                   </button>
 
                   <button
@@ -1061,13 +1102,30 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                     }`}
                   >
                     <Flame className={`w-3.5 h-3.5 ${onSaleOnly ? 'text-white fill-white' : 'text-rose-500 fill-rose-500'}`} />
-                    <span>Deals & On Sale ({onSaleCount})</span>
+                    <span>Deals ({onSaleCount})</span>
                   </button>
+
+                  {/* Point #8 Smart Product Sorting Selector */}
+                  <div className="flex items-center gap-1.5 bg-slate-100/80 hover:bg-slate-100 border border-slate-200 rounded-2xl px-2.5 py-1 transition-all">
+                    <ArrowUpDown className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                    <span className="text-[11px] font-bold text-slate-500 hidden sm:inline">Sort:</span>
+                    <select
+                      value={sortBy}
+                      onChange={e => setSortBy(e.target.value)}
+                      className="bg-transparent text-xs font-extrabold text-slate-900 border-none outline-none cursor-pointer pr-1 py-0.5 focus:ring-0"
+                    >
+                      {SORT_OPTIONS.map(opt => (
+                        <option key={opt.id} value={opt.id} className="font-semibold text-slate-800 bg-white">
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              {/* Active Filter Breadcrumb (Point #4, #5, #6 & #7) */}
-              {(selectedCategory !== 'all' || selectedSubCategory || selectedBrand !== 'all' || minRating > 0 || inStockOnly || onSaleOnly) && (
+              {/* Active Filter Breadcrumb (Point #4, #5, #6, #7 & #8) */}
+              {(selectedCategory !== 'all' || selectedSubCategory || selectedBrand !== 'all' || minRating > 0 || inStockOnly || onSaleOnly || sortBy !== 'popularity') && (
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-xs shadow-xs animate-in fade-in duration-200">
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 font-bold text-slate-800">
                     <FolderTree className="w-4 h-4 text-amber-600 flex-shrink-0" />
@@ -1133,8 +1191,22 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                         </button>
                       </span>
                     )}
+                    {sortBy !== 'popularity' && (
+                      <span className="font-extrabold text-slate-950 bg-white px-2 py-0.5 rounded-md shadow-xs border border-amber-400 text-xs flex items-center gap-1.5">
+                        <ArrowUpDown className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Sort: {SORT_OPTIONS.find(o => o.id === sortBy)?.label}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSortBy('popularity')}
+                          className="hover:text-red-500 ml-1 text-slate-400 font-bold"
+                          title="Reset to default popularity sort"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    )}
                     <span className="text-slate-500 font-semibold text-[11px]">
-                      ({filteredProducts.length} {filteredProducts.length === 1 ? 'item' : 'items'} found)
+                      ({sortedProducts.length} {sortedProducts.length === 1 ? 'item' : 'items'} found)
                     </span>
                   </div>
                   <button
@@ -1146,6 +1218,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                       setMinRating(0);
                       setInStockOnly(false);
                       setOnSaleOnly(false);
+                      setSortBy('popularity');
                     }}
                     className="font-black text-[11px] text-amber-800 hover:text-amber-950 bg-amber-200/70 hover:bg-amber-300/80 px-2.5 py-1 rounded-xl transition-all flex items-center gap-1"
                   >
@@ -1155,7 +1228,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               )}
             </div>
 
-            {filteredProducts.length === 0 ? (
+            {sortedProducts.length === 0 ? (
               <div className="p-12 rounded-3xl bg-white border border-slate-200 text-center space-y-3">
                 <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-2xl shadow-inner">
                   🔍
@@ -1177,6 +1250,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                       setMinRating(0);
                       setInStockOnly(false);
                       setOnSaleOnly(false);
+                      setSortBy('popularity');
                     }}
                     className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md transition-all"
                   >
@@ -1186,7 +1260,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-6">
-            {filteredProducts.map(product => {
+            {sortedProducts.map(product => {
               const discount = Math.round(((product.mrp - product.sellingPrice) / product.mrp) * 100);
               const isWishlisted = wishlist.includes(product._id);
               return (

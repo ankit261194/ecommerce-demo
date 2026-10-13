@@ -301,6 +301,54 @@ const runTests = async () => {
       }
     });
 
+    await test('Point 8: GET /products with sort (popularity, price_asc, price_desc, rating, newest) sorts accurately', async () => {
+      // Test price_asc
+      const resPriceAsc = await fetch(`${baseUrl}/products?sort=price_asc`);
+      assert.strictEqual(resPriceAsc.status, 200);
+      const dataPriceAsc = await resPriceAsc.json();
+      assert.strictEqual(dataPriceAsc.success, true);
+      assert.ok(dataPriceAsc.data.length >= 2);
+      for (let i = 0; i < dataPriceAsc.data.length - 1; i++) {
+        assert.ok(
+          dataPriceAsc.data[i].sellingPrice <= dataPriceAsc.data[i + 1].sellingPrice,
+          `Products must be in ascending price order: ₹${dataPriceAsc.data[i].sellingPrice} <= ₹${dataPriceAsc.data[i + 1].sellingPrice}`
+        );
+      }
+
+      // Test price_desc
+      const resPriceDesc = await fetch(`${baseUrl}/products?sort=price_desc`);
+      assert.strictEqual(resPriceDesc.status, 200);
+      const dataPriceDesc = await resPriceDesc.json();
+      assert.strictEqual(dataPriceDesc.success, true);
+      assert.ok(dataPriceDesc.data.length >= 2);
+      for (let i = 0; i < dataPriceDesc.data.length - 1; i++) {
+        assert.ok(
+          dataPriceDesc.data[i].sellingPrice >= dataPriceDesc.data[i + 1].sellingPrice,
+          `Products must be in descending price order: ₹${dataPriceDesc.data[i].sellingPrice} >= ₹${dataPriceDesc.data[i + 1].sellingPrice}`
+        );
+      }
+
+      // Test rating
+      const resRating = await fetch(`${baseUrl}/products?sort=rating`);
+      assert.strictEqual(resRating.status, 200);
+      const dataRating = await resRating.json();
+      assert.strictEqual(dataRating.success, true);
+      assert.ok(dataRating.data.length >= 2);
+      for (let i = 0; i < dataRating.data.length - 1; i++) {
+        assert.ok(
+          (dataRating.data[i].ratingsAverage || 0) >= (dataRating.data[i + 1].ratingsAverage || 0),
+          'Products must be sorted with highest rating first'
+        );
+      }
+
+      // Test popularity
+      const resPop = await fetch(`${baseUrl}/products?sort=popularity`);
+      assert.strictEqual(resPop.status, 200);
+      const dataPop = await resPop.json();
+      assert.strictEqual(dataPop.success, true);
+      assert.ok(dataPop.data.length >= 2);
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

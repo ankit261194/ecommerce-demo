@@ -222,6 +222,19 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
     fetchDashboardData();
   }, []);
 
+  useEffect(() => {
+    if (uiConfig?.integrations) {
+      setIntegrations(prev => ({
+        ...prev,
+        ...uiConfig.integrations,
+        sms: { ...(prev.sms || {}), ...(uiConfig.integrations.sms || {}) },
+        payments: { ...(prev.payments || {}), ...(uiConfig.integrations.payments || {}) },
+        email: { ...(prev.email || {}), ...(uiConfig.integrations.email || {}) },
+        storage: { ...(prev.storage || {}), ...(uiConfig.integrations.storage || {}) },
+      }));
+    }
+  }, [uiConfig?.integrations]);
+
   const handleStatusToggle = async (vendorId, currentStatus) => {
     const newStatus = currentStatus === 'approved' ? 'suspended' : 'approved';
     setVendors(prev =>
@@ -314,16 +327,18 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
         provider: integrations.sms.activeProvider,
         config: integrations.sms,
       });
+      const isSuccess = res.data?.success !== false;
       setTestSmsResult({
-        success: true,
-        message: res.data?.message || 'Test SMS sent successfully!',
+        success: isSuccess,
+        message: res.data?.message || (isSuccess ? 'Test SMS sent successfully!' : 'Test SMS dispatch failed'),
         data: res.data?.data,
       });
     } catch (err) {
+      const errMsg = err.response?.data?.message || err.message;
       setTestSmsResult({
-        success: true,
-        message: 'Test SMS simulated successfully via In-App Tester! (Ready for live keys)',
-        data: { provider: integrations.sms.activeProvider, status: 'DELIVERED' },
+        success: false,
+        message: `Test SMS Failed: ${errMsg || 'Connection error'}`,
+        data: { provider: integrations.sms.activeProvider, status: 'FAILED' },
       });
     } finally {
       setIsTestingSms(false);
@@ -342,16 +357,18 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
         provider: integrations.email.activeProvider,
         config: integrations.email,
       });
+      const isSuccess = res.data?.success !== false;
       setTestEmailResult({
-        success: true,
-        message: res.data?.message || 'Test Email sent successfully!',
+        success: isSuccess,
+        message: res.data?.message || (isSuccess ? 'Test Email sent successfully!' : 'Test Email dispatch failed'),
         data: res.data?.data,
       });
     } catch (err) {
+      const errMsg = err.response?.data?.message || err.message;
       setTestEmailResult({
-        success: true,
-        message: 'Test Email verified successfully via In-App Mailer! (Ready for live SMTP)',
-        data: { provider: integrations.email.activeProvider, status: 'SENT' },
+        success: false,
+        message: `Test Email Failed: ${errMsg || 'SMTP connection error'}`,
+        data: { provider: integrations.email.activeProvider, status: 'FAILED' },
       });
     } finally {
       setIsTestingEmail(false);

@@ -29,9 +29,14 @@ exports.getUIConfig = async (req, res, next) => {
       }
       if (configObj.integrations.email?.smtp) {
         delete configObj.integrations.email.smtp.password;
+        delete configObj.integrations.email.smtp.username;
+      }
+      if (configObj.integrations.email?.sendgrid) {
+        delete configObj.integrations.email.sendgrid.apiKey;
       }
       if (configObj.integrations.sms?.twilio) {
         delete configObj.integrations.sms.twilio.authToken;
+        delete configObj.integrations.sms.twilio.accountSid;
       }
       if (configObj.integrations.sms?.fast2sms) {
         delete configObj.integrations.sms.fast2sms.apiKey;
@@ -40,9 +45,11 @@ exports.getUIConfig = async (req, res, next) => {
         delete configObj.integrations.sms.msg91.authKey;
       }
       if (configObj.integrations.storage?.cloudinary) {
+        delete configObj.integrations.storage.cloudinary.apiKey;
         delete configObj.integrations.storage.cloudinary.apiSecret;
       }
       if (configObj.integrations.storage?.s3) {
+        delete configObj.integrations.storage.s3.accessKey;
         delete configObj.integrations.storage.s3.secretKey;
       }
     }
@@ -96,9 +103,13 @@ exports.updateUIConfig = async (req, res, next) => {
     if (demoWhatsAppUrl !== undefined) config.demoWhatsAppUrl = demoWhatsAppUrl;
 
     if (integrations) {
+      const cur = config.integrations ? (config.integrations.toObject ? config.integrations.toObject() : config.integrations) : {};
       config.integrations = {
-        ...((config.integrations && config.integrations.toObject) ? config.integrations.toObject() : (config.integrations || {})),
-        ...integrations,
+        ...cur,
+        sms: { ...(cur.sms || {}), ...(integrations.sms || {}) },
+        payments: { ...(cur.payments || {}), ...(integrations.payments || {}) },
+        email: { ...(cur.email || {}), ...(integrations.email || {}) },
+        storage: { ...(cur.storage || {}), ...(integrations.storage || {}) },
       };
     }
 

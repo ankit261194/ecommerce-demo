@@ -188,28 +188,42 @@ exports.updateIntegrations = async (req, res, next) => {
     }
 
     const { sms, payments, email, storage } = req.body;
+    const cur = config.integrations.toObject ? config.integrations.toObject() : config.integrations;
+
     if (sms) {
       config.integrations.sms = {
-        ...((config.integrations.sms && config.integrations.sms.toObject) ? config.integrations.sms.toObject() : (config.integrations.sms || {})),
+        ...(cur.sms || {}),
         ...sms,
+        fast2sms: { ...(cur.sms?.fast2sms || {}), ...(sms.fast2sms || {}) },
+        msg91: { ...(cur.sms?.msg91 || {}), ...(sms.msg91 || {}) },
+        twilio: { ...(cur.sms?.twilio || {}), ...(sms.twilio || {}) },
       };
     }
     if (payments) {
       config.integrations.payments = {
-        ...((config.integrations.payments && config.integrations.payments.toObject) ? config.integrations.payments.toObject() : (config.integrations.payments || {})),
+        ...(cur.payments || {}),
         ...payments,
+        cod: { ...(cur.payments?.cod || {}), ...(payments.cod || {}) },
+        razorpay: { ...(cur.payments?.razorpay || {}), ...(payments.razorpay || {}) },
+        stripe: { ...(cur.payments?.stripe || {}), ...(payments.stripe || {}) },
+        upi: { ...(cur.payments?.upi || {}), ...(payments.upi || {}) },
       };
     }
     if (email) {
       config.integrations.email = {
-        ...((config.integrations.email && config.integrations.email.toObject) ? config.integrations.email.toObject() : (config.integrations.email || {})),
+        ...(cur.email || {}),
         ...email,
+        smtp: { ...(cur.email?.smtp || {}), ...(email.smtp || {}) },
+        sendgrid: { ...(cur.email?.sendgrid || {}), ...(email.sendgrid || {}) },
       };
     }
     if (storage) {
       config.integrations.storage = {
-        ...((config.integrations.storage && config.integrations.storage.toObject) ? config.integrations.storage.toObject() : (config.integrations.storage || {})),
+        ...(cur.storage || {}),
         ...storage,
+        local: { ...(cur.storage?.local || {}), ...(storage.local || {}) },
+        cloudinary: { ...(cur.storage?.cloudinary || {}), ...(storage.cloudinary || {}) },
+        s3: { ...(cur.storage?.s3 || {}), ...(storage.s3 || {}) },
       };
     }
 

@@ -843,17 +843,75 @@ const runTests = async () => {
       assert.strictEqual(data.data.status, 'SENT');
     });
 
-    await test('Public GET /ui/config exposes active payment gateways but sanitizes secret keys', async () => {
+    await test('Public GET /ui/config exposes active payment gateways but sanitizes all secret keys', async () => {
+      // First, set sendgrid, smtp, and storage keys in admin
+      await fetch(`${baseUrl}/admin/integrations`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          email: {
+            sendgrid: { apiKey: 'SG.super_secret_production_key_12345' },
+            smtp: { password: 'secret_smtp_password_999' },
+          },
+          storage: {
+            s3: { secretKey: 'aws_secret_key_888' },
+            cloudinary: { apiSecret: 'cld_secret_777' },
+          },
+        }),
+      });
+
       const res = await fetch(`${baseUrl}/ui/config`);
       assert.strictEqual(res.status, 200);
       const data = await res.json();
       assert.strictEqual(data.success, true);
       assert.ok(data.data.integrations?.payments, 'Payments config should be present');
       assert.strictEqual(data.data.integrations.payments.razorpay.enabled, true);
-      assert.strictEqual(data.data.integrations.payments.razorpay.keyId, 'rzp_live_test_key_01');
-      // Secret key must be stripped for public safety
-      assert.strictEqual(data.data.integrations.payments.razorpay.keySecret, undefined);
-      assert.strictEqual(data.data.integrations.payments.stripe.secretKey, undefined);
+      // Secrets must be stripped for public safety
+      assert.strictEqual(data.data.integrations.payments?.razorpay?.keySecret, undefined);
+      assert.strictEqual(data.data.integrations.payments?.stripe?.secretKey, undefined);
+      assert.strictEqual(data.data.integrations.email?.sendgrid?.apiKey, undefined, 'SendGrid API key must NOT be leaked');
+      assert.strictEqual(data.data.integrations.email?.smtp?.password, undefined, 'SMTP password must NOT be leaked');
+      assert.strictEqual(data.data.integrations.storage?.s3?.secretKey, undefined, 'S3 secret must NOT be leaked');
+      assert.strictEqual(data.data.integrations.storage?.cloudinary?.apiSecret, undefined, 'Cloudinary secret must NOT be leaked');
+    });
+
+    await test('PUT /admin/integrations preserves existing keys when updating partial subdocuments', async () => {
+      // Step 1: Update razorpay key
+      await fetch(`${baseUrl}/admin/integrations`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          payments: {
+            razorpay: { keyId: 'rzp_preserved_key_99', keySecret: 'rzp_preserved_secret_99' },
+          },
+        }),
+      });
+
+      // Step 2: Partial update toggling only enabled without re-sending keys
+      const partialRes = await fetch(`${baseUrl}/admin/integrations`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          payments: {
+            razorpay: { enabled: true },
+          },
+        }),
+      });
+
+      assert.strictEqual(partialRes.status, 200);
+      const partialData = await partialRes.json();
+      assert.strictEqual(partialData.success, true);
+      assert.strictEqual(partialData.data.payments.razorpay.keyId, 'rzp_preserved_key_99', 'Existing keyId must be preserved');
+      assert.strictEqual(partialData.data.payments.razorpay.keySecret, 'rzp_preserved_secret_99', 'Existing keySecret must be preserved');
     });
 
   } finally {

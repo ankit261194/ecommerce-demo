@@ -30,6 +30,7 @@ import {
   ArrowUpDown,
   ArrowLeftRight,
   FileText,
+  Printer,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
@@ -48,6 +49,7 @@ import ScratchCardModal from '../components/ScratchCardModal';
 import AddressBookModal from '../components/AddressBookModal';
 import DynamicCheckoutPayment from '../components/DynamicCheckoutPayment';
 import LiveOrderTrackerModal from '../components/LiveOrderTrackerModal';
+import TaxInvoiceModal from '../components/TaxInvoiceModal';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -77,6 +79,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [isScratchCardOpen, setIsScratchCardOpen] = useState(false);
   const [isOrderTrackerOpen, setIsOrderTrackerOpen] = useState(false);
   const [trackedOrderId, setTrackedOrderId] = useState(null);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+  const [invoiceOrderId, setInvoiceOrderId] = useState(null);
 
   // Wishlist state (persisted in localStorage + synced with backend /api/wishlist)
   const [wishlist, setWishlist] = useState(() => {
@@ -2149,6 +2153,19 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               </div>
             </div>
 
+            {/* Point #30: 1-Click Tax Invoice Download Button */}
+            <button
+              onClick={() => {
+                setInvoiceOrderId(activeOrderConfirmation.orderId);
+                setIsInvoiceModalOpen(true);
+              }}
+              className="w-full py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs border border-indigo-200 flex items-center justify-center gap-1.5 transition active:scale-95 shadow-sm"
+              title="Download GST Compliant Tax Invoice"
+            >
+              <Printer className="w-4 h-4 text-indigo-600" />
+              Download GST Tax Invoice (PDF)
+            </button>
+
             <div className="flex gap-2.5">
               <button
                 onClick={() => {
@@ -2302,6 +2319,14 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         isOpen={isOrderTrackerOpen}
         onClose={() => setIsOrderTrackerOpen(false)}
         initialOrderId={trackedOrderId}
+        apiUrl="/api"
+      />
+
+      {/* Point #30: 1-Click Tax Invoice Download Modal */}
+      <TaxInvoiceModal
+        isOpen={isInvoiceModalOpen}
+        onClose={() => setIsInvoiceModalOpen(false)}
+        orderId={invoiceOrderId}
         apiUrl="/api"
       />
     </div>

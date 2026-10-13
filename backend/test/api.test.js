@@ -1675,6 +1675,54 @@ const runTests = async () => {
       assert.strictEqual(prodRefunded.stock, stockDelivered + 1, 'Stock must be auto-restored on return refund');
     });
 
+    await test('Point 30: 1-Click Tax Invoice Download / Generation (GET /orders/:id/invoice with GST split & printable HTML)', async () => {
+      // 1. Fetch tax invoice by orderNumber
+      const resInv = await fetch(`${baseUrl}/orders/${placedOrder.orderNumber}/invoice`);
+      assert.strictEqual(resInv.status, 200);
+      const dataInv = await resInv.json();
+      assert.strictEqual(dataInv.success, true);
+
+      const inv = dataInv.data;
+      assert.ok(inv.invoiceNumber.startsWith('INV-'));
+      assert.ok(inv.invoiceDate);
+      assert.strictEqual(inv.orderId, placedOrder.orderNumber);
+
+      // Seller tax fields
+      assert.ok(inv.seller.storeName);
+      assert.ok(inv.seller.gstin);
+      assert.ok(inv.seller.pan);
+
+      // Buyer details
+      assert.strictEqual(inv.buyer.name, 'Aman Sharma');
+      assert.ok(inv.buyer.address);
+
+      // Line items with HSN
+      assert.ok(Array.isArray(inv.lineItems));
+      assert.ok(inv.lineItems.length >= 1);
+      assert.strictEqual(inv.lineItems[0].hsnCode, '85183000');
+      assert.ok(inv.lineItems[0].taxableValue > 0);
+      assert.ok(inv.lineItems[0].cgstAmount >= 0);
+      assert.ok(inv.lineItems[0].sgstAmount >= 0);
+
+      // Pricing & currency words
+      assert.ok(inv.pricing.grandTotal > 0);
+      assert.ok(inv.pricing.amountInWords.includes('Rupees'));
+      assert.ok(inv.pricing.amountInWords.includes('Only'));
+
+      // Printable HTML verification
+      assert.ok(inv.printableHtml.includes('TAX INVOICE'));
+      assert.ok(inv.printableHtml.includes('AuraMarket'));
+      assert.ok(inv.printableHtml.includes(inv.seller.gstin));
+
+      // 2. Fetch by MongoDB ID
+      const resById = await fetch(`${baseUrl}/orders/${placedOrder._id}/invoice`);
+      assert.strictEqual(resById.status, 200);
+
+      // 3. 404 for non-existent order
+      const res404 = await fetch(`${baseUrl}/orders/NON_EXISTENT_ORDER_9999/invoice`);
+      assert.strictEqual(res404.status, 404);
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

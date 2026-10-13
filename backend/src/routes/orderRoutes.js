@@ -7,11 +7,13 @@ const {
   cancelOrder,
   trackOrder,
   simulateOrderStep,
+  getTaxInvoice,
 } = require('../controllers/orderController');
 const { protect } = require('../middlewares/auth');
 
-// Public live order tracking (accessible via SMS/order link without forced re-login)
+// Public live order tracking and 1-click tax invoice download
 router.get('/track/:identifier', trackOrder);
+router.get('/:id/invoice', getTaxInvoice);
 
 router.use(protect);
 

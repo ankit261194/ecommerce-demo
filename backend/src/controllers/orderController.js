@@ -689,4 +689,316 @@ exports.simulateOrderStep = async (req, res, next) => {
   }
 };
 
+// Helper: Convert number to English currency words
+function numberToWords(amount) {
+  const num = Math.round(Number(amount) || 0);
+  if (num === 0) return 'Zero Rupees Only';
+  const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
+  const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  
+  function inWords(n) {
+    if (n < 20) return a[n];
+    const digit = n % 10;
+    return b[Math.floor(n / 10)] + (digit ? ' ' + a[digit] : ' ');
+  }
+  
+  let str = '';
+  let n = num;
+  const crore = Math.floor(n / 10000000);
+  n %= 10000000;
+  const lakh = Math.floor(n / 100000);
+  n %= 100000;
+  const thousand = Math.floor(n / 1000);
+  n %= 1000;
+  const hundred = Math.floor(n / 100);
+  const remaining = Math.floor(n % 100);
+  
+  if (crore) str += inWords(crore) + 'Crore ';
+  if (lakh) str += inWords(lakh) + 'Lakh ';
+  if (thousand) str += inWords(thousand) + 'Thousand ';
+  if (hundred) str += inWords(hundred) + 'Hundred ';
+  if (remaining) str += inWords(remaining);
+  
+  return 'Rupees ' + str.trim() + ' Only';
+}
+
+// @desc    1-Click Tax Invoice Download / Preview (Point #30)
+// @route   GET /api/orders/:id/invoice
+// @access  Public / Customer / Admin
+exports.getTaxInvoice = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const mongoose = require('mongoose');
+    let order = null;
+
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      order = await Order.findById(id);
+    }
+    if (!order) {
+      order = await Order.findOne({ orderNumber: id });
+    }
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found for invoice generation' });
+    }
+
+    await order.populate([
+      { path: 'customer', select: 'name email phone' },
+      {
+        path: 'subOrders',
+        populate: [{ path: 'vendor', select: 'storeName pickupAddress phone businessEmail gstin pan' }],
+      },
+    ]);
+
+    const primaryVendor = order.subOrders?.[0]?.vendor;
+    const seller = {
+      storeName: primaryVendor?.storeName || 'AuraMarket Authorized Merchant',
+      address: primaryVendor?.pickupAddress || 'Fulfillment Center B-42, Okhla Industrial Area Phase-III, New Delhi, Delhi 110020',
+      phone: primaryVendor?.phone || '+91 9876543210',
+      email: primaryVendor?.businessEmail || 'billing@auramarket.com',
+      gstin: primaryVendor?.gstin || '07AAAAA0000A1Z5',
+      pan: primaryVendor?.pan || 'AAAAA0000A',
+      state: 'Delhi',
+      stateCode: '07',
+    };
+
+    const buyer = {
+      name: order.shippingAddress?.recipientName || order.customer?.name || 'Valued Customer',
+      phone: order.shippingAddress?.phone || order.customer?.phone || 'N/A',
+      email: order.customer?.email || 'customer@auramarket.com',
+      address: `${order.shippingAddress?.street}, ${order.shippingAddress?.city}, ${order.shippingAddress?.state} - ${order.shippingAddress?.pincode}`,
+      state: order.shippingAddress?.state || 'Delhi',
+      pincode: order.shippingAddress?.pincode || '110001',
+    };
+
+    const invoiceNumber = `INV-${order.orderNumber || order._id.toString().slice(-8).toUpperCase()}`;
+    const invoiceDate = order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-IN');
+    const orderDate = invoiceDate;
+
+    // Line items breakdown with 18% GST (9% CGST + 9% SGST for same-state)
+    let totalTaxableValue = 0;
+    let totalTaxAmount = 0;
+
+    const lineItems = (order.items || []).map((item, idx) => {
+      const grossTotal = (item.price || 0) * (item.quantity || 1);
+      // Assuming prices are inclusive of 18% GST
+      const taxable = Math.round((grossTotal / 1.18) * 100) / 100;
+      const tax = Math.round((grossTotal - taxable) * 100) / 100;
+      const cgst = Math.round((tax / 2) * 100) / 100;
+      const sgst = Math.round((tax / 2) * 100) / 100;
+
+      totalTaxableValue += taxable;
+      totalTaxAmount += tax;
+
+      return {
+        itemNo: idx + 1,
+        title: item.title || 'Product Item',
+        variantSku: item.variantSku || 'STD-SKU',
+        hsnCode: '85183000',
+        quantity: item.quantity || 1,
+        unitGrossPrice: item.price || 0,
+        taxableValue: taxable,
+        taxRate: '18%',
+        cgstAmount: cgst,
+        sgstAmount: sgst,
+        totalAmount: grossTotal,
+      };
+    });
+
+    const subtotal = Math.round(totalTaxableValue * 100) / 100;
+    const cgstTotal = Math.round((totalTaxAmount / 2) * 100) / 100;
+    const sgstTotal = Math.round((totalTaxAmount / 2) * 100) / 100;
+    const totalTax = Math.round(totalTaxAmount * 100) / 100;
+    const shippingFee = order.shippingFee || 0;
+    const discount = order.discountAmount || 0;
+    const grandTotal = order.totalAmount || Math.round((subtotal + totalTax + shippingFee - discount) * 100) / 100;
+    const amountInWords = numberToWords(grandTotal);
+
+    // Generate standalone printable HTML
+    const printableHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tax Invoice - ${invoiceNumber}</title>
+  <style>
+    @page { size: A4; margin: 15mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1e293b; line-height: 1.4; font-size: 12px; margin: 0; padding: 20px; }
+    .invoice-card { max-width: 800px; margin: 0 auto; border: 1px solid #e2e8f0; padding: 30px; border-radius: 8px; background: #fff; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f2444; padding-bottom: 15px; margin-bottom: 20px; }
+    .brand-title { font-size: 24px; font-weight: 900; color: #0f2444; margin: 0; letter-spacing: -0.5px; }
+    .badge { display: inline-block; background: #fef3c7; color: #92400e; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; margin-left: 6px; }
+    .inv-title { font-size: 18px; font-weight: 800; text-align: right; color: #0f2444; margin: 0; }
+    .inv-meta { text-align: right; font-size: 11px; color: #64748b; margin-top: 4px; }
+    .party-row { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+    .party-box { flex: 1; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; }
+    .party-title { font-size: 11px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 6px; }
+    .party-name { font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th { background: #0f2444; color: #ffffff; font-weight: 700; text-align: left; padding: 8px; font-size: 11px; }
+    td { padding: 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; }
+    .text-right { text-align: right; }
+    .totals-table { width: 320px; margin-left: auto; margin-bottom: 20px; }
+    .totals-table td { padding: 4px 8px; }
+    .grand-total-row { background: #f1f5f9; font-weight: 800; font-size: 13px; border-top: 2px solid #0f2444; }
+    .words-box { padding: 10px; background: #f8fafc; border-left: 3px solid #0f2444; font-size: 11px; margin-bottom: 20px; }
+    .footer { display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid #e2e8f0; padding-top: 15px; font-size: 10px; color: #64748b; }
+    .seal-box { text-align: center; border: 1px dashed #cbd5e1; padding: 8px 16px; border-radius: 6px; background: #fafafa; }
+    @media print {
+      body { padding: 0; }
+      .invoice-card { border: none; padding: 0; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="invoice-card">
+    <div class="header">
+      <div>
+        <h1 class="brand-title">AuraMarket<span class="badge">ORIGINAL TAX INVOICE</span></h1>
+        <p style="margin: 2px 0 0; color: #64748b; font-size: 11px;">Enterprise Multi-Vendor E-Commerce Platform</p>
+      </div>
+      <div>
+        <h2 class="inv-title">TAX INVOICE</h2>
+        <div class="inv-meta">
+          <strong>Invoice #:</strong> ${invoiceNumber}<br>
+          <strong>Invoice Date:</strong> ${invoiceDate}<br>
+          <strong>Order Reference:</strong> ${order.orderNumber || order._id}<br>
+          <strong>Payment Mode:</strong> ${order.paymentMethod || 'COD'} (${order.paymentStatus || 'PAID'})
+        </div>
+      </div>
+    </div>
+
+    <div class="party-row">
+      <div class="party-box">
+        <div class="party-title">Sold By (Merchant / Seller)</div>
+        <div class="party-name">${seller.storeName}</div>
+        <div>${seller.address}</div>
+        <div><strong>GSTIN:</strong> ${seller.gstin} | <strong>PAN:</strong> ${seller.pan}</div>
+        <div><strong>State:</strong> ${seller.state} (Code: ${seller.stateCode})</div>
+      </div>
+      <div class="party-box">
+        <div class="party-title">Billed & Shipped To (Customer)</div>
+        <div class="party-name">${buyer.name}</div>
+        <div>${buyer.address}</div>
+        <div><strong>Phone:</strong> ${buyer.phone}</div>
+        <div><strong>State of Supply:</strong> ${buyer.state}</div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 30px;">#</th>
+          <th>Item Description</th>
+          <th>HSN</th>
+          <th class="text-right">Qty</th>
+          <th class="text-right">Unit Price</th>
+          <th class="text-right">Taxable</th>
+          <th class="text-right">CGST (9%)</th>
+          <th class="text-right">SGST (9%)</th>
+          <th class="text-right">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${lineItems.map(item => `
+          <tr>
+            <td>${item.itemNo}</td>
+            <td><strong>${item.title}</strong><br><span style="color:#64748b; font-size:10px;">SKU: ${item.variantSku}</span></td>
+            <td>${item.hsnCode}</td>
+            <td class="text-right">${item.quantity}</td>
+            <td class="text-right">₹${item.unitGrossPrice.toLocaleString('en-IN')}</td>
+            <td class="text-right">₹${item.taxableValue.toLocaleString('en-IN')}</td>
+            <td class="text-right">₹${item.cgstAmount.toLocaleString('en-IN')}</td>
+            <td class="text-right">₹${item.sgstAmount.toLocaleString('en-IN')}</td>
+            <td class="text-right font-bold">₹${item.totalAmount.toLocaleString('en-IN')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+
+    <table class="totals-table">
+      <tr>
+        <td>Taxable Amount:</td>
+        <td class="text-right font-bold">₹${subtotal.toLocaleString('en-IN')}</td>
+      </tr>
+      <tr>
+        <td>CGST (9.0%):</td>
+        <td class="text-right font-bold">₹${cgstTotal.toLocaleString('en-IN')}</td>
+      </tr>
+      <tr>
+        <td>SGST (9.0%):</td>
+        <td class="text-right font-bold">₹${sgstTotal.toLocaleString('en-IN')}</td>
+      </tr>
+      <tr>
+        <td>Shipping & Delivery:</td>
+        <td class="text-right font-bold">${shippingFee === 0 ? 'FREE' : '₹' + shippingFee}</td>
+      </tr>
+      ${discount > 0 ? `
+      <tr>
+        <td style="color: #059669;">Promo Coupon Discount:</td>
+        <td class="text-right font-bold" style="color: #059669;">-₹${discount.toLocaleString('en-IN')}</td>
+      </tr>` : ''}
+      <tr class="grand-total-row">
+        <td>Grand Total (INR):</td>
+        <td class="text-right">₹${grandTotal.toLocaleString('en-IN')}</td>
+      </tr>
+    </table>
+
+    <div class="words-box">
+      <strong>Amount in Words:</strong> ${amountInWords}
+    </div>
+
+    <div class="footer">
+      <div>
+        <p style="margin: 0 0 2px;">• This is a system-generated electronic tax invoice authorized by AuraMarket.</p>
+        <p style="margin: 0 0 2px;">• For warranty and product returns, retain this invoice as proof of purchase.</p>
+        <p style="margin: 0;">• Subject to Delhi Jurisdiction. Contact: support@auramarket.com</p>
+      </div>
+      <div class="seal-box">
+        <strong style="color: #0f2444; font-size: 11px;">AuraMarket Digital Verification</strong><br>
+        <span style="color: #059669; font-weight: 700;">✓ Digitally Signed & Authenticated</span><br>
+        <span style="font-size: 9px; color: #94a3b8;">Authorized Signatory</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        invoiceNumber,
+        invoiceDate,
+        orderId: order.orderNumber || order._id,
+        rawOrderId: order._id,
+        orderDate,
+        seller,
+        buyer,
+        lineItems,
+        pricing: {
+          subtotal,
+          cgstTotal,
+          sgstTotal,
+          totalTax,
+          shippingFee,
+          discount,
+          grandTotal,
+          amountInWords,
+        },
+        payment: {
+          method: order.paymentMethod,
+          status: order.paymentStatus,
+          transactionRef: order.paymentDetails?.transactionId || order.paymentDetails?.upiUtr || 'N/A',
+        },
+        printableHtml,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
 

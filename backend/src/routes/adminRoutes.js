@@ -8,6 +8,10 @@ const {
   getPlatformLedger,
   triggerWipeDemo,
   triggerSeedDemo,
+  getIntegrations,
+  updateIntegrations,
+  testSMSIntegration,
+  testEmailIntegration,
 } = require('../controllers/adminController');
 const { protect, authorize } = require('../middlewares/auth');
 
@@ -22,6 +26,12 @@ router.patch('/vendors/:id/status', updateVendorStatus);
 router.patch('/vendors/:id/commission', updateVendorStatus);
 router.get('/orders', getAllOrders);
 router.get('/ledger', getPlatformLedger);
+
+// Integrations & API Hub
+router.get('/integrations', getIntegrations);
+router.put('/integrations', updateIntegrations);
+router.post('/integrations/test-sms', testSMSIntegration);
+router.post('/integrations/test-email', testEmailIntegration);
 
 // 1-Click Operations
 router.post('/wipe-demo', triggerWipeDemo);

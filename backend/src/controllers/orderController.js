@@ -5,6 +5,8 @@ const SubOrder = require('../models/SubOrder');
 const DeliveryTask = require('../models/DeliveryTask');
 const Ledger = require('../models/Ledger');
 const User = require('../models/User');
+const smsService = require('../services/smsService');
+const mailService = require('../services/mailService');
 
 // @desc    Checkout and Create Multi-Vendor Split Orders
 // @route   POST /api/orders
@@ -212,6 +214,18 @@ exports.createOrder = async (req, res, next) => {
       path: 'subOrders',
       populate: { path: 'vendor', select: 'storeName storeLogo pickupAddress' },
     });
+
+    // Asynchronously dispatch Order Confirmation SMS & Email notifications
+    const customerPhone = shippingAddress?.phone || req.user?.phone || '9876543210';
+    const customerEmail = req.user?.email || 'customer@auramarket.com';
+
+    smsService
+      .sendOrderSMS({ order: populatedOrder, phone: customerPhone })
+      .catch(err => console.log('[SMS Warning] Could not dispatch order SMS:', err.message));
+
+    mailService
+      .sendOrderEmail({ order: populatedOrder, email: customerEmail })
+      .catch(err => console.log('[Email Warning] Could not dispatch order email:', err.message));
 
     res.status(201).json({
       success: true,

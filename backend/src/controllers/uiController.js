@@ -1,6 +1,6 @@
 const UIConfig = require('../models/UIConfig');
 
-// @desc    Get Current Public UI Configuration
+// @desc    Get Current Public UI Configuration (Storefront & Mobile Safe)
 // @route   GET /api/ui/config
 exports.getUIConfig = async (req, res, next) => {
   try {
@@ -17,7 +17,37 @@ exports.getUIConfig = async (req, res, next) => {
       });
     }
 
-    res.status(200).json({ success: true, data: config });
+    const configObj = config.toObject();
+
+    // Sanitize sensitive credentials for public storefront callers
+    if (configObj.integrations) {
+      if (configObj.integrations.payments?.razorpay) {
+        delete configObj.integrations.payments.razorpay.keySecret;
+      }
+      if (configObj.integrations.payments?.stripe) {
+        delete configObj.integrations.payments.stripe.secretKey;
+      }
+      if (configObj.integrations.email?.smtp) {
+        delete configObj.integrations.email.smtp.password;
+      }
+      if (configObj.integrations.sms?.twilio) {
+        delete configObj.integrations.sms.twilio.authToken;
+      }
+      if (configObj.integrations.sms?.fast2sms) {
+        delete configObj.integrations.sms.fast2sms.apiKey;
+      }
+      if (configObj.integrations.sms?.msg91) {
+        delete configObj.integrations.sms.msg91.authKey;
+      }
+      if (configObj.integrations.storage?.cloudinary) {
+        delete configObj.integrations.storage.cloudinary.apiSecret;
+      }
+      if (configObj.integrations.storage?.s3) {
+        delete configObj.integrations.storage.s3.secretKey;
+      }
+    }
+
+    res.status(200).json({ success: true, data: configObj });
   } catch (error) {
     next(error);
   }
@@ -42,6 +72,7 @@ exports.updateUIConfig = async (req, res, next) => {
       demoModeActive,
       demoNoticeContact,
       demoWhatsAppUrl,
+      integrations,
     } = req.body;
 
     let config = await UIConfig.findOne();
@@ -63,6 +94,13 @@ exports.updateUIConfig = async (req, res, next) => {
     if (demoModeActive !== undefined) config.demoModeActive = demoModeActive;
     if (demoNoticeContact !== undefined) config.demoNoticeContact = demoNoticeContact;
     if (demoWhatsAppUrl !== undefined) config.demoWhatsAppUrl = demoWhatsAppUrl;
+
+    if (integrations) {
+      config.integrations = {
+        ...((config.integrations && config.integrations.toObject) ? config.integrations.toObject() : (config.integrations || {})),
+        ...integrations,
+      };
+    }
 
     await config.save();
 

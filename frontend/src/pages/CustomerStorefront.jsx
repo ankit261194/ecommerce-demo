@@ -39,6 +39,58 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   });
   const [paymentMethod, setPaymentMethod] = useState('COD');
 
+  // Dynamic Payment Gateways from Super Admin Integrations Hub
+  const paymentSettings = uiConfig?.integrations?.payments || {
+    cod: { enabled: true, label: 'Cash on Delivery (COD)' },
+    upi: { enabled: true, upiId: '8533955333@paytm', merchantName: 'AuraMarket Store' },
+    razorpay: { enabled: true },
+    stripe: { enabled: true },
+  };
+
+  const activeGateways = [];
+  if (paymentSettings.cod?.enabled !== false) {
+    activeGateways.push({
+      id: 'COD',
+      name: paymentSettings.cod?.label || 'Cash on Delivery (COD)',
+      badge: '💵 Doorstep Cash',
+      subtext: 'Pay cash or UPI upon package arrival',
+    });
+  }
+  if (paymentSettings.upi?.enabled !== false) {
+    activeGateways.push({
+      id: 'UPI',
+      name: 'Direct UPI & Dynamic QR',
+      badge: '⚡ Instant 0% Fee',
+      subtext: `Pay directly to ${paymentSettings.upi?.upiId || '8533955333@paytm'}`,
+    });
+  }
+  if (paymentSettings.razorpay?.enabled !== false) {
+    activeGateways.push({
+      id: 'RAZORPAY',
+      name: 'Razorpay Secure',
+      badge: '💳 Cards & NetBanking',
+      subtext: 'Cards, NetBanking & UPI via Razorpay',
+    });
+  }
+  if (paymentSettings.stripe?.enabled !== false) {
+    activeGateways.push({
+      id: 'STRIPE',
+      name: 'Stripe Global Checkout',
+      badge: '🌐 Global Cards',
+      subtext: 'International cards, Apple Pay & Google Pay',
+    });
+  }
+
+  const validGateways = activeGateways.length > 0 ? activeGateways : [
+    { id: 'COD', name: 'Cash on Delivery (COD)', badge: '💵 Doorstep Cash', subtext: 'Pay upon delivery' },
+  ];
+
+  useEffect(() => {
+    if (!validGateways.some(g => g.id === paymentMethod)) {
+      setPaymentMethod(validGateways[0]?.id || 'COD');
+    }
+  }, [validGateways, paymentMethod]);
+
   // Rich Product Catalog with Variants and Vendors
   const [products] = useState([
     {
@@ -546,33 +598,47 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">
-                    Payment Method
-                  </h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod('COD')}
-                      className={`p-3 rounded-xl border text-xs font-black transition-all ${
-                        paymentMethod === 'COD'
-                          ? 'border-amber-500 bg-amber-50 text-slate-950 ring-2 ring-amber-400/20'
-                          : 'border-slate-200 text-slate-600 bg-white'
-                      }`}
-                    >
-                      Cash on Delivery (COD)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod('ONLINE')}
-                      className={`p-3 rounded-xl border text-xs font-black transition-all ${
-                        paymentMethod === 'ONLINE'
-                          ? 'border-amber-500 bg-amber-50 text-slate-950 ring-2 ring-amber-400/20'
-                          : 'border-slate-200 text-slate-600 bg-white'
-                      }`}
-                    >
-                      Instant UPI / Cards
-                    </button>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">
+                      Payment Method
+                    </h3>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      {validGateways.length} Gateways Active
+                    </span>
                   </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {validGateways.map(gw => (
+                      <button
+                        key={gw.id}
+                        type="button"
+                        onClick={() => setPaymentMethod(gw.id)}
+                        className={`p-3 rounded-xl border text-left transition-all ${
+                          paymentMethod === gw.id
+                            ? 'border-amber-500 bg-amber-50 text-slate-950 ring-2 ring-amber-400/20'
+                            : 'border-slate-200 text-slate-600 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-slate-900">{gw.name}</span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                            {gw.badge}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">{gw.subtext}</p>
+                      </button>
+                    ))}
+                  </div>
+                  {paymentMethod === 'UPI' && (
+                    <div className="p-3 rounded-xl bg-purple-50 border border-purple-200 text-xs text-purple-900 space-y-1">
+                      <div className="font-bold flex items-center justify-between">
+                        <span>Scan & Pay via any UPI App</span>
+                        <span className="font-mono text-purple-700 font-bold">{paymentSettings.upi?.upiId || '8533955333@paytm'}</span>
+                      </div>
+                      <p className="text-[11px] text-purple-700">
+                        Payee: {paymentSettings.upi?.merchantName || 'AuraMarket Store'}. GPay, PhonePe, Paytm, or BHIM.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Grand Total & Place Order */}

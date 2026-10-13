@@ -4,6 +4,9 @@ const Product = require('../models/Product');
 const Order = require('../models/Order');
 const SubOrder = require('../models/SubOrder');
 const Ledger = require('../models/Ledger');
+const UIConfig = require('../models/UIConfig');
+const smsService = require('../services/smsService');
+const mailService = require('../services/mailService');
 const { wipeDemoData, seedDemoData } = require('../utils/demoManager');
 
 // @desc    Get Master Super Admin Analytics
@@ -153,3 +156,118 @@ exports.triggerSeedDemo = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Get All External Integrations Settings (Super Admin Only)
+// @route   GET /api/admin/integrations
+exports.getIntegrations = async (req, res, next) => {
+  try {
+    let config = await UIConfig.findOne();
+    if (!config) {
+      config = await UIConfig.create({});
+    }
+    res.status(200).json({
+      success: true,
+      data: config.integrations || {},
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update External Integrations Settings (Super Admin Only)
+// @route   PUT /api/admin/integrations
+exports.updateIntegrations = async (req, res, next) => {
+  try {
+    let config = await UIConfig.findOne();
+    if (!config) {
+      config = new UIConfig({});
+    }
+
+    if (!config.integrations) {
+      config.integrations = {};
+    }
+
+    const { sms, payments, email, storage } = req.body;
+    if (sms) {
+      config.integrations.sms = {
+        ...((config.integrations.sms && config.integrations.sms.toObject) ? config.integrations.sms.toObject() : (config.integrations.sms || {})),
+        ...sms,
+      };
+    }
+    if (payments) {
+      config.integrations.payments = {
+        ...((config.integrations.payments && config.integrations.payments.toObject) ? config.integrations.payments.toObject() : (config.integrations.payments || {})),
+        ...payments,
+      };
+    }
+    if (email) {
+      config.integrations.email = {
+        ...((config.integrations.email && config.integrations.email.toObject) ? config.integrations.email.toObject() : (config.integrations.email || {})),
+        ...email,
+      };
+    }
+    if (storage) {
+      config.integrations.storage = {
+        ...((config.integrations.storage && config.integrations.storage.toObject) ? config.integrations.storage.toObject() : (config.integrations.storage || {})),
+        ...storage,
+      };
+    }
+
+    await config.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Integrations updated successfully! Changes are active immediately.',
+      data: config.integrations,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Live Test SMS Gateway
+// @route   POST /api/admin/integrations/test-sms
+exports.testSMSIntegration = async (req, res, next) => {
+  try {
+    const { phone, message, provider, config } = req.body;
+    const result = await smsService.sendSMS({
+      to: phone || '+918533955333',
+      message: message || 'Live test verification message from AuraMarket Master Integrations Hub.',
+      provider,
+      config,
+    });
+
+    res.status(200).json({
+      success: result.success,
+      message: result.note || (result.success ? 'Test SMS processed successfully' : result.error),
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Live Test Email / SMTP Gateway
+// @route   POST /api/admin/integrations/test-email
+exports.testEmailIntegration = async (req, res, next) => {
+  try {
+    const { to, email, subject, message, provider, config } = req.body;
+    const recipient = email || to || 'admin@auramarket.com';
+    const result = await mailService.sendMail({
+      to: recipient,
+      subject: subject || 'AuraMarket Live SMTP Test Verification',
+      text: message || 'Your SMTP credentials have been successfully connected to AuraMarket Multi-Vendor Marketplace!',
+      provider,
+      config,
+    });
+
+    res.status(200).json({
+      success: result.success,
+      message: result.note || (result.success ? 'Test Email processed successfully' : result.error),
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

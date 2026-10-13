@@ -353,6 +353,7 @@
 
         <div class="nav-section-title">Configuration</div>
         <a href="#customization" class="nav-link">🎨 8. White-Label & Theme</a>
+        <a href="#integrations-hub" class="nav-link">🔌 8b. Integrations Hub (Non-Dev)</a>
         <a href="#otp-system" class="nav-link">🔒 9. 4-Digit Handover OTP</a>
         <a href="#api-reference" class="nav-link">📡 10. REST API Reference</a>
 
@@ -623,6 +624,165 @@ pm2 save</code></pre>
   showDemoNotice: false, // Turn off for production clients!
   ...
 });</code></pre>
+      </section>
+
+      <!-- 8b. Master Integrations & API Hub (Non-Developer Plug-and-Play Guide) -->
+      <section id="integrations-hub" class="doc-section">
+        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; padding: 24px; border-radius: 14px; margin-bottom: 24px;">
+          <span style="background: #f59e0b; color: #0f172a; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 9999px; text-transform: uppercase;">Non-Developer Zero-Code Guide</span>
+          <h2 style="color: #ffffff; font-size: 1.6rem; font-weight: 800; margin: 10px 0 6px;">8b. Master Integrations & API Hub (A to Z Admin Panel Configuration)</h2>
+          <p style="color: #cbd5e1; font-size: 0.92rem; margin: 0;">
+            <strong>बधाई हो!</strong> AuraMarket को खास तौर पर इस तरह बनाया गया है कि अगर आप या आपका क्लाइंट कोई कोडिंग नहीं जानता, तो भी आप बिना किसी डेवलपर की मदद के <strong>SMS Gateway, Payment Gateway, SMTP Email, और Cloud Storage</strong> सिर्फ 2 मिनट में Super Admin Panel से चालू कर सकते हैं।
+          </p>
+        </div>
+
+        <div class="callout callout-success">
+          <strong>⚡ 100% Plug-and-Play Guarantee:</strong> You never have to touch backend JavaScript, Node.js files, or terminal environments to configure external services. Simply paste your API credentials into the <strong>"🔌 Integrations & API Hub"</strong> tab in the Super Admin panel, click <strong>Save</strong>, and your live storefront & checkout will adapt dynamically!
+        </div>
+
+        <!-- 1. Payment Gateways Guide -->
+        <h3 style="color: #0f2444; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px;">💳 1. Payment Gateways Setup (पेमेंट गेटवे कैसे शुरू करें)</h3>
+        <p>In Super Admin Dashboard &gt; <strong>🔌 Integrations & API Hub</strong> &gt; <strong>💳 Payment Gateways</strong>:</p>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Gateway</th>
+                <th>Where to Get API Keys? (कहाँ से कीज़ मिलेंगी?)</th>
+                <th>How to Configure in Super Admin</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Cash on Delivery (COD)</strong></td>
+                <td>Zero setup needed! Pre-configured by default.</td>
+                <td>Toggle the switch <strong>ON/OFF</strong>. You can customize the checkout label (e.g. <em>"Cash on Delivery"</em>).</td>
+              </tr>
+              <tr>
+                <td><strong>Direct UPI / Dynamic QR</strong></td>
+                <td>Your existing UPI ID (e.g. <code>8533955333@paytm</code>, <code>yourstore@icici</code>, Google Pay, PhonePe).</td>
+                <td>Toggle <strong>ON</strong>, paste your <strong>Merchant UPI ID</strong> and enter your <strong>Store Name</strong>. Customers can scan &amp; pay with 0% gateway commission!</td>
+              </tr>
+              <tr>
+                <td><strong>Razorpay (India's #1 Gateway)</strong></td>
+                <td>
+                  1. Visit <a href="https://dashboard.razorpay.com" target="_blank" style="color: #2563eb; font-weight: bold;">dashboard.razorpay.com</a> and sign in.<br>
+                  2. Navigate to <strong>Settings &gt; API Keys</strong>.<br>
+                  3. Click <strong>Generate Key</strong>.<br>
+                  4. Copy <strong>Key ID</strong> and <strong>Key Secret</strong>.
+                </td>
+                <td>
+                  1. Paste <code>Key ID</code> into the Razorpay Key ID field.<br>
+                  2. Paste <code>Key Secret</code> into the Key Secret field.<br>
+                  3. Toggle Razorpay <strong>ON</strong> and click Save. Checkout activates Razorpay immediately!
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Stripe (Global International)</strong></td>
+                <td>
+                  1. Visit <a href="https://dashboard.stripe.com/apikeys" target="_blank" style="color: #2563eb; font-weight: bold;">dashboard.stripe.com/apikeys</a>.<br>
+                  2. Copy your <strong>Publishable key</strong> (starts with <code>pk_live_...</code> or <code>pk_test_...</code>).<br>
+                  3. Reveal and copy your <strong>Secret key</strong> (starts with <code>sk_live_...</code>).
+                </td>
+                <td>
+                  1. Paste <code>Publishable Key</code> and <code>Secret Key</code> into Super Admin.<br>
+                  2. Toggle Stripe <strong>ON</strong> and click Save.<br>
+                  3. International customers can now pay via Credit/Debit cards &amp; Apple Pay!
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p><strong>🎯 Dynamic Checkout Reactive Engine:</strong> If you turn OFF Razorpay and Stripe, the customer checkout screen instantly hides those options and shows only Cash on Delivery and Direct UPI. If you turn all gateways ON, customers can choose any method freely!</p>
+
+        <!-- 2. SMS Gateways Guide -->
+        <h3 style="color: #0f2444; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; margin-top: 32px;">📱 2. SMS Gateway & OTP Setup (एसएमएस और डिलीवरी ओटीपी गेटवे)</h3>
+        <p>Customer order bookings and 4-digit secret delivery handover OTPs are dispatched automatically via SMS. Select your preferred provider in Super Admin:</p>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>Credentials Required</th>
+                <th>Where to Get &amp; Setup Steps</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>In-App Mock Tester (Free)</strong></td>
+                <td>None (Zero setup)</td>
+                <td>Default showroom mode. Orders and OTPs log cleanly to the system without requiring any paid SMS balance or DLT approval!</td>
+              </tr>
+              <tr>
+                <td><strong>Fast2SMS (Quick OTP India)</strong></td>
+                <td>API Authorization Key</td>
+                <td>
+                  1. Create an account at <a href="https://www.fast2sms.com" target="_blank" style="color: #2563eb; font-weight: bold;">fast2sms.com</a>.<br>
+                  2. Go to <strong>Dev API</strong> in the left sidebar.<br>
+                  3. Copy your <strong>API Authorization Key</strong>.<br>
+                  4. In Super Admin, set Active Provider to <strong>Fast2SMS</strong>, paste the API key, and test via the <strong>Send Test SMS</strong> button!
+                </td>
+              </tr>
+              <tr>
+                <td><strong>MSG91 Enterprise (DLT)</strong></td>
+                <td>AuthKey &amp; DLT Sender ID</td>
+                <td>
+                  1. Sign up at <a href="https://msg91.com" target="_blank" style="color: #2563eb; font-weight: bold;">msg91.com</a>.<br>
+                  2. Create an API Key in MSG91 dashboard.<br>
+                  3. Paste AuthKey and your approved 6-character DLT Header (e.g. <code>AURAMK</code>) into Super Admin.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Twilio (Worldwide)</strong></td>
+                <td>Account SID, Auth Token &amp; Phone</td>
+                <td>
+                  1. Sign up at <a href="https://www.twilio.com/console" target="_blank" style="color: #2563eb; font-weight: bold;">twilio.com/console</a>.<br>
+                  2. Copy <strong>Account SID</strong> and <strong>Auth Token</strong> from Console Home.<br>
+                  3. Paste into Super Admin, enter your Twilio sender number, and test instantly!
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 3. Email & SMTP Guide -->
+        <h3 style="color: #0f2444; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; margin-top: 32px;">✉️ 3. Email / SMTP Notifications Setup (ईमेल और बिलिंग रसीद)</h3>
+        <p>Send branded HTML invoices, delivery OTP confirmations, and vendor alerts using standard email protocols:</p>
+
+        <h4>Option A: Hostinger / cPanel / Webmail (Most Common)</h4>
+        <ul>
+          <li><strong>SMTP Host:</strong> <code>smtp.hostinger.com</code> (or <code>mail.yourdomain.com</code> for cPanel)</li>
+          <li><strong>Port:</strong> <code>587</code> (or <code>465</code> for SSL)</li>
+          <li><strong>Username:</strong> Your professional business email (e.g. <code>orders@yourdomain.com</code>)</li>
+          <li><strong>Password:</strong> Your email inbox password</li>
+          <li><strong>From Email:</strong> <code>orders@yourdomain.com</code> | <strong>From Name:</strong> <code>Your Store Name</code></li>
+        </ul>
+
+        <h4>Option B: Gmail Account (Free with App Password)</h4>
+        <ol>
+          <li>Open your Google Account Security settings (<a href="https://myaccount.google.com/security" target="_blank" style="color: #2563eb;">myaccount.google.com/security</a>).</li>
+          <li>Enable <strong>2-Step Verification</strong> if not already enabled.</li>
+          <li>Search for <strong>"App Passwords"</strong>. Generate a new password named <em>"AuraMarket Store"</em>.</li>
+          <li>Google will provide a 16-character code (e.g. <code>abcd efgh ijkl mnop</code>).</li>
+          <li>In Super Admin: Host = <code>smtp.gmail.com</code>, Port = <code>587</code>, Username = your Gmail address, Password = the 16-character app password.</li>
+          <li>Click <strong>Send Test Email</strong> in Super Admin to verify connection!</li>
+        </ol>
+
+        <!-- 4. Media Storage Guide -->
+        <h3 style="color: #0f2444; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; margin-top: 32px;">☁️ 4. Cloud Storage & Media Manager (प्रोडक्ट फोटो और मीडिया)</h3>
+        <p>AuraMarket supports 3 storage backends depending on your server infrastructure:</p>
+        <ul>
+          <li><strong>Local Server Storage (Recommended Default):</strong> Free and pre-configured. Product images upload directly to your web server disk in <code>/uploads</code>. Zero extra costs.</li>
+          <li><strong>Cloudinary CDN:</strong> Paste your Cloud Name, API Key, and API Secret from <a href="https://cloudinary.com" target="_blank" style="color: #2563eb;">cloudinary.com</a> for global CDN image acceleration and automatic image resizing.</li>
+          <li><strong>Amazon AWS S3:</strong> Paste your S3 Bucket Name, AWS Region (e.g. <code>ap-south-1</code>), AWS Access Key ID, and AWS Secret Key.</li>
+        </ul>
+
+        <div class="callout callout-info" style="margin-top: 24px;">
+          <strong>📞 Live WhatsApp Author Help:</strong> If you ever get stuck or need help obtaining your live credentials, contact lead developer <strong>Ankit Chaudhary</strong> directly on WhatsApp at <strong>+91 8533955333</strong>. We will configure your payment and SMS gateways for you at zero extra charge!
+        </div>
       </section>
 
       <!-- 9. 4-Digit Handover OTP -->

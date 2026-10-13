@@ -761,6 +761,101 @@ const runTests = async () => {
       }
     });
 
+    // 13. Master Integrations Hub Tests (Non-Developer Plug-and-Play Architecture)
+    await test('GET /admin/integrations returns external services configuration for Super Admin', async () => {
+      const res = await fetch(`${baseUrl}/admin/integrations`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.sms, 'SMS config should exist');
+      assert.ok(data.data.payments, 'Payments config should exist');
+      assert.ok(data.data.email, 'Email config should exist');
+      assert.ok(data.data.storage, 'Storage config should exist');
+    });
+
+    await test('PUT /admin/integrations allows Super Admin to configure payment gateways and SMS settings', async () => {
+      const res = await fetch(`${baseUrl}/admin/integrations`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          sms: {
+            activeProvider: 'mock',
+            fast2sms: { apiKey: 'f2s_live_sample_key', senderId: 'AURAEX' },
+          },
+          payments: {
+            razorpay: { enabled: true, keyId: 'rzp_live_test_key_01', keySecret: 'rzp_secret_01' },
+            stripe: { enabled: true, publishableKey: 'pk_live_01', secretKey: 'sk_live_01' },
+            upi: { enabled: true, upiId: '8533955333@paytm', merchantName: 'AuraMarket Store' },
+            cod: { enabled: true, label: 'Cash on Delivery (COD)' },
+          },
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.payments.razorpay.keyId, 'rzp_live_test_key_01');
+      assert.strictEqual(data.data.payments.upi.upiId, '8533955333@paytm');
+    });
+
+    await test('POST /admin/integrations/test-sms executes live test SMS dispatch', async () => {
+      const res = await fetch(`${baseUrl}/admin/integrations/test-sms`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          phone: '+918533955333',
+          message: 'Test SMS from AuraMarket Admin Verification Suite',
+          provider: 'mock',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.provider, 'mock');
+      assert.strictEqual(data.data.status, 'DELIVERED');
+    });
+
+    await test('POST /admin/integrations/test-email executes live test Email dispatch', async () => {
+      const res = await fetch(`${baseUrl}/admin/integrations/test-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          email: 'admin@auramarket.com',
+          subject: 'AuraMarket Automated Test',
+          message: 'This is a test notification message from AuraMarket Test Suite.',
+          provider: 'mock',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.provider, 'mock');
+      assert.strictEqual(data.data.status, 'SENT');
+    });
+
+    await test('Public GET /ui/config exposes active payment gateways but sanitizes secret keys', async () => {
+      const res = await fetch(`${baseUrl}/ui/config`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.integrations?.payments, 'Payments config should be present');
+      assert.strictEqual(data.data.integrations.payments.razorpay.enabled, true);
+      assert.strictEqual(data.data.integrations.payments.razorpay.keyId, 'rzp_live_test_key_01');
+      // Secret key must be stripped for public safety
+      assert.strictEqual(data.data.integrations.payments.razorpay.keySecret, undefined);
+      assert.strictEqual(data.data.integrations.payments.stripe.secretKey, undefined);
+    });
+
   } finally {
     if (server) {
       server.close();

@@ -9,6 +9,97 @@ const bannerSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true },
 });
 
+const integrationsSchema = new mongoose.Schema(
+  {
+    sms: {
+      activeProvider: {
+        type: String,
+        enum: ['mock', 'fast2sms', 'msg91', 'twilio'],
+        default: 'mock',
+      },
+      fast2sms: {
+        apiKey: { type: String, default: '' },
+        senderId: { type: String, default: 'FSTSMS' },
+        route: { type: String, default: 'q' },
+      },
+      msg91: {
+        authKey: { type: String, default: '' },
+        senderId: { type: String, default: 'AURAMK' },
+        dltTemplateId: { type: String, default: '' },
+      },
+      twilio: {
+        accountSid: { type: String, default: '' },
+        authToken: { type: String, default: '' },
+        fromPhone: { type: String, default: '' },
+      },
+    },
+    payments: {
+      cod: {
+        enabled: { type: Boolean, default: true },
+        label: { type: String, default: 'Cash on Delivery (COD)' },
+      },
+      razorpay: {
+        enabled: { type: Boolean, default: true },
+        keyId: { type: String, default: 'rzp_test_AuraMarket2026' },
+        keySecret: { type: String, default: 'rzp_sec_mock_key_secret_2026' },
+      },
+      stripe: {
+        enabled: { type: Boolean, default: true },
+        publishableKey: { type: String, default: 'pk_test_51MockStripeAuraMarket2026' },
+        secretKey: { type: String, default: 'sk_test_51MockStripeSecretKey2026' },
+      },
+      upi: {
+        enabled: { type: Boolean, default: true },
+        upiId: { type: String, default: '8533955333@paytm' },
+        merchantName: { type: String, default: 'AuraMarket Store' },
+      },
+    },
+    email: {
+      activeProvider: {
+        type: String,
+        enum: ['mock', 'smtp', 'sendgrid'],
+        default: 'mock',
+      },
+      smtp: {
+        host: { type: String, default: 'smtp.gmail.com' },
+        port: { type: Number, default: 587 },
+        secure: { type: Boolean, default: false },
+        username: { type: String, default: 'notifications@auramarket.com' },
+        password: { type: String, default: '' },
+        fromEmail: { type: String, default: 'notifications@auramarket.com' },
+        fromName: { type: String, default: 'AuraMarket Store' },
+      },
+      sendgrid: {
+        apiKey: { type: String, default: '' },
+        fromEmail: { type: String, default: 'notifications@auramarket.com' },
+        fromName: { type: String, default: 'AuraMarket Store' },
+      },
+    },
+    storage: {
+      activeProvider: {
+        type: String,
+        enum: ['local', 'cloudinary', 's3'],
+        default: 'local',
+      },
+      local: {
+        uploadPath: { type: String, default: '/uploads' },
+      },
+      cloudinary: {
+        cloudName: { type: String, default: 'auramarket' },
+        apiKey: { type: String, default: '' },
+        apiSecret: { type: String, default: '' },
+      },
+      s3: {
+        bucket: { type: String, default: 'auramarket-media' },
+        region: { type: String, default: 'ap-south-1' },
+        accessKey: { type: String, default: '' },
+        secretKey: { type: String, default: '' },
+      },
+    },
+  },
+  { _id: false }
+);
+
 const uiConfigSchema = new mongoose.Schema(
   {
     storeName: {
@@ -69,6 +160,10 @@ const uiConfigSchema = new mongoose.Schema(
     demoWhatsAppUrl: {
       type: String,
       default: 'https://wa.me/918533955333?text=Hi%20Ankit,%20I%20want%20to%20purchase%20AuraMarket%20E-Commerce%20Platform',
+    },
+    integrations: {
+      type: integrationsSchema,
+      default: () => ({}),
     },
   },
   { timestamps: true }

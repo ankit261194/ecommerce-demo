@@ -1130,6 +1130,7 @@ const runTests = async () => {
             state: 'Delhi',
             pincode: '110001',
           },
+          deliveryInstructions: 'Leave with security guard. Ring bell once.',
           paymentMethod: 'COD',
         }),
       });
@@ -1139,6 +1140,7 @@ const runTests = async () => {
       assert.strictEqual(data.success, true);
       assert.ok(data.data._id);
       placedOrder = data.data;
+      assert.strictEqual(placedOrder.deliveryInstructions, 'Leave with security guard. Ring bell once.');
 
       // Verify sub-orders were split (2 vendors = 2 suborders)
       assert.strictEqual(placedOrder.subOrders.length, 2, 'Should create exactly 2 sub-orders');
@@ -1237,6 +1239,8 @@ const runTests = async () => {
       subOrder1 = data.data.subOrders[0];
       subOrder2 = data.data.subOrders[1];
 
+      assert.strictEqual(data.data.deliveryInstructions, 'Leave with security guard. Ring bell once.');
+      assert.strictEqual(subOrder1.deliveryInstructions, 'Leave with security guard. Ring bell once.');
       assert.ok(subOrder1.deliveryOtp, 'Sub-order 1 must have delivery OTP');
       assert.strictEqual(subOrder1.deliveryOtp.length, 4, 'OTP must be 4 digits');
       assert.ok(subOrder2.deliveryOtp, 'Sub-order 2 must have delivery OTP');
@@ -1278,6 +1282,14 @@ const runTests = async () => {
         riderTask = data.data[0];
       }
       assert.ok(riderTask, 'Rider must have at least one delivery task');
+      assert.strictEqual(riderTask.deliveryInstructions, 'Leave with security guard. Ring bell once.');
+    });
+
+    await test('Point 25: Order Delivery Instructions / Rider Notes box passed to Order, SubOrder, and DeliveryTask', async () => {
+      assert.strictEqual(placedOrder.deliveryInstructions, 'Leave with security guard. Ring bell once.');
+      const dt = await DeliveryTask.findOne({ subOrder: subOrder1._id });
+      assert.ok(dt, 'Delivery task must exist');
+      assert.strictEqual(dt.deliveryInstructions, 'Leave with security guard. Ring bell once.');
     });
 
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {

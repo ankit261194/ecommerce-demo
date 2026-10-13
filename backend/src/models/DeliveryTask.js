@@ -49,6 +49,12 @@ const deliveryTaskSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Point #25: Order Delivery Instructions / Rider Notes
+    deliveryInstructions: {
+      type: String,
+      default: '',
+      trim: true,
+    },
   },
   { timestamps: true }
 );

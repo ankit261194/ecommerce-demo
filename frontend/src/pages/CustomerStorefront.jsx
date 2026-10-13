@@ -29,6 +29,7 @@ import {
   BadgePercent,
   ArrowUpDown,
   ArrowLeftRight,
+  FileText,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
@@ -263,6 +264,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       }
     }).catch(() => {});
   }, [user]);
+
+  // Point #25: Order Delivery Instructions / Rider Notes State
+  const [deliveryInstructions, setDeliveryInstructions] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('COD');
 
   // Dynamic Payment Gateways from Super Admin Integrations Hub
@@ -835,6 +839,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         },
         paymentMethod,
         couponCode: appliedCoupon?.code || undefined,
+        deliveryInstructions: deliveryInstructions || undefined,
       });
 
       if (res.data?.success && res.data?.data) {
@@ -852,9 +857,11 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           totalAmount: order.totalAmount,
           address,
           paymentMethod,
+          deliveryInstructions: order.deliveryInstructions || deliveryInstructions,
         });
         clearCart();
         setAppliedCoupon(null);
+        setDeliveryInstructions('');
         setIsCartOpen(false);
         return;
       }
@@ -875,10 +882,12 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       totalAmount: fallbackTotal,
       address,
       paymentMethod,
+      deliveryInstructions,
     });
 
     clearCart();
     setAppliedCoupon(null);
+    setDeliveryInstructions('');
     setIsCartOpen(false);
   };
 
@@ -1852,6 +1861,75 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   </button>
                 </div>
 
+                {/* Point #25: Order Delivery Instructions / Rider Notes Box */}
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Rider Notes & Doorstep Instructions</span>
+                    </h4>
+                    {deliveryInstructions && (
+                      <button
+                        type="button"
+                        onClick={() => setDeliveryInstructions('')}
+                        className="text-[10px] font-bold text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 1-Click Quick Chips */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      'Leave with security / guard',
+                      'Ring bell & leave at door',
+                      'Do not ring bell (Baby sleeping)',
+                      'Call before arriving',
+                      'Leave with neighbor',
+                    ].map((chip) => {
+                      const isSelected = deliveryInstructions.includes(chip);
+                      return (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setDeliveryInstructions((prev) =>
+                                prev
+                                  .replace(chip, '')
+                                  .replace(/^,\s*|,\s*$/g, '')
+                                  .replace(/,\s*,/g, ',')
+                                  .trim()
+                              );
+                            } else {
+                              setDeliveryInstructions((prev) =>
+                                prev ? `${prev}, ${chip}` : chip
+                              );
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                            isSelected
+                              ? 'bg-amber-400 border-amber-500 text-slate-950 font-black shadow-xs ring-1 ring-amber-400/40'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                          }`}
+                        >
+                          {chip}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Custom Note Textarea */}
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. Flat on 4th floor, elevator code #402, please do not ring doorbell..."
+                    value={deliveryInstructions}
+                    onChange={(e) => setDeliveryInstructions(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none font-medium"
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">
@@ -2068,6 +2146,19 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                 </div>
               ))}
             </div>
+
+            {/* Point #25: Order Delivery Instructions / Rider Notes in Confirmation */}
+            {activeOrderConfirmation.deliveryInstructions && (
+              <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-300 text-left space-y-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-amber-600" />
+                  Rider Doorstep Instructions:
+                </span>
+                <p className="text-xs font-semibold text-slate-800">
+                  {activeOrderConfirmation.deliveryInstructions}
+                </p>
+              </div>
+            )}
 
             <button
               onClick={() => setActiveOrderConfirmation(null)}

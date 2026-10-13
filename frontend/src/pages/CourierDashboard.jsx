@@ -9,6 +9,7 @@ import {
   Navigation,
   KeyRound,
   AlertCircle,
+  FileText,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import api from '../api/client';
@@ -42,6 +43,7 @@ export const CourierDashboard = () => {
       amountToCollect: 0,
       status: 'OUT_FOR_DELIVERY', // 'ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED'
       expectedOtp: '4821', // Matches customer's secret OTP
+      deliveryInstructions: 'Leave with security guard. Ring bell once.',
     },
     {
       id: 'DEL-102',
@@ -63,6 +65,7 @@ export const CourierDashboard = () => {
       amountToCollect: 4499,
       status: 'PICKED_UP',
       expectedOtp: '9104',
+      deliveryInstructions: 'Call before arriving. Gate #3 entrance.',
     },
   ]);
 
@@ -97,6 +100,7 @@ export const CourierDashboard = () => {
           amountToCollect: t.amountToCollect || 0,
           status: t.status,
           expectedOtp: t.subOrder?.deliveryOtp || '4821',
+          deliveryInstructions: t.deliveryInstructions || t.subOrder?.deliveryInstructions || '',
         }));
         setTasks(mapped);
 
@@ -370,6 +374,19 @@ export const CourierDashboard = () => {
                   <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-bold flex items-center justify-between">
                     <span>💵 Collect COD Cash:</span>
                     <span className="text-base text-slate-900 font-black">₹{task.amountToCollect.toLocaleString('en-IN')}</span>
+                  </div>
+                )}
+
+                {/* Point #25: Order Delivery Instructions / Rider Notes Box */}
+                {task.deliveryInstructions && (
+                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50/70 border border-amber-300 text-amber-950">
+                    <FileText className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <span className="font-black text-[10px] uppercase tracking-wider text-amber-800 block">
+                        📝 Rider Instructions / Doorstep Notes:
+                      </span>
+                      <p className="font-semibold text-xs text-slate-800 mt-0.5">{task.deliveryInstructions}</p>
+                    </div>
                   </div>
                 )}
               </div>

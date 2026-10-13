@@ -12,7 +12,7 @@ const mailService = require('../services/mailService');
 // @route   POST /api/orders
 exports.createOrder = async (req, res, next) => {
   try {
-    const { items, shippingAddress, paymentMethod, couponCode } = req.body;
+    const { items, shippingAddress, paymentMethod, couponCode, deliveryInstructions } = req.body;
 
     if (!items || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Cart items are required to place an order' });
@@ -225,6 +225,7 @@ exports.createOrder = async (req, res, next) => {
       totalAmount: finalTotalAmount,
       shippingFee,
       shippingAddress,
+      deliveryInstructions: deliveryInstructions || '',
       paymentMethod: paymentMethod || 'COD',
       paymentStatus: paymentMethod === 'RAZORPAY' ? 'PAID' : 'PENDING',
     });
@@ -258,6 +259,7 @@ exports.createOrder = async (req, res, next) => {
         platformCommissionAmount: commissionAmount,
         vendorEarning,
         shippingAddress,
+        deliveryInstructions: deliveryInstructions || '',
         deliveryPartner: deliveryPartner ? deliveryPartner._id : null,
         trackingHistory: [
           {
@@ -292,6 +294,7 @@ exports.createOrder = async (req, res, next) => {
         await DeliveryTask.create({
           subOrder: subOrder._id,
           deliveryPartner: deliveryPartner._id,
+          deliveryInstructions: deliveryInstructions || '',
           pickupLocation: {
             storeName: vendor.storeName,
             phone: vendor.pickupAddress?.phone || '9876543210',

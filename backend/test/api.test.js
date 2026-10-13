@@ -912,6 +912,108 @@ const runTests = async () => {
       assert.ok(dataValScratch.coupon.discountAmount > 0);
     });
 
+    await test('Point 24: Multi-Address Book: CRUD addresses, labels (HOME/WORK/OTHER), and default selection', async () => {
+      // 1. Initial GET addresses
+      const resInit = await fetch(`${baseUrl}/auth/addresses`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resInit.status, 200);
+      const dataInit = await resInit.json();
+      assert.strictEqual(dataInit.success, true);
+      const initialCount = dataInit.count;
+
+      // 2. POST add Work address with isDefault: true
+      const resAddWork = await fetch(`${baseUrl}/auth/addresses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          recipientName: 'Aman Sharma (Office)',
+          phone: '9876543214',
+          street: 'Cyber Tower 8, 4th Floor, DLF CyberCity',
+          city: 'Gurugram',
+          state: 'Haryana',
+          pincode: '122002',
+          type: 'WORK',
+          isDefault: true,
+        }),
+      });
+      assert.strictEqual(resAddWork.status, 201);
+      const dataAddWork = await resAddWork.json();
+      assert.strictEqual(dataAddWork.data.type, 'WORK');
+      assert.strictEqual(dataAddWork.data.isDefault, true);
+      const workId = dataAddWork.data._id;
+
+      // 3. POST add Vacation / Other address with isDefault: false
+      const resAddOther = await fetch(`${baseUrl}/auth/addresses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          recipientName: 'Aman Sharma (Holiday Villa)',
+          phone: '9876543214',
+          street: 'Beach Villa 12, Calangute',
+          city: 'Goa',
+          state: 'Goa',
+          pincode: '403516',
+          type: 'OTHER',
+          isDefault: false,
+        }),
+      });
+      assert.strictEqual(resAddOther.status, 201);
+      const dataAddOther = await resAddOther.json();
+      assert.strictEqual(dataAddOther.data.type, 'OTHER');
+      assert.strictEqual(dataAddOther.data.isDefault, false);
+      const otherId = dataAddOther.data._id;
+
+      // 4. GET all addresses verifies count increased by 2 and default is WORK
+      const resGet = await fetch(`${baseUrl}/auth/addresses`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resGet.status, 200);
+      const dataGet = await resGet.json();
+      assert.strictEqual(dataGet.count, initialCount + 2);
+      const fetchedWork = dataGet.data.find(a => a._id.toString() === workId.toString());
+      assert.strictEqual(fetchedWork.isDefault, true);
+
+      // 5. PUT update address landmark
+      const resPut = await fetch(`${baseUrl}/auth/addresses/${otherId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          landmark: 'Near Calangute Beach Circle',
+        }),
+      });
+      assert.strictEqual(resPut.status, 200);
+      const dataPut = await resPut.json();
+      assert.strictEqual(dataPut.data.landmark, 'Near Calangute Beach Circle');
+
+      // 6. PATCH switch default address to OTHER
+      const resPatchDefault = await fetch(`${baseUrl}/auth/addresses/${otherId}/default`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resPatchDefault.status, 200);
+      const dataPatchDefault = await resPatchDefault.json();
+      assert.strictEqual(dataPatchDefault.defaultAddress._id.toString(), otherId.toString());
+
+      // 7. DELETE work address
+      const resDel = await fetch(`${baseUrl}/auth/addresses/${workId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resDel.status, 200);
+      const dataDel = await resDel.json();
+      assert.strictEqual(dataDel.addresses.length, initialCount + 1);
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

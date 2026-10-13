@@ -44,6 +44,7 @@ import SocialProofToast from '../components/SocialProofToast';
 import PromoCouponBox from '../components/PromoCouponBox';
 import StorefrontOffersHub from '../components/StorefrontOffersHub';
 import ScratchCardModal from '../components/ScratchCardModal';
+import AddressBookModal from '../components/AddressBookModal';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -227,15 +228,41 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     };
   }, [products]);
 
-  // Checkout address state
+  // Point #24: Checkout Address & Multi-Address Book State
+  const [isAddressBookOpen, setIsAddressBookOpen] = useState(false);
+  const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [address, setAddress] = useState({
     recipientName: user?.name || 'Aman Sharma',
     phone: user?.phone || '9876543214',
-    street: 'Flat 402, Green Valley Apartments',
+    alternatePhone: '',
+    street: 'Flat 402, Green Valley Apartments, Sector 62',
+    landmark: 'Near Metro Station Gate 2',
     city: 'New Delhi',
     state: 'Delhi',
     pincode: '110001',
+    type: 'HOME',
   });
+
+  // Fetch initial default address from backend
+  useEffect(() => {
+    api.get('/auth/addresses').then(res => {
+      if (res.data?.success && Array.isArray(res.data.addresses) && res.data.addresses.length > 0) {
+        const def = res.data.addresses.find(a => a.isDefault) || res.data.addresses[0];
+        setSelectedAddressId(def._id);
+        setAddress({
+          recipientName: def.recipientName || 'Aman Sharma',
+          phone: def.phone || '9876543214',
+          alternatePhone: def.alternatePhone || '',
+          street: def.street || 'Flat 402, Green Valley Apartments, Sector 62',
+          landmark: def.landmark || '',
+          city: def.city || 'New Delhi',
+          state: def.state || 'Delhi',
+          pincode: def.pincode || '110001',
+          type: def.type || 'HOME',
+        });
+      }
+    }).catch(() => {});
+  }, [user]);
   const [paymentMethod, setPaymentMethod] = useState('COD');
 
   // Dynamic Payment Gateways from Super Admin Integrations Hub
@@ -1771,48 +1798,58 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
               {/* Delivery Address & Payment */}
               <div className="space-y-4 pt-4 border-t border-slate-200">
-                <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">
-                  Shipping Destination
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">
+                    Shipping Destination
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddressBookOpen(true)}
+                    className="text-[11px] font-black text-amber-600 hover:text-amber-700 hover:underline flex items-center gap-1 transition-colors"
+                  >
+                    <MapPin className="w-3 h-3" />
+                    <span>Change / Address Book</span>
+                  </button>
+                </div>
 
-                <div className="space-y-2 text-xs">
-                  <input
-                    type="text"
-                    placeholder="Recipient Full Name"
-                    value={address.recipientName}
-                    onChange={e => setAddress({ ...address, recipientName: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-300 text-slate-900 font-medium"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Mobile Number"
-                    value={address.phone}
-                    onChange={e => setAddress({ ...address, phone: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-300 text-slate-900 font-medium"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Street Address / Flat No"
-                    value={address.street}
-                    onChange={e => setAddress({ ...address, street: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-300 text-slate-900 font-medium"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      placeholder="City"
-                      value={address.city}
-                      onChange={e => setAddress({ ...address, city: e.target.value })}
-                      className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-300 text-slate-900 font-medium"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Pincode"
-                      value={address.pincode}
-                      onChange={e => setAddress({ ...address, pincode: e.target.value })}
-                      className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-300 text-slate-900 font-medium"
-                    />
+                {/* Selected Address Display Card */}
+                <div className="p-3.5 rounded-2xl border border-amber-300 bg-amber-50/50 relative space-y-1.5 shadow-2xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                        address.type === 'WORK'
+                          ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                          : address.type === 'OTHER'
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          : 'bg-blue-100 text-blue-800 border border-blue-200'
+                      }`}>
+                        {address.type || 'HOME'}
+                      </span>
+                      <span className="text-xs font-black text-slate-900">{address.recipientName}</span>
+                    </div>
+                    <span className="text-[11px] font-mono font-bold text-slate-600">{address.phone}</span>
                   </div>
+
+                  <p className="text-xs text-slate-700 leading-relaxed font-normal">
+                    {address.street}
+                  </p>
+                  {address.landmark && (
+                    <p className="text-[11px] text-amber-700 font-medium">
+                      Landmark: {address.landmark}
+                    </p>
+                  )}
+                  <p className="text-xs font-bold text-slate-800">
+                    {address.city}, {address.state || 'Delhi'} - <span className="font-mono font-black text-slate-950">{address.pincode}</span>
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsAddressBookOpen(true)}
+                    className="mt-1.5 w-full py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 text-[11px] font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-98"
+                  >
+                    <MapPin className="w-3 h-3 text-amber-500" />
+                    <span>Select From Saved Addresses or Add New</span>
+                  </button>
                 </div>
 
                 <div className="space-y-2">
@@ -2141,6 +2178,29 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             setToastMessage(msg);
             setTimeout(() => setToastMessage(null), 3000);
           });
+        }}
+      />
+
+      {/* Point #24: Multi-Address Book (Home, Work, Other) Modal */}
+      <AddressBookModal
+        isOpen={isAddressBookOpen}
+        onClose={() => setIsAddressBookOpen(false)}
+        selectedAddressId={selectedAddressId}
+        onSelectAddress={(selected) => {
+          setSelectedAddressId(selected._id);
+          setAddress({
+            recipientName: selected.recipientName,
+            phone: selected.phone,
+            alternatePhone: selected.alternatePhone || '',
+            street: selected.street,
+            landmark: selected.landmark || '',
+            city: selected.city,
+            state: selected.state || 'Delhi',
+            pincode: selected.pincode,
+            type: selected.type || 'HOME',
+          });
+          setToastMessage(`Delivering to ${selected.recipientName} (${selected.type || 'HOME'}) 📍`);
+          setTimeout(() => setToastMessage(null), 2200);
         }}
       />
     </div>

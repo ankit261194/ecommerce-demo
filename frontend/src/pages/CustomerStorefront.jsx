@@ -35,6 +35,7 @@ import CategorySidebar from '../components/CategorySidebar';
 import FlashSaleSection from '../components/FlashSaleSection';
 import StockUrgencyBadge from '../components/StockUrgencyBadge';
 import RecentPurchaseCounter from '../components/RecentPurchaseCounter';
+import SocialProofToast from '../components/SocialProofToast';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -1817,6 +1818,17 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           <span>{toastMessage}</span>
         </div>
       )}
+      {/* Live Social Proof Toast Popups (Point #14) */}
+      <SocialProofToast
+        onSelectProduct={prod => {
+          const fullProduct = products.find(p => p._id === prod._id || p.slug === prod.slug) || prod;
+          setSelectedProduct(fullProduct);
+          if (fullProduct.hasVariants && fullProduct.variants?.length > 0) {
+            setSelectedVariant(fullProduct.variants[0]);
+          }
+        }}
+        currency="₹"
+      />
     </div>
   );
 };

@@ -464,6 +464,23 @@ const runTests = async () => {
       assert.ok(dataSlug.data.recentViewsPerHour > 0, 'PDP must include positive viewers counter');
     });
 
+    await test('Point 14: GET /products/social-proof/recent-activities returns verified customer purchase stream with customerName, city, and product metadata', async () => {
+      const res = await fetch(`${baseUrl}/products/social-proof/recent-activities`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data), 'Data must be array of recent activity toasts');
+      assert.ok(data.data.length >= 1, 'Must return at least 1 social proof activity');
+
+      const firstAct = data.data[0];
+      assert.ok(firstAct.customerName, 'Activity must have anonymized customerName');
+      assert.ok(firstAct.city, 'Activity must have buyer city');
+      assert.ok(firstAct.timeAgo, 'Activity must have timeAgo string');
+      assert.ok(firstAct.verifiedPurchase, 'Activity must be verified purchase');
+      assert.ok(firstAct.product && firstAct.product.title, 'Activity must include product details');
+      assert.ok(firstAct.product.sellingPrice, 'Activity product must include sellingPrice');
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

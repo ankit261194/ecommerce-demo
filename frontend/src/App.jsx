@@ -81,6 +81,20 @@ const MainLayout = () => {
         s3: { bucket: 'auramarket-media', region: 'ap-south-1', accessKey: '', secretKey: '' },
       },
     },
+    seo: {
+      metaTitle: 'AuraMarket — The Next-Gen Multi-Vendor Commerce Platform',
+      metaDescription:
+        'Discover top electronics, audio, fashion, and lifestyle brands from verified merchants with express delivery and OTP verification.',
+      metaKeywords:
+        'ecommerce, multi-vendor marketplace, online shopping, electronics, fashion, split orders',
+      ogImage:
+        'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=1200&q=80',
+      canonicalUrl: 'https://shribalajikripadham.online/ecommerce-demo/',
+      googleSiteVerification: '',
+      googleAnalyticsId: '',
+      facebookPixelId: '',
+      enableRichSnippets: true,
+    },
   });
 
   // Synchronize dynamic marketplace theme & branding from backend API
@@ -95,6 +109,143 @@ const MainLayout = () => {
         // Fallback to local default UI config if backend offline
       });
   }, []);
+
+  // Technical SEO Engine: Dynamic Head Meta, Open Graph, Twitter Cards, GA4 & JSON-LD
+  useEffect(() => {
+    const seo = uiConfig?.seo || {};
+    const storeName = uiConfig?.storeName || 'AuraMarket';
+    const canonical = seo.canonicalUrl || (window.location.origin + window.location.pathname);
+    const title = seo.metaTitle || `${storeName} — The Next-Gen Multi-Vendor Commerce Platform`;
+    const description =
+      seo.metaDescription ||
+      'Discover top electronics, audio, fashion, and lifestyle brands from verified merchants with express delivery and OTP verification.';
+    const keywords =
+      seo.metaKeywords ||
+      'ecommerce, multi-vendor marketplace, online shopping, electronics, fashion, split orders';
+    const ogImage =
+      seo.ogImage ||
+      'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=1200&q=80';
+
+    // 1. Dynamic Page Title
+    document.title = title;
+
+    // Helper to insert or update meta tags
+    const updateMeta = (selectorKey, selectorVal, content) => {
+      if (!content && content !== '') return;
+      let el = document.querySelector(`meta[${selectorKey}="${selectorVal}"]`);
+      if (!el) {
+        el = document.createElement('meta');
+        el.setAttribute(selectorKey, selectorVal);
+        document.head.appendChild(el);
+      }
+      el.setAttribute('content', content);
+    };
+
+    // 2. Core Search Engine Meta Tags
+    updateMeta('name', 'description', description);
+    updateMeta('name', 'keywords', keywords);
+
+    // 3. Canonical Link Tag
+    let canonicalTag = document.querySelector('link[rel="canonical"]');
+    if (!canonicalTag) {
+      canonicalTag = document.createElement('link');
+      canonicalTag.setAttribute('rel', 'canonical');
+      document.head.appendChild(canonicalTag);
+    }
+    canonicalTag.setAttribute('href', canonical);
+
+    // 4. Open Graph Social Media Tags (WhatsApp, Facebook, LinkedIn)
+    updateMeta('property', 'og:title', title);
+    updateMeta('property', 'og:description', description);
+    updateMeta('property', 'og:image', ogImage);
+    updateMeta('property', 'og:type', 'website');
+    updateMeta('property', 'og:url', canonical);
+    updateMeta('property', 'og:site_name', storeName);
+
+    // 5. Twitter / X Card Tags
+    updateMeta('name', 'twitter:card', 'summary_large_image');
+    updateMeta('name', 'twitter:title', title);
+    updateMeta('name', 'twitter:description', description);
+    updateMeta('name', 'twitter:image', ogImage);
+
+    // 6. Google Search Console Verification
+    if (seo.googleSiteVerification && seo.googleSiteVerification.trim() !== '') {
+      let code = seo.googleSiteVerification.trim();
+      const contentMatch = code.match(/content=["']([^"']+)["']/i);
+      if (contentMatch) code = contentMatch[1];
+      updateMeta('name', 'google-site-verification', code);
+    }
+
+    // 7. Google Analytics 4 (GA4) Script Injection
+    if (seo.googleAnalyticsId && seo.googleAnalyticsId.trim() !== '') {
+      const gaId = seo.googleAnalyticsId.trim();
+      if (!document.getElementById('ga4-script-tag')) {
+        const gaScript = document.createElement('script');
+        gaScript.id = 'ga4-script-tag';
+        gaScript.async = true;
+        gaScript.src = `https://www.googletagmanager.com/gtag/js?id=${gaId}`;
+        document.head.appendChild(gaScript);
+
+        const initScript = document.createElement('script');
+        initScript.id = 'ga4-init-tag';
+        initScript.innerHTML = `
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', '${gaId}');
+        `;
+        document.head.appendChild(initScript);
+      }
+    }
+
+    // 8. JSON-LD Structured Data (WebSite + Organization Schema)
+    if (seo.enableRichSnippets !== false) {
+      let webSiteSchemaTag = document.getElementById('jsonld-website-schema');
+      if (!webSiteSchemaTag) {
+        webSiteSchemaTag = document.createElement('script');
+        webSiteSchemaTag.id = 'jsonld-website-schema';
+        webSiteSchemaTag.type = 'application/ld+json';
+        document.head.appendChild(webSiteSchemaTag);
+      }
+      webSiteSchemaTag.textContent = JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: storeName,
+        url: canonical,
+        potentialAction: {
+          '@type': 'SearchAction',
+          target: `${canonical}?search={search_term_string}`,
+          'query-input': 'required name=search_term_string',
+        },
+      });
+
+      let orgSchemaTag = document.getElementById('jsonld-organization-schema');
+      if (!orgSchemaTag) {
+        orgSchemaTag = document.createElement('script');
+        orgSchemaTag.id = 'jsonld-organization-schema';
+        orgSchemaTag.type = 'application/ld+json';
+        document.head.appendChild(orgSchemaTag);
+      }
+      orgSchemaTag.textContent = JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        name: storeName,
+        url: canonical,
+        logo: ogImage,
+        contactPoint: {
+          '@type': 'ContactPoint',
+          telephone: uiConfig?.supportPhone || '+91 8533955333',
+          contactType: 'customer service',
+        },
+      });
+    } else {
+      const wEl = document.getElementById('jsonld-website-schema');
+      if (wEl) wEl.remove();
+      const oEl = document.getElementById('jsonld-organization-schema');
+      if (oEl) oEl.remove();
+    }
+  }, [uiConfig?.seo, uiConfig?.storeName, uiConfig?.supportPhone]);
+
 
   const handleResetDemo = () => {
     clearCart();

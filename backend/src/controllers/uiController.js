@@ -80,6 +80,7 @@ exports.updateUIConfig = async (req, res, next) => {
       demoNoticeContact,
       demoWhatsAppUrl,
       integrations,
+      seo,
     } = req.body;
 
     let config = await UIConfig.findOne();
@@ -101,6 +102,14 @@ exports.updateUIConfig = async (req, res, next) => {
     if (demoModeActive !== undefined) config.demoModeActive = demoModeActive;
     if (demoNoticeContact !== undefined) config.demoNoticeContact = demoNoticeContact;
     if (demoWhatsAppUrl !== undefined) config.demoWhatsAppUrl = demoWhatsAppUrl;
+
+    if (seo) {
+      const curSeo = config.seo ? (config.seo.toObject ? config.seo.toObject() : config.seo) : {};
+      config.seo = {
+        ...curSeo,
+        ...seo,
+      };
+    }
 
     if (integrations) {
       const cur = config.integrations ? (config.integrations.toObject ? config.integrations.toObject() : config.integrations) : {};

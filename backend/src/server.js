@@ -89,6 +89,100 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/delivery', deliveryRoutes);
 app.use('/api/ui', uiRoutes);
 
+// Dynamic Technical SEO Endpoints
+const generateSitemap = async (req, res) => {
+  try {
+    const UIConfig = require('./models/UIConfig');
+    const Product = require('./models/Product');
+    const Category = require('./models/Category');
+
+    const config = await UIConfig.findOne();
+    const rawCanonical = config?.seo?.canonicalUrl;
+    const baseUrl = (rawCanonical && rawCanonical.trim() !== '')
+      ? rawCanonical.replace(/\/+$/, '')
+      : `${req.protocol}://${req.get('host')}`;
+
+    const nowIso = new Date().toISOString().split('T')[0];
+
+    const staticUrls = [
+      { loc: `${baseUrl}/`, priority: '1.0', changefreq: 'daily', lastmod: nowIso },
+      { loc: `${baseUrl}/products`, priority: '0.9', changefreq: 'daily', lastmod: nowIso },
+    ];
+
+    let categoryUrls = [];
+    try {
+      const categories = await Category.find({}).select('slug updatedAt').lean();
+      categoryUrls = categories.map(cat => ({
+        loc: `${baseUrl}/category/${cat.slug}`,
+        priority: '0.8',
+        changefreq: 'weekly',
+        lastmod: (cat.updatedAt ? new Date(cat.updatedAt) : new Date()).toISOString().split('T')[0],
+      }));
+    } catch (_) {}
+
+    let productUrls = [];
+    try {
+      const products = await Product.find({ isPublished: { $ne: false } }).select('slug updatedAt').lean();
+      productUrls = products.map(prod => ({
+        loc: `${baseUrl}/product/${prod.slug}`,
+        priority: '0.8',
+        changefreq: 'weekly',
+        lastmod: (prod.updatedAt ? new Date(prod.updatedAt) : new Date()).toISOString().split('T')[0],
+      }));
+    } catch (_) {}
+
+    const allUrls = [...staticUrls, ...categoryUrls, ...productUrls];
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${allUrls
+  .map(
+    u => `  <url>
+    <loc>${u.loc}</loc>
+    <lastmod>${u.lastmod}</lastmod>
+    <changefreq>${u.changefreq}</changefreq>
+    <priority>${u.priority}</priority>
+  </url>`
+  )
+  .join('\n')}
+</urlset>`;
+
+    res.header('Content-Type', 'application/xml');
+    res.status(200).send(xml);
+  } catch (error) {
+    res.status(500).header('Content-Type', 'application/xml').send('<?xml version="1.0" encoding="UTF-8"?><error>Failed to generate sitemap</error>');
+  }
+};
+
+const generateRobotsTxt = async (req, res) => {
+  try {
+    const UIConfig = require('./models/UIConfig');
+    const config = await UIConfig.findOne();
+    const rawCanonical = config?.seo?.canonicalUrl;
+    const baseUrl = (rawCanonical && rawCanonical.trim() !== '')
+      ? rawCanonical.replace(/\/+$/, '')
+      : `${req.protocol}://${req.get('host')}`;
+
+    const robotsContent = `User-agent: *
+Allow: /
+Disallow: /api/admin
+Disallow: /admin
+
+Sitemap: ${baseUrl}/sitemap.xml
+`;
+    res.header('Content-Type', 'text/plain');
+    res.status(200).send(robotsContent);
+  } catch (error) {
+    res.header('Content-Type', 'text/plain');
+    res.status(200).send("User-agent: *\nAllow: /\nDisallow: /api/admin\nDisallow: /admin\n");
+  }
+};
+
+app.get('/sitemap.xml', generateSitemap);
+app.get('/api/sitemap.xml', generateSitemap);
+app.get('/robots.txt', generateRobotsTxt);
+app.get('/api/robots.txt', generateRobotsTxt);
+
 // 404 handler for unknown API routes
 app.use((req, res, next) => {
   res.status(404).json({

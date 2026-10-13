@@ -914,6 +914,72 @@ const runTests = async () => {
       assert.strictEqual(partialData.data.payments.razorpay.keySecret, 'rzp_preserved_secret_99', 'Existing keySecret must be preserved');
     });
 
+    // 14. E-Commerce SEO Engine & Webmaster System Tests
+    await test('GET /sitemap.xml generates valid XML with homepage, categories, products and priority/changefreq', async () => {
+      const serverRoot = `http://127.0.0.1:${PORT}`;
+      const res = await fetch(`${serverRoot}/sitemap.xml`);
+      assert.strictEqual(res.status, 200);
+      const text = await res.text();
+      assert.ok(text.includes('<?xml version="1.0" encoding="UTF-8"?>'), 'Must have XML declaration');
+      assert.ok(text.includes('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'), 'Must have urlset namespace');
+      assert.ok(text.includes('<loc>'), 'Must have loc elements');
+      assert.ok(text.includes('<lastmod>'), 'Must have lastmod elements');
+      assert.ok(text.includes('<changefreq>'), 'Must have changefreq elements');
+      assert.ok(text.includes('<priority>'), 'Must have priority elements');
+    });
+
+    await test('GET /robots.txt serves valid robots directives and sitemap reference', async () => {
+      const serverRoot = `http://127.0.0.1:${PORT}`;
+      const res = await fetch(`${serverRoot}/robots.txt`);
+      assert.strictEqual(res.status, 200);
+      const text = await res.text();
+      assert.ok(text.includes('User-agent: *'), 'Must specify User-agent: *');
+      assert.ok(text.includes('Allow: /'), 'Must specify Allow: /');
+      assert.ok(text.includes('Disallow: /api/admin'), 'Must disallow admin APIs');
+      assert.ok(text.includes('Disallow: /admin'), 'Must disallow admin paths');
+      assert.ok(text.includes('Sitemap:'), 'Must include Sitemap directive');
+    });
+
+    await test('PUT /ui/config persists SEO and Webmaster configuration for Super Admin', async () => {
+      const updatePayload = {
+        seo: {
+          metaTitle: 'AuraMarket Pro — Top E-Commerce Showcase',
+          metaDescription: 'Shop premier electronics, fashion, and accessories with instant OTP delivery.',
+          metaKeywords: 'marketplace, verified sellers, fast delivery, shopping',
+          ogImage: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1200',
+          canonicalUrl: 'https://shribalajikripadham.online/ecommerce-demo/',
+          googleSiteVerification: 'google-site-verification-aura-2026-xyz',
+          googleAnalyticsId: 'G-AURA2026TEST',
+          facebookPixelId: '123456789012345',
+          enableRichSnippets: true,
+        },
+      };
+
+      const res = await fetch(`${baseUrl}/ui/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify(updatePayload),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.seo.metaTitle, 'AuraMarket Pro — Top E-Commerce Showcase');
+      assert.strictEqual(data.data.seo.googleAnalyticsId, 'G-AURA2026TEST');
+      assert.strictEqual(data.data.seo.googleSiteVerification, 'google-site-verification-aura-2026-xyz');
+      assert.strictEqual(data.data.seo.facebookPixelId, '123456789012345');
+      assert.strictEqual(data.data.seo.enableRichSnippets, true);
+
+      // Verify persistence via public GET /ui/config
+      const getRes = await fetch(`${baseUrl}/ui/config`);
+      assert.strictEqual(getRes.status, 200);
+      const getData = await getRes.json();
+      assert.strictEqual(getData.data.seo.metaTitle, 'AuraMarket Pro — Top E-Commerce Showcase');
+      assert.strictEqual(getData.data.seo.canonicalUrl, 'https://shribalajikripadham.online/ecommerce-demo/');
+    });
+
   } finally {
     if (server) {
       server.close();

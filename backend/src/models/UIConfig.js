@@ -165,6 +165,44 @@ const uiConfigSchema = new mongoose.Schema(
       type: integrationsSchema,
       default: () => ({}),
     },
+    seo: {
+      metaTitle: {
+        type: String,
+        default: 'AuraMarket — The Next-Gen Multi-Vendor Commerce Platform',
+      },
+      metaDescription: {
+        type: String,
+        default: 'Discover top electronics, audio, fashion, and lifestyle brands from verified merchants with express delivery and OTP verification.',
+      },
+      metaKeywords: {
+        type: String,
+        default: 'ecommerce, multi-vendor marketplace, online shopping, electronics, fashion, split orders',
+      },
+      ogImage: {
+        type: String,
+        default: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=1200&q=80',
+      },
+      canonicalUrl: {
+        type: String,
+        default: 'https://shribalajikripadham.online/ecommerce-demo/',
+      },
+      googleSiteVerification: {
+        type: String,
+        default: '',
+      },
+      googleAnalyticsId: {
+        type: String,
+        default: '',
+      },
+      facebookPixelId: {
+        type: String,
+        default: '',
+      },
+      enableRichSnippets: {
+        type: Boolean,
+        default: true,
+      },
+    },
   },
   { timestamps: true }
 );

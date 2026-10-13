@@ -25,7 +25,9 @@ import {
   Globe,
   Settings,
   Lock,
-  ArrowRight
+  ArrowRight,
+  Search,
+  BarChart3,
 } from 'lucide-react';
 
 export const DocumentationModal = ({ isOpen, onClose }) => {
@@ -150,7 +152,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
             }`}
           >
             <span>⚡</span>
-            <span>{lang === 'hi' ? 'एडमिन जीरो-कोड (SMS, Payments, SMTP, Cloud)' : 'Admin Zero-Code (SMS, Payments, SMTP, Cloud)'}</span>
+            <span>{lang === 'hi' ? 'एडमिन जीरो-कोड (SMS, Payments, SMTP, Cloud, SEO)' : 'Admin Zero-Code (SMS, Payments, SMTP, Cloud, SEO)'}</span>
           </button>
           <button
             onClick={() => setActiveTab('credentials')}
@@ -719,6 +721,84 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     ? 'सुपर एडमिन में ऊपर "Theme & Banner Manager" पर क्लिक करें। स्टोर का नाम, सेल का डिस्काउंट टेक्स्ट और कस्टमर केयर फ़ोन नंबर बदलकर सेव करें — सब कुछ तुरंत लाइव बदल जाता है!'
                     : 'Click "Theme & Banner Manager" inside Super Admin. Change store title, promotional sales banners, and support phone numbers live.'}
                 </p>
+              </div>
+
+              {/* MODULE H: MASTER E-COMMERCE SEO & WEBMASTER SUITE */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+                      Module H • Admin Zero-Code SEO
+                    </span>
+                    <h4 className="text-sm sm:text-base font-black text-slate-900 mt-1 flex items-center gap-2">
+                      <Search className="w-4 h-4 text-amber-500" />
+                      {lang === 'hi'
+                        ? '6. एसईओ (SEO), गूगल सर्च कंसोल, GA4 व साइटमैप सबमिशन'
+                        : '6. Master SEO, Google Search Console, GA4 & Sitemap Engine'}
+                    </h4>
+                  </div>
+                  <span className="text-xs text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                    Google Page 1
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-600">
+                  {lang === 'hi'
+                    ? 'सुपर एडमिन में "🔍 SEO & Webmaster Hub" टैब से अपने स्टोर का Google Search Console कोड, GA4 ट्रैकिंग आईडी, सोशल शेयरिंग इमेज और स्कीमा मार्कअप बिना कोड छुए सेट करें। सभी प्रोडक्ट्स 24-48 घंटे में गूगल पर सर्च होने लगते हैं।'
+                    : 'Manage search engine meta tags, Google Search Console HTML tag verification, Google Analytics 4 (GA4), Open Graph social previews, and Schema.org rich snippets with zero code from Super Admin.'}
+                </p>
+
+                {/* Interactive Endpoints & Code Snippets */}
+                <div className="space-y-2.5">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="text-[11px] font-bold text-slate-700">
+                        {lang === 'hi' ? '1. गूगल सर्च कंसोल में साइटमैप URL:' : '1. Google Search Console Sitemap URL:'}
+                      </div>
+                      <div className="font-mono text-xs text-blue-700 font-semibold break-all">
+                        https://shribalajikripadham.online/ecommerce-demo/sitemap.xml
+                      </div>
+                    </div>
+                    {renderCopyBtn('https://shribalajikripadham.online/ecommerce-demo/sitemap.xml', 'sitemap-url')}
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="text-[11px] font-bold text-slate-700">
+                        {lang === 'hi' ? '2. सर्च इंजन Robots.txt लिंक:' : '2. Live Robots.txt URL:'}
+                      </div>
+                      <div className="font-mono text-xs text-slate-700 font-semibold break-all">
+                        https://shribalajikripadham.online/ecommerce-demo/robots.txt
+                      </div>
+                    </div>
+                    {renderCopyBtn('https://shribalajikripadham.online/ecommerce-demo/robots.txt', 'robots-url')}
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="text-[11px] font-bold text-slate-700">
+                        {lang === 'hi' ? '3. टर्मिनल से साइटमैप टेस्ट करने की कमांड:' : '3. Test Sitemap Header Command:'}
+                      </div>
+                      <div className="font-mono text-xs text-emerald-800 font-semibold break-all">
+                        curl -I https://shribalajikripadham.online/ecommerce-demo/sitemap.xml
+                      </div>
+                    </div>
+                    {renderCopyBtn('curl -I https://shribalajikripadham.online/ecommerce-demo/sitemap.xml', 'curl-sitemap')}
+                  </div>
+                </div>
+
+                {/* Steps Mini Card */}
+                <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-200 text-xs text-slate-700 space-y-1.5">
+                  <div className="font-bold text-blue-900 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                    <span>{lang === 'hi' ? '3-स्टेप्स में 100% गूगल इंडेक्सिंग:' : '3-Step Google Setup Checklist:'}</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-1 text-slate-600 pl-1 text-[11px]">
+                    <li>{lang === 'hi' ? 'search.google.com/search-console पर HTML tag चुनकर कोड कॉपी करें।' : 'Select HTML Tag method on search.google.com/search-console and copy code.'}</li>
+                    <li>{lang === 'hi' ? 'Super Admin के SEO Hub में कोड पेस्ट करके "Save SEO Configuration" दबाएं।' : 'Paste code in Super Admin SEO Hub and click "Save SEO Configuration".'}</li>
+                    <li>{lang === 'hi' ? 'Google Search Console में sitemap.xml सबमिट करें — 24 से 48 घंटे में कैटलॉग लाइव!' : 'Submit sitemap.xml in Google Search Console — catalog indexed in 24-48 hours!'}</li>
+                  </ul>
+                </div>
               </div>
             </div>
           )}

@@ -191,6 +191,99 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     return matchesCategory && matchesSearch;
   });
 
+  // Inject JSON-LD ItemList Schema for Product Catalog
+  useEffect(() => {
+    if (uiConfig?.seo?.enableRichSnippets === false) {
+      const existing = document.getElementById('jsonld-storefront-products');
+      if (existing) existing.remove();
+      return;
+    }
+
+    let productListSchema = document.getElementById('jsonld-storefront-products');
+    if (!productListSchema) {
+      productListSchema = document.createElement('script');
+      productListSchema.id = 'jsonld-storefront-products';
+      productListSchema.type = 'application/ld+json';
+      document.head.appendChild(productListSchema);
+    }
+
+    const items = (products || []).slice(0, 10).map((prod, idx) => ({
+      '@type': 'ListItem',
+      position: idx + 1,
+      item: {
+        '@type': 'Product',
+        name: prod.title,
+        image: prod.images?.[0] || prod.image,
+        description: prod.description,
+        sku: prod.sku || prod._id,
+        offers: {
+          '@type': 'Offer',
+          priceCurrency: 'INR',
+          price: prod.sellingPrice || prod.price,
+          availability: prod.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+          seller: {
+            '@type': 'Organization',
+            name: prod.vendor?.storeName || 'AuraMarket Partner',
+          },
+        },
+      },
+    }));
+
+    productListSchema.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      name: 'AuraMarket Featured Catalog',
+      itemListElement: items,
+    });
+
+    return () => {
+      const el = document.getElementById('jsonld-storefront-products');
+      if (el) el.remove();
+    };
+  }, [products, uiConfig?.seo?.enableRichSnippets]);
+
+  // Inject JSON-LD Product Schema and Dynamic Title when a Product is Selected
+  useEffect(() => {
+    if (selectedProduct) {
+      const prevTitle = document.title;
+      document.title = `${selectedProduct.title} | ${uiConfig?.storeName || 'AuraMarket'}`;
+
+      if (uiConfig?.seo?.enableRichSnippets !== false) {
+        let singleSchema = document.getElementById('jsonld-selected-product');
+        if (!singleSchema) {
+          singleSchema = document.createElement('script');
+          singleSchema.id = 'jsonld-selected-product';
+          singleSchema.type = 'application/ld+json';
+          document.head.appendChild(singleSchema);
+        }
+        singleSchema.textContent = JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'Product',
+          name: selectedProduct.title,
+          image: selectedProduct.images?.[0] || selectedProduct.image,
+          description: selectedProduct.description,
+          sku: selectedProduct.sku || selectedProduct._id,
+          brand: {
+            '@type': 'Brand',
+            name: selectedProduct.brand || 'AuraMarket Choice',
+          },
+          offers: {
+            '@type': 'Offer',
+            priceCurrency: 'INR',
+            price: selectedProduct.sellingPrice || selectedProduct.price,
+            availability: selectedProduct.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+          },
+        });
+      }
+
+      return () => {
+        document.title = prevTitle;
+        const el = document.getElementById('jsonld-selected-product');
+        if (el) el.remove();
+      };
+    }
+  }, [selectedProduct, uiConfig?.storeName, uiConfig?.seo?.enableRichSnippets]);
+
   // Handle Checkout Order Placement
   const handlePlaceOrder = async () => {
     if (cartItems.length === 0) return;

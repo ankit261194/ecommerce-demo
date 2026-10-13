@@ -1,0 +1,36 @@
+========================================================================
+   AuraMarket Multi-Vendor Demo: How to Upload to Your cPanel / Hosting
+========================================================================
+
+Aap is folder ('ecommerce-demo') ko apne cPanel hosting par upload karke
+apne domain par instant live CodeCanyon-style demo chala sakte hain!
+
+STEPS (1 Minute Ka Kaam):
+------------------------------------------------------------------------
+1. Apne cPanel me Login karein aur "File Manager" open karein.
+2. 'public_html' folder ke andar jayein.
+3. Ek naya folder banayein jiska naam rakhein: 'ecommerce-demo' 
+   (ya jo bhi naam aap URL me chahte hain, jaise 'demo').
+4. Is 'ecommerce-demo' folder ke andar jo files hain:
+   - index.html
+   - assets/ (poora folder)
+   inhe wahan upload kar dein!
+5. Ho gaya! Ab aapka live demo link ready hai:
+   👉 https://aapkiwebsite.com/ecommerce-demo/
+
+DEMO CONTROLS AVAILABLE IN THIS LINK:
+------------------------------------------------------------------------
+- Desktop Mode: Full-screen responsive web view.
+- iPhone / Mobile Bezel Simulator: Screen ke beech me real phone mockup
+  chalega jisme client scroll karke mobile app jaisa feel le sakega.
+- Tablet (iPad) Mode: Tablet screen simulator.
+- 1-Click Panel Switcher:
+  * Customer Storefront (Products, Variants, Split Cart, Checkout, OTP Stepper)
+  * Super Admin Panel (Bento Analytics, 1-Click Wipe/Seed, Theme Manager)
+  * Vendor Portal (Inventory, SKU creation, Sub-order dispatch stepper)
+  * Courier Hub (Pickup/Drop maps, 4-digit OTP handover)
+- 1-Click Reset: Ek click me fresh showroom data reset.
+- Hide Bar Button: CodeCanyon bar ko hide karke direct standalone view.
+
+Sabhi cheezein 100% production-tested hain!
+========================================================================

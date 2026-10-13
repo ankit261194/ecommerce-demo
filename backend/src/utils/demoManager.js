@@ -1,0 +1,460 @@
+const User = require('../models/User');
+const VendorProfile = require('../models/VendorProfile');
+const Category = require('../models/Category');
+const Product = require('../models/Product');
+const Order = require('../models/Order');
+const SubOrder = require('../models/SubOrder');
+const DeliveryTask = require('../models/DeliveryTask');
+const Ledger = require('../models/Ledger');
+const UIConfig = require('../models/UIConfig');
+
+const seedDemoData = async () => {
+  console.log('[DemoManager] Seeding demo multi-vendor data...');
+
+  // 1. Ensure SuperAdmin exists
+  let admin = await User.findOne({ email: 'admin@auramarket.com' });
+  if (!admin) {
+    admin = await User.create({
+      name: 'Super Admin',
+      email: 'admin@auramarket.com',
+      phone: '9876543210',
+      password: 'admin123456',
+      role: 'superadmin',
+    });
+  }
+
+  // 2. Ensure Vendor Users & Profiles exist
+  let vendor1User = await User.findOne({ email: 'apex@auramarket.com' });
+  if (!vendor1User) {
+    vendor1User = await User.create({
+      name: 'Rajesh Verma (Apex Electronics)',
+      email: 'apex@auramarket.com',
+      phone: '9876543211',
+      password: 'vendor123456',
+      role: 'vendor',
+    });
+  }
+
+  let vendor1Profile = await VendorProfile.findOne({ user: vendor1User._id });
+  if (!vendor1Profile) {
+    vendor1Profile = await VendorProfile.create({
+      user: vendor1User._id,
+      storeName: 'Apex Tech Hub',
+      storeSlug: 'apex-tech-hub',
+      description: 'Authorized retailer for high-end audio, gaming gear, and smartphones.',
+      gstNumber: '07AAAAA0000A1Z5',
+      commissionRate: 8,
+      status: 'approved',
+      walletBalance: 24500,
+      totalSales: 185000,
+      rating: 4.9,
+    });
+  }
+
+  let vendor2User = await User.findOne({ email: 'vogue@auramarket.com' });
+  if (!vendor2User) {
+    vendor2User = await User.create({
+      name: 'Pooja Kapoor (Vogue Trends)',
+      email: 'vogue@auramarket.com',
+      phone: '9876543212',
+      password: 'vendor123456',
+      role: 'vendor',
+    });
+  }
+
+  let vendor2Profile = await VendorProfile.findOne({ user: vendor2User._id });
+  if (!vendor2Profile) {
+    vendor2Profile = await VendorProfile.create({
+      user: vendor2User._id,
+      storeName: 'Vogue Trends Apparel',
+      storeSlug: 'vogue-trends-apparel',
+      description: 'Contemporary streetwear and luxury apparel handcrafted in India.',
+      gstNumber: '08BBBBB1111B2Z6',
+      commissionRate: 12,
+      status: 'approved',
+      walletBalance: 12400,
+      totalSales: 89000,
+      rating: 4.8,
+    });
+  }
+
+  // 3. Ensure Delivery Partner exists
+  let rider = await User.findOne({ email: 'rider@auramarket.com' });
+  if (!rider) {
+    rider = await User.create({
+      name: 'Vikram Singh (Express Courier)',
+      email: 'rider@auramarket.com',
+      phone: '9876543213',
+      password: 'rider123456',
+      role: 'delivery',
+    });
+  }
+
+  // 4. Ensure Customer exists
+  let customer = await User.findOne({ email: 'customer@auramarket.com' });
+  if (!customer) {
+    customer = await User.create({
+      name: 'Aman Sharma',
+      email: 'customer@auramarket.com',
+      phone: '9876543214',
+      password: 'customer123456',
+      role: 'customer',
+      addresses: [
+        {
+          recipientName: 'Aman Sharma',
+          phone: '9876543214',
+          street: 'Flat 402, Green Valley Apartments',
+          city: 'New Delhi',
+          state: 'Delhi',
+          pincode: '110001',
+          isDefault: true,
+        },
+      ],
+    });
+  }
+
+  // 5. Seed Categories
+  const categoriesData = [
+    { name: 'Electronics & Audio', slug: 'electronics-audio', icon: 'headphones', image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500', isFeatured: true },
+    { name: 'Men & Women Fashion', slug: 'fashion', icon: 'shirt', image: 'https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=500', isFeatured: true },
+    { name: 'Home & Kitchen', slug: 'home-kitchen', icon: 'home', image: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=500', isFeatured: true },
+    { name: 'Watches & Accessories', slug: 'watches-accessories', icon: 'watch', image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500', isFeatured: true },
+  ];
+
+  const categoryMap = {};
+  for (const cat of categoriesData) {
+    let existing = await Category.findOne({ slug: cat.slug });
+    if (!existing) {
+      existing = await Category.create(cat);
+    }
+    categoryMap[cat.slug] = existing._id;
+  }
+
+  // 6. Seed Realistic Products
+  const productsData = [
+    {
+      vendor: vendor1Profile._id,
+      title: 'Aura Pro ANC Wireless Noise-Cancelling Headphones',
+      slug: 'aura-pro-anc-wireless-headphones',
+      description: 'Studio-grade spatial acoustics with 40-hour battery life and custom titanium drivers.',
+      category: categoryMap['electronics-audio'],
+      brand: 'AuraAudio',
+      images: [
+        'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800',
+        'https://images.unsplash.com/photo-1484704849700-f032a568e944?w=800',
+      ],
+      mrp: 14999,
+      sellingPrice: 8999,
+      stock: 45,
+      sku: 'APX-HEAD-001',
+      hasVariants: true,
+      variants: [
+        { sku: 'APX-HEAD-BLK', name: 'Obsidian Black', attributes: { color: 'Black' }, additionalPrice: 0, stock: 25 },
+        { sku: 'APX-HEAD-SLV', name: 'Silver Matte', attributes: { color: 'Silver' }, additionalPrice: 500, stock: 20 },
+      ],
+      ratingsAverage: 4.8,
+      ratingsQuantity: 42,
+      isFeatured: true,
+      tags: ['audio', 'wireless', 'headphones', 'anc'],
+    },
+    {
+      vendor: vendor1Profile._id,
+      title: 'AeroWatch S9 Ultra Smartwatch with AMOLED Display',
+      slug: 'aerowatch-s9-ultra-smartwatch',
+      description: 'Titanium chassis, ECG heart tracking, GPS routing, and IP68 waterproof rating.',
+      category: categoryMap['watches-accessories'],
+      brand: 'AeroTech',
+      images: [
+        'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800',
+      ],
+      mrp: 9999,
+      sellingPrice: 4499,
+      stock: 30,
+      sku: 'APX-WTCH-002',
+      hasVariants: false,
+      ratingsAverage: 4.7,
+      ratingsQuantity: 38,
+      isFeatured: true,
+      tags: ['smartwatch', 'fitness', 'amoled'],
+    },
+    {
+      vendor: vendor2Profile._id,
+      title: 'Obsidian Oversized Heavyweight Cotton Hoodie',
+      slug: 'obsidian-oversized-heavyweight-hoodie',
+      description: '450 GSM French terry cotton with tailored dropped shoulders and ribbed accents.',
+      category: categoryMap['fashion'],
+      brand: 'Vogue Urban',
+      images: [
+        'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=800',
+      ],
+      mrp: 3999,
+      sellingPrice: 1999,
+      stock: 60,
+      sku: 'VOG-HOD-001',
+      hasVariants: true,
+      variants: [
+        { sku: 'VOG-HOD-M', name: 'Medium / Obsidian', attributes: { size: 'M', color: 'Obsidian' }, additionalPrice: 0, stock: 20 },
+        { sku: 'VOG-HOD-L', name: 'Large / Obsidian', attributes: { size: 'L', color: 'Obsidian' }, additionalPrice: 0, stock: 25 },
+        { sku: 'VOG-HOD-XL', name: 'XL / Obsidian', attributes: { size: 'XL', color: 'Obsidian' }, additionalPrice: 100, stock: 15 },
+      ],
+      ratingsAverage: 4.9,
+      ratingsQuantity: 84,
+      isFeatured: true,
+      tags: ['hoodie', 'streetwear', 'cotton', 'winter'],
+    },
+    {
+      vendor: vendor2Profile._id,
+      title: 'Tailored Linen Minimalist Casual Blazer',
+      slug: 'tailored-linen-minimalist-blazer',
+      description: 'Breathable pure European linen engineered for lightweight summer styling.',
+      category: categoryMap['fashion'],
+      brand: 'Vogue Luxe',
+      images: [
+        'https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=800',
+      ],
+      mrp: 7999,
+      sellingPrice: 4299,
+      stock: 25,
+      sku: 'VOG-BLZ-002',
+      hasVariants: false,
+      ratingsAverage: 4.6,
+      ratingsQuantity: 19,
+      isFeatured: false,
+      tags: ['blazer', 'linen', 'formal'],
+    },
+  ];
+
+  for (const prod of productsData) {
+    const existing = await Product.findOne({ slug: prod.slug });
+    if (!existing) {
+      await Product.create(prod);
+    }
+  }
+
+  // 7. Seed or Update UI Config (Obsidian & Amber)
+  let uiConfig = await UIConfig.findOne();
+  if (!uiConfig) {
+    uiConfig = await UIConfig.create({
+      storeName: 'AuraMarket',
+      tagline: 'The Next-Gen Multi-Vendor Commerce Platform',
+      primaryColor: '#F59E0B',
+      secondaryColor: '#0B0F17',
+      announcementText: '✨ Launch Offer: Flat ₹500 Cashback on Orders Above ₹2999!',
+      showAnnouncement: true,
+      heroBanners: [
+        {
+          title: 'Spatial Audio Reinvented',
+          subtitle: 'Immerse yourself in studio-grade acoustics with Aura Pro series.',
+          imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=1200',
+          actionLink: '/products',
+          badgeText: 'Featured Deal',
+          isActive: true,
+        },
+        {
+          title: 'The Autumn Luxury Collection',
+          subtitle: 'Handcrafted heavyweight textures designed for contemporary living.',
+          imageUrl: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1200',
+          actionLink: '/products?category=fashion',
+          badgeText: 'New Arrivals',
+          isActive: true,
+        },
+      ],
+      featuredCategoryIds: Object.values(categoryMap),
+      demoModeActive: true,
+    });
+  }
+
+  // 8. Seed Sample Multi-Vendor Order & Delivery Tasks (if no orders exist)
+  const existingOrder = await Order.findOne();
+  if (!existingOrder) {
+    const p1 = await Product.findOne({ sku: 'APX-HEAD-001' });
+    const p2 = await Product.findOne({ sku: 'VOG-HOD-001' });
+    if (p1 && p2) {
+      const order = await Order.create({
+        orderNumber: 'ORD-DEMO-2026',
+        customer: customer._id,
+        items: [
+          {
+            product: p1._id,
+            vendor: vendor1Profile._id,
+            title: p1.title,
+            image: p1.images[0],
+            quantity: 1,
+            price: p1.sellingPrice,
+            totalPrice: p1.sellingPrice,
+          },
+          {
+            product: p2._id,
+            vendor: vendor2Profile._id,
+            title: p2.title,
+            image: p2.images[0],
+            quantity: 1,
+            price: p2.sellingPrice,
+            totalPrice: p2.sellingPrice,
+          },
+        ],
+        totalAmount: p1.sellingPrice + p2.sellingPrice,
+        totalCommission: Math.round(p1.sellingPrice * 0.08 + p2.sellingPrice * 0.12),
+        shippingAddress: customer.addresses[0],
+        paymentMethod: 'COD',
+        paymentStatus: 'PENDING',
+      });
+
+      // SubOrder 1 for Apex Tech
+      const sub1 = await SubOrder.create({
+        parentOrder: order._id,
+        vendor: vendor1Profile._id,
+        customer: customer._id,
+        items: [
+          {
+            product: p1._id,
+            title: p1.title,
+            image: p1.images[0],
+            quantity: 1,
+            price: p1.sellingPrice,
+            totalPrice: p1.sellingPrice,
+          },
+        ],
+        subTotal: p1.sellingPrice,
+        platformCommissionRate: 8,
+        platformCommissionAmount: Math.round(p1.sellingPrice * 0.08),
+        vendorEarning: Math.round(p1.sellingPrice * 0.92),
+        status: 'out_for_delivery',
+        deliveryOtp: '4821',
+        deliveryPartner: rider._id,
+        shippingAddress: customer.addresses[0],
+        trackingHistory: [
+          { status: 'placed', timestamp: new Date(Date.now() - 3600000), note: 'Order placed by customer' },
+          { status: 'dispatched', timestamp: new Date(Date.now() - 1800000), note: 'Dispatched by Apex Tech Hub' },
+          { status: 'out_for_delivery', timestamp: new Date(), note: 'Out for delivery with courier rider Vikram Singh' },
+        ],
+      });
+
+      // SubOrder 2 for Vogue Trends
+      const sub2 = await SubOrder.create({
+        parentOrder: order._id,
+        vendor: vendor2Profile._id,
+        customer: customer._id,
+        items: [
+          {
+            product: p2._id,
+            title: p2.title,
+            image: p2.images[0],
+            quantity: 1,
+            price: p2.sellingPrice,
+            totalPrice: p2.sellingPrice,
+          },
+        ],
+        subTotal: p2.sellingPrice,
+        platformCommissionRate: 12,
+        platformCommissionAmount: Math.round(p2.sellingPrice * 0.12),
+        vendorEarning: Math.round(p2.sellingPrice * 0.88),
+        status: 'confirmed',
+        deliveryOtp: '9104',
+        deliveryPartner: rider._id,
+        shippingAddress: customer.addresses[0],
+        trackingHistory: [
+          { status: 'placed', timestamp: new Date(Date.now() - 3600000), note: 'Order placed by customer' },
+          { status: 'confirmed', timestamp: new Date(), note: 'Accepted by Vogue Trends Apparel' },
+        ],
+      });
+
+      order.subOrders = [sub1._id, sub2._id];
+      await order.save();
+
+      // Delivery Task for SubOrder 1
+      await DeliveryTask.create({
+        subOrder: sub1._id,
+        deliveryPartner: rider._id,
+        pickupLocation: {
+          storeName: vendor1Profile.storeName,
+          phone: '9876543211',
+          address: 'Shop 14, Commercial Complex, Sector 18, Noida',
+        },
+        dropLocation: {
+          recipientName: customer.addresses[0].recipientName,
+          phone: customer.addresses[0].phone,
+          address: `${customer.addresses[0].street}, ${customer.addresses[0].city}`,
+          pincode: customer.addresses[0].pincode,
+        },
+        status: 'OUT_FOR_DELIVERY',
+        isCod: true,
+        amountToCollect: p1.sellingPrice,
+      });
+
+      // Delivery Task for SubOrder 2
+      await DeliveryTask.create({
+        subOrder: sub2._id,
+        deliveryPartner: rider._id,
+        pickupLocation: {
+          storeName: vendor2Profile.storeName,
+          phone: '9876543212',
+          address: 'Unit 402, Fashion District, Gurugram',
+        },
+        dropLocation: {
+          recipientName: customer.addresses[0].recipientName,
+          phone: customer.addresses[0].phone,
+          address: `${customer.addresses[0].street}, ${customer.addresses[0].city}`,
+          pincode: customer.addresses[0].pincode,
+        },
+        status: 'PICKED_UP',
+        isCod: false,
+        amountToCollect: 0,
+      });
+
+      // Initial Ledgers
+      await Ledger.create({
+        vendor: vendor1Profile._id,
+        subOrder: sub1._id,
+        type: 'ORDER_CREDIT',
+        amount: Math.round(p1.sellingPrice * 0.92),
+        description: `Demo Credit for SubOrder #${sub1._id.toString().slice(-6)}`,
+        balanceAfter: vendor1Profile.walletBalance,
+        status: 'COMPLETED',
+      });
+
+      await Ledger.create({
+        type: 'COMMISSION_DEBIT',
+        amount: Math.round(p1.sellingPrice * 0.08 + p2.sellingPrice * 0.12),
+        description: `Platform Commission cut on Master Order #ORD-DEMO-2026`,
+        balanceAfter: Math.round(p1.sellingPrice * 0.08 + p2.sellingPrice * 0.12),
+        status: 'COMPLETED',
+      });
+    }
+  }
+
+  console.log('[DemoManager] Seeding completed successfully!');
+  return { success: true, message: 'Demo data seeded successfully' };
+};
+
+const wipeDemoData = async () => {
+  console.log('[DemoManager] Wiping demo products, orders, tasks, and ledgers...');
+
+  // 1. Delete all products, categories, orders, suborders, delivery tasks, ledger entries
+  await Product.deleteMany({});
+  await Order.deleteMany({});
+  await SubOrder.deleteMany({});
+  await DeliveryTask.deleteMany({});
+  await Ledger.deleteMany({});
+  await Category.deleteMany({});
+
+  // 2. Remove non-admin demo users if desired, or keep superadmin safe
+  await User.deleteMany({ role: { $ne: 'superadmin' } });
+  await VendorProfile.deleteMany({});
+
+  // 3. Reset UI Config to clean state
+  await UIConfig.findOneAndUpdate(
+    {},
+    {
+      demoModeActive: false,
+      heroBanners: [],
+      featuredCategoryIds: [],
+    },
+    { new: true, upsert: true }
+  );
+
+  console.log('[DemoManager] Database wiped clean! Production ready.');
+  return { success: true, message: 'All demo data wiped cleanly. Database is now in fresh production state.' };
+};
+
+module.exports = { seedDemoData, wipeDemoData };

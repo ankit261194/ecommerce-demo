@@ -1,0 +1,25 @@
+{
+  "name": "ecommerce-marketplace-backend",
+  "version": "1.0.0",
+  "description": "Enterprise-Grade Multi-Vendor E-Commerce Platform Backend",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "seed": "node src/utils/seedRunner.js seed",
+    "wipe": "node src/utils/seedRunner.js wipe",
+    "test": "node test/api.test.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongodb-memory-server": "^10.4.3",
+    "mongoose": "^8.5.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}

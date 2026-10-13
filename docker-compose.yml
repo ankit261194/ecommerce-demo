@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: auramarket_mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: ecommerce_marketplace
+    volumes:
+      - mongo_data:/data/db
+
+  backend:
+    build: ./backend
+    container_name: auramarket_backend
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongodb:27017/ecommerce_marketplace
+      JWT_SECRET: production_grade_super_secret_jwt_key_2026_obsidian_amber
+      JWT_EXPIRES_IN: 7d
+      DEFAULT_PLATFORM_COMMISSION: 10
+    depends_on:
+      - mongodb
+
+volumes:
+  mongo_data:
+    driver: local

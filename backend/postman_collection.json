@@ -1,0 +1,138 @@
+{
+  "info": {
+    "name": "AuraMarket Multi-Vendor API Collection",
+    "description": "Complete REST API endpoints for AuraMarket Amazon-Grade Multi-Vendor Marketplace",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (SuperAdmin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@auramarket.com\",\n  \"password\": \"admin123456\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        },
+        {
+          "name": "Login (Vendor)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"apex@auramarket.com\",\n  \"password\": \"vendor123456\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        },
+        {
+          "name": "Get Current Profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/me", "host": ["{{baseUrl}}"], "path": ["api", "auth", "me"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Super Admin",
+      "item": [
+        {
+          "name": "Get Analytics",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/api/admin/analytics", "host": ["{{baseUrl}}"], "path": ["api", "admin", "analytics"] }
+          }
+        },
+        {
+          "name": "1-Click Wipe Demo Data",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/api/admin/wipe-demo", "host": ["{{baseUrl}}"], "path": ["api", "admin", "wipe-demo"] }
+          }
+        },
+        {
+          "name": "1-Click Seed Demo Data",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/api/admin/seed-demo", "host": ["{{baseUrl}}"], "path": ["api", "admin", "seed-demo"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "Get All Products",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/products?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["api", "products"] }
+          }
+        },
+        {
+          "name": "Get Categories",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/products/categories/all", "host": ["{{baseUrl}}"], "path": ["api", "products", "categories", "all"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders (Multi-Vendor Split)",
+      "item": [
+        {
+          "name": "Checkout & Create Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"productId\": \"prod_001\",\n      \"quantity\": 1,\n      \"variantSku\": \"APX-HEAD-BLK\"\n    }\n  ],\n  \"shippingAddress\": {\n    \"recipientName\": \"Aman Sharma\",\n    \"phone\": \"9876543214\",\n    \"street\": \"Flat 402, Green Valley Apartments\",\n    \"city\": \"New Delhi\",\n    \"state\": \"Delhi\",\n    \"pincode\": \"110001\"\n  },\n  \"paymentMethod\": \"COD\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api", "orders"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Delivery Hub",
+      "item": [
+        {
+          "name": "Verify Customer OTP & Deliver",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"otp\": \"4821\",\n  \"amountCollected\": 0\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/delivery/tasks/task_id/verify-otp", "host": ["{{baseUrl}}"], "path": ["api", "delivery", "tasks", "task_id", "verify-otp"] }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000" },
+    { "key": "token", "value": "" }
+  ]
+}

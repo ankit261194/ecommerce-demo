@@ -73,7 +73,7 @@ const MainLayout = () => {
   };
 
   // Render Inner Content of the Active Portal
-  const renderAppContent = () => (
+  const renderAppContent = (isMobile = false) => (
     <div className="min-h-full flex flex-col bg-slate-50 text-slate-800 pb-20 md:pb-0">
       {/* Top Navbar with Dynamic Branding & Search */}
       <Navbar
@@ -82,6 +82,7 @@ const MainLayout = () => {
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         uiConfig={uiConfig}
+        isMobileMode={isMobile}
       />
 
       {/* Main Panel Content Area */}
@@ -298,7 +299,7 @@ const MainLayout = () => {
       {/* Interactive Device Viewport Simulator */}
       {deviceMode === 'desktop' && (
         <div className="flex-1 w-full animate-fade-in">
-          {renderAppContent()}
+          {renderAppContent(false)}
         </div>
       )}
 
@@ -318,7 +319,7 @@ const MainLayout = () => {
 
             {/* Inner Tablet Canvas with ALWAYS VISIBLE DRAGGABLE SCROLLBAR */}
             <div className="flex-1 rounded-2xl overflow-y-scroll overflow-x-hidden bg-slate-50 shadow-inner custom-device-scrollbar">
-              {renderAppContent()}
+              {renderAppContent(false)}
             </div>
 
             {/* Bottom Home Indicator Bar */}
@@ -327,6 +328,36 @@ const MainLayout = () => {
         </div>
       )}
 
+      {/* Android Smartphone Simulator (Samsung Galaxy / Google Pixel 412px) */}
+      {deviceMode === 'android' && (
+        <div className="flex-1 py-4 sm:py-6 px-3 flex justify-center items-start bg-slate-200/90">
+          <div className="w-full max-w-[412px] h-[calc(100vh-85px)] min-h-[580px] rounded-[36px] p-3 bg-slate-900 border-4 border-slate-700 shadow-2xl relative flex flex-col animate-scale-up">
+            {/* Android Status Bar with Centered Camera Punch-Hole */}
+            <div className="flex items-center justify-between px-3.5 py-1.5 text-[11px] font-bold text-slate-300 bg-slate-950/90 rounded-t-2xl mb-1 select-none">
+              <span className="text-emerald-400 font-extrabold flex items-center gap-1.5">
+                🤖 Android • 12:30
+              </span>
+              {/* Centered Camera Punch-Hole */}
+              <div className="w-3.5 h-3.5 rounded-full bg-slate-950 border border-slate-700 shadow-inner flex-shrink-0" />
+              <span className="flex items-center gap-1.5 text-slate-300">
+                <span>5G</span>
+                <span>•</span>
+                <span>100% 🔋</span>
+              </span>
+            </div>
+
+            {/* Inner Android Canvas with ALWAYS VISIBLE DRAGGABLE SCROLLBAR */}
+            <div className="flex-1 rounded-2xl overflow-y-scroll overflow-x-hidden bg-slate-50 shadow-inner custom-device-scrollbar">
+              {renderAppContent(true)}
+            </div>
+
+            {/* Android Bottom Gesture Navigation Pill */}
+            <div className="w-24 h-1 bg-slate-500 rounded-full mx-auto mt-2" />
+          </div>
+        </div>
+      )}
+
+      {/* iPhone Smartphone Simulator (iOS 414px) */}
       {deviceMode === 'mobile' && (
         <div className="flex-1 py-4 sm:py-6 px-3 flex justify-center items-start bg-slate-200/90">
           <div className="w-full max-w-[414px] h-[calc(100vh-85px)] min-h-[580px] rounded-3xl p-3 bg-slate-900 border-4 border-slate-700 shadow-2xl relative flex flex-col animate-scale-up">
@@ -343,7 +374,7 @@ const MainLayout = () => {
 
             {/* Inner Mobile Canvas with ALWAYS VISIBLE DRAGGABLE SCROLLBAR */}
             <div className="flex-1 rounded-2xl overflow-y-scroll overflow-x-hidden bg-slate-50 shadow-inner custom-device-scrollbar">
-              {renderAppContent()}
+              {renderAppContent(true)}
             </div>
 
             {/* Bottom Home Indicator Bar */}

@@ -3,7 +3,7 @@ import { ShoppingBag, Search, MapPin, Sparkles, ChevronDown } from 'lucide-react
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 
-export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect }) => {
+export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect, isMobileMode = false }) => {
   const { user } = useAuth();
   const { cartCount, setIsCartOpen } = useCart();
 
@@ -27,10 +27,10 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
 
       {/* Main Professional Royal Sapphire / Navy Header (Responsive 2-Row on Mobile, 1-Row on Desktop) */}
       <div className="bg-[#0f2444] text-white px-3 sm:px-4 lg:px-8 py-2.5 sm:py-3.5 shadow-sm">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-2.5 md:gap-6">
+        <div className={`max-w-7xl mx-auto flex ${isMobileMode ? 'flex-col items-stretch gap-2.5' : 'flex-col md:flex-row md:items-center justify-between gap-2.5 md:gap-6'}`}>
           
           {/* Top Bar on Mobile: Brand Logo + Cart + Account */}
-          <div className="flex items-center justify-between gap-3 w-full md:w-auto">
+          <div className={`flex items-center justify-between gap-3 w-full ${isMobileMode ? '' : 'md:w-auto'}`}>
             {/* Logo */}
             <div className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group flex-shrink-0">
               <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-400 flex items-center justify-center shadow-md flex-shrink-0">
@@ -48,7 +48,7 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
             </div>
 
             {/* Mobile Header Actions (Cart & Avatar) */}
-            <div className="flex items-center gap-2 md:hidden">
+            <div className={`flex items-center gap-2 ${isMobileMode ? 'flex' : 'md:hidden'}`}>
               <div className="w-8 h-8 rounded-full bg-blue-950 border border-blue-700 flex items-center justify-center font-black text-amber-400 text-xs shadow-inner">
                 {user?.name?.charAt(0) || 'U'}
               </div>
@@ -68,8 +68,8 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
             </div>
           </div>
 
-          {/* Clean High-Contrast Search Bar (Full Width on Mobile!) */}
-          <div className="w-full md:flex-1 md:max-w-2xl relative">
+          {/* Clean High-Contrast Search Bar (Full 100% Width on Mobile!) */}
+          <div className={`w-full ${isMobileMode ? 'w-full' : 'md:flex-1 md:max-w-2xl'} relative`}>
             <div className="flex items-center bg-white rounded-xl overflow-hidden shadow-sm border border-white/20 focus-within:ring-2 focus-within:ring-amber-400 transition-all">
               <div className="hidden sm:flex items-center gap-1 px-3 py-2 bg-slate-100 text-slate-700 text-xs font-bold border-r border-slate-200 cursor-pointer flex-shrink-0">
                 <span>All</span>
@@ -89,7 +89,7 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
           </div>
 
           {/* Desktop Right Header Navigation: Account & Cart */}
-          <div className="hidden md:flex items-center gap-4 flex-shrink-0">
+          <div className={`${isMobileMode ? 'hidden' : 'hidden md:flex'} items-center gap-4 flex-shrink-0`}>
             {/* Account / User */}
             <div className="flex items-center gap-2.5 cursor-pointer text-xs">
               <div className="w-9 h-9 rounded-full bg-blue-950/70 border border-blue-800 flex items-center justify-center font-black text-amber-400 shadow-inner flex-shrink-0">

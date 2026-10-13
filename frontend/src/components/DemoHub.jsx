@@ -294,20 +294,28 @@ export const DemoHub = ({ onSelectPortal, uiConfig, onOpenDocs }) => {
                     <ArrowRight className="w-4 h-4 text-amber-400" />
                   </button>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <button
+                      onClick={() => onSelectPortal(portal.id, 'android')}
+                      className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1 transition-colors"
+                      title="Test in Android (Samsung / Pixel) Frame"
+                    >
+                      <span>🤖 Android</span>
+                    </button>
                     <button
                       onClick={() => onSelectPortal(portal.id, 'mobile')}
-                      className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                      className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1 transition-colors"
+                      title="Test in iPhone Frame"
                     >
                       <Smartphone className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Test in iPhone Frame</span>
+                      <span>iPhone</span>
                     </button>
                     <button
                       onClick={() => onSelectPortal(portal.id, 'tablet')}
-                      className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                      className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1 transition-colors"
+                      title="Test in iPad Frame"
                     >
-                      <Smartphone className="w-3.5 h-3.5 text-slate-500" />
-                      <span>iPad View</span>
+                      <span>iPad</span>
                     </button>
                   </div>
                 </div>
@@ -321,30 +329,36 @@ export const DemoHub = ({ onSelectPortal, uiConfig, onOpenDocs }) => {
           <div className="space-y-2 max-w-xl">
             <div className="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-wider">
               <Smartphone className="w-3 h-3" />
-              <span>Native Flutter 3.x Engine</span>
+              <span>Native Flutter 3.x Engine • Android (.APK) & iOS</span>
             </div>
             <h3 className="text-2xl font-black text-white tracking-tight">
               Cross-Platform Flutter Mobile Apps (Android & iOS)
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed font-medium">
-              Native source code included with real-time REST API synchronization, customer cart state, push notification models, and courier rider OTP handover verification.
+              Single unified Dart codebase included in the package. Direct APK generation (`flutter build apk`) and iOS IPA generation with real-time REST API synchronization, customer cart state, and OTP delivery verification.
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
             <button
-              onClick={() => onSelectPortal('customer', 'mobile')}
-              className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-lg flex items-center justify-center gap-2 transition-all transform hover:-translate-y-0.5"
+              onClick={() => onSelectPortal('customer', 'android')}
+              className="w-full sm:w-auto px-5 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-lg flex items-center justify-center gap-2 transition-all transform hover:-translate-y-0.5"
             >
-              <Smartphone className="w-4 h-4" />
-              <span>Launch Customer Mobile App</span>
+              <span>🤖 Launch Android Demo</span>
             </button>
             <button
-              onClick={() => onSelectPortal('courier', 'mobile')}
-              className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/10 flex items-center justify-center gap-2 transition-colors"
+              onClick={() => onSelectPortal('customer', 'mobile')}
+              className="w-full sm:w-auto px-5 py-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-lg flex items-center justify-center gap-2 transition-all transform hover:-translate-y-0.5"
+            >
+              <Smartphone className="w-4 h-4" />
+              <span>🍎 iPhone Demo</span>
+            </button>
+            <button
+              onClick={() => onSelectPortal('courier', 'android')}
+              className="w-full sm:w-auto px-5 py-3.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/10 flex items-center justify-center gap-2 transition-colors"
             >
               <Truck className="w-4 h-4 text-amber-400" />
-              <span>Launch Courier Rider App</span>
+              <span>Rider App</span>
             </button>
           </div>
         </div>

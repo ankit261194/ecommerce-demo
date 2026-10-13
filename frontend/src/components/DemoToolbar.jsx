@@ -134,6 +134,19 @@ export const DemoToolbar = ({
             </button>
 
             <button
+              onClick={() => setDeviceMode('android')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                deviceMode === 'android'
+                  ? 'bg-emerald-600 text-white font-black shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Android (Samsung / Pixel) Mockup (Flutter App)"
+            >
+              <span className="text-xs">🤖</span>
+              <span className="hidden sm:inline">Android</span>
+            </button>
+
+            <button
               onClick={() => setDeviceMode('mobile')}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
                 deviceMode === 'mobile'

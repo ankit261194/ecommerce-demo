@@ -52,7 +52,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       sellingPrice: 8999,
       stock: 45,
       sku: 'APX-HEAD-001',
-      images: ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800'],
+      images: ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&q=80'],
       ratingsAverage: 4.8,
       ratingsQuantity: 142,
       vendor: { _id: 'vnd_001', storeName: 'Apex Tech Hub', rating: 4.9 },
@@ -73,7 +73,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       sellingPrice: 4499,
       stock: 30,
       sku: 'APX-WTCH-002',
-      images: ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800'],
+      images: ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80'],
       ratingsAverage: 4.7,
       ratingsQuantity: 88,
       vendor: { _id: 'vnd_001', storeName: 'Apex Tech Hub', rating: 4.9 },
@@ -90,7 +90,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       sellingPrice: 1999,
       stock: 60,
       sku: 'VOG-HOD-001',
-      images: ['https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=800'],
+      images: ['https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=500&q=80'],
       ratingsAverage: 4.9,
       ratingsQuantity: 215,
       vendor: { _id: 'vnd_002', storeName: 'Vogue Trends Apparel', rating: 4.8 },
@@ -112,7 +112,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       sellingPrice: 4299,
       stock: 25,
       sku: 'VOG-BLZ-002',
-      images: ['https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=800'],
+      images: ['https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=500&q=80'],
       ratingsAverage: 4.6,
       ratingsQuantity: 49,
       vendor: { _id: 'vnd_002', storeName: 'Vogue Trends Apparel', rating: 4.8 },
@@ -290,6 +290,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                     <img
                       src={product.images[0]}
                       alt={product.title}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     <div className="absolute top-3 left-3 bg-red-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded shadow">

@@ -395,6 +395,26 @@ const runTests = async () => {
       assert.ok(dataSugg.products.length >= 1, 'Voice suggestion must find matching product');
     });
 
+    await test('Point 11: GET /products/flash-deals returns campaign with active countdown timer, discount percentage, and claimed progress meter', async () => {
+      const res = await fetch(`${baseUrl}/products/flash-deals`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.campaign, 'Must return campaign object');
+      assert.ok(data.campaign.title.includes('Flash Sale'), 'Campaign must have flash sale title');
+      assert.ok(data.campaign.endsAt, 'Campaign must have endsAt ISO timestamp');
+      assert.ok(data.campaign.durationSeconds > 0, 'Campaign must have positive remaining duration in seconds');
+      assert.ok(Array.isArray(data.data), 'Data must be array of flash deal products');
+      assert.ok(data.data.length >= 1, 'Must return at least 1 flash deal product');
+
+      const firstDeal = data.data[0];
+      assert.ok(firstDeal.title, 'Deal must have product title');
+      assert.ok(firstDeal.mrp > firstDeal.sellingPrice, 'Flash deal MRP must be greater than selling price');
+      assert.ok(firstDeal.discountPercentage > 0, 'Deal must have calculated discount percentage');
+      assert.ok(typeof firstDeal.claimedPercent === 'number', 'Deal must have claimedPercent number');
+      assert.ok(firstDeal.claimedPercent >= 0 && firstDeal.claimedPercent <= 100, 'Claimed percent must be between 0 and 100');
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

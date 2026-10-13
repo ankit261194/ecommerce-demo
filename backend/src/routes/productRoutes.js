@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { getProducts, getProductBySlug, getCategories, getCategoryTree, getBrands, getSearchSuggestions } = require('../controllers/productController');
+const { getProducts, getProductBySlug, getCategories, getCategoryTree, getBrands, getSearchSuggestions, getFlashDeals } = require('../controllers/productController');
 
 router.get('/', getProducts);
+router.get('/flash-deals', getFlashDeals);
 router.get('/search/suggestions', getSearchSuggestions);
 router.get('/brands', getBrands);
 router.get('/categories/tree', getCategoryTree);

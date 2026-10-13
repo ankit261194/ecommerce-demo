@@ -103,6 +103,10 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isFlashDeal: {
+      type: Boolean,
+      default: false,
+    },
     tags: [String],
   },
   { timestamps: true }

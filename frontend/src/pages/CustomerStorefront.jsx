@@ -32,6 +32,7 @@ import {
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
 import CategorySidebar from '../components/CategorySidebar';
+import FlashSaleSection from '../components/FlashSaleSection';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -811,6 +812,18 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             />
           </div>
         </div>
+
+        {/* Flash Sale Frenzy & Deal of the Day with Live Countdown Timer (Point #11) */}
+        <FlashSaleSection
+          onSelectProduct={p => setSelectedProduct(p)}
+          onAddToCart={deal => {
+            const prod = products.find(p => p._id === deal._id) || deal;
+            addToCart(prod, 1);
+            setToastMessage(`⚡ "${deal.title}" claimed and added to cart!`);
+            setTimeout(() => setToastMessage(null), 2500);
+          }}
+          currency="₹"
+        />
 
         {/* Category Circular Cards / Filter Pills */}
         <div className="space-y-3">

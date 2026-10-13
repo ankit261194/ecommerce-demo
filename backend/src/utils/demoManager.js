@@ -7,6 +7,7 @@ const SubOrder = require('../models/SubOrder');
 const DeliveryTask = require('../models/DeliveryTask');
 const Ledger = require('../models/Ledger');
 const UIConfig = require('../models/UIConfig');
+const Coupon = require('../models/Coupon');
 
 const seedDemoData = async () => {
   console.log('[DemoManager] Seeding demo multi-vendor data...');
@@ -563,20 +564,60 @@ const seedDemoData = async () => {
     }
   }
 
+  // 10. Seed Demo Promo Codes / Coupons
+  const existingCouponsCount = await Coupon.countDocuments();
+  if (existingCouponsCount === 0) {
+    await Coupon.create([
+      {
+        code: 'AURAFIRST',
+        title: 'Welcome 20% Off',
+        description: 'Save 20% up to ₹1,000 on your order above ₹999.',
+        discountType: 'PERCENTAGE',
+        discountValue: 20,
+        maxDiscountAmount: 1000,
+        minOrderAmount: 999,
+        isFeatured: true,
+        isActive: true,
+      },
+      {
+        code: 'FESTIVE500',
+        title: 'Flat ₹500 Mega Festive Savings',
+        description: 'Get flat ₹500 instant discount on orders above ₹2,499.',
+        discountType: 'FLAT',
+        discountValue: 500,
+        minOrderAmount: 2499,
+        isFeatured: true,
+        isActive: true,
+      },
+      {
+        code: 'SUPER10',
+        title: 'Everyday Saver 10% Off',
+        description: 'Enjoy 10% instant discount across all catalog items with no minimum spend.',
+        discountType: 'PERCENTAGE',
+        discountValue: 10,
+        maxDiscountAmount: 500,
+        minOrderAmount: 0,
+        isFeatured: false,
+        isActive: true,
+      },
+    ]);
+  }
+
   console.log('[DemoManager] Seeding completed successfully!');
   return { success: true, message: 'Demo data seeded successfully' };
 };
 
 const wipeDemoData = async () => {
-  console.log('[DemoManager] Wiping demo products, orders, tasks, and ledgers...');
+  console.log('[DemoManager] Wiping demo products, orders, tasks, ledgers, and coupons...');
 
-  // 1. Delete all products, categories, orders, suborders, delivery tasks, ledger entries
+  // 1. Delete all products, categories, orders, suborders, delivery tasks, ledger entries, coupons
   await Product.deleteMany({});
   await Order.deleteMany({});
   await SubOrder.deleteMany({});
   await DeliveryTask.deleteMany({});
   await Ledger.deleteMany({});
   await Category.deleteMany({});
+  await Coupon.deleteMany({});
 
   // 2. Remove non-admin demo users if desired, or keep superadmin safe
   await User.deleteMany({ role: { $ne: 'superadmin' } });

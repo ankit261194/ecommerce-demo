@@ -12,7 +12,7 @@ const mailService = require('../services/mailService');
 // @route   POST /api/orders
 exports.createOrder = async (req, res, next) => {
   try {
-    const { items, shippingAddress, paymentMethod } = req.body;
+    const { items, shippingAddress, paymentMethod, couponCode } = req.body;
 
     if (!items || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Cart items are required to place an order' });
@@ -168,7 +168,44 @@ exports.createOrder = async (req, res, next) => {
       });
     }
 
-    // Step 2: Point #19 Dynamic Shipping Calculation (Free Shipping above threshold)
+    // Step 2: Point #22 Real Promo Code / Coupon Engine validation & calculation
+    let appliedCoupon = null;
+    let couponDiscountAmount = 0;
+
+    if (couponCode && typeof couponCode === 'string' && couponCode.trim()) {
+      const Coupon = require('../models/Coupon');
+      const cleanCode = couponCode.trim().toUpperCase();
+      const couponDoc = await Coupon.findOne({ code: cleanCode, isActive: true });
+
+      if (couponDoc) {
+        const notExpired = !couponDoc.expiryDate || new Date(couponDoc.expiryDate) >= new Date();
+        const limitNotReached = !couponDoc.usageLimit || couponDoc.usedCount < couponDoc.usageLimit;
+        const minOrderMet = !couponDoc.minOrderAmount || totalOrderAmount >= couponDoc.minOrderAmount;
+
+        if (notExpired && limitNotReached && minOrderMet) {
+          if (couponDoc.discountType === 'PERCENTAGE') {
+            couponDiscountAmount = Math.round((totalOrderAmount * couponDoc.discountValue) / 100);
+            if (couponDoc.maxDiscountAmount && couponDoc.maxDiscountAmount > 0) {
+              couponDiscountAmount = Math.min(couponDiscountAmount, couponDoc.maxDiscountAmount);
+            }
+          } else {
+            couponDiscountAmount = Math.min(couponDoc.discountValue, totalOrderAmount);
+          }
+
+          appliedCoupon = {
+            code: couponDoc.code,
+            title: couponDoc.title,
+            discountAmount: couponDiscountAmount,
+            discountType: couponDoc.discountType,
+          };
+
+          // Increment usage count atomically
+          await Coupon.findByIdAndUpdate(couponDoc._id, { $inc: { usedCount: 1 } });
+        }
+      }
+    }
+
+    // Dynamic Shipping Calculation (Free Shipping above threshold on net item subtotal)
     const UIConfig = require('../models/UIConfig');
     let uiConfigDoc = null;
     try {
@@ -177,11 +214,14 @@ exports.createOrder = async (req, res, next) => {
     const freeThreshold = uiConfigDoc?.shipping?.freeShippingThreshold ?? 999;
     const defaultFee = uiConfigDoc?.shipping?.defaultShippingFee ?? 99;
     const shippingFee = totalOrderAmount >= freeThreshold ? 0 : defaultFee;
-    const finalTotalAmount = totalOrderAmount + shippingFee;
+    const finalTotalAmount = Math.max(0, totalOrderAmount - couponDiscountAmount + shippingFee);
 
     const masterOrder = await Order.create({
       customer: req.user._id,
       items: validatedItems,
+      subtotal: totalOrderAmount,
+      discountAmount: couponDiscountAmount,
+      coupon: appliedCoupon,
       totalAmount: finalTotalAmount,
       shippingFee,
       shippingAddress,

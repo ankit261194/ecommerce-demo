@@ -40,6 +40,20 @@ const orderSchema = new mongoose.Schema(
         ref: 'SubOrder',
       },
     ],
+    subtotal: {
+      type: Number,
+      default: 0,
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+    },
+    coupon: {
+      code: { type: String, default: null },
+      title: { type: String, default: null },
+      discountAmount: { type: Number, default: 0 },
+      discountType: { type: String, default: null },
+    },
     totalAmount: {
       type: Number,
       required: true,

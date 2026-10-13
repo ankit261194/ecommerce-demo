@@ -41,6 +41,7 @@ import FlashSaleSection from '../components/FlashSaleSection';
 import StockUrgencyBadge from '../components/StockUrgencyBadge';
 import RecentPurchaseCounter from '../components/RecentPurchaseCounter';
 import SocialProofToast from '../components/SocialProofToast';
+import PromoCouponBox from '../components/PromoCouponBox';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -65,6 +66,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [isWishlistDrawerOpen, setIsWishlistDrawerOpen] = useState(false);
   const [compareList, setCompareList] = useState([]);
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
 
   // Wishlist state (persisted in localStorage + synced with backend /api/wishlist)
   const [wishlist, setWishlist] = useState(() => {
@@ -801,6 +803,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           pincode: address.pincode || '110001',
         },
         paymentMethod,
+        couponCode: appliedCoupon?.code || undefined,
       });
 
       if (res.data?.success && res.data?.data) {
@@ -820,6 +823,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           paymentMethod,
         });
         clearCart();
+        setAppliedCoupon(null);
         setIsCartOpen(false);
         return;
       }
@@ -827,15 +831,23 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       // Graceful fallback to rich local confirmation in offline or demo preview
     }
 
+    const freeThresh = uiConfig?.shipping?.freeShippingThreshold ?? 999;
+    const defaultShipFee = uiConfig?.shipping?.defaultShippingFee ?? 99;
+    const isFree = cartTotal >= freeThresh;
+    const activeShipFee = isFree ? 0 : defaultShipFee;
+    const couponDiscount = appliedCoupon?.discountAmount || 0;
+    const fallbackTotal = Math.max(0, cartTotal - couponDiscount + activeShipFee);
+
     setActiveOrderConfirmation({
       orderId: fallbackOrderId,
       subOrders: fallbackSubOrdersList,
-      totalAmount: cartTotal,
+      totalAmount: fallbackTotal,
       address,
       paymentMethod,
     });
 
     clearCart();
+    setAppliedCoupon(null);
     setIsCartOpen(false);
   };
 
@@ -1856,13 +1868,32 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   )}
                 </div>
 
-                {/* Point #19: Dynamic Bill Breakdown & Grand Total */}
+                {/* Point #22: Real Promo Code / Coupon Engine at Checkout */}
+                <div className="pt-3">
+                  <PromoCouponBox
+                    cartTotal={cartTotal}
+                    appliedCoupon={appliedCoupon}
+                    onApplyCoupon={(couponData) => {
+                      setAppliedCoupon(couponData);
+                      setToastMessage(`Coupon "${couponData.code}" applied! Saved ₹${couponData.discountAmount} 🎉`);
+                      setTimeout(() => setToastMessage(null), 2500);
+                    }}
+                    onRemoveCoupon={() => {
+                      setAppliedCoupon(null);
+                      setToastMessage('Coupon removed');
+                      setTimeout(() => setToastMessage(null), 2000);
+                    }}
+                  />
+                </div>
+
+                {/* Point #19 & Point #22: Dynamic Bill Breakdown & Grand Total */}
                 {(() => {
                   const freeThresh = uiConfig?.shipping?.freeShippingThreshold ?? 999;
                   const defaultShipFee = uiConfig?.shipping?.defaultShippingFee ?? 99;
                   const isFree = cartTotal >= freeThresh;
                   const activeShipFee = isFree ? 0 : defaultShipFee;
-                  const grandTotalPayable = cartTotal + activeShipFee;
+                  const couponDiscount = appliedCoupon?.discountAmount || 0;
+                  const grandTotalPayable = Math.max(0, cartTotal - couponDiscount + activeShipFee);
 
                   return (
                     <div className="pt-4 border-t border-slate-200 space-y-2.5">
@@ -1870,6 +1901,19 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                         <span>Items Subtotal:</span>
                         <span className="font-black text-slate-900">₹{cartTotal.toLocaleString('en-IN')}</span>
                       </div>
+
+                      {appliedCoupon && (
+                        <div className="flex items-center justify-between text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-200">
+                          <span className="flex items-center gap-1.5">
+                            <span className="font-black tracking-wider uppercase text-[10px] bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded">
+                              {appliedCoupon.code}
+                            </span>
+                            <span>Promo Discount:</span>
+                          </span>
+                          <span className="font-black">-₹{couponDiscount.toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between text-xs font-bold">
                         <span className="text-slate-600">Doorstep Express Delivery:</span>
                         {isFree ? (
@@ -1881,8 +1925,16 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                           <span className="text-slate-900 font-black">₹{defaultShipFee}</span>
                         )}
                       </div>
+
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-sm">
-                        <span className="font-black text-slate-900">Grand Total Payable:</span>
+                        <div>
+                          <span className="font-black text-slate-900 block leading-tight">Grand Total Payable:</span>
+                          {couponDiscount > 0 && (
+                            <span className="text-[10px] text-emerald-600 font-bold">
+                              Total Savings: ₹{couponDiscount.toLocaleString('en-IN')}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-2xl font-black text-slate-950">₹{grandTotalPayable.toLocaleString('en-IN')}</span>
                       </div>
 

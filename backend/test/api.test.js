@@ -795,6 +795,99 @@ const runTests = async () => {
       assert.ok(item.ratingsAverage >= 0, 'Recommended product must have ratingsAverage');
     });
 
+    await test('Point 22: Real Promo Code / Coupon Engine: GET /coupons and POST /coupons/validate instant discount calculation', async () => {
+      // 1. Fetch public coupons
+      const resCoupons = await fetch(`${baseUrl}/coupons`);
+      assert.strictEqual(resCoupons.status, 200);
+      const dataCoupons = await resCoupons.json();
+      assert.strictEqual(dataCoupons.success, true);
+      assert.ok(Array.isArray(dataCoupons.data));
+      assert.ok(dataCoupons.data.some(c => c.code === 'AURAFIRST'));
+
+      // 2. Validate valid percentage promo code AURAFIRST on ₹2,000 cart
+      const resValid = await fetch(`${baseUrl}/coupons/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: 'AURAFIRST', cartTotal: 2000 }),
+      });
+      assert.strictEqual(resValid.status, 200);
+      const dataValid = await resValid.json();
+      assert.strictEqual(dataValid.success, true);
+      assert.strictEqual(dataValid.valid, true);
+      assert.strictEqual(dataValid.coupon.code, 'AURAFIRST');
+      assert.strictEqual(dataValid.coupon.discountType, 'PERCENTAGE');
+      assert.strictEqual(dataValid.coupon.discountAmount, 400); // 20% of 2000
+      assert.strictEqual(dataValid.coupon.newTotal, 1600);
+
+      // 3. Validate valid flat promo code FESTIVE500 on ₹3,000 cart
+      const resFlat = await fetch(`${baseUrl}/coupons/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: 'festive500', cartTotal: 3000 }),
+      });
+      assert.strictEqual(resFlat.status, 200);
+      const dataFlat = await resFlat.json();
+      assert.strictEqual(dataFlat.coupon.discountAmount, 500);
+      assert.strictEqual(dataFlat.coupon.newTotal, 2500);
+
+      // 4. Reject promo code when cart value is below minimum order requirement
+      const resMinFail = await fetch(`${baseUrl}/coupons/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: 'FESTIVE500', cartTotal: 1500 }),
+      });
+      assert.strictEqual(resMinFail.status, 400);
+      const dataMinFail = await resMinFail.json();
+      assert.strictEqual(dataMinFail.valid, false);
+      assert.ok(dataMinFail.shortfall > 0);
+
+      // 5. Reject invalid non-existent promo code
+      const resInvalid = await fetch(`${baseUrl}/coupons/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: 'BOGUS999', cartTotal: 5000 }),
+      });
+      assert.strictEqual(resInvalid.status, 404);
+      const dataInvalid = await resInvalid.json();
+      assert.strictEqual(dataInvalid.valid, false);
+
+      // 6. Test order creation with couponCode applies discount to masterOrder
+      const resOrderCoupon = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [
+            { productId: hoodieProduct._id, quantity: 1, variantSku: 'VOG-HOD-M' },
+          ],
+          shippingAddress: {
+            recipientName: 'Aman Sharma',
+            phone: '9876543214',
+            street: 'Flat 402, Green Valley Apartments',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'COD',
+          couponCode: 'SUPER10',
+        }),
+      });
+      assert.strictEqual(resOrderCoupon.status, 201);
+      const dataOrderCoupon = await resOrderCoupon.json();
+      assert.strictEqual(dataOrderCoupon.success, true);
+      assert.ok(dataOrderCoupon.data.coupon, 'Order must record applied coupon');
+      assert.strictEqual(dataOrderCoupon.data.coupon.code, 'SUPER10');
+      assert.ok(dataOrderCoupon.data.discountAmount > 0, 'Order discountAmount must be > 0');
+
+      // Cancel coupon test order to restore stock for subsequent test assertions
+      await fetch(`${baseUrl}/orders/${dataOrderCoupon.data._id}/cancel`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

@@ -349,6 +349,31 @@ const runTests = async () => {
       assert.ok(dataPop.data.length >= 2);
     });
 
+    await test('Point 9: GET /products/search/suggestions returns autocomplete products, categories, brands, and search history keywords', async () => {
+      // 1. Empty query returns default trending searches
+      const resEmpty = await fetch(`${baseUrl}/products/search/suggestions`);
+      assert.strictEqual(resEmpty.status, 200);
+      const dataEmpty = await resEmpty.json();
+      assert.strictEqual(dataEmpty.success, true);
+      assert.ok(Array.isArray(dataEmpty.trendingSearches), 'Must return trending searches array');
+      assert.ok(dataEmpty.trendingSearches.length >= 3, 'Must have at least 3 trending searches');
+
+      // 2. Query with 'head' returns headphone products, matching categories, and keywords
+      const resQuery = await fetch(`${baseUrl}/products/search/suggestions?q=head`);
+      assert.strictEqual(resQuery.status, 200);
+      const dataQuery = await resQuery.json();
+      assert.strictEqual(dataQuery.success, true);
+      assert.strictEqual(dataQuery.query, 'head');
+      assert.ok(Array.isArray(dataQuery.products), 'Must return products array');
+      assert.ok(dataQuery.products.length >= 1, 'Should find products matching "head"');
+      assert.ok(
+        dataQuery.products.some(p => p.title.toLowerCase().includes('head')),
+        'Matched products must contain "head" in title'
+      );
+      assert.ok(Array.isArray(dataQuery.categories), 'Must return categories array');
+      assert.ok(Array.isArray(dataQuery.brands), 'Must return brands array');
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

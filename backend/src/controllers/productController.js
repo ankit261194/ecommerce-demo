@@ -285,4 +285,72 @@ exports.getBrands = async (req, res, next) => {
   }
 };
 
+// @desc    Live Search with Autocomplete suggestions (Products, Categories, Brands & Popular Searches) (Point #9)
+// @route   GET /api/products/search/suggestions
+exports.getSearchSuggestions = async (req, res, next) => {
+  try {
+    const rawQuery = (req.query.q || req.query.query || '').trim();
+
+    const trendingSearches = [
+      'Wireless Headphones',
+      'AMOLED Smartwatch',
+      'Heavyweight Cotton Hoodie',
+      'Nordic Desk Lamp',
+      'Tailored Blazer',
+      'Noise Cancelling',
+    ];
+
+    if (!rawQuery) {
+      return res.status(200).json({
+        success: true,
+        query: '',
+        products: [],
+        categories: [],
+        brands: [],
+        trendingSearches,
+      });
+    }
+
+    const regex = new RegExp(rawQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+    // 1. Matched Products (Top 6)
+    const products = await Product.find({
+      isPublished: true,
+      $or: [{ title: regex }, { brand: regex }, { tags: regex }, { description: regex }],
+    })
+      .select('title slug brand sellingPrice mrp images category ratingsAverage stock')
+      .populate('category', 'name slug')
+      .limit(6);
+
+    // 2. Matched Categories
+    const categories = await Category.find({
+      name: regex,
+    })
+      .select('name slug icon')
+      .limit(4);
+
+    // 3. Matched Brands
+    const brandAgg = await Product.aggregate([
+      { $match: { isPublished: true, brand: regex } },
+      { $group: { _id: '$brand', count: { $sum: 1 } } },
+      { $limit: 4 },
+    ]);
+    const brands = brandAgg.map(b => ({ name: b._id, count: b.count }));
+
+    // 4. Matched Trending Searches
+    const matchedTrending = trendingSearches.filter(t => regex.test(t));
+
+    res.status(200).json({
+      success: true,
+      query: rawQuery,
+      products,
+      categories,
+      brands,
+      trendingSearches: matchedTrending.length > 0 ? matchedTrending : trendingSearches.slice(0, 3),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 

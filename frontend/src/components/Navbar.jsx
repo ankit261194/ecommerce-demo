@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ShoppingBag, Search, MapPin, Sparkles, ChevronDown, Heart, X, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import LiveSearchAutocomplete from './LiveSearchAutocomplete';
 
 export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect, isMobileMode = false }) => {
   const { user } = useAuth();
@@ -145,24 +146,22 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
             </div>
           </div>
 
-          {/* Clean High-Contrast Search Bar (Full 100% Width on Mobile!) */}
+          {/* Point #9 Live Search with Autocomplete & Search History Suggestions */}
           <div className={`w-full ${isMobileMode ? 'w-full' : 'md:flex-1 md:max-w-2xl'} relative`}>
-            <div className="flex items-center bg-white rounded-xl overflow-hidden shadow-sm border border-white/20 focus-within:ring-2 focus-within:ring-amber-400 transition-all">
-              <div className="hidden sm:flex items-center gap-1 px-3 py-2 bg-slate-100 text-slate-700 text-xs font-bold border-r border-slate-200 cursor-pointer flex-shrink-0">
-                <span>All</span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-              </div>
-              <input
-                type="text"
-                placeholder="Search products, brands, smartphones, electronics..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full px-3.5 py-2 sm:py-2.5 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 bg-white focus:outline-none"
-              />
-              <button className="bg-amber-400 hover:bg-amber-300 text-slate-950 px-4 py-2 sm:py-2.5 font-black flex items-center justify-center transition-colors shadow flex-shrink-0">
-                <Search className="w-4 h-4" />
-              </button>
-            </div>
+            <LiveSearchAutocomplete
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              onSelectCategory={catSlug => {
+                if (onCategorySelect) onCategorySelect(catSlug);
+                window.dispatchEvent(new CustomEvent('auramarket_select_category', { detail: catSlug }));
+              }}
+              onSelectBrand={bName => {
+                window.dispatchEvent(new CustomEvent('auramarket_select_brand', { detail: bName }));
+              }}
+              onSelectProduct={prod => {
+                window.dispatchEvent(new CustomEvent('auramarket_open_product_pdp', { detail: prod }));
+              }}
+            />
           </div>
 
           {/* Desktop Right Header Navigation: Location, Wishlist, Account & Cart */}

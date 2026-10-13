@@ -97,9 +97,39 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     const handleOpenWishlist = () => {
       setSelectedCategory('wishlist');
     };
+    const handleSelectCategory = e => {
+      if (e.detail) {
+        setSelectedCategory(e.detail);
+        setSelectedSubCategory(null);
+      }
+    };
+    const handleSelectBrand = e => {
+      if (e.detail) {
+        setSelectedBrand(e.detail);
+      }
+    };
+    const handleOpenProductPDP = e => {
+      if (e.detail) {
+        const prod = products.find(p => p._id === e.detail._id) || e.detail;
+        setSelectedProduct(prod);
+        if (prod.hasVariants && prod.variants?.length > 0) {
+          setSelectedVariant(prod.variants[0]);
+        }
+      }
+    };
+
     window.addEventListener('auramarket_open_wishlist', handleOpenWishlist);
-    return () => window.removeEventListener('auramarket_open_wishlist', handleOpenWishlist);
-  }, []);
+    window.addEventListener('auramarket_select_category', handleSelectCategory);
+    window.addEventListener('auramarket_select_brand', handleSelectBrand);
+    window.addEventListener('auramarket_open_product_pdp', handleOpenProductPDP);
+
+    return () => {
+      window.removeEventListener('auramarket_open_wishlist', handleOpenWishlist);
+      window.removeEventListener('auramarket_select_category', handleSelectCategory);
+      window.removeEventListener('auramarket_select_brand', handleSelectBrand);
+      window.removeEventListener('auramarket_open_product_pdp', handleOpenProductPDP);
+    };
+  }, [products]);
 
   // Checkout address state
   const [address, setAddress] = useState({

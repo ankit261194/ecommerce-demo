@@ -113,24 +113,62 @@ const seedDemoData = async () => {
     });
   }
 
-  // 5. Seed Categories
-  const categoriesData = [
-    { name: 'Electronics & Audio', slug: 'electronics-audio', icon: 'headphones', image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500', isFeatured: true },
-    { name: 'Men & Women Fashion', slug: 'fashion', icon: 'shirt', image: 'https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=500', isFeatured: true },
-    { name: 'Home & Kitchen', slug: 'home-kitchen', icon: 'home', image: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=500', isFeatured: true },
-    { name: 'Watches & Accessories', slug: 'watches-accessories', icon: 'watch', image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500', isFeatured: true },
+  // 5. Seed Root Categories & Subcategories (Point #4)
+  const rootCategoriesData = [
+    { name: 'Electronics & Audio', slug: 'electronics-audio', icon: 'headphones', image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500', isFeatured: true, displayOrder: 1 },
+    { name: 'Men & Women Fashion', slug: 'fashion', icon: 'shirt', image: 'https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=500', isFeatured: true, displayOrder: 2 },
+    { name: 'Home & Kitchen', slug: 'home-kitchen', icon: 'home', image: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=500', isFeatured: true, displayOrder: 3 },
+    { name: 'Watches & Accessories', slug: 'watches-accessories', icon: 'watch', image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500', isFeatured: true, displayOrder: 4 },
   ];
 
   const categoryMap = {};
-  for (const cat of categoriesData) {
+  for (const cat of rootCategoriesData) {
     let existing = await Category.findOne({ slug: cat.slug });
     if (!existing) {
       existing = await Category.create(cat);
+    } else {
+      await Category.findByIdAndUpdate(existing._id, { $set: { ...cat, parentCategory: null } });
     }
     categoryMap[cat.slug] = existing._id;
   }
 
-  // 6. Seed Realistic Products
+  // Nested Subcategories
+  const subCategoriesData = [
+    { name: 'Wireless Headphones', slug: 'wireless-headphones', icon: 'headphones', parentSlug: 'electronics-audio', displayOrder: 1 },
+    { name: 'Smartwatches & Wearables', slug: 'smartwatches-wearables', icon: 'watch', parentSlug: 'electronics-audio', displayOrder: 2 },
+    { name: 'Bluetooth Speakers', slug: 'bluetooth-speakers', icon: 'speaker', parentSlug: 'electronics-audio', displayOrder: 3 },
+
+    { name: 'Streetwear & Hoodies', slug: 'streetwear-hoodies', icon: 'shirt', parentSlug: 'fashion', displayOrder: 1 },
+    { name: 'Tailored Blazers', slug: 'blazers-formal', icon: 'briefcase', parentSlug: 'fashion', displayOrder: 2 },
+    { name: 'Footwear & Sneakers', slug: 'footwear-sneakers', icon: 'shoe', parentSlug: 'fashion', displayOrder: 3 },
+
+    { name: 'Smart Lighting', slug: 'smart-lighting', icon: 'lamp', parentSlug: 'home-kitchen', displayOrder: 1 },
+    { name: 'Kitchen & Dining', slug: 'cookware-appliances', icon: 'coffee', parentSlug: 'home-kitchen', displayOrder: 2 },
+
+    { name: 'Luxury Chronographs', slug: 'luxury-chronographs', icon: 'watch', parentSlug: 'watches-accessories', displayOrder: 1 },
+    { name: 'Leather Straps & Wallets', slug: 'leather-wallets', icon: 'pocket', parentSlug: 'watches-accessories', displayOrder: 2 },
+  ];
+
+  const subCategoryMap = {};
+  for (const sub of subCategoriesData) {
+    let existing = await Category.findOne({ slug: sub.slug });
+    const parentId = categoryMap[sub.parentSlug];
+    const subPayload = {
+      name: sub.name,
+      slug: sub.slug,
+      icon: sub.icon,
+      parentCategory: parentId,
+      displayOrder: sub.displayOrder,
+    };
+    if (!existing) {
+      existing = await Category.create(subPayload);
+    } else {
+      await Category.findByIdAndUpdate(existing._id, { $set: subPayload });
+    }
+    subCategoryMap[sub.slug] = existing._id;
+  }
+
+  // 6. Seed Realistic Products with Hierarchy References
   const productsData = [
     {
       vendor: vendor1Profile._id,
@@ -138,6 +176,7 @@ const seedDemoData = async () => {
       slug: 'aura-pro-anc-wireless-headphones',
       description: 'Studio-grade spatial acoustics with 40-hour battery life and custom titanium drivers.',
       category: categoryMap['electronics-audio'],
+      subCategory: subCategoryMap['wireless-headphones'],
       brand: 'AuraAudio',
       images: [
         'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800',
@@ -175,6 +214,7 @@ const seedDemoData = async () => {
       slug: 'aerowatch-s9-ultra-smartwatch',
       description: 'Titanium chassis, ECG heart tracking, GPS routing, and IP68 waterproof rating.',
       category: categoryMap['watches-accessories'],
+      subCategory: subCategoryMap['smartwatches-wearables'],
       brand: 'AeroTech',
       images: [
         'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800',
@@ -206,6 +246,7 @@ const seedDemoData = async () => {
       slug: 'obsidian-oversized-heavyweight-hoodie',
       description: '450 GSM French terry cotton with tailored dropped shoulders and ribbed accents.',
       category: categoryMap['fashion'],
+      subCategory: subCategoryMap['streetwear-hoodies'],
       brand: 'Vogue Urban',
       images: [
         'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=800',
@@ -240,6 +281,7 @@ const seedDemoData = async () => {
       slug: 'tailored-linen-minimalist-blazer',
       description: 'Breathable pure European linen engineered for lightweight summer styling.',
       category: categoryMap['fashion'],
+      subCategory: subCategoryMap['blazers-formal'],
       brand: 'Vogue Luxe',
       images: [
         'https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=800',
@@ -261,6 +303,62 @@ const seedDemoData = async () => {
       ratingsQuantity: 19,
       isFeatured: false,
       tags: ['blazer', 'linen', 'formal'],
+    },
+    {
+      vendor: vendor1Profile._id,
+      title: 'SonicPulse 360 Portable Bluetooth Speaker',
+      slug: 'sonicpulse-360-portable-speaker',
+      description: '360-degree immersive acoustic sound, IPX7 waterproof rating, and 24-hour playtime.',
+      category: categoryMap['electronics-audio'],
+      subCategory: subCategoryMap['bluetooth-speakers'],
+      brand: 'AuraAudio',
+      images: [
+        'https://images.unsplash.com/photo-1545454675-3531b543be5d?w=800',
+        'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800',
+      ],
+      mrp: 4999,
+      sellingPrice: 2499,
+      stock: 50,
+      sku: 'APX-SPK-003',
+      hasVariants: false,
+      specifications: [
+        { key: 'Audio Output', value: '25W Dual High-Excursion Neodymium Drivers' },
+        { key: 'Waterproof', value: 'IPX7 Submersible Waterproof Rating' },
+        { key: 'Battery Life', value: '24 Hours Continuous Playback (5200mAh)' },
+        { key: 'Bluetooth Version', value: 'Bluetooth 5.3 + TWS Stereo Pairing' },
+      ],
+      ratingsAverage: 4.8,
+      ratingsQuantity: 65,
+      isFeatured: true,
+      tags: ['speaker', 'bluetooth', 'audio', 'portable'],
+    },
+    {
+      vendor: vendor1Profile._id,
+      title: 'Aura Luma Ambient Smart Desk Lamp',
+      slug: 'aura-luma-ambient-smart-desk-lamp',
+      description: 'Stepless color temperature dimming, wireless phone charging base, and gentle eye-care light.',
+      category: categoryMap['home-kitchen'],
+      subCategory: subCategoryMap['smart-lighting'],
+      brand: 'AuraLiving',
+      images: [
+        'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=800',
+        'https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?w=800',
+      ],
+      mrp: 5999,
+      sellingPrice: 3199,
+      stock: 35,
+      sku: 'APX-LMP-004',
+      hasVariants: false,
+      specifications: [
+        { key: 'Brightness', value: '800 Lumens RGBCW Color Tuning' },
+        { key: 'Wireless Charging', value: '15W Fast Qi Wireless Charging Pad' },
+        { key: 'App Control', value: 'WiFi & Bluetooth Smart App Controls' },
+        { key: 'Color Temperature', value: '2700K - 6500K Tunable White' },
+      ],
+      ratingsAverage: 4.7,
+      ratingsQuantity: 28,
+      isFeatured: false,
+      tags: ['lamp', 'smart-home', 'lighting', 'desk'],
     },
   ];
 

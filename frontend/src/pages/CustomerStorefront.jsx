@@ -22,9 +22,13 @@ import {
   MapPin,
   Eye,
   SlidersHorizontal,
+  FolderTree,
+  ChevronRight,
+  Filter,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
+import CategorySidebar from '../components/CategorySidebar';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -34,6 +38,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const { user } = useAuth();
 
   const [selectedCategory, setSelectedCategory] = useState(activeCategoryFilter || 'all');
+  const [selectedSubCategory, setSelectedSubCategory] = useState(null);
+  const [isOpenCategoryDrawer, setIsOpenCategoryDrawer] = useState(false);
+  const [isCollapsedCategorySidebar, setIsCollapsedCategorySidebar] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [activeOrderConfirmation, setActiveOrderConfirmation] = useState(null);
@@ -150,7 +157,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     }
   }, [validGateways, paymentMethod]);
 
-  // Rich Product Catalog with Variants and Vendors
+  // Rich Product Catalog with Variants, Vendors & Hierarchical Subcategories (Point #4)
   const [products] = useState([
     {
       _id: 'prod_001',
@@ -158,6 +165,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       description: 'Studio-grade spatial acoustics with 40-hour battery life and custom titanium drivers.',
       category: 'electronics-audio',
       categoryLabel: 'Electronics & Audio',
+      subCategory: 'wireless-headphones',
+      subCategoryLabel: 'Wireless Headphones',
       brand: 'AuraAudio',
       mrp: 14999,
       sellingPrice: 8999,
@@ -178,7 +187,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       title: 'AeroWatch S9 Ultra Smartwatch with AMOLED Display',
       description: 'Titanium chassis, ECG heart tracking, GPS routing, and IP68 waterproof rating.',
       category: 'watches-accessories',
-      categoryLabel: 'Watches',
+      categoryLabel: 'Watches & Accessories',
+      subCategory: 'smartwatches-wearables',
+      subCategoryLabel: 'Smartwatches & Wearables',
       brand: 'AeroTech',
       mrp: 9999,
       sellingPrice: 4499,
@@ -195,7 +206,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       title: 'Obsidian Oversized Heavyweight Cotton Hoodie',
       description: '450 GSM French terry cotton with tailored dropped shoulders and ribbed cuffs.',
       category: 'fashion',
-      categoryLabel: 'Fashion',
+      categoryLabel: 'Fashion & Apparel',
+      subCategory: 'streetwear-hoodies',
+      subCategoryLabel: 'Streetwear & Hoodies',
       brand: 'Vogue Urban',
       mrp: 3999,
       sellingPrice: 1999,
@@ -217,7 +230,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       title: 'Tailored Linen Minimalist Casual Blazer',
       description: 'Breathable pure European linen engineered for lightweight summer styling.',
       category: 'fashion',
-      categoryLabel: 'Fashion',
+      categoryLabel: 'Fashion & Apparel',
+      subCategory: 'blazers-formal',
+      subCategoryLabel: 'Tailored Blazers',
       brand: 'Vogue Luxe',
       mrp: 7999,
       sellingPrice: 4299,
@@ -229,31 +244,160 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       vendor: { _id: 'vnd_002', storeName: 'Vogue Trends Apparel', rating: 4.8 },
       hasVariants: false,
     },
+    {
+      _id: 'prod_005',
+      title: 'SonicPulse 360 Portable Bluetooth Speaker',
+      description: '360-degree immersive acoustic sound, IPX7 waterproof rating, and 24-hour playtime.',
+      category: 'electronics-audio',
+      categoryLabel: 'Electronics & Audio',
+      subCategory: 'bluetooth-speakers',
+      subCategoryLabel: 'Bluetooth Speakers',
+      brand: 'AuraAudio',
+      mrp: 4999,
+      sellingPrice: 2499,
+      stock: 50,
+      sku: 'APX-SPK-003',
+      images: ['https://images.unsplash.com/photo-1545454675-3531b543be5d?w=500&q=80'],
+      ratingsAverage: 4.8,
+      ratingsQuantity: 65,
+      vendor: { _id: 'vnd_001', storeName: 'Apex Tech Hub', rating: 4.9 },
+      hasVariants: false,
+    },
+    {
+      _id: 'prod_006',
+      title: 'Aura Luma Ambient Smart Desk Lamp',
+      description: 'Stepless color temperature dimming, wireless phone charging base, and gentle eye-care light.',
+      category: 'home-kitchen',
+      categoryLabel: 'Home & Kitchen',
+      subCategory: 'smart-lighting',
+      subCategoryLabel: 'Smart Lighting',
+      brand: 'AuraLiving',
+      mrp: 5999,
+      sellingPrice: 3199,
+      stock: 35,
+      sku: 'APX-LMP-004',
+      images: ['https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=500&q=80'],
+      ratingsAverage: 4.7,
+      ratingsQuantity: 28,
+      vendor: { _id: 'vnd_001', storeName: 'Apex Tech Hub', rating: 4.9 },
+      hasVariants: false,
+    },
   ]);
+
+  // Hierarchical Multi-Level Categories Tree with Dynamic Live Counts (Point #4)
+  const categoriesTree = useMemo(() => {
+    const rootStructure = [
+      {
+        _id: 'cat_electronics',
+        name: 'Electronics & Audio',
+        slug: 'electronics-audio',
+        icon: 'headphones',
+        subcategories: [
+          { _id: 'sub_headphones', name: 'Wireless Headphones', slug: 'wireless-headphones' },
+          { _id: 'sub_smartwatches', name: 'Smartwatches & Wearables', slug: 'smartwatches-wearables' },
+          { _id: 'sub_speakers', name: 'Bluetooth Speakers', slug: 'bluetooth-speakers' },
+        ],
+      },
+      {
+        _id: 'cat_fashion',
+        name: 'Men & Women Fashion',
+        slug: 'fashion',
+        icon: 'shirt',
+        subcategories: [
+          { _id: 'sub_hoodies', name: 'Streetwear & Hoodies', slug: 'streetwear-hoodies' },
+          { _id: 'sub_blazers', name: 'Tailored Blazers', slug: 'blazers-formal' },
+          { _id: 'sub_footwear', name: 'Footwear & Sneakers', slug: 'footwear-sneakers' },
+        ],
+      },
+      {
+        _id: 'cat_watches',
+        name: 'Watches & Accessories',
+        slug: 'watches-accessories',
+        icon: 'watch',
+        subcategories: [
+          { _id: 'sub_chronographs', name: 'Luxury Chronographs', slug: 'luxury-chronographs' },
+          { _id: 'sub_smartbands', name: 'Smart Bands & Straps', slug: 'smart-bands' },
+          { _id: 'sub_leather', name: 'Leather Straps & Wallets', slug: 'leather-wallets' },
+        ],
+      },
+      {
+        _id: 'cat_home',
+        name: 'Home & Kitchen',
+        slug: 'home-kitchen',
+        icon: 'home',
+        subcategories: [
+          { _id: 'sub_lighting', name: 'Smart Lighting', slug: 'smart-lighting' },
+          { _id: 'sub_kitchen', name: 'Kitchen & Dining', slug: 'cookware-appliances' },
+        ],
+      },
+    ];
+
+    return rootStructure.map(parent => {
+      const subWithCounts = parent.subcategories.map(sub => {
+        const count = products.filter(p => p.subCategory === sub.slug).length;
+        return { ...sub, productCount: count };
+      });
+      const subSlugs = new Set(subWithCounts.map(s => s.slug));
+      const parentCount = products.filter(
+        p => p.category === parent.slug || subSlugs.has(p.subCategory)
+      ).length;
+      return {
+        ...parent,
+        productCount: parentCount,
+        subcategories: subWithCounts,
+      };
+    });
+  }, [products]);
 
   const categories = [
     { id: 'all', label: 'All Products', icon: '🛍️' },
     { id: 'electronics-audio', label: 'Electronics & Audio', icon: '🎧' },
     { id: 'fashion', label: 'Fashion & Apparel', icon: '👕' },
     { id: 'watches-accessories', label: 'Watches & Wearables', icon: '⌚' },
+    { id: 'home-kitchen', label: 'Home & Kitchen', icon: '🏠' },
     { id: 'wishlist', label: `My Wishlist (${wishlist.length})`, icon: '❤️' },
   ];
+
+  // Active Category & Subcategory Labels for Breadcrumb
+  const activeCategoryObj = useMemo(
+    () => categoriesTree.find(c => c.slug === selectedCategory),
+    [categoriesTree, selectedCategory]
+  );
+
+  const activeCategoryLabel = useMemo(() => {
+    if (selectedCategory === 'wishlist') return 'Saved Wishlist';
+    if (selectedCategory === 'all') return 'All Categories';
+    return activeCategoryObj?.name || 'Selected Category';
+  }, [selectedCategory, activeCategoryObj]);
+
+  const activeSubCategoryLabel = useMemo(() => {
+    if (!selectedSubCategory || !activeCategoryObj) return null;
+    const sub = activeCategoryObj.subcategories?.find(s => s.slug === selectedSubCategory);
+    return sub?.name || selectedSubCategory;
+  }, [selectedSubCategory, activeCategoryObj]);
 
   // Price Range Filter State (Point #3)
   const [priceRange, setPriceRange] = useState([0, 50000]);
 
-  // Filtering products
+  // Filtering products with Multi-Level Category & Subcategory & Price Filters (Point #3 & #4)
   const filteredProducts = products.filter(p => {
     if (selectedCategory === 'wishlist') {
       return wishlist.includes(p._id);
     }
-    const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+    const matchesCategory =
+      selectedCategory === 'all' ||
+      p.category === selectedCategory ||
+      (activeCategoryObj?.subcategories || []).some(s => s.slug === p.subCategory);
+
+    const matchesSubCategory = !selectedSubCategory || p.subCategory === selectedSubCategory;
+
     const matchesSearch =
       !searchQuery ||
       p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.brand.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesPrice = p.sellingPrice >= priceRange[0] && p.sellingPrice <= priceRange[1];
-    return matchesCategory && matchesSearch && matchesPrice;
+
+    return matchesCategory && matchesSubCategory && matchesSearch && matchesPrice;
   });
 
   // Inject JSON-LD ItemList Schema for Product Catalog
@@ -658,41 +802,125 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           </div>
         </div>
 
-        {/* Products Grid (Amazon/Myntra Clean High-Contrast Cards) */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-            <div>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                Featured Marketplace Products
-              </h2>
-              <p className="text-xs text-slate-500 font-medium">Showing {filteredProducts.length} verified merchant listings</p>
-            </div>
-            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
-              ✓ In Stock & Dispatch Ready
-            </span>
-          </div>
+        {/* Main Catalog View: Multi-Level Category Sidebar + Products Grid (Point #4) */}
+        <div className="flex flex-col lg:flex-row items-start gap-6 pt-1">
+          {/* Multi-Level Category & Subcategory Sidebar */}
+          <CategorySidebar
+            categoriesTree={categoriesTree}
+            selectedCategory={selectedCategory}
+            selectedSubCategory={selectedSubCategory}
+            onSelectCategory={slug => {
+              setSelectedCategory(slug);
+              setSelectedSubCategory(null);
+            }}
+            onSelectSubCategory={(parentSlug, subSlug) => {
+              setSelectedCategory(parentSlug);
+              setSelectedSubCategory(subSlug);
+            }}
+            onResetAll={() => {
+              setSelectedCategory('all');
+              setSelectedSubCategory(null);
+            }}
+            totalProductsCount={products.length}
+            isOpenMobile={isOpenCategoryDrawer}
+            onCloseMobile={() => setIsOpenCategoryDrawer(false)}
+            isCollapsedDesktop={isCollapsedCategorySidebar}
+            onToggleCollapseDesktop={() => setIsCollapsedCategorySidebar(prev => !prev)}
+            wishlistCount={wishlist.length}
+          />
 
-          {filteredProducts.length === 0 ? (
-            <div className="p-12 rounded-3xl bg-white border border-slate-200 text-center space-y-3">
-              <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-2xl shadow-inner">
-                🔍
+          {/* Catalog Content Area */}
+          <div className="flex-1 w-full space-y-4">
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-200 pb-3">
+                <div className="flex items-center gap-3">
+                  {/* Mobile Category Drawer Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsOpenCategoryDrawer(true)}
+                    className="lg:hidden px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-2 shadow-sm transition-all"
+                  >
+                    <FolderTree className="w-4 h-4" />
+                    <span>Categories</span>
+                  </button>
+
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                      Featured Marketplace Products
+                    </h2>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Showing {filteredProducts.length} verified merchant listings
+                    </p>
+                  </div>
+                </div>
+
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full self-start sm:self-auto">
+                  ✓ In Stock & Dispatch Ready
+                </span>
               </div>
-              <h3 className="font-extrabold text-base text-slate-900">
-                No products found in this price bracket
-              </h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                No items match ₹{priceRange[0].toLocaleString('en-IN')} to ₹{priceRange[1].toLocaleString('en-IN')}. Try expanding your budget range or resetting filters.
-              </p>
-              <button
-                type="button"
-                onClick={() => setPriceRange([0, 50000])}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md transition-all"
-              >
-                Reset Price Filter
-              </button>
+
+              {/* Active Filter Breadcrumb (Point #4) */}
+              {(selectedCategory !== 'all' || selectedSubCategory) && (
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-xs shadow-xs animate-in fade-in duration-200">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 font-bold text-slate-800">
+                    <FolderTree className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                    <span className="text-slate-500 text-[11px] uppercase tracking-wider">Filtered by:</span>
+                    <span className="font-extrabold text-amber-950 bg-amber-200/70 px-2 py-0.5 rounded-md text-xs">
+                      {activeCategoryLabel}
+                    </span>
+                    {activeSubCategoryLabel && (
+                      <>
+                        <ChevronRight className="w-3.5 h-3.5 text-amber-600" />
+                        <span className="font-extrabold text-slate-950 bg-white px-2 py-0.5 rounded-md shadow-xs border border-amber-300 text-xs">
+                          {activeSubCategoryLabel}
+                        </span>
+                      </>
+                    )}
+                    <span className="text-slate-500 font-semibold text-[11px]">
+                      ({filteredProducts.length} {filteredProducts.length === 1 ? 'item' : 'items'} found)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCategory('all');
+                      setSelectedSubCategory(null);
+                    }}
+                    className="font-black text-[11px] text-amber-800 hover:text-amber-950 bg-amber-200/70 hover:bg-amber-300/80 px-2.5 py-1 rounded-xl transition-all flex items-center gap-1"
+                  >
+                    ✕ Clear
+                  </button>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+
+            {filteredProducts.length === 0 ? (
+              <div className="p-12 rounded-3xl bg-white border border-slate-200 text-center space-y-3">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-2xl shadow-inner">
+                  🔍
+                </div>
+                <h3 className="font-extrabold text-base text-slate-900">
+                  No products found matching filters
+                </h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  No items match the selected category or price bracket. Try resetting filters.
+                </p>
+                <div className="flex items-center justify-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCategory('all');
+                      setSelectedSubCategory(null);
+                      setPriceRange([0, 50000]);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md transition-all"
+                  >
+                    Reset All Filters
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-6">
             {filteredProducts.map(product => {
               const discount = Math.round(((product.mrp - product.sellingPrice) / product.mrp) * 100);
               const isWishlisted = wishlist.includes(product._id);
@@ -827,6 +1055,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             })}
           </div>
         )}
+      </div>
       </div>
       </div>
 

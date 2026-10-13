@@ -40,6 +40,11 @@ const productSchema = new mongoose.Schema(
       ref: 'Category',
       required: true,
     },
+    subCategory: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Category',
+      default: null,
+    },
     brand: {
       type: String,
       default: 'Generic',

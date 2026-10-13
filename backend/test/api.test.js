@@ -203,6 +203,34 @@ const runTests = async () => {
       }
     });
 
+    await test('Point 4: GET /products/categories/tree returns hierarchical categories, nested subcategories, and verified product counts', async () => {
+      const res = await fetch(`${baseUrl}/products/categories/tree`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data), 'Tree must return array of root categories');
+      assert.ok(data.data.length >= 4, 'Must have at least 4 root categories');
+      assert.ok(data.totalProducts >= 4, 'Must count total products');
+
+      // Check Electronics category & subcategories
+      const electronics = data.data.find(c => c.slug === 'electronics-audio');
+      assert.ok(electronics, 'Electronics category must exist in tree');
+      assert.ok(electronics.productCount > 0, 'Electronics must have non-zero product count');
+      assert.ok(Array.isArray(electronics.subcategories) && electronics.subcategories.length >= 2, 'Must have nested subcategories');
+
+      const headphonesSub = electronics.subcategories.find(s => s.slug === 'wireless-headphones');
+      assert.ok(headphonesSub, 'Wireless Headphones subcategory must exist');
+      assert.ok(headphonesSub.productCount >= 1, 'Wireless Headphones must have product count >= 1');
+
+      // Check subcategory filtering
+      const filterRes = await fetch(`${baseUrl}/products?subCategory=wireless-headphones`);
+      assert.strictEqual(filterRes.status, 200);
+      const filterData = await filterRes.json();
+      assert.strictEqual(filterData.success, true);
+      assert.ok(filterData.data.length >= 1, 'Should find products under wireless-headphones');
+      assert.ok(filterData.data.some(p => p.sku === 'APX-HEAD-001'));
+    });
+
     await test('GET /products/:slug fetches single product with vendor details', async () => {
       const res = await fetch(`${baseUrl}/products/${headphonesProduct.slug}`);
       assert.strictEqual(res.status, 200);

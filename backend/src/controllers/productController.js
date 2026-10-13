@@ -5,13 +5,29 @@ const Category = require('../models/Category');
 // @route   GET /api/products
 exports.getProducts = async (req, res, next) => {
   try {
-    const { category, search, minPrice, maxPrice, featured, sort, page = 1, limit = 20 } = req.query;
+    const { category, subCategory, search, minPrice, maxPrice, featured, sort, page = 1, limit = 20 } = req.query;
 
     const query = { isPublished: true };
 
-    if (category) {
-      const cat = await Category.findOne({ slug: category });
-      if (cat) query.category = cat._id;
+    if (subCategory) {
+      const subCat = await Category.findOne({
+        $or: [{ slug: subCategory }, { _id: require('mongoose').Types.ObjectId.isValid(subCategory) ? subCategory : null }],
+      });
+      if (subCat) {
+        query.$or = [{ subCategory: subCat._id }, { category: subCat._id }];
+      }
+    } else if (category && category !== 'all') {
+      const cat = await Category.findOne({
+        $or: [{ slug: category }, { _id: require('mongoose').Types.ObjectId.isValid(category) ? category : null }],
+      });
+      if (cat) {
+        const childCats = await Category.find({ parentCategory: cat._id }).select('_id');
+        const childIds = childCats.map(c => c._id);
+        query.$or = [
+          { category: cat._id },
+          { subCategory: { $in: [cat._id, ...childIds] } },
+        ];
+      }
     }
 
     if (search) {
@@ -42,7 +58,8 @@ exports.getProducts = async (req, res, next) => {
     const skip = (Number(page) - 1) * Number(limit);
 
     const products = await Product.find(query)
-      .populate('category', 'name slug')
+      .populate('category', 'name slug icon image')
+      .populate('subCategory', 'name slug icon image')
       .populate('vendor', 'storeName storeLogo rating')
       .sort(sortOption)
       .skip(skip)
@@ -97,3 +114,82 @@ exports.getCategories = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Get Hierarchical Multi-Level Category Tree with dynamic product counts (Point #4)
+// @route   GET /api/products/categories/tree
+exports.getCategoryTree = async (req, res, next) => {
+  try {
+    // 1. Fetch root categories
+    const rootCategories = await Category.find({
+      $or: [{ parentCategory: null }, { parentCategory: { $exists: false } }],
+    })
+      .sort({ displayOrder: 1, name: 1 })
+      .lean();
+
+    // 2. Fetch all child subcategories
+    const subCategories = await Category.find({
+      parentCategory: { $ne: null, $exists: true },
+    })
+      .sort({ displayOrder: 1, name: 1 })
+      .lean();
+
+    // 3. Aggregate all published products to compute live counts
+    const publishedProducts = await Product.find({ isPublished: true })
+      .select('category subCategory')
+      .lean();
+
+    const catCountMap = {};
+    const subCatCountMap = {};
+
+    publishedProducts.forEach(prod => {
+      if (prod.category) {
+        const cId = prod.category.toString();
+        catCountMap[cId] = (catCountMap[cId] || 0) + 1;
+      }
+      if (prod.subCategory) {
+        const sId = prod.subCategory.toString();
+        subCatCountMap[sId] = (subCatCountMap[sId] || 0) + 1;
+      }
+    });
+
+    // 4. Build hierarchy with live counts
+    const tree = rootCategories.map(parent => {
+      const parentIdStr = parent._id.toString();
+      const children = subCategories.filter(
+        sub => sub.parentCategory && sub.parentCategory.toString() === parentIdStr
+      );
+
+      const childrenWithCounts = children.map(child => {
+        const childIdStr = child._id.toString();
+        return {
+          ...child,
+          productCount: subCatCountMap[childIdStr] || 0,
+        };
+      });
+
+      const childIdsSet = new Set(children.map(c => c._id.toString()));
+
+      // Count distinct published products that match this parent category or any of its subcategories
+      const parentDistinctCount = publishedProducts.filter(p => {
+        const matchesParent = p.category && p.category.toString() === parentIdStr;
+        const matchesChild = p.subCategory && childIdsSet.has(p.subCategory.toString());
+        return matchesParent || matchesChild;
+      }).length;
+
+      return {
+        ...parent,
+        productCount: parentDistinctCount,
+        subcategories: childrenWithCounts,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      totalProducts: publishedProducts.length,
+      data: tree,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

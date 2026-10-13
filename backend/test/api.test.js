@@ -732,6 +732,35 @@ const runTests = async () => {
       assert.strictEqual(data.data.status, 'approved');
     });
 
+    await test('POST /auth/login accepts courier@express.com as demo alias', async () => {
+      const res = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'courier@express.com', password: 'rider123456' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.user.role, 'delivery');
+    });
+
+    await test('Security: Mock demo tokens are rejected in strict production environment', async () => {
+      const origEnv = process.env.NODE_ENV;
+      const origAllow = process.env.ALLOW_DEMO_TOKENS;
+      try {
+        process.env.NODE_ENV = 'production';
+        delete process.env.ALLOW_DEMO_TOKENS;
+
+        const res = await fetch(`${baseUrl}/admin/analytics`, {
+          headers: { Authorization: 'Bearer mock_jwt_superadmin_token_2026' },
+        });
+        assert.strictEqual(res.status, 401);
+      } finally {
+        process.env.NODE_ENV = origEnv;
+        if (origAllow) process.env.ALLOW_DEMO_TOKENS = origAllow;
+      }
+    });
+
   } finally {
     if (server) {
       server.close();

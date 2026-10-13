@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider, useCart } from './context/CartContext';
 import { Navbar } from './components/Navbar';
@@ -10,6 +10,7 @@ import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { VendorPortal } from './pages/VendorPortal';
 import { CourierDashboard } from './pages/CourierDashboard';
 import { ShoppingBag, Flame, Layers, LayoutGrid, MessageCircle, Phone, BookOpen } from 'lucide-react';
+import api from './api/client';
 
 const MainLayout = () => {
   // 'hub' | 'customer' | 'superadmin' | 'vendor' | 'courier'
@@ -29,9 +30,11 @@ const MainLayout = () => {
     announcementText: '🔥 Festive Sale Live! Up to 40% OFF with code FESTIVE2026',
     showAnnouncement: true,
     footerText: '© 2026 AuraMarket — Enterprise Multi-Vendor Marketplace Platform. All rights reserved.',
-    supportPhone: '+91 8533955333',
+    supportPhone: '+1 (800) 555-0199',
     supportEmail: 'support@auramarket.com',
     showDemoNotice: true,
+    demoNoticeContact: '+91 8533955333',
+    demoWhatsAppUrl: 'https://wa.me/918533955333?text=Hi%20Ankit,%20I%20want%20to%20purchase%20AuraMarket%20E-Commerce%20Platform',
     heroBanners: [
       {
         title: 'Spatial Audio Reinvented',
@@ -42,6 +45,19 @@ const MainLayout = () => {
       },
     ],
   });
+
+  // Synchronize dynamic marketplace theme & branding from backend API
+  useEffect(() => {
+    api.get('/ui/config')
+      .then(res => {
+        if (res.data?.success && res.data?.data) {
+          setUiConfig(prev => ({ ...prev, ...res.data.data }));
+        }
+      })
+      .catch(() => {
+        // Fallback to local default UI config if backend offline
+      });
+  }, []);
 
   const handleResetDemo = () => {
     clearCart();
@@ -140,27 +156,30 @@ const MainLayout = () => {
                 <span>Official Showroom & Commercial License Notice</span>
               </div>
               <p className="font-black text-slate-950 text-sm">
-                Developed by Ankit Chaudhary ({uiConfig.supportPhone || '+91 8533955333'})
+                Developed by Ankit Chaudhary • Direct Author Support: {uiConfig.demoNoticeContact || '+91 8533955333'}
               </p>
               <p className="text-xs text-slate-700 font-semibold">
-                अगर purchase करना है तो इस नंबर पर संपर्क करें: <strong className="text-slate-950 font-black">{uiConfig.supportPhone || '+91 8533955333'}</strong>
+                For commercial license, custom deployment, or full source code: <strong className="text-slate-950 font-black">{uiConfig.demoNoticeContact || '+91 8533955333'}</strong>
+              </p>
+              <p className="text-[11px] text-amber-900 font-bold">
+                खरीदने या पूछताछ के लिए संपर्क करें (WhatsApp / Call Available)
               </p>
               <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
                 <a
-                  href={`https://wa.me/918533955333?text=Hi%20Ankit,%20I%20want%20to%20purchase%20${encodeURIComponent(uiConfig.storeName)}%20Platform`}
+                  href={uiConfig.demoWhatsAppUrl || `https://wa.me/918533955333?text=Hi%20Ankit,%20I%20want%20to%20purchase%20${encodeURIComponent(uiConfig.storeName)}%20Platform`}
                   target="_blank"
                   rel="noreferrer"
                   className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-1.5 shadow"
                 >
                   <MessageCircle className="w-4 h-4" />
-                  <span>WhatsApp: {uiConfig.supportPhone || '8533955333'}</span>
+                  <span>WhatsApp: {uiConfig.demoNoticeContact || '8533955333'}</span>
                 </a>
                 <a
-                  href={`tel:${(uiConfig.supportPhone || '8533955333').replace(/[^0-9+]/g, '')}`}
+                  href={`tel:${(uiConfig.demoNoticeContact || '8533955333').replace(/[^0-9+]/g, '')}`}
                   className="px-4 py-2 rounded-xl bg-[#0f2444] hover:bg-[#1a3a6b] text-white font-bold text-xs flex items-center gap-1.5 shadow"
                 >
                   <Phone className="w-4 h-4 text-amber-400" />
-                  <span>Call: {uiConfig.supportPhone || '8533955333'}</span>
+                  <span>Call: {uiConfig.demoNoticeContact || '8533955333'}</span>
                 </a>
                 <button
                   onClick={() => setIsDocsOpen(true)}

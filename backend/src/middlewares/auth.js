@@ -16,8 +16,9 @@ const protect = async (req, res, next) => {
     });
   }
 
-  // Support demo persona tokens for instant UI preview & test runner compatibility
-  if (token.startsWith('mock_jwt_') || token.startsWith('demo_')) {
+  // Support demo persona tokens for instant UI preview & test runner compatibility (disabled in strict production)
+  const allowDemoTokens = process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEMO_TOKENS === 'true';
+  if (allowDemoTokens && (token.startsWith('mock_jwt_') || token.startsWith('demo_'))) {
     let query = { role: 'customer' };
     if (token.includes('superadmin') || token.includes('admin')) {
       query = { $or: [{ role: 'superadmin' }, { email: 'admin@auramarket.com' }] };

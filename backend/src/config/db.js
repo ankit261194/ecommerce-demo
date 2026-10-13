@@ -24,6 +24,10 @@ const connectDB = async () => {
       return conn;
     } catch (externalErr) {
       console.warn(`[Database] Local/External MongoDB not reachable at ${targetUri} (${externalErr.message}).`);
+      if (process.env.NODE_ENV === 'production' && process.env.ALLOW_IN_MEMORY !== 'true') {
+        console.error('[Database Error] Fatal: In-memory fallback is disabled in production to protect persistent data. Set ALLOW_IN_MEMORY=true to override.');
+        throw externalErr;
+      }
       console.log('[Database] Initiating seamless In-Memory MongoDB Engine for instant zero-dependency execution...');
     }
 

@@ -18,6 +18,7 @@ const reviewRoutes = require('./routes/reviewRoutes');
 const questionRoutes = require('./routes/questionRoutes');
 const wishlistRoutes = require('./routes/wishlistRoutes');
 const couponRoutes = require('./routes/couponRoutes');
+const returnRoutes = require('./routes/returnRoutes');
 
 const app = express();
 
@@ -96,6 +97,7 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/coupons', couponRoutes);
+app.use('/api/returns', returnRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

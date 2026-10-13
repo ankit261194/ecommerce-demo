@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   RotateCcw,
 } from 'lucide-react';
+import ReturnRefundModal from './ReturnRefundModal';
 
 export default function LiveOrderTrackerModal({
   isOpen,
@@ -45,6 +46,9 @@ export default function LiveOrderTrackerModal({
   const [customReason, setCustomReason] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState(null);
+
+  // Point #29: Return & Refund Request State
+  const [showReturnModal, setShowReturnModal] = useState(false);
 
   const cancellationReasons = [
     'Ordered by mistake',
@@ -344,6 +348,17 @@ export default function LiveOrderTrackerModal({
                     >
                       <XCircle className="w-3.5 h-3.5" />
                       1-Click Cancel Order
+                    </button>
+                  )}
+
+                  {/* Point #29: Return & Refund Action Button (When Delivered) */}
+                  {(orderData.status === 'DELIVERED' || currentPackage?.status === 'delivered') && !isOrderCancelled && (
+                    <button
+                      onClick={() => setShowReturnModal(true)}
+                      className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition shadow-sm active:scale-95"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Return / Refund
                     </button>
                   )}
 
@@ -727,6 +742,15 @@ export default function LiveOrderTrackerModal({
                 Cancel Order
               </button>
             )}
+            {(orderData?.status === 'DELIVERED' || currentPackage?.status === 'delivered') && !isOrderCancelled && (
+              <button
+                onClick={() => setShowReturnModal(true)}
+                className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold transition shadow-sm active:scale-95 flex items-center gap-1.5"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Return / Refund
+              </button>
+            )}
             <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline">
               Powered by AuraMarket Express Logistics Engine
             </span>
@@ -849,6 +873,15 @@ export default function LiveOrderTrackerModal({
           </div>
         </div>
       )}
+
+      {/* Point #29: Return & Refund Request Modal */}
+      <ReturnRefundModal
+        isOpen={showReturnModal}
+        onClose={() => setShowReturnModal(false)}
+        orderData={orderData}
+        apiUrl={apiUrl}
+        onSuccess={() => fetchOrderTracking(orderData?.orderId || orderData?.rawOrderId)}
+      />
     </div>
   );
 }

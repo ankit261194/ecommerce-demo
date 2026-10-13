@@ -1544,6 +1544,137 @@ const runTests = async () => {
       });
     });
 
+    await test('Point 29: Return & Refund Request System with reason, photo upload, delivery check, and inventory auto-restoration', async () => {
+      // 1. Place a test order for return flow
+      const resOrder = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: headphonesProduct._id, quantity: 1, variantSku: 'APX-HEAD-BLK' }],
+          shippingAddress: {
+            recipientName: 'Aman Sharma',
+            phone: '9876543214',
+            street: 'Flat 402, Green Valley Apartments',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'COD',
+        }),
+      });
+      assert.strictEqual(resOrder.status, 201);
+      const dataOrder = await resOrder.json();
+      const orderId = dataOrder.data._id;
+
+      // 2. Reject return request before delivery
+      const resPremature = await fetch(`${baseUrl}/returns`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          orderId,
+          reason: 'Defective item',
+        }),
+      });
+      assert.strictEqual(resPremature.status, 400);
+      const dataPremature = await resPremature.json();
+      assert.strictEqual(dataPremature.success, false);
+      assert.ok(dataPremature.message.includes('delivered orders'));
+
+      // 3. Advance milestone to 'delivered'
+      await fetch(`${baseUrl}/orders/${orderId}/advance-step`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ step: 'delivered' }),
+      });
+
+      // Stock before return approval
+      const prodDelivered = await Product.findById(headphonesProduct._id);
+      const stockDelivered = prodDelivered.stock;
+
+      // 4. Create legitimate return request with photos and reason
+      const returnPayload = {
+        orderId,
+        reason: 'Defective / damaged item',
+        detailedDescription: 'Product arrived with crackling audio in the left ear cup at higher volumes.',
+        proofPhotos: ['https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=500'],
+        refundMode: 'ORIGINAL_PAYMENT_METHOD',
+      };
+
+      const resReturn = await fetch(`${baseUrl}/returns`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify(returnPayload),
+      });
+      assert.strictEqual(resReturn.status, 201);
+      const dataReturn = await resReturn.json();
+      assert.strictEqual(dataReturn.success, true);
+      assert.strictEqual(dataReturn.data.status, 'REQUESTED');
+      assert.strictEqual(dataReturn.data.reason, 'Defective / damaged item');
+      assert.strictEqual(dataReturn.data.proofPhotos.length, 1);
+      const returnRequestId = dataReturn.data._id;
+
+      // 5. Duplicate return request rejected
+      const resDup = await fetch(`${baseUrl}/returns`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify(returnPayload),
+      });
+      assert.strictEqual(resDup.status, 400);
+
+      // 6. Customer can view their return requests
+      const resMy = await fetch(`${baseUrl}/returns/my`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resMy.status, 200);
+      const dataMy = await resMy.json();
+      assert.strictEqual(dataMy.success, true);
+      assert.ok(dataMy.count >= 1);
+
+      // 7. Get return by order ID
+      const resByOrder = await fetch(`${baseUrl}/returns/order/${orderId}`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resByOrder.status, 200);
+      const dataByOrder = await resByOrder.json();
+      assert.strictEqual(dataByOrder.data._id, returnRequestId);
+
+      // 8. Admin approves & processes refund -> auto-restores stock to inventory
+      const resApprove = await fetch(`${baseUrl}/returns/${returnRequestId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          status: 'REFUNDED',
+          resolutionNote: 'Quality defect verified. Refund initiated and stock restored.',
+        }),
+      });
+      assert.strictEqual(resApprove.status, 200);
+      const dataApprove = await resApprove.json();
+      assert.strictEqual(dataApprove.data.status, 'REFUNDED');
+      assert.ok(dataApprove.data.resolvedAt);
+
+      // Verify stock was restored (+1)
+      const prodRefunded = await Product.findById(headphonesProduct._id);
+      assert.strictEqual(prodRefunded.stock, stockDelivered + 1, 'Stock must be auto-restored on return refund');
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

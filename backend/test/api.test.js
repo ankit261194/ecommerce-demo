@@ -2747,6 +2747,97 @@ const runTests = async () => {
       assert.strictEqual(dataDelete.success, true);
     });
 
+    await test('Point 42: Abandoned Cart Auto-Recovery System (View abandoned carts, 1-click reminders, recovery discount & conversion)', async () => {
+      // 1. Customer syncs an open cart session via POST /api/abandoned-carts/sync
+      const resSync = await fetch(`${baseUrl}/abandoned-carts/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName: 'Rahul Sharma',
+          customerEmail: 'rahul.abandoned@example.com',
+          customerPhone: '+919876543210',
+          items: [
+            {
+              product: headphonesProduct._id,
+              title: headphonesProduct.title,
+              price: 8999,
+              quantity: 1,
+            },
+          ],
+          cartTotal: 8999,
+        }),
+      });
+      assert.strictEqual(resSync.status, 200);
+      const dataSync = await resSync.json();
+      assert.strictEqual(dataSync.success, true);
+      assert.strictEqual(dataSync.data.customerEmail, 'rahul.abandoned@example.com');
+      assert.strictEqual(dataSync.data.status, 'ABANDONED');
+      const cartId = dataSync.data._id;
+
+      // 2. Super Admin views abandoned carts & potential recoverable revenue
+      const resList = await fetch(`${baseUrl}/abandoned-carts/admin/all`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resList.status, 200);
+      const dataList = await resList.json();
+      assert.strictEqual(dataList.success, true);
+      assert.ok(dataList.stats);
+      assert.ok(dataList.stats.potentialRevenue >= 8999);
+      assert.ok(dataList.data.some((c) => c._id === cartId));
+
+      // 3. Super Admin triggers 1-Click recovery reminder via Email + SMS
+      const resRemind = await fetch(`${baseUrl}/abandoned-carts/admin/${cartId}/send-reminder`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          couponCode: 'RECOVER15',
+          customMessage: 'Special 15% discount waiting for your headphones checkout!',
+        }),
+      });
+      assert.strictEqual(resRemind.status, 200);
+      const dataRemind = await resRemind.json();
+      assert.strictEqual(dataRemind.success, true);
+      assert.strictEqual(dataRemind.data.status, 'REMINDER_SENT');
+      assert.strictEqual(dataRemind.data.reminderCount, 1);
+      assert.strictEqual(dataRemind.data.recoveryCoupon, 'RECOVER15');
+
+      // 4. Super Admin triggers bulk reminder dispatch
+      const resBulk = await fetch(`${baseUrl}/abandoned-carts/admin/bulk-reminder`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ couponCode: 'COMEBACK10' }),
+      });
+      assert.strictEqual(resBulk.status, 200);
+      const dataBulk = await resBulk.json();
+      assert.strictEqual(dataBulk.success, true);
+      assert.ok(typeof dataBulk.count === 'number');
+
+      // 5. Mark cart as recovered when order is completed
+      const resRecovered = await fetch(`${baseUrl}/abandoned-carts/admin/${cartId}/mark-recovered`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resRecovered.status, 200);
+      const dataRecovered = await resRecovered.json();
+      assert.strictEqual(dataRecovered.success, true);
+      assert.strictEqual(dataRecovered.data.status, 'RECOVERED');
+
+      // 6. Super Admin deletes the test abandoned cart
+      const resDelete = await fetch(`${baseUrl}/abandoned-carts/admin/${cartId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resDelete.status, 200);
+      const dataDelete = await resDelete.json();
+      assert.strictEqual(dataDelete.success, true);
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

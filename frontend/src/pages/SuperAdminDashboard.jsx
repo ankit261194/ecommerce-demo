@@ -56,6 +56,7 @@ import {
   Megaphone,
   Ticket,
   Flame,
+  ShoppingCart,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -66,6 +67,7 @@ import BannerManager from '../components/BannerManager';
 import AnnouncementBarManager from '../components/AnnouncementBarManager';
 import CouponManager from '../components/CouponManager';
 import FlashDealManager from '../components/FlashDealManager';
+import AbandonedCartManager from '../components/AbandonedCartManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1305,6 +1307,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('abandoned-carts')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'abandoned-carts'
+                ? 'bg-blue-500 text-white shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <ShoppingCart className="w-4 h-4 text-blue-400" />
+            <span>Abandoned Carts</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-blue-500/30 text-blue-300 ml-1">
+              Point #42
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveDashboardTab('layout')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
               activeDashboardTab === 'layout'
@@ -2095,6 +2112,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'flash-deals' && (
         <FlashDealManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 9: ABANDONED CART AUTO-RECOVERY SYSTEM (Point #42) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'abandoned-carts' && (
+        <AbandonedCartManager />
       )}
 
       {/* ========================================================================= */}

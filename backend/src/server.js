@@ -21,6 +21,7 @@ const couponRoutes = require('./routes/couponRoutes');
 const returnRoutes = require('./routes/returnRoutes');
 const walletRoutes = require('./routes/walletRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
+const brandRoutes = require('./routes/brandRoutes');
 
 const app = express();
 
@@ -102,6 +103,7 @@ app.use('/api/coupons', couponRoutes);
 app.use('/api/returns', returnRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/brands', brandRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

@@ -56,6 +56,18 @@ router.put('/categories/reorder', reorderCategories);
 router.put('/categories/:id', updateCategory);
 router.delete('/categories/:id', deleteCategory);
 
+// Brand Directory Manager (Point #37)
+const {
+  getBrands,
+  createBrand,
+  updateBrand,
+  deleteBrand,
+} = require('../controllers/brandController');
+router.get('/brands', getBrands);
+router.post('/brands', createBrand);
+router.put('/brands/:id', updateBrand);
+router.delete('/brands/:id', deleteBrand);
+
 // Integrations & API Hub
 router.get('/integrations', getIntegrations);
 router.put('/integrations', updateIntegrations);

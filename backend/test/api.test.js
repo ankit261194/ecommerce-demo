@@ -2162,6 +2162,88 @@ const runTests = async () => {
       });
     });
 
+    await test('Point 37: Brand Directory & Manufacturer Hub (POST/GET/PUT/DELETE /admin/brands & /brands)', async () => {
+      // 1. Create a new brand
+      const resCreate = await fetch(`${baseUrl}/admin/brands`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Sennheiser Acoustics',
+          slug: 'sennheiser-acoustics',
+          logo: 'https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=200',
+          description: 'Precision audio engineering and studio microphones',
+          website: 'https://sennheiser.com',
+          isFeatured: true,
+          displayOrder: 1,
+        }),
+      });
+      assert.strictEqual(resCreate.status, 201);
+      const createData = await resCreate.json();
+      assert.strictEqual(createData.success, true);
+      assert.strictEqual(createData.data.name, 'Sennheiser Acoustics');
+      assert.strictEqual(createData.data.slug, 'sennheiser-acoustics');
+      const brandId = createData.data._id;
+
+      // 2. Reject duplicate brand name
+      const resDup = await fetch(`${baseUrl}/admin/brands`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Sennheiser Acoustics',
+          slug: 'different-slug',
+        }),
+      });
+      assert.strictEqual(resDup.status, 400);
+
+      // 3. Query all brands (Public GET /brands)
+      const resList = await fetch(`${baseUrl}/brands`);
+      assert.strictEqual(resList.status, 200);
+      const listData = await resList.json();
+      assert.strictEqual(listData.success, true);
+      const found = listData.data.find(b => b._id.toString() === brandId.toString());
+      assert.ok(found, 'Created brand must be listed in public brand directory');
+      assert.ok(typeof found.productCount === 'number');
+
+      // 4. Query single brand by slug (GET /brands/:slug)
+      const resSingle = await fetch(`${baseUrl}/brands/sennheiser-acoustics`);
+      assert.strictEqual(resSingle.status, 200);
+      const singleData = await resSingle.json();
+      assert.strictEqual(singleData.data.name, 'Sennheiser Acoustics');
+      assert.strictEqual(singleData.data.website, 'https://sennheiser.com');
+
+      // 5. Update brand details
+      const resUpdate = await fetch(`${baseUrl}/admin/brands/${brandId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          description: 'Updated high-resolution studio monitors and noise cancelling earphones',
+          isFeatured: false,
+        }),
+      });
+      assert.strictEqual(resUpdate.status, 200);
+      const updateData = await resUpdate.json();
+      assert.strictEqual(updateData.data.isFeatured, false);
+      assert.ok(updateData.data.description.includes('studio monitors'));
+
+      // 6. Delete brand
+      const resDel = await fetch(`${baseUrl}/admin/brands/${brandId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resDel.status, 200);
+      const delData = await resDel.json();
+      assert.strictEqual(delData.success, true);
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

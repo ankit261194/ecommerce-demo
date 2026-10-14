@@ -53,6 +53,7 @@ import {
   FolderTree,
   Award,
   Sliders,
+  Megaphone,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -60,6 +61,7 @@ import TaxInvoiceModal from '../components/TaxInvoiceModal';
 import CategoryTreeManager from '../components/CategoryTreeManager';
 import BrandDirectoryManager from '../components/BrandDirectoryManager';
 import BannerManager from '../components/BannerManager';
+import AnnouncementBarManager from '../components/AnnouncementBarManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1254,6 +1256,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('announcement')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'announcement'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Megaphone className="w-4 h-4" />
+            <span>Top Announcement</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-300 ml-1">
+              Point #39
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveDashboardTab('layout')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
               activeDashboardTab === 'layout'
@@ -2014,6 +2031,22 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'banners' && (
         <BannerManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 6: DYNAMIC TOP ANNOUNCEMENT BAR CONTROLLER (Point #39) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'announcement' && (
+        <AnnouncementBarManager
+          onUpdate={(data) =>
+            setUiConfig((prev) => ({
+              ...prev,
+              announcement: data,
+              showAnnouncement: data.enabled,
+              announcementText: data.text,
+            }))
+          }
+        />
       )}
 
       {/* ========================================================================= */}

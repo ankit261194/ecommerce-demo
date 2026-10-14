@@ -126,6 +126,44 @@ const uiConfigSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    announcement: {
+      enabled: {
+        type: Boolean,
+        default: true,
+      },
+      text: {
+        type: String,
+        default: '🔥 Festive Sale Live! Get up to 40% OFF with code FESTIVE2026',
+      },
+      bgColor: {
+        type: String,
+        default: '#F59E0B',
+      },
+      textColor: {
+        type: String,
+        default: '#0B0F17',
+      },
+      couponCode: {
+        type: String,
+        default: 'FESTIVE2026',
+      },
+      actionLink: {
+        type: String,
+        default: '/products',
+      },
+      buttonText: {
+        type: String,
+        default: 'Shop Now',
+      },
+      isDismissible: {
+        type: Boolean,
+        default: true,
+      },
+      countdownEnd: {
+        type: Date,
+        default: null,
+      },
+    },
     heroBanners: [bannerSchema],
     featuredCategoryIds: [
       {

@@ -84,6 +84,11 @@ router.put('/banners/:id', updateBanner);
 router.delete('/banners/:id', deleteBanner);
 router.patch('/banners/:id/toggle', toggleBannerStatus);
 
+// Dynamic Top Announcement Bar Controller (Point #39)
+const { getAnnouncement, updateAnnouncement } = require('../controllers/uiController');
+router.get('/announcement', getAnnouncement);
+router.put('/announcement', updateAnnouncement);
+
 // Integrations & API Hub
 router.get('/integrations', getIntegrations);
 router.put('/integrations', updateIntegrations);

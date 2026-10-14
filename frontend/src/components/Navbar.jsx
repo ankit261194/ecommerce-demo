@@ -3,6 +3,7 @@ import { ShoppingBag, Search, MapPin, Sparkles, ChevronDown, Heart, X, Check, Tr
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import LiveSearchAutocomplete from './LiveSearchAutocomplete';
+import TopAnnouncementBar from './TopAnnouncementBar';
 
 export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect, isMobileMode = false }) => {
   const { user } = useAuth();
@@ -89,13 +90,8 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
 
   return (
     <header className="sticky top-0 z-40 w-full shadow-md bg-white border-b border-slate-200">
-      {/* Top Announcement Bar (Vibrant Festive Amber) */}
-      {uiConfig?.showAnnouncement && (
-        <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 py-1 px-3 text-center text-[11px] sm:text-xs font-black flex items-center justify-center gap-1.5 shadow-inner">
-          <Sparkles className="w-3.5 h-3.5 text-slate-950 flex-shrink-0" />
-          <span className="truncate">{uiConfig?.announcementText || '🔥 Festive Sale Live! Flat 40% OFF with code FESTIVE2026'}</span>
-        </div>
-      )}
+      {/* Top Dynamic Announcement Bar (Point #39) */}
+      <TopAnnouncementBar uiConfig={uiConfig} />
 
       {/* Main Professional Royal Sapphire / Navy Header (Responsive 2-Row on Mobile, 1-Row on Desktop) */}
       <div className="bg-[#0f2444] text-white px-3 sm:px-4 lg:px-8 py-2.5 sm:py-3.5 shadow-sm">

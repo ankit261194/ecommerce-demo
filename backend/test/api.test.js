@@ -2401,6 +2401,91 @@ const runTests = async () => {
       });
     });
 
+    await test('Point 39: Dynamic Top Announcement Bar Controller (GET /ui/announcement, PUT /admin/announcement & /ui/config persistence)', async () => {
+      // 1. Get current public announcement configuration
+      const resGet = await fetch(`${baseUrl}/ui/announcement`);
+      assert.strictEqual(resGet.status, 200);
+      const dataGet = await resGet.json();
+      assert.strictEqual(dataGet.success, true);
+      assert.ok(dataGet.data.text);
+      assert.strictEqual(typeof dataGet.data.enabled, 'boolean');
+
+      // 2. Super Admin updates announcement settings via PUT /admin/announcement
+      const targetCountdown = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+      const resUpdate = await fetch(`${baseUrl}/admin/announcement`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          enabled: true,
+          text: '⚡ Mega Flash Weekend: Flat ₹500 OFF with code FESTIVE500!',
+          bgColor: '#059669',
+          textColor: '#FFFFFF',
+          couponCode: 'FESTIVE500',
+          actionLink: '/category/electronics-audio',
+          buttonText: 'Claim ₹500 OFF',
+          isDismissible: true,
+          countdownEnd: targetCountdown,
+        }),
+      });
+      assert.strictEqual(resUpdate.status, 200);
+      const dataUpdate = await resUpdate.json();
+      assert.strictEqual(dataUpdate.success, true);
+      assert.strictEqual(dataUpdate.data.text, '⚡ Mega Flash Weekend: Flat ₹500 OFF with code FESTIVE500!');
+      assert.strictEqual(dataUpdate.data.bgColor, '#059669');
+      assert.strictEqual(dataUpdate.data.textColor, '#FFFFFF');
+      assert.strictEqual(dataUpdate.data.couponCode, 'FESTIVE500');
+      assert.strictEqual(dataUpdate.data.buttonText, 'Claim ₹500 OFF');
+
+      // 3. Verify public GET /ui/config reflects updated announcement and top-level fields
+      const resConfig = await fetch(`${baseUrl}/ui/config`);
+      assert.strictEqual(resConfig.status, 200);
+      const dataConfig = await resConfig.json();
+      assert.strictEqual(dataConfig.data.announcementText, '⚡ Mega Flash Weekend: Flat ₹500 OFF with code FESTIVE500!');
+      assert.strictEqual(dataConfig.data.showAnnouncement, true);
+      assert.strictEqual(dataConfig.data.announcement.couponCode, 'FESTIVE500');
+      assert.strictEqual(dataConfig.data.announcement.bgColor, '#059669');
+
+      // 4. Toggle announcement OFF
+      const resToggleOff = await fetch(`${baseUrl}/admin/announcement`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          enabled: false,
+        }),
+      });
+      assert.strictEqual(resToggleOff.status, 200);
+      const dataToggleOff = await resToggleOff.json();
+      assert.strictEqual(dataToggleOff.data.enabled, false);
+
+      // Verify toggle OFF synchronizes with showAnnouncement
+      const resConfigOff = await fetch(`${baseUrl}/ui/config`);
+      const dataConfigOff = await resConfigOff.json();
+      assert.strictEqual(dataConfigOff.data.showAnnouncement, false);
+      assert.strictEqual(dataConfigOff.data.announcement.enabled, false);
+
+      // Toggle back ON with default festive announcement
+      await fetch(`${baseUrl}/admin/announcement`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          enabled: true,
+          text: '🔥 Festive Sale Live! Get up to 40% OFF with code FESTIVE2026',
+          bgColor: '#F59E0B',
+          textColor: '#0B0F17',
+          couponCode: 'FESTIVE2026',
+        }),
+      });
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

@@ -72,6 +72,7 @@ exports.updateUIConfig = async (req, res, next) => {
       heroBanners,
       announcementText,
       showAnnouncement,
+      announcement,
       footerText,
       supportPhone,
       supportEmail,
@@ -103,6 +104,17 @@ exports.updateUIConfig = async (req, res, next) => {
     if (demoNoticeContact !== undefined) config.demoNoticeContact = demoNoticeContact;
     if (demoWhatsAppUrl !== undefined) config.demoWhatsAppUrl = demoWhatsAppUrl;
 
+    if (announcement) {
+      const curAnn = config.announcement ? (config.announcement.toObject ? config.announcement.toObject() : config.announcement) : {};
+      config.announcement = {
+        ...curAnn,
+        ...announcement,
+      };
+      if (announcement.text !== undefined) config.announcementText = announcement.text;
+      if (announcement.enabled !== undefined) config.showAnnouncement = announcement.enabled;
+      config.markModified('announcement');
+    }
+
     if (seo) {
       const curSeo = config.seo ? (config.seo.toObject ? config.seo.toObject() : config.seo) : {};
       config.seo = {
@@ -130,6 +142,71 @@ exports.updateUIConfig = async (req, res, next) => {
       success: true,
       message: 'UI Configuration updated successfully! Changes are live across Web and Mobile apps.',
       data: config,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Current Announcement Bar Settings
+// @route   GET /api/ui/announcement
+// @access  Public
+exports.getAnnouncement = async (req, res, next) => {
+  try {
+    let config = await UIConfig.findOne();
+    if (!config) {
+      config = await UIConfig.create({});
+    }
+
+    const ann = config.announcement || {
+      enabled: config.showAnnouncement ?? true,
+      text: config.announcementText || '🔥 Festive Sale Live! Get up to 40% OFF with code FESTIVE2026',
+      bgColor: '#F59E0B',
+      textColor: '#0B0F17',
+      couponCode: 'FESTIVE2026',
+      actionLink: '/products',
+      buttonText: 'Shop Now',
+      isDismissible: true,
+      countdownEnd: null,
+    };
+
+    res.status(200).json({
+      success: true,
+      data: ann,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update Announcement Bar Settings (Super Admin Only)
+// @route   PUT /api/admin/announcement
+// @access  Private (Super Admin)
+exports.updateAnnouncement = async (req, res, next) => {
+  try {
+    let config = await UIConfig.findOne();
+    if (!config) {
+      config = new UIConfig();
+    }
+
+    const updatePayload = req.body;
+    const curAnn = config.announcement ? (config.announcement.toObject ? config.announcement.toObject() : config.announcement) : {};
+
+    config.announcement = {
+      ...curAnn,
+      ...updatePayload,
+    };
+
+    if (updatePayload.text !== undefined) config.announcementText = updatePayload.text;
+    if (updatePayload.enabled !== undefined) config.showAnnouncement = updatePayload.enabled;
+
+    config.markModified('announcement');
+    await config.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Top announcement bar updated successfully!',
+      data: config.announcement,
     });
   } catch (error) {
     next(error);

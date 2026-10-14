@@ -15,6 +15,7 @@ const {
   testSMSIntegration,
   testEmailIntegration,
 } = require('../controllers/adminController');
+const { getTaxInvoice } = require('../controllers/orderController');
 const { protect, authorize } = require('../middlewares/auth');
 
 // All admin routes require Super Admin authorization
@@ -30,6 +31,7 @@ router.get('/orders', getAllOrders);
 router.put('/orders/:id/status', updateOrderStatus);
 router.patch('/orders/:id/status', updateOrderStatus);
 router.get('/orders/:id/commission-split', getOrderCommissionSplit);
+router.get('/orders/:id/invoice', getTaxInvoice);
 router.get('/ledger', getPlatformLedger);
 
 // Integrations & API Hub

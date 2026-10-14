@@ -1924,6 +1924,74 @@ const runTests = async () => {
       assert.strictEqual(resNotFound.status, 404);
     });
 
+    await test('Point 34: 1-Click Master Printable Tax Invoice Generator with GSTIN, HSN & Company Seal (GET /admin/orders/:id/invoice)', async () => {
+      // 1. Fetch Tax Invoice via Super Admin endpoint
+      const resInvoice = await fetch(`${baseUrl}/admin/orders/${placedOrder._id}/invoice`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resInvoice.status, 200);
+      const invoiceData = await resInvoice.json();
+      assert.strictEqual(invoiceData.success, true);
+      assert.ok(invoiceData.data.invoiceNumber.startsWith('INV-'));
+      assert.strictEqual(invoiceData.data.orderNumber, placedOrder.orderNumber);
+
+      // Verify Seller & Buyer details
+      const { seller, buyer, lineItems, hsnSummary, companySeal, pricing } = invoiceData.data;
+      assert.ok(seller.companyName, 'Must have seller company name');
+      assert.ok(seller.gstin, 'Must have seller GSTIN');
+      assert.ok(seller.cin, 'Must have corporate CIN');
+      assert.ok(buyer.recipientName, 'Must have buyer recipient name');
+      assert.ok(buyer.state, 'Must have buyer state');
+
+      // Verify Line items & HSN breakdown
+      assert.ok(Array.isArray(lineItems) && lineItems.length >= 1, 'Must have invoice line items');
+      assert.ok(lineItems[0].hsnCode, 'Line item must have HSN code');
+      assert.ok(lineItems[0].taxableValue > 0, 'Line item must have taxable value');
+
+      // Verify HSN Summary Table
+      assert.ok(Array.isArray(hsnSummary) && hsnSummary.length >= 1, 'Must aggregate HSN summary');
+      assert.strictEqual(hsnSummary[0].hsnCode, lineItems[0].hsnCode);
+      assert.ok(typeof hsnSummary[0].taxableValue === 'number');
+      assert.ok(typeof hsnSummary[0].totalTax === 'number');
+
+      // Verify Cryptographic Corporate Seal
+      assert.ok(companySeal.legalEntityName, 'Must specify corporate legal entity');
+      assert.ok(companySeal.cin, 'Must include corporate CIN');
+      assert.ok(companySeal.verificationCode.startsWith('AUTH-SEAL-'), 'Must have SHA-256 seal verification code');
+      assert.ok(companySeal.signatory, 'Must have authorized signatory cell');
+
+      // Verify Dynamic Inter-State vs Intra-State GST pricing
+      assert.ok(typeof pricing.subtotal === 'number');
+      assert.ok(typeof pricing.grandTotal === 'number');
+      assert.ok(typeof pricing.isInterState === 'boolean');
+      assert.ok(pricing.amountInWords.includes('Rupees'), 'Must include amount in words');
+      if (pricing.isInterState) {
+        assert.ok(pricing.igstTotal >= 0);
+      } else {
+        assert.strictEqual(pricing.cgstTotal, pricing.sgstTotal, 'CGST and SGST must match in intra-state transaction');
+      }
+
+      // 2. Fetch standalone printable HTML via ?format=html
+      const resHtml = await fetch(`${baseUrl}/admin/orders/${placedOrder._id}/invoice?format=html`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resHtml.status, 200);
+      const contentType = resHtml.headers.get('content-type');
+      assert.ok(contentType.includes('text/html'), 'Must return text/html format');
+      const htmlText = await resHtml.text();
+      assert.ok(htmlText.includes('TAX INVOICE'), 'HTML must render TAX INVOICE heading');
+      assert.ok(htmlText.includes('HSN / SAC Tax Summary'), 'HTML must include HSN summary table');
+      assert.ok(htmlText.includes(companySeal.verificationCode), 'HTML must render corporate seal hash');
+
+      // 3. Customer endpoint also returns identical authentic invoice
+      const resCustomer = await fetch(`${baseUrl}/orders/${placedOrder._id}/invoice`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustomer.status, 200);
+      const custData = await resCustomer.json();
+      assert.strictEqual(custData.data.invoiceNumber, invoiceData.data.invoiceNumber);
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

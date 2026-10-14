@@ -848,20 +848,28 @@ exports.getTaxInvoice = async (req, res, next) => {
       },
     ]);
 
+    const UIConfig = require('../models/UIConfig');
+    const uiConfig = await UIConfig.findOne();
+    const taxCfg = uiConfig?.taxSettings || {};
+
     const primaryVendor = order.subOrders?.[0]?.vendor;
     const seller = {
-      storeName: primaryVendor?.storeName || 'AuraMarket Authorized Merchant',
-      address: primaryVendor?.pickupAddress || 'Fulfillment Center B-42, Okhla Industrial Area Phase-III, New Delhi, Delhi 110020',
-      phone: primaryVendor?.phone || '+91 9876543210',
-      email: primaryVendor?.businessEmail || 'billing@auramarket.com',
-      gstin: primaryVendor?.gstin || '07AAAAA0000A1Z5',
-      pan: primaryVendor?.pan || 'AAAAA0000A',
-      state: 'Delhi',
-      stateCode: '07',
+      companyName: taxCfg.companyName || 'AuraMarket E-Commerce Private Limited',
+      storeName: taxCfg.companyName || primaryVendor?.storeName || 'AuraMarket E-Commerce Private Limited',
+      legalEntity: taxCfg.companyName || 'AuraMarket E-Commerce Private Limited',
+      address: taxCfg.corporateAddress || primaryVendor?.pickupAddress || 'Fulfillment Center B-42, Okhla Industrial Area Phase-III, New Delhi, Delhi 110020',
+      phone: uiConfig?.supportPhone || primaryVendor?.phone || '+91 8533955333',
+      email: uiConfig?.supportEmail || primaryVendor?.businessEmail || 'billing@auramarket.com',
+      gstin: taxCfg.gstin || primaryVendor?.gstin || '07AAAAA0000A1Z5',
+      pan: taxCfg.pan || primaryVendor?.pan || 'AAAAA0000A',
+      cin: taxCfg.cin || 'U72900DL2026PTC389102',
+      state: taxCfg.state || 'Delhi',
+      stateCode: taxCfg.stateCode || '07',
     };
 
     const buyer = {
-      name: order.shippingAddress?.recipientName || order.customer?.name || 'Valued Customer',
+      recipientName: order.shippingAddress?.recipientName || order.shippingAddress?.fullName || order.customer?.name || 'Valued Customer',
+      name: order.shippingAddress?.recipientName || order.shippingAddress?.fullName || order.customer?.name || 'Valued Customer',
       phone: order.shippingAddress?.phone || order.customer?.phone || 'N/A',
       email: order.customer?.email || 'customer@auramarket.com',
       address: `${order.shippingAddress?.street}, ${order.shippingAddress?.city}, ${order.shippingAddress?.state} - ${order.shippingAddress?.pincode}`,
@@ -869,60 +877,112 @@ exports.getTaxInvoice = async (req, res, next) => {
       pincode: order.shippingAddress?.pincode || '110001',
     };
 
+    const isInterState = seller.state.trim().toLowerCase() !== buyer.state.trim().toLowerCase();
+
     const invoiceNumber = `INV-${order.orderNumber || order._id.toString().slice(-8).toUpperCase()}`;
     const invoiceDate = order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-IN');
     const orderDate = invoiceDate;
 
-    // Line items breakdown with 18% GST (9% CGST + 9% SGST for same-state)
+    // Line items breakdown with 18% GST (9% CGST + 9% SGST for same-state, 18% IGST for inter-state)
     let totalTaxableValue = 0;
     let totalTaxAmount = 0;
+    const hsnMap = {};
 
     const lineItems = (order.items || []).map((item, idx) => {
       const grossTotal = (item.price || 0) * (item.quantity || 1);
       // Assuming prices are inclusive of 18% GST
       const taxable = Math.round((grossTotal / 1.18) * 100) / 100;
       const tax = Math.round((grossTotal - taxable) * 100) / 100;
-      const cgst = Math.round((tax / 2) * 100) / 100;
-      const sgst = Math.round((tax / 2) * 100) / 100;
+      
+      const cgst = isInterState ? 0 : Math.round((tax / 2) * 100) / 100;
+      const sgst = isInterState ? 0 : Math.round((tax / 2) * 100) / 100;
+      const igst = isInterState ? tax : 0;
 
       totalTaxableValue += taxable;
       totalTaxAmount += tax;
+
+      // Assign category-specific HSN code if available
+      const hsnCode = item.hsnCode || '85183000';
+      if (!hsnMap[hsnCode]) {
+        hsnMap[hsnCode] = {
+          hsnCode,
+          taxableValue: 0,
+          cgstAmount: 0,
+          sgstAmount: 0,
+          igstAmount: 0,
+          totalTax: 0,
+        };
+      }
+      hsnMap[hsnCode].taxableValue += taxable;
+      hsnMap[hsnCode].cgstAmount += cgst;
+      hsnMap[hsnCode].sgstAmount += sgst;
+      hsnMap[hsnCode].igstAmount += igst;
+      hsnMap[hsnCode].totalTax += tax;
 
       return {
         itemNo: idx + 1,
         title: item.title || 'Product Item',
         variantSku: item.variantSku || 'STD-SKU',
-        hsnCode: '85183000',
+        hsnCode,
         quantity: item.quantity || 1,
         unitGrossPrice: item.price || 0,
         taxableValue: taxable,
         taxRate: '18%',
         cgstAmount: cgst,
         sgstAmount: sgst,
+        igstAmount: igst,
         totalAmount: grossTotal,
       };
     });
 
     const subtotal = Math.round(totalTaxableValue * 100) / 100;
-    const cgstTotal = Math.round((totalTaxAmount / 2) * 100) / 100;
-    const sgstTotal = Math.round((totalTaxAmount / 2) * 100) / 100;
+    const cgstTotal = isInterState ? 0 : Math.round((totalTaxAmount / 2) * 100) / 100;
+    const sgstTotal = isInterState ? 0 : Math.round((totalTaxAmount / 2) * 100) / 100;
+    const igstTotal = isInterState ? Math.round(totalTaxAmount * 100) / 100 : 0;
     const totalTax = Math.round(totalTaxAmount * 100) / 100;
     const shippingFee = order.shippingFee || 0;
     const discount = order.discountAmount || 0;
     const grandTotal = order.totalAmount || Math.round((subtotal + totalTax + shippingFee - discount) * 100) / 100;
     const amountInWords = numberToWords(grandTotal);
 
-    // Generate standalone printable HTML
+    const hsnSummary = Object.values(hsnMap).map(h => ({
+      hsnCode: h.hsnCode,
+      taxableValue: Math.round(h.taxableValue * 100) / 100,
+      cgstAmount: Math.round(h.cgstAmount * 100) / 100,
+      sgstAmount: Math.round(h.sgstAmount * 100) / 100,
+      igstAmount: Math.round(h.igstAmount * 100) / 100,
+      totalTax: Math.round(h.totalTax * 100) / 100,
+    }));
+
+    const crypto = require('crypto');
+    const verificationDigest = crypto
+      .createHash('sha256')
+      .update(`${invoiceNumber}:${grandTotal}:${order.createdAt || ''}`)
+      .digest('hex')
+      .slice(0, 16)
+      .toUpperCase();
+
+    const companySeal = {
+      legalEntityName: seller.legalEntity,
+      cin: seller.cin,
+      gstin: seller.gstin,
+      pan: seller.pan,
+      signatory: taxCfg.authorizedSignatory || 'Authorized Signatory • Taxation Cell',
+      verificationCode: `AUTH-SEAL-${verificationDigest}`,
+      signedAt: new Date().toISOString(),
+    };
+
+    // Generate standalone printable HTML with Master Corporate Seal & HSN Summary
     const printableHtml = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Tax Invoice - ${invoiceNumber}</title>
+  <title>Master Tax Invoice - ${invoiceNumber}</title>
   <style>
     @page { size: A4; margin: 15mm; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1e293b; line-height: 1.4; font-size: 12px; margin: 0; padding: 20px; }
-    .invoice-card { max-width: 800px; margin: 0 auto; border: 1px solid #e2e8f0; padding: 30px; border-radius: 8px; background: #fff; }
+    .invoice-card { max-width: 820px; margin: 0 auto; border: 1px solid #e2e8f0; padding: 30px; border-radius: 8px; background: #fff; }
     .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f2444; padding-bottom: 15px; margin-bottom: 20px; }
     .brand-title { font-size: 24px; font-weight: 900; color: #0f2444; margin: 0; letter-spacing: -0.5px; }
     .badge { display: inline-block; background: #fef3c7; color: #92400e; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; margin-left: 6px; }
@@ -932,16 +992,19 @@ exports.getTaxInvoice = async (req, res, next) => {
     .party-box { flex: 1; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; }
     .party-title { font-size: 11px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 6px; }
     .party-name { font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
     th { background: #0f2444; color: #ffffff; font-weight: 700; text-align: left; padding: 8px; font-size: 11px; }
     td { padding: 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; }
     .text-right { text-align: right; }
-    .totals-table { width: 320px; margin-left: auto; margin-bottom: 20px; }
+    .text-center { text-align: center; }
+    .totals-table { width: 340px; margin-left: auto; margin-bottom: 15px; }
     .totals-table td { padding: 4px 8px; }
     .grand-total-row { background: #f1f5f9; font-weight: 800; font-size: 13px; border-top: 2px solid #0f2444; }
-    .words-box { padding: 10px; background: #f8fafc; border-left: 3px solid #0f2444; font-size: 11px; margin-bottom: 20px; }
+    .words-box { padding: 10px; background: #f8fafc; border-left: 3px solid #0f2444; font-size: 11px; margin-bottom: 15px; }
+    .hsn-box { margin-bottom: 20px; }
+    .hsn-box th { background: #334155; font-size: 10px; }
     .footer { display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid #e2e8f0; padding-top: 15px; font-size: 10px; color: #64748b; }
-    .seal-box { text-align: center; border: 1px dashed #cbd5e1; padding: 8px 16px; border-radius: 6px; background: #fafafa; }
+    .seal-box { text-align: center; border: 2px dashed #0f2444; padding: 10px 18px; border-radius: 8px; background: #f8fafc; min-width: 220px; }
     @media print {
       body { padding: 0; }
       .invoice-card { border: none; padding: 0; }
@@ -953,8 +1016,8 @@ exports.getTaxInvoice = async (req, res, next) => {
   <div class="invoice-card">
     <div class="header">
       <div>
-        <h1 class="brand-title">AuraMarket<span class="badge">ORIGINAL TAX INVOICE</span></h1>
-        <p style="margin: 2px 0 0; color: #64748b; font-size: 11px;">Enterprise Multi-Vendor E-Commerce Platform</p>
+        <h1 class="brand-title">AuraMarket<span class="badge">ORIGINAL MASTER TAX INVOICE</span></h1>
+        <p style="margin: 2px 0 0; color: #64748b; font-size: 11px;">GST & HSN Compliant Corporate Invoice • Enterprise Commerce Suite</p>
       </div>
       <div>
         <h2 class="inv-title">TAX INVOICE</h2>
@@ -962,6 +1025,7 @@ exports.getTaxInvoice = async (req, res, next) => {
           <strong>Invoice #:</strong> ${invoiceNumber}<br>
           <strong>Invoice Date:</strong> ${invoiceDate}<br>
           <strong>Order Reference:</strong> ${order.orderNumber || order._id}<br>
+          <strong>Supply Type:</strong> ${isInterState ? 'Inter-State (IGST 18%)' : 'Intra-State (CGST 9% + SGST 9%)'}<br>
           <strong>Payment Mode:</strong> ${order.paymentMethod || 'COD'} (${order.paymentStatus || 'PAID'})
         </div>
       </div>
@@ -969,10 +1033,11 @@ exports.getTaxInvoice = async (req, res, next) => {
 
     <div class="party-row">
       <div class="party-box">
-        <div class="party-title">Sold By (Merchant / Seller)</div>
+        <div class="party-title">Sold & Invoiced By (Corporate Seller)</div>
         <div class="party-name">${seller.storeName}</div>
         <div>${seller.address}</div>
         <div><strong>GSTIN:</strong> ${seller.gstin} | <strong>PAN:</strong> ${seller.pan}</div>
+        <div><strong>CIN:</strong> ${seller.cin}</div>
         <div><strong>State:</strong> ${seller.state} (Code: ${seller.stateCode})</div>
       </div>
       <div class="party-box">
@@ -980,7 +1045,7 @@ exports.getTaxInvoice = async (req, res, next) => {
         <div class="party-name">${buyer.name}</div>
         <div>${buyer.address}</div>
         <div><strong>Phone:</strong> ${buyer.phone}</div>
-        <div><strong>State of Supply:</strong> ${buyer.state}</div>
+        <div><strong>Place of Supply:</strong> ${buyer.state}</div>
       </div>
     </div>
 
@@ -993,8 +1058,7 @@ exports.getTaxInvoice = async (req, res, next) => {
           <th class="text-right">Qty</th>
           <th class="text-right">Unit Price</th>
           <th class="text-right">Taxable</th>
-          <th class="text-right">CGST (9%)</th>
-          <th class="text-right">SGST (9%)</th>
+          ${isInterState ? `<th class="text-right">IGST (18%)</th>` : `<th class="text-right">CGST (9%)</th><th class="text-right">SGST (9%)</th>`}
           <th class="text-right">Total</th>
         </tr>
       </thead>
@@ -1007,34 +1071,63 @@ exports.getTaxInvoice = async (req, res, next) => {
             <td class="text-right">${item.quantity}</td>
             <td class="text-right">₹${item.unitGrossPrice.toLocaleString('en-IN')}</td>
             <td class="text-right">₹${item.taxableValue.toLocaleString('en-IN')}</td>
-            <td class="text-right">₹${item.cgstAmount.toLocaleString('en-IN')}</td>
-            <td class="text-right">₹${item.sgstAmount.toLocaleString('en-IN')}</td>
+            ${isInterState ? `<td class="text-right">₹${item.igstAmount.toLocaleString('en-IN')}</td>` : `<td class="text-right">₹${item.cgstAmount.toLocaleString('en-IN')}</td><td class="text-right">₹${item.sgstAmount.toLocaleString('en-IN')}</td>`}
             <td class="text-right font-bold">₹${item.totalAmount.toLocaleString('en-IN')}</td>
           </tr>
         `).join('')}
       </tbody>
     </table>
 
+    <!-- HSN Summary Table -->
+    <div class="hsn-box">
+      <h4 style="margin: 0 0 6px; font-size: 11px; text-transform: uppercase; color: #475569;">HSN / SAC Tax Summary</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>HSN / SAC</th>
+            <th class="text-right">Taxable Amount</th>
+            ${isInterState ? `<th class="text-right">IGST Amount</th>` : `<th class="text-right">CGST Amount</th><th class="text-right">SGST Amount</th>`}
+            <th class="text-right">Total Tax Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${hsnSummary.map(h => `
+            <tr>
+              <td><strong>${h.hsnCode}</strong></td>
+              <td class="text-right">₹${h.taxableValue.toLocaleString('en-IN')}</td>
+              ${isInterState ? `<td class="text-right">₹${h.igstAmount.toLocaleString('en-IN')}</td>` : `<td class="text-right">₹${h.cgstAmount.toLocaleString('en-IN')}</td><td class="text-right">₹${h.sgstAmount.toLocaleString('en-IN')}</td>`}
+              <td class="text-right font-bold">₹${h.totalTax.toLocaleString('en-IN')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
     <table class="totals-table">
       <tr>
         <td>Taxable Amount:</td>
         <td class="text-right font-bold">₹${subtotal.toLocaleString('en-IN')}</td>
       </tr>
+      ${isInterState ? `
       <tr>
-        <td>CGST (9.0%):</td>
+        <td>Integrated Tax (IGST 18%):</td>
+        <td class="text-right font-bold">₹${igstTotal.toLocaleString('en-IN')}</td>
+      </tr>` : `
+      <tr>
+        <td>Central Tax (CGST 9.0%):</td>
         <td class="text-right font-bold">₹${cgstTotal.toLocaleString('en-IN')}</td>
       </tr>
       <tr>
-        <td>SGST (9.0%):</td>
+        <td>State Tax (SGST 9.0%):</td>
         <td class="text-right font-bold">₹${sgstTotal.toLocaleString('en-IN')}</td>
-      </tr>
+      </tr>`}
       <tr>
         <td>Shipping & Delivery:</td>
         <td class="text-right font-bold">${shippingFee === 0 ? 'FREE' : '₹' + shippingFee}</td>
       </tr>
       ${discount > 0 ? `
       <tr>
-        <td style="color: #059669;">Promo Coupon Discount:</td>
+        <td style="color: #059669;">Reward Coins Redeemed:</td>
         <td class="text-right font-bold" style="color: #059669;">-₹${discount.toLocaleString('en-IN')}</td>
       </tr>` : ''}
       <tr class="grand-total-row">
@@ -1049,14 +1142,15 @@ exports.getTaxInvoice = async (req, res, next) => {
 
     <div class="footer">
       <div>
-        <p style="margin: 0 0 2px;">• This is a system-generated electronic tax invoice authorized by AuraMarket.</p>
-        <p style="margin: 0 0 2px;">• For warranty and product returns, retain this invoice as proof of purchase.</p>
-        <p style="margin: 0;">• Subject to Delhi Jurisdiction. Contact: support@auramarket.com</p>
+        <p style="margin: 0 0 2px;">• This is an authentic computer generated electronic invoice issued under Section 31 of CGST Act.</p>
+        <p style="margin: 0 0 2px;">• Retain this document for official warranty and business taxation credits.</p>
+        <p style="margin: 0;">• Subject to ${seller.state} Jurisdiction. Support: ${seller.email}</p>
       </div>
       <div class="seal-box">
-        <strong style="color: #0f2444; font-size: 11px;">AuraMarket Digital Verification</strong><br>
-        <span style="color: #059669; font-weight: 700;">✓ Digitally Signed & Authenticated</span><br>
-        <span style="font-size: 9px; color: #94a3b8;">Authorized Signatory</span>
+        <strong style="color: #0f2444; font-size: 11px;">${companySeal.legalEntityName}</strong><br>
+        <span style="color: #059669; font-weight: 800; font-size: 11px;">✓ DIGITALLY AUTHENTICATED</span><br>
+        <span style="font-size: 9px; color: #64748b; font-family: monospace;">${companySeal.verificationCode}</span><br>
+        <span style="font-size: 9px; color: #475569; font-weight: 700;">${companySeal.signatory}</span>
       </div>
     </div>
   </div>
@@ -1064,21 +1158,30 @@ exports.getTaxInvoice = async (req, res, next) => {
 </html>
     `;
 
+    if (req.query.format === 'html') {
+      return res.type('html').send(printableHtml);
+    }
+
     res.status(200).json({
       success: true,
       data: {
         invoiceNumber,
         invoiceDate,
         orderId: order.orderNumber || order._id,
+        orderNumber: order.orderNumber || order._id.toString(),
         rawOrderId: order._id,
         orderDate,
         seller,
         buyer,
         lineItems,
+        hsnSummary,
+        companySeal,
         pricing: {
           subtotal,
           cgstTotal,
           sgstTotal,
+          igstTotal,
+          isInterState,
           totalTax,
           shippingFee,
           discount,

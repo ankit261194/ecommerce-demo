@@ -221,6 +221,44 @@ const uiConfigSchema = new mongoose.Schema(
         default: true,
       },
     },
+    taxSettings: {
+      companyName: {
+        type: String,
+        default: 'AuraMarket E-Commerce Private Limited',
+      },
+      gstin: {
+        type: String,
+        default: '07AAAAA0000A1Z5',
+      },
+      pan: {
+        type: String,
+        default: 'AAAAA0000A',
+      },
+      cin: {
+        type: String,
+        default: 'U72900DL2026PTC389102',
+      },
+      defaultHsn: {
+        type: String,
+        default: '85183000',
+      },
+      authorizedSignatory: {
+        type: String,
+        default: 'Authorized Signatory • Taxation Cell',
+      },
+      corporateAddress: {
+        type: String,
+        default: 'Fulfillment Center B-42, Okhla Industrial Area Phase-III, New Delhi, Delhi 110020',
+      },
+      state: {
+        type: String,
+        default: 'Delhi',
+      },
+      stateCode: {
+        type: String,
+        default: '07',
+      },
+    },
   },
   { timestamps: true }
 );

@@ -241,8 +241,14 @@ export default function TaxInvoiceModal({
                       <th className="p-2.5 font-bold text-right">Qty</th>
                       <th className="p-2.5 font-bold text-right">Unit Gross</th>
                       <th className="p-2.5 font-bold text-right">Taxable</th>
-                      <th className="p-2.5 font-bold text-right">CGST (9%)</th>
-                      <th className="p-2.5 font-bold text-right">SGST (9%)</th>
+                      {invoiceData.pricing?.isInterState ? (
+                        <th className="p-2.5 font-bold text-right">IGST (18%)</th>
+                      ) : (
+                        <>
+                          <th className="p-2.5 font-bold text-right">CGST (9%)</th>
+                          <th className="p-2.5 font-bold text-right">SGST (9%)</th>
+                        </>
+                      )}
                       <th className="p-2.5 font-bold text-right">Total</th>
                     </tr>
                   </thead>
@@ -258,14 +264,67 @@ export default function TaxInvoiceModal({
                         <td className="p-2.5 text-right font-semibold">{item.quantity}</td>
                         <td className="p-2.5 text-right font-mono">₹{item.unitGrossPrice?.toLocaleString('en-IN')}</td>
                         <td className="p-2.5 text-right font-mono">₹{item.taxableValue?.toLocaleString('en-IN')}</td>
-                        <td className="p-2.5 text-right font-mono text-slate-600">₹{item.cgstAmount?.toLocaleString('en-IN')}</td>
-                        <td className="p-2.5 text-right font-mono text-slate-600">₹{item.sgstAmount?.toLocaleString('en-IN')}</td>
+                        {invoiceData.pricing?.isInterState ? (
+                          <td className="p-2.5 text-right font-mono text-slate-600">
+                            ₹{(item.igstAmount ?? item.cgstAmount + item.sgstAmount)?.toLocaleString('en-IN')}
+                          </td>
+                        ) : (
+                          <>
+                            <td className="p-2.5 text-right font-mono text-slate-600">₹{item.cgstAmount?.toLocaleString('en-IN')}</td>
+                            <td className="p-2.5 text-right font-mono text-slate-600">₹{item.sgstAmount?.toLocaleString('en-IN')}</td>
+                          </>
+                        )}
                         <td className="p-2.5 text-right font-bold text-slate-900 font-mono">₹{item.totalAmount?.toLocaleString('en-IN')}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              {/* HSN Summary Table */}
+              {invoiceData.hsnSummary && invoiceData.hsnSummary.length > 0 && (
+                <div className="overflow-x-auto border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="bg-slate-100 px-3 py-2 text-[11px] font-black uppercase text-slate-700 tracking-wider">
+                    HSN / SAC Tax Itemization Summary
+                  </div>
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                      <tr>
+                        <th className="p-2 font-bold">HSN Code</th>
+                        <th className="p-2 font-bold text-right">Taxable Amount</th>
+                        {invoiceData.pricing?.isInterState ? (
+                          <th className="p-2 font-bold text-right">IGST</th>
+                        ) : (
+                          <>
+                            <th className="p-2 font-bold text-right">CGST</th>
+                            <th className="p-2 font-bold text-right">SGST</th>
+                          </>
+                        )}
+                        <th className="p-2 font-bold text-right">Total Tax</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {invoiceData.hsnSummary.map((h, hIdx) => (
+                        <tr key={hIdx}>
+                          <td className="p-2 font-mono font-bold text-slate-800">{h.hsnCode}</td>
+                          <td className="p-2 text-right font-mono">₹{h.taxableValue?.toLocaleString('en-IN')}</td>
+                          {invoiceData.pricing?.isInterState ? (
+                            <td className="p-2 text-right font-mono">₹{h.igstAmount?.toLocaleString('en-IN')}</td>
+                          ) : (
+                            <>
+                              <td className="p-2 text-right font-mono">₹{h.cgstAmount?.toLocaleString('en-IN')}</td>
+                              <td className="p-2 text-right font-mono">₹{h.sgstAmount?.toLocaleString('en-IN')}</td>
+                            </>
+                          )}
+                          <td className="p-2 text-right font-bold font-mono text-slate-900">
+                            ₹{h.totalTax?.toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               {/* Totals Table */}
               <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
@@ -276,6 +335,12 @@ export default function TaxInvoiceModal({
                       {invoiceData.pricing?.amountInWords}
                     </p>
                   </div>
+                  {invoiceData.companySeal && (
+                    <div className="text-[11px] text-slate-500 font-mono space-y-0.5">
+                      <p>Corporate CIN: {invoiceData.companySeal.cin}</p>
+                      <p>Corporate GSTIN: {invoiceData.companySeal.gstin}</p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="w-full sm:w-72 space-y-1.5 text-xs text-slate-700 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
@@ -283,21 +348,30 @@ export default function TaxInvoiceModal({
                     <span>Taxable Amount:</span>
                     <span className="font-mono font-bold">₹{invoiceData.pricing?.subtotal?.toLocaleString('en-IN')}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>CGST (9.0%):</span>
-                    <span className="font-mono font-bold">₹{invoiceData.pricing?.cgstTotal?.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>SGST (9.0%):</span>
-                    <span className="font-mono font-bold">₹{invoiceData.pricing?.sgstTotal?.toLocaleString('en-IN')}</span>
-                  </div>
+                  {invoiceData.pricing?.isInterState ? (
+                    <div className="flex justify-between">
+                      <span>IGST (18.0%):</span>
+                      <span className="font-mono font-bold">₹{invoiceData.pricing?.igstTotal?.toLocaleString('en-IN')}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between">
+                        <span>CGST (9.0%):</span>
+                        <span className="font-mono font-bold">₹{invoiceData.pricing?.cgstTotal?.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>SGST (9.0%):</span>
+                        <span className="font-mono font-bold">₹{invoiceData.pricing?.sgstTotal?.toLocaleString('en-IN')}</span>
+                      </div>
+                    </>
+                  )}
                   <div className="flex justify-between">
                     <span>Shipping Fee:</span>
                     <span className="font-mono font-bold">{invoiceData.pricing?.shippingFee === 0 ? 'FREE' : `₹${invoiceData.pricing?.shippingFee}`}</span>
                   </div>
                   {invoiceData.pricing?.discount > 0 && (
                     <div className="flex justify-between text-emerald-600 font-bold">
-                      <span>Promo Coupon Discount:</span>
+                      <span>Reward Coins Redeemed:</span>
                       <span className="font-mono">-₹{invoiceData.pricing?.discount?.toLocaleString('en-IN')}</span>
                     </div>
                   )}
@@ -311,16 +385,23 @@ export default function TaxInvoiceModal({
               {/* Paper Footer with Digital Seal */}
               <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-[10px] text-slate-500">
                 <div className="space-y-0.5 text-center sm:text-left">
-                  <p>• This is a computer generated electronic invoice and requires no physical signature.</p>
-                  <p>• Retain this document for official warranty claims and accounting reconciliation.</p>
+                  <p>• Authentic computer-generated electronic invoice issued under Section 31 of CGST Act.</p>
+                  <p>• Retain this document for official warranty claims and business input tax credit.</p>
                   <p>• AuraMarket Platform Support: support@auramarket.com</p>
                 </div>
-                <div className="border-2 border-dashed border-slate-300 rounded-xl p-2.5 text-center bg-slate-50 shrink-0">
-                  <p className="font-bold text-slate-800 text-[11px]">AuraMarket Digital Verification</p>
-                  <p className="text-emerald-600 font-bold flex items-center justify-center gap-1 mt-0.5">
-                    <CheckCircle2 className="w-3 h-3" /> Digitally Authenticated
+                <div className="border-2 border-dashed border-slate-400 rounded-xl p-3 text-center bg-slate-50 shrink-0">
+                  <p className="font-black text-slate-900 text-[11px]">
+                    {invoiceData.companySeal?.legalEntityName || 'AuraMarket E-Commerce Pvt Ltd'}
                   </p>
-                  <p className="text-[9px] text-slate-400">Authorized Signatory</p>
+                  <p className="text-emerald-600 font-black flex items-center justify-center gap-1 mt-0.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> DIGITALLY AUTHENTICATED
+                  </p>
+                  <p className="text-[10px] font-mono text-slate-600 mt-0.5">
+                    {invoiceData.companySeal?.verificationCode || 'AUTH-SEAL-VERIFIED'}
+                  </p>
+                  <p className="text-[9px] text-slate-400 font-bold">
+                    {invoiceData.companySeal?.signatory || 'Authorized Signatory • Taxation Cell'}
+                  </p>
                 </div>
               </div>
             </div>

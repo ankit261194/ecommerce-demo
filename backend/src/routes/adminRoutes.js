@@ -14,6 +14,9 @@ const {
   updateIntegrations,
   testSMSIntegration,
   testEmailIntegration,
+  bulkUpdateOrderStatus,
+  exportOrdersCSV,
+  getBulkInvoices,
 } = require('../controllers/adminController');
 const { getTaxInvoice } = require('../controllers/orderController');
 const { protect, authorize } = require('../middlewares/auth');
@@ -28,6 +31,11 @@ router.put('/vendors/:id/status', updateVendorStatus);
 router.patch('/vendors/:id/status', updateVendorStatus);
 router.patch('/vendors/:id/commission', updateVendorStatus);
 router.get('/orders', getAllOrders);
+router.post('/orders/bulk-status', bulkUpdateOrderStatus);
+router.put('/orders/bulk-status', bulkUpdateOrderStatus);
+router.get('/orders/export-csv', exportOrdersCSV);
+router.post('/orders/export-csv', exportOrdersCSV);
+router.post('/orders/bulk-invoices', getBulkInvoices);
 router.put('/orders/:id/status', updateOrderStatus);
 router.patch('/orders/:id/status', updateOrderStatus);
 router.get('/orders/:id/commission-split', getOrderCommissionSplit);

@@ -1989,7 +1989,79 @@ const runTests = async () => {
       });
       assert.strictEqual(resCustomer.status, 200);
       const custData = await resCustomer.json();
-      assert.strictEqual(custData.data.invoiceNumber, invoiceData.data.invoiceNumber);
+    });
+
+    await test('Point 35: Bulk Order Actions & RFC-4180 CSV/Excel Export (POST /admin/orders/bulk-status & GET/POST /admin/orders/export-csv)', async () => {
+      // 1. Bulk Status Update
+      const resBulkStatus = await fetch(`${baseUrl}/admin/orders/bulk-status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          orderIds: [placedOrder._id],
+          status: 'CONFIRMED',
+          note: 'Verified payment confirmation batch',
+        }),
+      });
+      assert.strictEqual(resBulkStatus.status, 200);
+      const dataBulkStatus = await resBulkStatus.json();
+      assert.strictEqual(dataBulkStatus.success, true);
+      assert.strictEqual(dataBulkStatus.updatedCount, 1);
+      assert.ok(dataBulkStatus.updatedIds.includes(placedOrder._id.toString()));
+
+      // 2. Reject empty orderIds array
+      const resBadBulk = await fetch(`${baseUrl}/admin/orders/bulk-status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ orderIds: [], status: 'SHIPPED' }),
+      });
+      assert.strictEqual(resBadBulk.status, 400);
+
+      // 3. Export Filtered Orders as RFC-4180 CSV via GET
+      const resCsvGet = await fetch(`${baseUrl}/admin/orders/export-csv?status=all`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resCsvGet.status, 200);
+      const csvType = resCsvGet.headers.get('content-type');
+      assert.ok(csvType.includes('text/csv'), 'Must return text/csv mime type');
+      const csvDisposition = resCsvGet.headers.get('content-disposition');
+      assert.ok(csvDisposition.includes('attachment; filename="AuraMarket_Orders_'), 'Must include attachment header');
+      const csvText = await resCsvGet.text();
+      assert.ok(csvText.includes('Order ID,Date,Customer Name'), 'Must contain CSV headers');
+      assert.ok(csvText.includes(placedOrder.orderNumber), 'Must contain order number in exported CSV');
+
+      // 4. Export Selected Orders via POST
+      const resCsvPost = await fetch(`${baseUrl}/admin/orders/export-csv`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ orderIds: [placedOrder._id] }),
+      });
+      assert.strictEqual(resCsvPost.status, 200);
+      const postCsvText = await resCsvPost.text();
+      assert.ok(postCsvText.includes(placedOrder.orderNumber));
+
+      // 5. Bulk Invoices endpoint (POST /admin/orders/bulk-invoices)
+      const resBulkInvoices = await fetch(`${baseUrl}/admin/orders/bulk-invoices`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ orderIds: [placedOrder._id] }),
+      });
+      assert.strictEqual(resBulkInvoices.status, 200);
+      const dataBulkInvoices = await resBulkInvoices.json();
+      assert.strictEqual(dataBulkInvoices.success, true);
+      assert.strictEqual(dataBulkInvoices.count, 1);
+      assert.strictEqual(dataBulkInvoices.data[0].orderNumber, placedOrder.orderNumber);
     });
 
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {

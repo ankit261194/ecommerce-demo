@@ -517,3 +517,206 @@ exports.testEmailIntegration = async (req, res, next) => {
   }
 };
 
+// @desc    Bulk Update Order Status (Point #35)
+// @route   POST /api/admin/orders/bulk-status
+exports.bulkUpdateOrderStatus = async (req, res, next) => {
+  try {
+    const { orderIds, status, paymentStatus, note } = req.body;
+
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'Please provide an array of orderIds to update' });
+    }
+
+    if (!status && !paymentStatus) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid status or paymentStatus to apply' });
+    }
+
+    const Product = require('../models/Product');
+    const updatedIds = [];
+
+    for (const id of orderIds) {
+      const isObjectId = /^[0-9a-fA-F]{24}$/.test(id);
+      const query = isObjectId ? { _id: id } : { orderNumber: id };
+      const order = await Order.findOne(query).populate('subOrders');
+      if (!order) continue;
+
+      const previousStatus = order.status;
+      if (status) order.status = status;
+      if (paymentStatus) order.paymentStatus = paymentStatus;
+
+      if (status === 'DELIVERED') {
+        order.paymentStatus = 'PAID';
+        for (const sub of order.subOrders || []) {
+          sub.status = 'delivered';
+          await sub.save();
+        }
+      }
+
+      if (status === 'CANCELLED' && previousStatus !== 'CANCELLED') {
+        for (const item of order.items || []) {
+          if (item.variantSku) {
+            await Product.findOneAndUpdate(
+              { _id: item.product, 'variants.sku': item.variantSku },
+              { $inc: { stock: item.quantity, 'variants.$.stock': item.quantity } }
+            );
+          } else {
+            await Product.findByIdAndUpdate(item.product, { $inc: { stock: item.quantity } });
+          }
+        }
+        order.cancellationReason = note || 'Admin Bulk Order Cancellation';
+        order.cancelledAt = new Date();
+      }
+
+      await order.save();
+      updatedIds.push(order._id);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully updated ${updatedIds.length} orders to ${status || paymentStatus}`,
+      updatedCount: updatedIds.length,
+      updatedIds,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Export Orders as RFC-4180 CSV (Point #35)
+// @route   GET /api/admin/orders/export-csv
+// @route   POST /api/admin/orders/export-csv
+exports.exportOrdersCSV = async (req, res, next) => {
+  try {
+    const params = req.method === 'POST' ? req.body : req.query;
+    const { status, paymentStatus, paymentMethod, search, orderIds } = params;
+
+    const filter = {};
+
+    if (orderIds && Array.isArray(orderIds) && orderIds.length > 0) {
+      filter.$or = [
+        { _id: { $in: orderIds.filter(id => /^[0-9a-fA-F]{24}$/.test(id)) } },
+        { orderNumber: { $in: orderIds } },
+      ];
+    } else {
+      if (status && status !== 'all') {
+        filter.status = status.toUpperCase();
+      }
+      if (paymentStatus && paymentStatus !== 'all') {
+        filter.paymentStatus = paymentStatus.toUpperCase();
+      }
+      if (paymentMethod && paymentMethod !== 'all') {
+        filter.paymentMethod = paymentMethod.toUpperCase();
+      }
+      if (search && search.trim()) {
+        const regex = new RegExp(search.trim(), 'i');
+        filter.$or = [
+          { orderNumber: regex },
+          { 'shippingAddress.recipientName': regex },
+          { 'shippingAddress.city': regex },
+          { 'shippingAddress.phone': regex },
+        ];
+      }
+    }
+
+    const orders = await Order.find(filter)
+      .populate('customer', 'name email phone')
+      .sort({ createdAt: -1 });
+
+    const escapeCsv = (val) => {
+      if (val === undefined || val === null) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const headers = [
+      'Order ID',
+      'Date',
+      'Customer Name',
+      'Phone',
+      'Email',
+      'Total Amount (INR)',
+      'Payment Status',
+      'Payment Method',
+      'Order Status',
+      'Items Count',
+      'Shipping City',
+      'Shipping State',
+      'Pincode',
+      'Delivery Address',
+    ];
+
+    const rows = orders.map((ord) => {
+      const custName = ord.customer?.name || ord.shippingAddress?.recipientName || 'Valued Customer';
+      const custPhone = ord.shippingAddress?.phone || ord.customer?.phone || 'N/A';
+      const custEmail = ord.customer?.email || 'N/A';
+      const itemsCount = (ord.items || []).reduce((acc, it) => acc + (it.quantity || 1), 0);
+      const fullAddress = `${ord.shippingAddress?.street || ''}, ${ord.shippingAddress?.city || ''}, ${ord.shippingAddress?.state || ''} - ${ord.shippingAddress?.pincode || ''}`;
+
+      return [
+        escapeCsv(ord.orderNumber || ord._id),
+        escapeCsv(ord.createdAt ? new Date(ord.createdAt).toISOString().split('T')[0] : ''),
+        escapeCsv(custName),
+        escapeCsv(custPhone),
+        escapeCsv(custEmail),
+        escapeCsv(ord.totalAmount || 0),
+        escapeCsv(ord.paymentStatus),
+        escapeCsv(ord.paymentMethod),
+        escapeCsv(ord.status),
+        escapeCsv(itemsCount),
+        escapeCsv(ord.shippingAddress?.city || ''),
+        escapeCsv(ord.shippingAddress?.state || ''),
+        escapeCsv(ord.shippingAddress?.pincode || ''),
+        escapeCsv(fullAddress),
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\r\n');
+    const dateStr = new Date().toISOString().split('T')[0];
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="AuraMarket_Orders_${dateStr}.csv"`);
+    res.status(200).send(csvContent);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Consolidated Invoices for Bulk Orders (Point #35)
+// @route   POST /api/admin/orders/bulk-invoices
+exports.getBulkInvoices = async (req, res, next) => {
+  try {
+    const { orderIds, format } = req.body;
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'Please provide an array of orderIds' });
+    }
+
+    const invoices = [];
+    for (const id of orderIds) {
+      const isObjectId = /^[0-9a-fA-F]{24}$/.test(id);
+      const query = isObjectId ? { _id: id } : { orderNumber: id };
+      const order = await Order.findOne(query)
+        .populate('customer', 'name email phone')
+        .populate('items.product', 'title hsnCode price');
+      if (!order) continue;
+
+      invoices.push({
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        createdAt: order.createdAt,
+        totalAmount: order.totalAmount,
+        status: order.status,
+        customerName: order.customer?.name || order.shippingAddress?.recipientName || 'Valued Customer',
+        itemCount: (order.items || []).reduce((s, it) => s + (it.quantity || 1), 0),
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      count: invoices.length,
+      data: invoices,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

@@ -2244,6 +2244,163 @@ const runTests = async () => {
       assert.strictEqual(delData.success, true);
     });
 
+    await test('Point 38: Homepage Hero Slider & Promo Banner Manager (CRUD, position filter, reorder, and active toggle)', async () => {
+      // 1. Create a hero banner
+      const resCreate = await fetch(`${baseUrl}/admin/banners`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Premium Studio Monitors Sale',
+          subtitle: 'High fidelity audio equipment with 24-bit DAC and wireless streaming.',
+          badgeText: '🔥 Mega Sound Festival',
+          imageUrl: 'https://images.unsplash.com/photo-1545454675-3531b543be5d?w=1200',
+          actionLink: '/category/audio',
+          buttonText: 'Discover Audio',
+          position: 'hero_slider',
+          displayOrder: 1,
+          isActive: true,
+        }),
+      });
+      assert.strictEqual(resCreate.status, 201);
+      const createData = await resCreate.json();
+      assert.strictEqual(createData.success, true);
+      assert.strictEqual(createData.data.title, 'Premium Studio Monitors Sale');
+      assert.strictEqual(createData.data.position, 'hero_slider');
+      const bannerId = createData.data._id;
+
+      // 2. Reject banner creation missing required fields
+      const resInvalid = await fetch(`${baseUrl}/admin/banners`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Missing Image Banner',
+        }),
+      });
+      assert.strictEqual(resInvalid.status, 400);
+
+      // 3. Create a top promo banner
+      const resPromo = await fetch(`${baseUrl}/admin/banners`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Summer Cashback Extravaganza',
+          subtitle: 'Get up to 25% cashback on all credit card purchases.',
+          badgeText: '💰 Cashback Alert',
+          imageUrl: 'https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?w=1200',
+          actionLink: '/products',
+          buttonText: 'Shop Cashback',
+          position: 'promo_banner_top',
+          displayOrder: 1,
+          isActive: true,
+        }),
+      });
+      assert.strictEqual(resPromo.status, 201);
+      const promoData = await resPromo.json();
+      const promoId = promoData.data._id;
+
+      // 4. Query public banners with position filter (GET /banners?position=hero_slider)
+      const resPublicHero = await fetch(`${baseUrl}/banners?position=hero_slider`);
+      assert.strictEqual(resPublicHero.status, 200);
+      const publicHeroData = await resPublicHero.json();
+      assert.strictEqual(publicHeroData.success, true);
+      assert.ok(Array.isArray(publicHeroData.data));
+      const foundHero = publicHeroData.data.find(b => b._id.toString() === bannerId.toString());
+      assert.ok(foundHero, 'Created hero banner must be returned in public hero_slider query');
+      const foundPromoInHero = publicHeroData.data.find(b => b._id.toString() === promoId.toString());
+      assert.strictEqual(foundPromoInHero, undefined, 'Promo banner must not appear in hero_slider filtered query');
+
+      // 5. Query admin banners with stats (GET /admin/banners)
+      const resAdminBanners = await fetch(`${baseUrl}/admin/banners`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resAdminBanners.status, 200);
+      const adminBannersData = await resAdminBanners.json();
+      assert.strictEqual(adminBannersData.success, true);
+      assert.ok(adminBannersData.stats.total >= 2);
+      assert.ok(adminBannersData.stats.hero >= 1);
+      assert.ok(adminBannersData.stats.promo >= 1);
+
+      // 6. Update banner (PUT /admin/banners/:id)
+      const resUpdate = await fetch(`${baseUrl}/admin/banners/${bannerId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Premium Studio Monitors Sale — Extended 48h',
+          badgeText: '⏰ Ends Midnight',
+        }),
+      });
+      assert.strictEqual(resUpdate.status, 200);
+      const updateData = await resUpdate.json();
+      assert.strictEqual(updateData.data.title, 'Premium Studio Monitors Sale — Extended 48h');
+      assert.strictEqual(updateData.data.badgeText, '⏰ Ends Midnight');
+
+      // 7. Toggle active status (PATCH /admin/banners/:id/toggle)
+      const resToggle = await fetch(`${baseUrl}/admin/banners/${bannerId}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resToggle.status, 200);
+      const toggleData = await resToggle.json();
+      assert.strictEqual(toggleData.data.isActive, false, 'Banner should be deactivated');
+
+      // Verify deactivated banner no longer appears in public active query
+      const resCheckInactive = await fetch(`${baseUrl}/banners?position=hero_slider&activeOnly=true`);
+      const checkInactiveData = await resCheckInactive.json();
+      const stillInPublic = checkInactiveData.data.find(b => b._id.toString() === bannerId.toString());
+      assert.strictEqual(stillInPublic, undefined, 'Deactivated banner must not appear in active public banners');
+
+      // Toggle back to active
+      await fetch(`${baseUrl}/admin/banners/${bannerId}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      // 8. Reorder banners (PUT /admin/banners/reorder)
+      const resReorder = await fetch(`${baseUrl}/admin/banners/reorder`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          items: [
+            { id: promoId, displayOrder: 1 },
+            { id: bannerId, displayOrder: 2 },
+          ],
+        }),
+      });
+      assert.strictEqual(resReorder.status, 200);
+      const reorderData = await resReorder.json();
+      assert.strictEqual(reorderData.success, true);
+
+      // 9. Delete banner (DELETE /admin/banners/:id)
+      const resDelete = await fetch(`${baseUrl}/admin/banners/${bannerId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resDelete.status, 200);
+      const deleteData = await resDelete.json();
+      assert.strictEqual(deleteData.success, true);
+
+      // Clean up promo banner
+      await fetch(`${baseUrl}/admin/banners/${promoId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

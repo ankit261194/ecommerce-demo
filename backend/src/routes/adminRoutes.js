@@ -68,6 +68,22 @@ router.post('/brands', createBrand);
 router.put('/brands/:id', updateBrand);
 router.delete('/brands/:id', deleteBrand);
 
+// Homepage Hero Slider & Promo Banner Manager (Point #38)
+const {
+  getAdminBanners,
+  createBanner,
+  updateBanner,
+  deleteBanner,
+  toggleBannerStatus,
+  reorderBanners,
+} = require('../controllers/bannerController');
+router.get('/banners', getAdminBanners);
+router.post('/banners', createBanner);
+router.put('/banners/reorder', reorderBanners);
+router.put('/banners/:id', updateBanner);
+router.delete('/banners/:id', deleteBanner);
+router.patch('/banners/:id/toggle', toggleBannerStatus);
+
 // Integrations & API Hub
 router.get('/integrations', getIntegrations);
 router.put('/integrations', updateIntegrations);

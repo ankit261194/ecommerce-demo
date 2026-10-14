@@ -24,6 +24,7 @@ import {
   SlidersHorizontal,
   FolderTree,
   ChevronRight,
+  ChevronLeft,
   Filter,
   Flame,
   BadgePercent,
@@ -89,6 +90,74 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [redeemedCoins, setRedeemedCoins] = useState(0);
   const [customerWallet, setCustomerWallet] = useState({ coins: 500, balance: 250 });
+
+  // Point #38: Homepage Hero Slider & Promo Banners State
+  const [heroBanners, setHeroBanners] = useState([
+    {
+      _id: 'bn_hero_1',
+      title: uiConfig?.heroBanners?.[0]?.title || 'Spatial Audio Reinvented',
+      subtitle: uiConfig?.heroBanners?.[0]?.subtitle || 'Studio acoustics with active noise cancellation. Shipped directly from verified electronics distributor.',
+      badgeText: uiConfig?.heroBanners?.[0]?.badgeText || 'MEGA FESTIVE DEAL',
+      imageUrl: uiConfig?.heroBanners?.[0]?.imageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=1200',
+      actionLink: uiConfig?.heroBanners?.[0]?.actionLink || '/category/electronics-audio',
+      buttonText: 'Shop Festive Deals',
+      backgroundColor: '#0F172A',
+      textColor: '#FFFFFF',
+    },
+    {
+      _id: 'bn_hero_2',
+      title: 'Cyberpunk & Minimal Streetwear Drop',
+      subtitle: 'Heavyweight organic cotton, boxy oversized cuts, and handcrafted aesthetics.',
+      badgeText: '✨ New Arrivals',
+      imageUrl: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=1200&q=80',
+      actionLink: '/category/fashion',
+      buttonText: 'Explore Fashion',
+      backgroundColor: '#1E1B4B',
+      textColor: '#FFFFFF',
+    },
+    {
+      _id: 'bn_hero_3',
+      title: 'Titanium Smartwatch Pro Ultra Series',
+      subtitle: 'Military-grade rugged durability, multi-day battery, and ECG cardiac sensor.',
+      badgeText: '⚡ Limited Flash Deal',
+      imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=1200&q=80',
+      actionLink: '/products',
+      buttonText: 'Grab Deal Now',
+      backgroundColor: '#18181B',
+      textColor: '#FFFFFF',
+    },
+  ]);
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [isSlidePaused, setIsSlidePaused] = useState(false);
+  const [topPromoBanner, setTopPromoBanner] = useState(null);
+
+  // Fetch live banners from backend
+  useEffect(() => {
+    api.get('/banners?position=hero_slider&activeOnly=true')
+      .then(res => {
+        if (res.data?.success && Array.isArray(res.data.data) && res.data.data.length > 0) {
+          setHeroBanners(res.data.data);
+        }
+      })
+      .catch(() => {});
+
+    api.get('/banners?position=promo_banner_top&activeOnly=true')
+      .then(res => {
+        if (res.data?.success && Array.isArray(res.data.data) && res.data.data.length > 0) {
+          setTopPromoBanner(res.data.data[0]);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Auto-advance hero slides every 5 seconds unless hovered/paused
+  useEffect(() => {
+    if (isSlidePaused || heroBanners.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentSlideIndex(prev => (prev + 1) % heroBanners.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isSlidePaused, heroBanners.length]);
 
   // Sync wallet on mount & listen to custom open event
   useEffect(() => {
@@ -1048,42 +1117,141 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           </div>
         </div>
 
-        {/* Vibrant Clean Hero Banner (Responsive Mobile & Desktop) */}
-        <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-md bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 text-slate-950 min-h-[220px] sm:min-h-[280px] lg:min-h-[340px] flex items-center p-5 sm:p-8 lg:p-14 border border-amber-300">
-          <div className="max-w-xl space-y-3 sm:space-y-4 z-10">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-slate-950 text-amber-400 text-[10px] sm:text-xs font-black uppercase tracking-wider shadow">
-              <Sparkles className="w-3 h-3 text-amber-400" />
-              <span>MEGA FESTIVE DEAL</span>
+        {/* Top Promo Banner Strip (Point #38) */}
+        {topPromoBanner && topPromoBanner.isActive && (
+          <div className="relative rounded-2xl overflow-hidden shadow-sm border border-amber-300 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 text-slate-950 p-3 sm:p-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              {topPromoBanner.badgeText && (
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-slate-950 text-amber-400 tracking-wider shadow-xs">
+                  {topPromoBanner.badgeText}
+                </span>
+              )}
+              <div>
+                <h4 className="text-xs sm:text-sm font-black">{topPromoBanner.title}</h4>
+                {topPromoBanner.subtitle && (
+                  <p className="text-[11px] text-slate-900 font-medium hidden sm:block">
+                    {topPromoBanner.subtitle}
+                  </p>
+                )}
+              </div>
             </div>
+            <a
+              href={topPromoBanner.actionLink || '/products'}
+              onClick={(e) => {
+                if (topPromoBanner.actionLink?.startsWith('/category/')) {
+                  e.preventDefault();
+                  const catSlug = topPromoBanner.actionLink.replace('/category/', '');
+                  setSelectedCategory(catSlug);
+                }
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-900 text-white font-black text-xs whitespace-nowrap shadow-md transition-all flex items-center gap-1.5 flex-shrink-0"
+            >
+              <span>{topPromoBanner.buttonText || 'Claim Deal'}</span>
+              <ArrowRight className="w-3.5 h-3.5 text-amber-400" />
+            </a>
+          </div>
+        )}
 
-            <h1 className="text-2xl sm:text-3xl lg:text-5xl font-black text-slate-950 tracking-tight leading-tight">
-              {uiConfig?.heroBanners?.[0]?.title || 'Spatial Audio Reinvented'}
+        {/* Dynamic Homepage Hero Slider Carousel (Point #38) */}
+        <div
+          onMouseEnter={() => setIsSlidePaused(true)}
+          onMouseLeave={() => setIsSlidePaused(false)}
+          className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-lg bg-slate-950 text-white min-h-[240px] sm:min-h-[300px] lg:min-h-[360px] flex items-center p-6 sm:p-10 lg:p-14 border border-slate-800 group"
+        >
+          {/* Background Image with Dark Gradient Overlay */}
+          <div className="absolute inset-0 z-0">
+            <img
+              src={heroBanners[currentSlideIndex]?.imageUrl}
+              alt={heroBanners[currentSlideIndex]?.title}
+              className="w-full h-full object-cover object-center transition-all duration-700 transform scale-105 group-hover:scale-100"
+              onError={(e) => {
+                e.currentTarget.src = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=1200';
+              }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/75 to-slate-950/30" />
+          </div>
+
+          {/* Slide Text Content */}
+          <div className="relative z-10 max-w-xl space-y-3 sm:space-y-4">
+            {heroBanners[currentSlideIndex]?.badgeText && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500 text-slate-950 text-[10px] sm:text-xs font-black uppercase tracking-wider shadow">
+                <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                <span>{heroBanners[currentSlideIndex]?.badgeText}</span>
+              </div>
+            )}
+
+            <h1 className="text-2xl sm:text-3xl lg:text-5xl font-black text-white tracking-tight leading-tight line-clamp-2">
+              {heroBanners[currentSlideIndex]?.title}
             </h1>
 
-            <p className="text-xs sm:text-sm lg:text-base text-slate-900 leading-relaxed font-semibold line-clamp-2 sm:line-clamp-none">
-              {uiConfig?.heroBanners?.[0]?.subtitle ||
-                'Studio acoustics with active noise cancellation. Shipped directly from verified electronics distributor.'}
-            </p>
+            {heroBanners[currentSlideIndex]?.subtitle && (
+              <p className="text-xs sm:text-sm lg:text-base text-slate-300 leading-relaxed font-normal line-clamp-2 sm:line-clamp-none">
+                {heroBanners[currentSlideIndex]?.subtitle}
+              </p>
+            )}
 
-            <div className="flex items-center gap-3 pt-1">
+            <div className="flex items-center gap-3 pt-2">
               <button
-                onClick={() => setSelectedCategory('electronics-audio')}
-                className="px-4 py-2 sm:px-6 sm:py-3 rounded-xl bg-slate-950 hover:bg-slate-850 text-white font-black text-xs sm:text-sm shadow-xl flex items-center gap-2 transition-all transform hover:-translate-y-0.5"
+                onClick={() => {
+                  const link = heroBanners[currentSlideIndex]?.actionLink || '/products';
+                  if (link.startsWith('/category/')) {
+                    const catSlug = link.replace('/category/', '');
+                    setSelectedCategory(catSlug);
+                  } else {
+                    setSelectedCategory('all');
+                  }
+                }}
+                className="px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs sm:text-sm shadow-xl flex items-center gap-2 transition-all transform hover:-translate-y-0.5"
               >
-                <span>Shop Festive Deals</span>
-                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+                <span>{heroBanners[currentSlideIndex]?.buttonText || 'Shop Now'}</span>
+                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
               </button>
             </div>
           </div>
 
-          {/* Banner Product Showcase Image */}
-          <div className="absolute right-0 top-0 bottom-0 w-1/2 hidden md:block opacity-90 pointer-events-none">
-            <img
-              src="https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=1000"
-              alt="Hero Showcase"
-              className="w-full h-full object-cover object-center"
-            />
-          </div>
+          {/* Next / Previous Carousel Navigation Arrows */}
+          {heroBanners.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  setCurrentSlideIndex((prev) => (prev === 0 ? heroBanners.length - 1 : prev - 1))
+                }
+                className="absolute left-3 sm:left-4 z-20 p-2 sm:p-2.5 rounded-full bg-slate-950/70 hover:bg-slate-900 text-white backdrop-blur-md border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                title="Previous Slide"
+              >
+                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setCurrentSlideIndex((prev) => (prev + 1) % heroBanners.length)
+                }
+                className="absolute right-3 sm:right-4 z-20 p-2 sm:p-2.5 rounded-full bg-slate-950/70 hover:bg-slate-900 text-white backdrop-blur-md border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                title="Next Slide"
+              >
+                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+
+              {/* Carousel Dot Indicators */}
+              <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-slate-950/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+                {heroBanners.map((_, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setCurrentSlideIndex(idx)}
+                    className={`h-2 rounded-full transition-all ${
+                      idx === currentSlideIndex
+                        ? 'w-6 bg-amber-400'
+                        : 'w-2 bg-white/40 hover:bg-white/70'
+                    }`}
+                    title={`Slide ${idx + 1}`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Flash Sale Frenzy & Deal of the Day with Live Countdown Timer (Point #11) */}

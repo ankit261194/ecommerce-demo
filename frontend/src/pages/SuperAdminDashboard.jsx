@@ -52,12 +52,14 @@ import {
   FileSpreadsheet,
   FolderTree,
   Award,
+  Sliders,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import TaxInvoiceModal from '../components/TaxInvoiceModal';
 import CategoryTreeManager from '../components/CategoryTreeManager';
 import BrandDirectoryManager from '../components/BrandDirectoryManager';
+import BannerManager from '../components/BannerManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1237,6 +1239,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('banners')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'banners'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Sliders className="w-4 h-4" />
+            <span>Hero & Promo Banners</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-300 ml-1">
+              Point #38
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveDashboardTab('layout')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
               activeDashboardTab === 'layout'
@@ -1990,6 +2007,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'brands' && (
         <BrandDirectoryManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: HOMEPAGE HERO SLIDER & PROMO BANNER MANAGER (Point #38) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'banners' && (
+        <BannerManager />
       )}
 
       {/* ========================================================================= */}

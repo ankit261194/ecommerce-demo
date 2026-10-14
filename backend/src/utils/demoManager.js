@@ -8,6 +8,7 @@ const DeliveryTask = require('../models/DeliveryTask');
 const Ledger = require('../models/Ledger');
 const UIConfig = require('../models/UIConfig');
 const Coupon = require('../models/Coupon');
+const Banner = require('../models/Banner');
 
 const seedDemoData = async () => {
   console.log('[DemoManager] Seeding demo multi-vendor data...');
@@ -605,14 +606,86 @@ const seedDemoData = async () => {
     ]);
   }
 
+  // 11. Seed Demo Hero and Promo Banners
+  const existingBannersCount = await Banner.countDocuments();
+  if (existingBannersCount === 0) {
+    await Banner.create([
+      {
+        title: 'Next-Gen Wireless Noise Cancelling Over-Ear',
+        subtitle: 'Immerse in studio-grade acoustics with 40-hour playtime & dynamic ANC.',
+        badgeText: '🔥 Mega Launch 2026',
+        imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=1200&q=80',
+        actionLink: '/category/electronics',
+        buttonText: 'Shop Electronics',
+        position: 'hero_slider',
+        displayOrder: 1,
+        isActive: true,
+        backgroundColor: '#0F172A',
+        textColor: '#FFFFFF',
+      },
+      {
+        title: 'Cyberpunk & Minimal Streetwear Drop',
+        subtitle: 'Heavyweight organic cotton, boxy oversized cuts, and handcrafted aesthetics.',
+        badgeText: '✨ New Arrivals',
+        imageUrl: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=1200&q=80',
+        actionLink: '/category/fashion',
+        buttonText: 'Explore Fashion',
+        position: 'hero_slider',
+        displayOrder: 2,
+        isActive: true,
+        backgroundColor: '#1E1B4B',
+        textColor: '#FFFFFF',
+      },
+      {
+        title: 'Titanium Smartwatch Pro Ultra Series',
+        subtitle: 'Military-grade rugged durability, multi-day battery, and ECG cardiac sensor.',
+        badgeText: '⚡ Limited Flash Deal',
+        imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=1200&q=80',
+        actionLink: '/products',
+        buttonText: 'Grab Deal Now',
+        position: 'hero_slider',
+        displayOrder: 3,
+        isActive: true,
+        backgroundColor: '#18181B',
+        textColor: '#FFFFFF',
+      },
+      {
+        title: 'Festive Electronics Bonanza — Flat 40% OFF',
+        subtitle: 'Use coupon FESTIVE500 at checkout on orders above ₹2,499.',
+        badgeText: '🎉 Festive Special',
+        imageUrl: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=1200&q=80',
+        actionLink: '/products',
+        buttonText: 'Claim 40% OFF',
+        position: 'promo_banner_top',
+        displayOrder: 1,
+        isActive: true,
+        backgroundColor: '#F59E0B',
+        textColor: '#0B0F17',
+      },
+      {
+        title: 'Join As A Verified Merchant Partner Today',
+        subtitle: 'Zero upfront listing fee, 24-hour payouts, and 100k+ active shoppers across India.',
+        badgeText: '💼 Vendor Onboarding',
+        imageUrl: 'https://images.unsplash.com/photo-1556742049-0a67e5572248?auto=format&fit=crop&w=1200&q=80',
+        actionLink: '/vendor/register',
+        buttonText: 'Open Your Store',
+        position: 'promo_banner_middle',
+        displayOrder: 1,
+        isActive: true,
+        backgroundColor: '#047857',
+        textColor: '#FFFFFF',
+      },
+    ]);
+  }
+
   console.log('[DemoManager] Seeding completed successfully!');
   return { success: true, message: 'Demo data seeded successfully' };
 };
 
 const wipeDemoData = async () => {
-  console.log('[DemoManager] Wiping demo products, orders, tasks, ledgers, and coupons...');
+  console.log('[DemoManager] Wiping demo products, orders, tasks, ledgers, coupons, and banners...');
 
-  // 1. Delete all products, categories, orders, suborders, delivery tasks, ledger entries, coupons
+  // 1. Delete all products, categories, orders, suborders, delivery tasks, ledger entries, coupons, banners
   await Product.deleteMany({});
   await Order.deleteMany({});
   await SubOrder.deleteMany({});
@@ -620,6 +693,7 @@ const wipeDemoData = async () => {
   await Ledger.deleteMany({});
   await Category.deleteMany({});
   await Coupon.deleteMany({});
+  await Banner.deleteMany({});
 
   // 2. Remove non-admin demo users if desired, or keep superadmin safe
   await User.deleteMany({ role: { $ne: 'superadmin' } });

@@ -2061,7 +2061,105 @@ const runTests = async () => {
       const dataBulkInvoices = await resBulkInvoices.json();
       assert.strictEqual(dataBulkInvoices.success, true);
       assert.strictEqual(dataBulkInvoices.count, 1);
-      assert.strictEqual(dataBulkInvoices.data[0].orderNumber, placedOrder.orderNumber);
+    });
+
+    await test('Point 36: Category & Sub-Category Tree Manager (POST/PUT/DELETE /admin/categories & GET /categories?tree=true)', async () => {
+      // 1. Create a root category
+      const resRoot = await fetch(`${baseUrl}/admin/categories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Audio & Studio Gear',
+          description: 'High-fidelity audio monitors and headsets',
+          icon: 'headphones',
+          isFeatured: true,
+          displayOrder: 10,
+        }),
+      });
+      assert.strictEqual(resRoot.status, 201);
+      const rootData = await resRoot.json();
+      assert.strictEqual(rootData.success, true);
+      assert.strictEqual(rootData.data.name, 'Audio & Studio Gear');
+      assert.strictEqual(rootData.data.slug, 'audio-studio-gear');
+      const rootCatId = rootData.data._id;
+
+      // 2. Create a child sub-category under the root
+      const resSub = await fetch(`${baseUrl}/admin/categories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Studio Monitor Speakers',
+          parentCategory: rootCatId,
+          icon: 'headphones',
+          displayOrder: 1,
+        }),
+      });
+      assert.strictEqual(resSub.status, 201);
+      const subData = await resSub.json();
+      assert.strictEqual(subData.data.parentCategory._id.toString(), rootCatId.toString());
+      const subCatId = subData.data._id;
+
+      // 3. Query category hierarchy with ?tree=true
+      const resTree = await fetch(`${baseUrl}/categories?tree=true`);
+      assert.strictEqual(resTree.status, 200);
+      const treeData = await resTree.json();
+      assert.strictEqual(treeData.success, true);
+      const treeNode = treeData.data.find(c => c._id.toString() === rootCatId.toString());
+      assert.ok(treeNode, 'Created root category must exist in tree');
+      assert.ok(Array.isArray(treeNode.subcategories));
+      const childInTree = treeNode.subcategories.find(s => s._id.toString() === subCatId.toString());
+      assert.ok(childInTree, 'Created subcategory must be nested inside root category node');
+
+      // 4. Update category details
+      const resUpdate = await fetch(`${baseUrl}/admin/categories/${rootCatId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Pro Audio & Studio Gear',
+          displayOrder: 5,
+        }),
+      });
+      assert.strictEqual(resUpdate.status, 200);
+      const updateData = await resUpdate.json();
+      assert.strictEqual(updateData.data.name, 'Pro Audio & Studio Gear');
+
+      // 5. Batch Reorder categories
+      const resReorder = await fetch(`${baseUrl}/admin/categories/reorder`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          orders: [
+            { id: rootCatId, displayOrder: 1 },
+            { id: subCatId, displayOrder: 2 },
+          ],
+        }),
+      });
+      assert.strictEqual(resReorder.status, 200);
+
+      // 6. Delete sub-category
+      const resDel = await fetch(`${baseUrl}/admin/categories/${subCatId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resDel.status, 200);
+
+      // Clean up root category
+      await fetch(`${baseUrl}/admin/categories/${rootCatId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
     });
 
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {

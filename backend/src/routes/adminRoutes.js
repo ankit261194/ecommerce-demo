@@ -42,6 +42,20 @@ router.get('/orders/:id/commission-split', getOrderCommissionSplit);
 router.get('/orders/:id/invoice', getTaxInvoice);
 router.get('/ledger', getPlatformLedger);
 
+// Category & Sub-Category Tree Manager (Point #36)
+const {
+  getCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  reorderCategories,
+} = require('../controllers/categoryController');
+router.get('/categories', getCategories);
+router.post('/categories', createCategory);
+router.put('/categories/reorder', reorderCategories);
+router.put('/categories/:id', updateCategory);
+router.delete('/categories/:id', deleteCategory);
+
 // Integrations & API Hub
 router.get('/integrations', getIntegrations);
 router.put('/integrations', updateIntegrations);

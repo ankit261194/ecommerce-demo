@@ -2486,6 +2486,162 @@ const runTests = async () => {
       });
     });
 
+    await test('Point 40: Coupon & Promo Code Creator (Percentage/Flat, min spend, expiry date, usage limit & admin toggle)', async () => {
+      // 1. Fetch initial admin coupons & stats
+      const resStatsInit = await fetch(`${baseUrl}/coupons/admin/all`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resStatsInit.status, 200);
+      const dataStatsInit = await resStatsInit.json();
+      assert.strictEqual(dataStatsInit.success, true);
+      assert.ok(dataStatsInit.stats);
+      assert.strictEqual(typeof dataStatsInit.stats.total, 'number');
+      assert.strictEqual(typeof dataStatsInit.stats.percentageCount, 'number');
+      assert.strictEqual(typeof dataStatsInit.stats.flatCount, 'number');
+
+      // 2. Super Admin creates a PERCENTAGE coupon with max cap & min spend
+      const tomorrow = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+      const resCreatePercent = await fetch(`${baseUrl}/coupons`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          code: 'PERCENT25TEST',
+          title: '25% Mega Discount Test',
+          description: 'Get 25% discount capped at ₹500 on min ₹1000 spend',
+          discountType: 'PERCENTAGE',
+          discountValue: 25,
+          maxDiscountAmount: 500,
+          minOrderAmount: 1000,
+          usageLimit: 50,
+          expiryDate: tomorrow,
+          isFeatured: true,
+          isActive: true,
+        }),
+      });
+      assert.strictEqual(resCreatePercent.status, 201);
+      const dataCreatePercent = await resCreatePercent.json();
+      assert.strictEqual(dataCreatePercent.success, true);
+      assert.strictEqual(dataCreatePercent.data.code, 'PERCENT25TEST');
+      assert.strictEqual(dataCreatePercent.data.discountType, 'PERCENTAGE');
+      assert.strictEqual(dataCreatePercent.data.maxDiscountAmount, 500);
+      const percentCouponId = dataCreatePercent.data._id;
+
+      // 3. Super Admin creates a FLAT discount coupon
+      const resCreateFlat = await fetch(`${baseUrl}/coupons`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          code: 'FLAT750TEST',
+          title: 'Flat ₹750 Festive Bonanza',
+          description: 'Instant ₹750 flat rebate on orders over ₹3000',
+          discountType: 'FLAT',
+          discountValue: 750,
+          minOrderAmount: 3000,
+          usageLimit: 100,
+          expiryDate: tomorrow,
+          isFeatured: true,
+          isActive: true,
+        }),
+      });
+      assert.strictEqual(resCreateFlat.status, 201);
+      const dataCreateFlat = await resCreateFlat.json();
+      assert.strictEqual(dataCreateFlat.success, true);
+      assert.strictEqual(dataCreateFlat.data.code, 'FLAT750TEST');
+      assert.strictEqual(dataCreateFlat.data.discountType, 'FLAT');
+      const flatCouponId = dataCreateFlat.data._id;
+
+      // 4. Validate PERCENTAGE coupon math with cap
+      const resValPercent = await fetch(`${baseUrl}/coupons/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: 'PERCENT25TEST', cartTotal: 4000 }),
+      });
+      assert.strictEqual(resValPercent.status, 200);
+      const dataValPercent = await resValPercent.json();
+      assert.strictEqual(dataValPercent.valid, true);
+      // 25% of 4000 is 1000, but capped at 500
+      assert.strictEqual(dataValPercent.coupon.discountAmount, 500);
+      assert.strictEqual(dataValPercent.coupon.newTotal, 3500);
+
+      // 5. Validate FLAT coupon math & min spend rejection
+      const resValFlatFail = await fetch(`${baseUrl}/coupons/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: 'FLAT750TEST', cartTotal: 2000 }),
+      });
+      assert.strictEqual(resValFlatFail.status, 400); // Fails minimum order amount ₹3000
+
+      const resValFlatSuccess = await fetch(`${baseUrl}/coupons/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: 'FLAT750TEST', cartTotal: 5000 }),
+      });
+      assert.strictEqual(resValFlatSuccess.status, 200);
+      const dataValFlatSuccess = await resValFlatSuccess.json();
+      assert.strictEqual(dataValFlatSuccess.valid, true);
+      assert.strictEqual(dataValFlatSuccess.coupon.discountAmount, 750);
+      assert.strictEqual(dataValFlatSuccess.coupon.newTotal, 4250);
+
+      // 6. Toggle coupon status via PATCH /api/coupons/:id/toggle
+      const resToggle = await fetch(`${baseUrl}/coupons/${percentCouponId}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resToggle.status, 200);
+      const dataToggle = await resToggle.json();
+      assert.strictEqual(dataToggle.success, true);
+      assert.strictEqual(dataToggle.data.isActive, false);
+
+      // Verify that deactivated coupon is rejected at checkout
+      const resValDeactivated = await fetch(`${baseUrl}/coupons/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: 'PERCENT25TEST', cartTotal: 2000 }),
+      });
+      assert.strictEqual(resValDeactivated.status, 404);
+
+      // Toggle back to active
+      await fetch(`${baseUrl}/coupons/${percentCouponId}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      // 7. Update coupon via PUT /api/coupons/:id
+      const resUpdate = await fetch(`${baseUrl}/coupons/${flatCouponId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ discountValue: 800, minOrderAmount: 2500 }),
+      });
+      assert.strictEqual(resUpdate.status, 200);
+      const dataUpdate = await resUpdate.json();
+      assert.strictEqual(dataUpdate.data.discountValue, 800);
+      assert.strictEqual(dataUpdate.data.minOrderAmount, 2500);
+
+      // 8. Delete coupon via DELETE /api/coupons/:id
+      const resDelete = await fetch(`${baseUrl}/coupons/${flatCouponId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resDelete.status, 200);
+      const dataDelete = await resDelete.json();
+      assert.strictEqual(dataDelete.success, true);
+
+      // Clean up percent coupon
+      await fetch(`${baseUrl}/coupons/${percentCouponId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

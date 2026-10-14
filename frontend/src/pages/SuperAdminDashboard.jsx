@@ -54,6 +54,7 @@ import {
   Award,
   Sliders,
   Megaphone,
+  Ticket,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -62,6 +63,7 @@ import CategoryTreeManager from '../components/CategoryTreeManager';
 import BrandDirectoryManager from '../components/BrandDirectoryManager';
 import BannerManager from '../components/BannerManager';
 import AnnouncementBarManager from '../components/AnnouncementBarManager';
+import CouponManager from '../components/CouponManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1271,6 +1273,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('coupons')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'coupons'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Ticket className="w-4 h-4" />
+            <span>Coupons & Promo Codes</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-300 ml-1">
+              Point #40
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveDashboardTab('layout')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
               activeDashboardTab === 'layout'
@@ -2047,6 +2064,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
             }))
           }
         />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 7: COUPON & PROMO CODE CREATOR (Point #40) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'coupons' && (
+        <CouponManager />
       )}
 
       {/* ========================================================================= */}

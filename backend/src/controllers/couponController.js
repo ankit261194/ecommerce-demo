@@ -278,6 +278,115 @@ exports.deleteCoupon = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: 'Coupon deleted successfully',
+      deletedId: req.params.id,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get All Coupons for Super Admin with detailed stats
+// @route   GET /api/admin/coupons
+// @access  Private (Super Admin)
+exports.getAdminCoupons = async (req, res, next) => {
+  try {
+    const { search, discountType, status } = req.query;
+
+    const query = {};
+
+    if (discountType && discountType !== 'all') {
+      query.discountType = discountType.toUpperCase();
+    }
+
+    if (status === 'active') {
+      query.isActive = true;
+      query.$or = [{ expiryDate: null }, { expiryDate: { $gt: new Date() } }];
+    } else if (status === 'expired') {
+      query.expiryDate = { $lte: new Date() };
+    } else if (status === 'inactive') {
+      query.isActive = false;
+    }
+
+    if (search && search.trim() !== '') {
+      query.$or = [
+        { code: { $regex: search.trim(), $options: 'i' } },
+        { title: { $regex: search.trim(), $options: 'i' } },
+        { description: { $regex: search.trim(), $options: 'i' } },
+      ];
+    }
+
+    const coupons = await Coupon.find(query).sort({ createdAt: -1 });
+
+    const totalCoupons = await Coupon.countDocuments();
+    const activeCoupons = await Coupon.countDocuments({
+      isActive: true,
+      $or: [{ expiryDate: null }, { expiryDate: { $gt: new Date() } }],
+    });
+    const expiredCoupons = await Coupon.countDocuments({
+      expiryDate: { $lte: new Date() },
+    });
+    const percentageCount = await Coupon.countDocuments({ discountType: 'PERCENTAGE' });
+    const flatCount = await Coupon.countDocuments({ discountType: 'FLAT' });
+
+    res.status(200).json({
+      success: true,
+      count: coupons.length,
+      stats: {
+        total: totalCoupons,
+        active: activeCoupons,
+        expired: expiredCoupons,
+        percentageCount,
+        flatCount,
+      },
+      data: coupons,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get single coupon by ID
+// @route   GET /api/coupons/:id
+// @access  Public / Admin
+exports.getCouponById = async (req, res, next) => {
+  try {
+    const coupon = await Coupon.findById(req.params.id);
+    if (!coupon) {
+      return res.status(404).json({
+        success: false,
+        message: 'Coupon not found',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: coupon,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Toggle coupon active status
+// @route   PATCH /api/admin/coupons/:id/toggle
+// @access  Private (Super Admin)
+exports.toggleCouponStatus = async (req, res, next) => {
+  try {
+    const coupon = await Coupon.findById(req.params.id);
+    if (!coupon) {
+      return res.status(404).json({
+        success: false,
+        message: 'Coupon not found',
+      });
+    }
+
+    coupon.isActive = !coupon.isActive;
+    await coupon.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Coupon ${coupon.isActive ? 'activated' : 'deactivated'} successfully`,
+      data: coupon,
     });
   } catch (error) {
     next(error);

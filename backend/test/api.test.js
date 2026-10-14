@@ -2642,6 +2642,111 @@ const runTests = async () => {
       });
     });
 
+    await test('Point 41: Flash Deals & Campaign Manager (Create limited-time flash sales with countdown timer, deal badge, discount & stock)', async () => {
+      // 1. Fetch admin flash deals list and stats
+      const resListInit = await fetch(`${baseUrl}/flash-deals/admin/all`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resListInit.status, 200);
+      const dataListInit = await resListInit.json();
+      assert.strictEqual(dataListInit.success, true);
+      assert.ok(dataListInit.stats);
+      assert.strictEqual(typeof dataListInit.stats.total, 'number');
+
+      // 2. Super Admin creates a new active Flash Deal campaign with a product
+      const tomorrow = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+      const resCreate = await fetch(`${baseUrl}/flash-deals/admin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: '⚡ Midnight Audio Frenzy 40% OFF',
+          badgeText: '🔥 24H FLASH DEAL',
+          bannerImage: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=1200&q=80',
+          startDate: new Date().toISOString(),
+          endDate: tomorrow,
+          backgroundColor: '#DC2626',
+          textColor: '#FFFFFF',
+          isActive: true,
+          products: [
+            {
+              product: headphonesProduct._id,
+              discountPercentage: 40,
+              dealPrice: 5999,
+              allocatedStock: 50,
+              soldCount: 12,
+            },
+          ],
+        }),
+      });
+      assert.strictEqual(resCreate.status, 201);
+      const dataCreate = await resCreate.json();
+      assert.strictEqual(dataCreate.success, true);
+      assert.strictEqual(dataCreate.data.title, '⚡ Midnight Audio Frenzy 40% OFF');
+      assert.strictEqual(dataCreate.data.products.length, 1);
+      assert.strictEqual(dataCreate.data.products[0].discountPercentage, 40);
+      assert.strictEqual(dataCreate.data.products[0].dealPrice, 5999);
+      const flashDealId = dataCreate.data._id;
+
+      // 3. Verify public GET /api/flash-deals/active returns the active campaign and positive secondsRemaining
+      const resActive = await fetch(`${baseUrl}/flash-deals/active`);
+      assert.strictEqual(resActive.status, 200);
+      const dataActive = await resActive.json();
+      assert.strictEqual(dataActive.success, true);
+      assert.strictEqual(dataActive.hasActiveDeal, true);
+      assert.ok(dataActive.secondsRemaining > 0);
+      assert.strictEqual(dataActive.data.title, '⚡ Midnight Audio Frenzy 40% OFF');
+      assert.ok(dataActive.data.products.length >= 1);
+      assert.strictEqual(dataActive.data.products[0].dealPrice, 5999);
+
+      // 4. Toggle flash deal to PAUSED via PATCH /api/flash-deals/admin/:id/toggle
+      const resToggle = await fetch(`${baseUrl}/flash-deals/admin/${flashDealId}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resToggle.status, 200);
+      const dataToggle = await resToggle.json();
+      assert.strictEqual(dataToggle.success, true);
+      assert.strictEqual(dataToggle.data.isActive, false);
+
+      // 5. Verify public active deal returns false when deal is paused
+      const resActivePaused = await fetch(`${baseUrl}/flash-deals/active`);
+      const dataActivePaused = await resActivePaused.json();
+      assert.strictEqual(dataActivePaused.hasActiveDeal, false);
+
+      // 6. Resume flash deal
+      await fetch(`${baseUrl}/flash-deals/admin/${flashDealId}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      // 7. Update deal details via PUT /api/flash-deals/admin/:id
+      const resUpdate = await fetch(`${baseUrl}/flash-deals/admin/${flashDealId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          badgeText: '⚡ EXTENDED MEGA DEAL',
+        }),
+      });
+      assert.strictEqual(resUpdate.status, 200);
+      const dataUpdate = await resUpdate.json();
+      assert.strictEqual(dataUpdate.data.badgeText, '⚡ EXTENDED MEGA DEAL');
+
+      // 8. Super Admin deletes the flash deal via DELETE /api/flash-deals/admin/:id
+      const resDelete = await fetch(`${baseUrl}/flash-deals/admin/${flashDealId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resDelete.status, 200);
+      const dataDelete = await resDelete.json();
+      assert.strictEqual(dataDelete.success, true);
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

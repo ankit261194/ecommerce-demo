@@ -55,6 +55,7 @@ import {
   Sliders,
   Megaphone,
   Ticket,
+  Flame,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -64,6 +65,7 @@ import BrandDirectoryManager from '../components/BrandDirectoryManager';
 import BannerManager from '../components/BannerManager';
 import AnnouncementBarManager from '../components/AnnouncementBarManager';
 import CouponManager from '../components/CouponManager';
+import FlashDealManager from '../components/FlashDealManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1288,6 +1290,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('flash-deals')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'flash-deals'
+                ? 'bg-rose-500 text-white shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Flame className="w-4 h-4 text-rose-400" />
+            <span>Flash Deals & Sales</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-rose-500/30 text-rose-300 ml-1">
+              Point #41
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveDashboardTab('layout')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
               activeDashboardTab === 'layout'
@@ -2071,6 +2088,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'coupons' && (
         <CouponManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 8: FLASH DEALS & CAMPAIGN MANAGER (Point #41) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'flash-deals' && (
+        <FlashDealManager />
       )}
 
       {/* ========================================================================= */}

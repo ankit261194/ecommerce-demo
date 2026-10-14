@@ -27,6 +27,50 @@ export default function FlashSaleSection({
     let isMounted = true;
     const fetchDeals = async () => {
       try {
+        // 1. Try fetching live Flash Deal Campaign managed by Super Admin (Point #41)
+        const resFlash = await fetch('/api/flash-deals/active');
+        if (resFlash.ok) {
+          const flashData = await resFlash.json();
+          if (isMounted && flashData.hasActiveDeal && flashData.data && flashData.data.products?.length > 0) {
+            const mappedDeals = flashData.data.products.map((item) => ({
+              ...(item.product || {}),
+              _id: item.product?._id || item._id,
+              title: item.product?.title || 'Flash Deal Item',
+              sellingPrice: item.dealPrice,
+              originalSellingPrice: item.product?.sellingPrice || item.dealPrice,
+              mrp: item.product?.mrp || Math.round(item.dealPrice * 1.4),
+              discountPercent: item.discountPercentage || 35,
+              dealStock: item.allocatedStock || 50,
+              claimedPercent: Math.min(
+                100,
+                Math.round(((item.soldCount || 0) / (item.allocatedStock || 1)) * 100)
+              ),
+              dealBadge: flashData.data.badgeText || '⚡ FLASH SALE',
+            }));
+
+            setDeals(mappedDeals);
+            setCampaign({
+              title: flashData.data.title,
+              subtitle: `Limited promotional campaign: ${flashData.data.title}`,
+              endsAt: flashData.data.endDate,
+            });
+
+            if (flashData.data.endDate) {
+              const diffMs = new Date(flashData.data.endDate).getTime() - Date.now();
+              if (diffMs > 0) {
+                const totalSeconds = Math.floor(diffMs / 1000);
+                const hours = Math.floor(totalSeconds / 3600);
+                const minutes = Math.floor((totalSeconds % 3600) / 60);
+                const seconds = totalSeconds % 60;
+                setTimeLeft({ hours, minutes, seconds });
+              }
+            }
+            setLoading(false);
+            return;
+          }
+        }
+
+        // 2. Fallback to general flash deals products endpoint
         const res = await fetch('/api/products/flash-deals');
         if (res.ok) {
           const data = await res.json();

@@ -3023,11 +3023,11 @@ const runTests = async () => {
 
     await test('Point 45: Vendor Withdrawal / Payout Approval Hub (Review requests, approve with transaction ID, reject with refund & CSV export)', async () => {
       // 1. Ensure vendor has wallet balance for payout test
-      let vendorProfileBefore = await VendorProfile.findOne({});
+      const apexUser = await User.findOne({ email: 'apex@auramarket.com' });
+      let vendorProfileBefore = await VendorProfile.findOne({ user: apexUser._id });
       if (!vendorProfileBefore) {
-        const u = await User.findOne({ role: 'vendor' });
         vendorProfileBefore = await VendorProfile.create({
-          user: u._id,
+          user: apexUser._id,
           storeName: 'Test Store Payout',
           walletBalance: 5000,
         });
@@ -3091,7 +3091,7 @@ const runTests = async () => {
       assert.strictEqual(dataApprove.data.status, 'COMPLETED');
       assert.strictEqual(dataApprove.data.payoutDetails.utrNumber, 'UTR-HDFC-9988776655');
 
-      // 6. Vendor requests another payout of ₹200 to test rejection with wallet refund
+      // 6. Vendor requests another payout of ₹600 to test rejection with wallet refund
       const vendorBeforeReject = await VendorProfile.findById(vendorProfileBefore._id);
       const balanceBeforeSecond = vendorBeforeReject.walletBalance;
 
@@ -3101,7 +3101,7 @@ const runTests = async () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${vendorToken}`,
         },
-        body: JSON.stringify({ amount: 200 }),
+        body: JSON.stringify({ amount: 600 }),
       });
       assert.strictEqual(resPayoutReq2.status, 200);
       const dataPayoutReq2 = await resPayoutReq2.json();
@@ -4365,6 +4365,129 @@ const runTests = async () => {
         headers: { Authorization: `Bearer ${customerToken}` },
       });
       assert.strictEqual(resForbidden.status, 403);
+    });
+
+    // =========================================================================
+    // Point 62: Payout Withdrawal Request Flow (Bank NEFT / IMPS / UPI & Admin Approval Lifecycle)
+    // =========================================================================
+    await test('Point 62: Payout Withdrawal Request Flow (Bank NEFT / IMPS, Direct UPI, Min Limit & Admin Approval Lifecycle)', async () => {
+      // 1. Get initial vendor wallet balance
+      const resInitialWallet = await fetch(`${baseUrl}/vendor/wallet`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resInitialWallet.status, 200);
+      const dataInitialWallet = await resInitialWallet.json();
+      const initialBalance = dataInitialWallet.wallet.availableBalance;
+      assert.ok(initialBalance >= 2000, 'Vendor should have sufficient balance for test');
+
+      // 2. Validation: Rejects amount below minimum limit (₹500)
+      const resBelowMin = await fetch(`${baseUrl}/vendor/payout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({ amount: 250 }),
+      });
+      assert.strictEqual(resBelowMin.status, 400);
+      const dataBelowMin = await resBelowMin.json();
+      assert.strictEqual(dataBelowMin.success, false);
+      assert.ok(dataBelowMin.message.includes('500'));
+
+      // 3. Submit valid Bank IMPS withdrawal request
+      const withdrawAmountBank = 1000;
+      const resBankPayout = await fetch(`${baseUrl}/vendor/payout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({
+          amount: withdrawAmountBank,
+          paymentMode: 'IMPS',
+          bankDetails: {
+            accountHolder: 'Apex Tech Automated',
+            bankName: 'HDFC Bank Ltd',
+            accountNumber: '50100492810234',
+            ifscCode: 'HDFC0001024',
+          },
+        }),
+      });
+      assert.strictEqual(resBankPayout.status, 200);
+      const dataBankPayout = await resBankPayout.json();
+      assert.strictEqual(dataBankPayout.success, true);
+      const bankLedger = dataBankPayout.data;
+      assert.strictEqual(bankLedger.amount, withdrawAmountBank);
+      assert.strictEqual(bankLedger.status, 'PENDING');
+      assert.strictEqual(bankLedger.payoutDetails.paymentMode, 'IMPS');
+      assert.strictEqual(bankLedger.balanceAfter, initialBalance - withdrawAmountBank);
+
+      // 4. Submit valid Direct UPI withdrawal request
+      const withdrawAmountUpi = 600;
+      const resUpiPayout = await fetch(`${baseUrl}/vendor/payout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({
+          amount: withdrawAmountUpi,
+          paymentMode: 'UPI',
+          upiId: 'apextech@okhdfcbank',
+        }),
+      });
+      assert.strictEqual(resUpiPayout.status, 200);
+      const dataUpiPayout = await resUpiPayout.json();
+      assert.strictEqual(dataUpiPayout.success, true);
+      const upiLedger = dataUpiPayout.data;
+      assert.strictEqual(upiLedger.amount, withdrawAmountUpi);
+      assert.strictEqual(upiLedger.status, 'PENDING');
+      assert.strictEqual(upiLedger.payoutDetails.paymentMode, 'UPI');
+
+      // 5. Super Admin Approval Lifecycle: Admin approves bank payout with banking UTR
+      const sampleUtr = 'UTR-HDFC-TEST-' + Date.now();
+      const resApprove = await fetch(`${baseUrl}/admin/payouts/${bankLedger._id}/approve`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          utrNumber: sampleUtr,
+          adminNotes: 'Automated settlement approved via Host-to-Host banking node',
+        }),
+      });
+      assert.strictEqual(resApprove.status, 200);
+      const dataApprove = await resApprove.json();
+      assert.strictEqual(dataApprove.success, true);
+      assert.strictEqual(dataApprove.data.status, 'COMPLETED');
+      assert.strictEqual(dataApprove.data.payoutDetails.utrNumber, sampleUtr);
+
+      // 6. Super Admin Rejection & Automatic Wallet Refund Lifecycle:
+      // Admin rejects UPI payout request due to invalid VPA / compliance check
+      const resReject = await fetch(`${baseUrl}/admin/payouts/${upiLedger._id}/reject`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          rejectionReason: 'VPA inactive / Name mismatch at NPCI clearing house',
+        }),
+      });
+      assert.strictEqual(resReject.status, 200);
+      const dataReject = await resReject.json();
+      assert.strictEqual(dataReject.success, true);
+      assert.strictEqual(dataReject.data.status, 'REJECTED');
+
+      // 7. Verify that rejected amount (₹600) was refunded back to vendor wallet
+      const resFinalWallet = await fetch(`${baseUrl}/vendor/wallet`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resFinalWallet.status, 200);
+      const dataFinalWallet = await resFinalWallet.json();
+      // Balance should be: initial - 1000 - 600 + 600 (refund) = initial - 1000
+      assert.strictEqual(dataFinalWallet.wallet.availableBalance, initialBalance - withdrawAmountBank);
     });
 
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {

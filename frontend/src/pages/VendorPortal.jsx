@@ -32,6 +32,7 @@ import VendorPublicStoreModal from '../components/VendorPublicStoreModal';
 import VacationModeModal from '../components/VacationModeModal';
 import VendorReviewsModal from '../components/VendorReviewsModal';
 import VendorWalletLedgerModal from '../components/VendorWalletLedgerModal';
+import VendorPayoutModal from '../components/VendorPayoutModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -1349,46 +1350,29 @@ export const VendorPortal = () => {
         </form>
       </SlideOverDrawer>
 
-      {/* Payout Modal */}
-      {isPayoutModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full border border-slate-200 shadow-2xl space-y-4">
-            <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-              <Wallet className="w-5 h-5 text-emerald-600" /> Withdraw Earnings
-            </h3>
-            <p className="text-xs text-slate-600">
-              Available Balance: <strong className="text-slate-900">₹{vendorData.walletBalance.toLocaleString('en-IN')}</strong>
-            </p>
-            <div>
-              <label className="text-xs font-bold uppercase text-slate-600">Amount to Transfer</label>
-              <input
-                type="number"
-                value={payoutAmount}
-                max={vendorData.walletBalance}
-                onChange={e => setPayoutAmount(e.target.value)}
-                className="w-full mt-1 px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-sm font-bold text-slate-900 focus:outline-none focus:border-amber-500"
-              />
-            </div>
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
-              Transfer to: <strong>HDFC Bank A/C ****4092 (IFSC: HDFC0001024)</strong>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setIsPayoutModalOpen(false)}
-                className="w-1/2 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePayoutSubmit}
-                className="w-1/2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-sm"
-              >
-                Confirm Transfer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Point #62: Payout Withdrawal Request Flow (Bank NEFT / IMPS / UPI) */}
+      <VendorPayoutModal
+        isOpen={isPayoutModalOpen}
+        onClose={() => setIsPayoutModalOpen(false)}
+        walletBalance={vendorData.walletBalance}
+        initialBankDetails={vendorData.bankDetails || {
+          accountHolder: vendorData.storeName || 'Apex Tech Enterprise',
+          bankName: 'HDFC Bank Ltd',
+          accountNumber: '50100492810234',
+          ifscCode: 'HDFC0001024',
+          upiId: 'apextech@okhdfcbank',
+        }}
+        onPayoutSuccess={(result) => {
+          setVendorData(prev => ({
+            ...prev,
+            walletBalance: result.remainingBalance !== undefined ? result.remainingBalance : prev.walletBalance - result.amount,
+          }));
+          setNotification(
+            `Withdrawal of ₹${result.amount.toLocaleString('en-IN')} via ${result.mode} (${result.recipient}) submitted successfully!`
+          );
+          fetchVendorData();
+        }}
+      />
 
       {/* Point #51: Multi-Variant Product Creator Modal */}
       <MultiVariantProductModal

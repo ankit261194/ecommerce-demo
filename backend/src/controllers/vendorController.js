@@ -679,46 +679,83 @@ exports.getShippingLabelData = async (req, res, next) => {
   }
 };
 
-// @desc    Request Wallet Payout
+// @desc    Request Wallet Payout (Point #62: Bank NEFT / IMPS / Direct UPI)
 // @route   POST /api/vendor/payout
 exports.requestPayout = async (req, res, next) => {
   try {
-    const { amount } = req.body;
+    const { amount, paymentMode, bankDetails, upiId } = req.body;
     const vendor = await VendorProfile.findOne({ user: req.user._id });
     if (!vendor) {
       return res.status(404).json({ success: false, message: 'Vendor profile not found' });
     }
 
     const numAmount = Number(amount);
-    if (!numAmount || isNaN(numAmount) || numAmount <= 0 || numAmount > vendor.walletBalance) {
+    if (!numAmount || isNaN(numAmount) || numAmount <= 0) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid payout amount. Must be a valid positive number not exceeding available wallet balance.',
+        message: 'Invalid payout amount. Must be a valid positive number.',
       });
+    }
+
+    if (numAmount < 500) {
+      return res.status(400).json({
+        success: false,
+        message: 'Minimum payout withdrawal amount is ₹500.',
+      });
+    }
+
+    if (numAmount > vendor.walletBalance) {
+      return res.status(400).json({
+        success: false,
+        message: `Requested amount ₹${numAmount} exceeds your available wallet balance of ₹${vendor.walletBalance}.`,
+      });
+    }
+
+    // Determine payout mode: UPI or Bank Transfer (IMPS / NEFT)
+    const rawMode = (paymentMode || 'IMPS').toUpperCase();
+    const finalMode = ['IMPS', 'NEFT', 'UPI'].includes(rawMode) ? rawMode : 'IMPS';
+
+    // Update vendor profile bank/UPI details if supplied
+    if (bankDetails) {
+      vendor.bankDetails = {
+        ...(vendor.bankDetails?.toObject ? vendor.bankDetails.toObject() : vendor.bankDetails),
+        ...bankDetails,
+      };
+    }
+    if (upiId) {
+      if (!vendor.bankDetails) vendor.bankDetails = {};
+      vendor.bankDetails.upiId = upiId.trim();
     }
 
     vendor.walletBalance -= numAmount;
     await vendor.save();
 
+    const recipientDesc = finalMode === 'UPI'
+      ? `UPI ID: ${upiId || vendor.bankDetails?.upiId || 'merchant@upi'}`
+      : `${vendor.bankDetails?.bankName || 'Bank'} A/C: ${vendor.bankDetails?.accountNumber || '****4092'}`;
+
     const ledger = await Ledger.create({
       vendor: vendor._id,
       type: 'PAYOUT_WITHDRAWAL',
       amount: numAmount,
-      description: `Vendor payout request for ₹${numAmount} to bank ${vendor.bankDetails?.bankName || 'Default'}`,
+      description: `Vendor withdrawal request for ₹${numAmount} via ${finalMode} (${recipientDesc})`,
       balanceAfter: vendor.walletBalance,
       status: 'PENDING',
       payoutDetails: {
-        accountHolder: vendor.bankDetails?.accountHolder || '',
-        accountNumber: vendor.bankDetails?.accountNumber || '',
-        ifscCode: vendor.bankDetails?.ifscCode || '',
-        bankName: vendor.bankDetails?.bankName || '',
+        paymentMode: finalMode,
+        accountHolder: bankDetails?.accountHolder || vendor.bankDetails?.accountHolder || vendor.storeName || '',
+        accountNumber: bankDetails?.accountNumber || vendor.bankDetails?.accountNumber || '',
+        ifscCode: bankDetails?.ifscCode || vendor.bankDetails?.ifscCode || '',
+        bankName: bankDetails?.bankName || vendor.bankDetails?.bankName || '',
+        adminNotes: finalMode === 'UPI' ? `Direct UPI Transfer to ${upiId || vendor.bankDetails?.upiId}` : '',
       },
     });
 
     res.status(200).json({
       success: true,
-      message: 'Payout request submitted successfully. Funds will transfer in 24-48 hours.',
+      message: `Payout request of ₹${numAmount.toLocaleString('en-IN')} submitted successfully via ${finalMode}. Settlement will transfer in 24-48 business hours.`,
       data: ledger,
+      updatedWalletBalance: vendor.walletBalance,
     });
   } catch (error) {
     next(error);

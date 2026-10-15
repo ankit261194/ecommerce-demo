@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Printer,
   Store,
+  Palmtree,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -28,6 +29,7 @@ import BulkProductExcelModal from '../components/BulkProductExcelModal';
 import ShippingLabelPrinterModal from '../components/ShippingLabelPrinterModal';
 import VendorStoreProfileModal from '../components/VendorStoreProfileModal';
 import VendorPublicStoreModal from '../components/VendorPublicStoreModal';
+import VacationModeModal from '../components/VacationModeModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -42,6 +44,11 @@ export const VendorPortal = () => {
     totalSales: 185000,
     commissionRate: 8,
     rating: 4.9,
+    vacationMode: {
+      isVacation: false,
+      noticeMessage: '',
+      disableOrdering: true,
+    },
   });
 
   const [products, setProducts] = useState([
@@ -141,6 +148,7 @@ export const VendorPortal = () => {
   const [selectedOrderForLabel, setSelectedOrderForLabel] = useState(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // Point #58: Store Profile Customization
   const [isPublicStorePreviewOpen, setIsPublicStorePreviewOpen] = useState(false); // Point #58: Public Storefront Preview
+  const [isVacationModalOpen, setIsVacationModalOpen] = useState(false); // Point #59: Vacation Mode Toggle
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
@@ -176,6 +184,7 @@ export const VendorPortal = () => {
           totalSales: d.vendor?.totalSales ?? prev.totalSales,
           commissionRate: d.vendor?.commissionRate ?? prev.commissionRate,
           rating: d.vendor?.rating ?? prev.rating,
+          vacationMode: d.vendor?.vacationMode || prev.vacationMode,
         }));
       }
 
@@ -468,6 +477,25 @@ export const VendorPortal = () => {
         <div className="flex items-center gap-3 flex-wrap">
           <button
             type="button"
+            onClick={() => setIsVacationModalOpen(true)}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs font-bold transition-all shadow-sm ${
+              vendorData.vacationMode?.isVacation
+                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-600 ring-2 ring-amber-400/50'
+                : 'bg-white hover:bg-slate-50 border-slate-300 text-slate-700'
+            }`}
+            title="Configure Store Vacation / Holiday Mode"
+          >
+            <Palmtree className={`w-4 h-4 ${vendorData.vacationMode?.isVacation ? 'text-slate-950 animate-bounce' : 'text-slate-500'}`} />
+            <span>
+              {vendorData.vacationMode?.isVacation ? '🌴 Vacation Mode ON' : '🌴 Vacation Mode'}
+            </span>
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${vendorData.vacationMode?.isVacation ? 'bg-slate-950 text-amber-400' : 'bg-slate-100 text-slate-700'}`}>
+              #59
+            </span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setIsProfileModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all"
             title="Customize Shop Logo, Cover Banner, Bio, Slug & Social Links"
@@ -496,6 +524,38 @@ export const VendorPortal = () => {
           </button>
         </div>
       </div>
+
+      {/* Point 59: Vacation Mode Active Banner */}
+      {vendorData.vacationMode?.isVacation && (
+        <div className="p-4 rounded-2xl bg-amber-500/15 border-2 border-amber-400 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-sm font-black">
+              <Palmtree className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black uppercase tracking-wider bg-amber-400 text-slate-950 px-2 py-0.5 rounded-md">
+                  Vacation Mode Active
+                </span>
+                <span className="text-xs font-bold text-amber-900">
+                  Customer order placement is paused
+                </span>
+              </div>
+              <p className="text-xs text-amber-800 mt-0.5">
+                Notice displayed to shoppers: "{vendorData.vacationMode.noticeMessage || 'Store is on vacation'}"
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsVacationModalOpen(true)}
+            className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black shrink-0 transition-all shadow-sm"
+          >
+            Modify / Turn Off
+          </button>
+        </div>
+      )}
 
       {/* Bento Grid Metrics */}
       <BentoGrid>
@@ -1443,6 +1503,24 @@ export const VendorPortal = () => {
         }}
         onAddToCart={(p) => {
           setNotification(`Added '${p.title}' to cart!`);
+        }}
+      />
+
+      {/* Point 59: Vacation Mode Modal */}
+      <VacationModeModal
+        isOpen={isVacationModalOpen}
+        onClose={() => setIsVacationModalOpen(false)}
+        currentVacationMode={vendorData.vacationMode}
+        onVacationUpdated={(updated) => {
+          setVendorData(prev => ({
+            ...prev,
+            vacationMode: updated,
+          }));
+          setNotification(
+            updated.isVacation
+              ? '🌴 Vacation mode enabled. Store ordering has been paused with notice.'
+              : '🌴 Vacation mode disabled. Store ordering is now live!'
+          );
         }}
       />
     </div>

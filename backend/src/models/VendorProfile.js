@@ -57,6 +57,7 @@ const vendorProfileSchema = new mongoose.Schema(
     vacationMode: {
       isVacation: { type: Boolean, default: false },
       noticeMessage: { type: String, default: 'This store is temporarily on vacation. Orders will resume shortly.' },
+      disableOrdering: { type: Boolean, default: true },
       startDate: { type: Date },
       endDate: { type: Date },
     },

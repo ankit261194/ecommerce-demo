@@ -18,6 +18,7 @@ import {
   Check,
   ThumbsUp,
   MessageSquare,
+  Palmtree,
 } from 'lucide-react';
 import StockUrgencyBadge from './StockUrgencyBadge';
 import RecentPurchaseCounter from './RecentPurchaseCounter';
@@ -161,6 +162,15 @@ export const ProductDetailModal = ({
 
   // Current Stock
   const currentStock = selectedVariant ? selectedVariant.stock : (product.stock ?? 10);
+
+  // Vacation Mode Detection (Point #59)
+  const vendorVacation = product.vendor?.vacationMode;
+  const isVendorOnVacation = Boolean(vendorVacation?.isVacation);
+  const isOrderingPaused = isVendorOnVacation && (vendorVacation?.disableOrdering !== false);
+  const vacationNotice = vendorVacation?.noticeMessage || 'Merchant is currently away on vacation. Orders will resume shortly.';
+  const vacationEndDate = vendorVacation?.endDate
+    ? new Date(vendorVacation.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    : null;
 
   const handleShare = () => {
     const url = window.location.href;
@@ -558,13 +568,52 @@ export const ProductDetailModal = ({
                 </div>
               )}
 
+              {/* Point 59: Vacation Mode Alert Banner */}
+              {isVendorOnVacation && (
+                <div className={`p-4 rounded-2xl border flex items-start gap-3.5 text-xs transition-all shadow-sm ${
+                  isOrderingPaused
+                    ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 text-amber-950'
+                    : 'bg-gradient-to-r from-blue-50 to-sky-50 border-blue-200 text-blue-950'
+                }`}>
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                    isOrderingPaused ? 'bg-amber-500 text-slate-950' : 'bg-blue-500 text-white'
+                  }`}>
+                    <Palmtree className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                        isOrderingPaused
+                          ? 'bg-amber-100/80 text-amber-900 border-amber-300'
+                          : 'bg-blue-100/80 text-blue-900 border-blue-300'
+                      }`}>
+                        {isOrderingPaused ? '🌴 Store on Vacation • Ordering Paused' : '🌴 Vacation Notice • Delayed Shipping'}
+                      </span>
+                      {vacationEndDate && (
+                        <span className="text-[11px] font-extrabold text-slate-600 bg-white/70 px-2 py-0.5 rounded border border-slate-200">
+                          Reopening: {vacationEndDate}
+                        </span>
+                      )}
+                    </div>
+                    <p className="font-semibold text-slate-700 leading-relaxed text-xs">
+                      {vacationNotice}
+                    </p>
+                    {isOrderingPaused && (
+                      <p className="text-[11px] font-bold text-amber-800">
+                        Orders for this merchant are temporarily paused until vacation ends.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Quantity Selector & Purchase Actions */}
               <div className="space-y-3 pt-2">
                 <div className="flex items-center gap-3">
                   <div className="flex items-center border-2 border-slate-200 rounded-xl bg-white overflow-hidden font-extrabold text-sm">
                     <button
                       onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                      disabled={quantity <= 1}
+                      disabled={quantity <= 1 || isOrderingPaused}
                       className="px-3.5 py-2.5 text-slate-600 hover:text-slate-950 hover:bg-slate-100 disabled:opacity-40 transition-colors"
                     >
                       -
@@ -574,7 +623,7 @@ export const ProductDetailModal = ({
                     </span>
                     <button
                       onClick={() => setQuantity(q => Math.min(currentStock || 10, q + 1))}
-                      disabled={quantity >= currentStock}
+                      disabled={quantity >= currentStock || isOrderingPaused}
                       className="px-3.5 py-2.5 text-slate-600 hover:text-slate-950 hover:bg-slate-100 disabled:opacity-40 transition-colors"
                     >
                       +
@@ -585,22 +634,22 @@ export const ProductDetailModal = ({
                     onClick={() => {
                       onAddToCart(product, selectedVariant, quantity);
                     }}
-                    disabled={currentStock <= 0}
+                    disabled={currentStock <= 0 || isOrderingPaused}
                     className="flex-1 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black text-sm shadow-lg hover:shadow-xl transition-all transform active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <ShoppingBag className="w-4 h-4 stroke-[2.5]" />
-                    <span>Add to Cart</span>
+                    <span>{isOrderingPaused ? '🌴 Merchant on Vacation' : 'Add to Cart'}</span>
                   </button>
 
                   <button
                     onClick={() => {
                       onBuyNow(product, selectedVariant, quantity);
                     }}
-                    disabled={currentStock <= 0}
+                    disabled={currentStock <= 0 || isOrderingPaused}
                     className="flex-1 py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white font-black text-sm shadow-lg hover:shadow-xl transition-all transform active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Zap className="w-4 h-4 fill-amber-400 text-amber-400 stroke-none" />
-                    <span>Buy Now</span>
+                    <span>{isOrderingPaused ? '🌴 Orders Paused' : 'Buy Now'}</span>
                   </button>
                 </div>
               </div>
@@ -787,6 +836,15 @@ export const ProductDetailModal = ({
                       </p>
                     </div>
                   </div>
+
+                  {isVendorOnVacation && (
+                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 flex items-center gap-2.5 font-bold text-xs">
+                      <Palmtree className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>
+                        Merchant is on vacation mode{vacationEndDate ? ` until ${vacationEndDate}` : ''}. {isOrderingPaused ? 'Orders are temporarily paused.' : 'Orders will be dispatched upon return.'}
+                      </span>
+                    </div>
+                  )}
 
                   {onOpenVendorStore && product.vendor && (
                     <button

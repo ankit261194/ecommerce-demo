@@ -4075,6 +4075,116 @@ const runTests = async () => {
       await User.deleteOne({ _id: secondVendorUser._id });
     });
 
+    await test('Point 59: Vacation Mode Toggle (Pause orders without deleting items & customer warnings)', async () => {
+      // 1. Enable Vacation Mode with notice and ordering paused
+      const vacationNotice = 'Annual warehouse maintenance from Oct 28 to Nov 3. Orders paused.';
+      const resEnable = await fetch(`${baseUrl}/vendor/vacation-mode`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({
+          isVacation: true,
+          noticeMessage: vacationNotice,
+          disableOrdering: true,
+          startDate: '2026-10-28',
+          endDate: '2026-11-03',
+        }),
+      });
+      assert.strictEqual(resEnable.status, 200);
+      const dataEnable = await resEnable.json();
+      assert.strictEqual(dataEnable.success, true);
+      assert.strictEqual(dataEnable.data.isVacation, true);
+      assert.strictEqual(dataEnable.data.noticeMessage, vacationNotice);
+      assert.strictEqual(dataEnable.data.disableOrdering, true);
+
+      // 2. Customer attempts to place order for an item from this vendor while vacation mode is active
+      const resBlockedOrder = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: headphonesProduct._id, quantity: 1, variantSku: 'APX-HEAD-BLK' }],
+          shippingAddress: {
+            recipientName: 'Test Customer',
+            phone: '9876543210',
+            street: '123 Test St',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'COD',
+        }),
+      });
+      assert.strictEqual(resBlockedOrder.status, 400);
+      const dataBlocked = await resBlockedOrder.json();
+      assert.strictEqual(dataBlocked.success, false);
+      assert.ok(dataBlocked.message.includes('vacation'), 'Must notify customer that merchant is on vacation');
+
+      // 3. Public store endpoint exposes vacationMode state
+      const resPublicStore = await fetch(`${baseUrl}/vendor/store/apex-tech-enterprise`);
+      assert.strictEqual(resPublicStore.status, 200);
+      const dataStore = await resPublicStore.json();
+      assert.strictEqual(dataStore.data.vacationMode.isVacation, true);
+      assert.strictEqual(dataStore.data.vacationMode.noticeMessage, vacationNotice);
+
+      // 4. Disable Vacation Mode (Store resumes operations)
+      const resDisable = await fetch(`${baseUrl}/vendor/vacation-mode`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({
+          isVacation: false,
+        }),
+      });
+      assert.strictEqual(resDisable.status, 200);
+      const dataDisable = await resDisable.json();
+      assert.strictEqual(dataDisable.success, true);
+      assert.strictEqual(dataDisable.data.isVacation, false);
+
+      // 5. Customer places order again now that store is active
+      const resAllowedOrder = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: headphonesProduct._id, quantity: 1, variantSku: 'APX-HEAD-BLK' }],
+          shippingAddress: {
+            recipientName: 'Test Customer',
+            phone: '9876543210',
+            street: '123 Test St',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'COD',
+        }),
+      });
+      assert.strictEqual(resAllowedOrder.status, 201);
+      const dataAllowed = await resAllowedOrder.json();
+      assert.strictEqual(dataAllowed.success, true);
+
+      // Clean up test order to restore inventory
+      const orderIdToCancel = dataAllowed.data._id || dataAllowed.data.order?._id;
+      if (orderIdToCancel) {
+        await fetch(`${baseUrl}/orders/${orderIdToCancel}/cancel`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${customerToken}`,
+          },
+          body: JSON.stringify({ reason: 'Point 59 automated test cleanup' }),
+        });
+      }
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

@@ -17,6 +17,7 @@ const {
   getVendorProfile,
   updateVendorProfile,
   getPublicVendorStore,
+  updateVacationMode,
 } = require('../controllers/vendorController');
 const { protect, authorize } = require('../middlewares/auth');
 
@@ -30,6 +31,9 @@ router.use(authorize('vendor'));
 // Point 58: Vendor Profile & Branding Customization
 router.get('/profile', getVendorProfile);
 router.put('/profile', updateVendorProfile);
+
+// Point 59: Vacation Mode Toggle (Pause orders without deleting items)
+router.put('/vacation-mode', updateVacationMode);
 
 router.get('/dashboard', getVendorDashboard);
 router.get('/products', getVendorProducts);

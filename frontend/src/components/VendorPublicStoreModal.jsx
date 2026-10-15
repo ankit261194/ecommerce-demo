@@ -20,6 +20,7 @@ import {
   FileText,
   BadgePercent,
   Clock,
+  Palmtree,
 } from 'lucide-react';
 import api from '../api/client';
 
@@ -273,6 +274,33 @@ const VendorPublicStoreModal = ({
             </div>
           </div>
 
+          {/* Point 59: Vacation Notice Banner */}
+          {storeData?.vacationMode?.isVacation && (
+            <div className="mt-4 p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 flex items-start gap-3 shadow-xs animate-fade-in">
+              <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 font-bold">
+                <Palmtree className="w-4 h-4" />
+              </div>
+              <div className="text-xs">
+                <p className="font-black text-amber-900 flex items-center gap-1.5">
+                  <span>Store Currently on Holiday Break</span>
+                  {storeData.vacationMode.disableOrdering && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[10px] uppercase font-black">
+                      Orders Paused
+                    </span>
+                  )}
+                </p>
+                <p className="text-amber-800 font-medium mt-0.5">
+                  {storeData.vacationMode.noticeMessage || 'This store is temporarily on vacation. Orders will resume shortly.'}
+                </p>
+                {storeData.vacationMode.endDate && (
+                  <p className="text-[11px] text-amber-900 font-bold mt-1">
+                    🗓️ Operations resume on {new Date(storeData.vacationMode.endDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Bio & Return Guarantee Card */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 pt-3 border-t border-slate-100 text-xs">
             <div className="md:col-span-2 text-slate-600 leading-relaxed font-medium">
@@ -341,6 +369,7 @@ const VendorPublicStoreModal = ({
                 const discount = p.mrp && p.sellingPrice ? Math.round(((p.mrp - p.sellingPrice) / p.mrp) * 100) : 0;
                 const pId = p.sku || p._id || p.id;
                 const isJustAdded = addedItemSku === pId;
+                const isVacationOrderingPaused = Boolean(storeData?.vacationMode?.isVacation && storeData?.vacationMode?.disableOrdering !== false);
 
                 return (
                   <div
@@ -404,11 +433,13 @@ const VendorPublicStoreModal = ({
 
                       <button
                         type="button"
-                        disabled={isOutOfStock}
+                        disabled={isOutOfStock || isVacationOrderingPaused}
                         onClick={() => handleCartAdd(p)}
                         className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all ${
                           isOutOfStock
                             ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            : isVacationOrderingPaused
+                            ? 'bg-amber-100 text-amber-800 border border-amber-300 cursor-not-allowed'
                             : isJustAdded
                             ? 'bg-emerald-600 text-white'
                             : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm'
@@ -418,6 +449,11 @@ const VendorPublicStoreModal = ({
                           <>
                             <Check className="w-3.5 h-3.5" />
                             <span>Added!</span>
+                          </>
+                        ) : isVacationOrderingPaused ? (
+                          <>
+                            <Palmtree className="w-3.5 h-3.5 text-amber-700" />
+                            <span>On Vacation</span>
                           </>
                         ) : (
                           <>

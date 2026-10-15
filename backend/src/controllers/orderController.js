@@ -43,6 +43,15 @@ exports.createOrder = async (req, res, next) => {
         return res.status(404).json({ success: false, message: `Product '${item.title || item.productId}' is no longer available` });
       }
 
+      // Point 59: Vacation Mode Protection
+      if (product.vendor && product.vendor.vacationMode?.isVacation && product.vendor.vacationMode?.disableOrdering) {
+        const vendorMsg = product.vendor.vacationMode.noticeMessage || 'This store is temporarily on vacation.';
+        return res.status(400).json({
+          success: false,
+          message: `Cannot order '${product.title}'. Merchant '${product.vendor.storeName}' is currently on vacation: ${vendorMsg}`,
+        });
+      }
+
       let variantMatch = null;
       let itemPrice = product.sellingPrice;
       let variantName = item.variantName || 'Standard';

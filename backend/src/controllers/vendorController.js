@@ -1216,3 +1216,43 @@ exports.getPublicVendorStore = async (req, res, next) => {
   }
 };
 
+// =========================================================================
+// Point 59: Vacation Mode Toggle (Pause orders without deleting items)
+// =========================================================================
+
+// @desc    Toggle and Configure Vendor Vacation Mode (Point #59)
+// @route   PUT /api/vendor/vacation-mode
+exports.updateVacationMode = async (req, res, next) => {
+  try {
+    const vendor = await VendorProfile.findOne({ user: req.user._id });
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor profile not found' });
+    }
+
+    const { isVacation, noticeMessage, disableOrdering, startDate, endDate } = req.body;
+
+    vendor.vacationMode = {
+      isVacation: Boolean(isVacation),
+      noticeMessage:
+        noticeMessage !== undefined
+          ? noticeMessage
+          : vendor.vacationMode?.noticeMessage || 'This store is temporarily on vacation. Orders will resume shortly.',
+      disableOrdering: disableOrdering !== undefined ? Boolean(disableOrdering) : true,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+    };
+
+    await vendor.save();
+
+    res.status(200).json({
+      success: true,
+      message: vendor.vacationMode.isVacation
+        ? 'Vacation mode enabled. Your store ordering has been paused with notice.'
+        : 'Vacation mode disabled. Store ordering is now live and active!',
+      data: vendor.vacationMode,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

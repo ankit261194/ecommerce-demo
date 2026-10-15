@@ -94,6 +94,11 @@ const productSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    lowStockThreshold: {
+      type: Number,
+      default: 5,
+      min: 0,
+    },
     sku: {
       type: String,
       required: true,
@@ -159,6 +164,15 @@ productSchema.virtual('calculatedDiscountPercentage').get(function () {
 productSchema.virtual('calculatedSavings').get(function () {
   if (!this.mrp || this.mrp <= this.sellingPrice) return 0;
   return Math.max(0, this.mrp - this.sellingPrice);
+});
+
+// Point #54: Low Stock Alert Virtuals
+productSchema.virtual('isLowStock').get(function () {
+  return this.stock > 0 && this.stock <= (this.lowStockThreshold !== undefined ? this.lowStockThreshold : 5);
+});
+
+productSchema.virtual('isOutOfStock').get(function () {
+  return this.stock <= 0;
 });
 
 // Point #51: Auto-calculate total product stock from variants when present

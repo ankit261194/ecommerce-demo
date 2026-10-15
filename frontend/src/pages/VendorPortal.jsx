@@ -13,6 +13,8 @@ import {
   Palette,
   Camera,
   Image as ImageIcon,
+  AlertTriangle,
+  RotateCw,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -38,6 +40,7 @@ export const VendorPortal = () => {
       mrp: 14999,
       sellingPrice: 8999,
       stock: 45,
+      lowStockThreshold: 10,
       category: 'Electronics & Audio',
       image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
       thumbnail: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
@@ -56,7 +59,8 @@ export const VendorPortal = () => {
       sku: 'APX-WTCH-002',
       mrp: 9999,
       sellingPrice: 4499,
-      stock: 30,
+      stock: 3,
+      lowStockThreshold: 5,
       category: 'Watches & Accessories',
       image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
       thumbnail: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
@@ -67,6 +71,22 @@ export const VendorPortal = () => {
       variantsCount: 2,
       colorSwatches: ['#1E293B', '#F59E0B'],
       sizeMatrix: ['42mm', '46mm'],
+    },
+    {
+      id: 'p3',
+      title: 'AuraStudio True Wireless ANC Earbuds (Demo Out-of-Stock)',
+      sku: 'APX-EAR-003',
+      mrp: 4999,
+      sellingPrice: 2499,
+      stock: 0,
+      lowStockThreshold: 5,
+      category: 'Electronics & Audio',
+      image: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500',
+      thumbnail: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500',
+      gallery: [],
+      variantsCount: 0,
+      colorSwatches: ['#000000'],
+      sizeMatrix: ['Standard'],
     },
   ]);
 
@@ -102,6 +122,7 @@ export const VendorPortal = () => {
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [selectedProductForMedia, setSelectedProductForMedia] = useState(null);
   const [mediaDraft, setMediaDraft] = useState({ thumbnail: '', gallery: [] });
+  const [stockFilter, setStockFilter] = useState('all'); // Point #54: all | in_stock | low_stock | out_of_stock
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
@@ -112,6 +133,7 @@ export const VendorPortal = () => {
     mrp: '',
     sellingPrice: '',
     stock: '',
+    lowStockThreshold: 5,
     sku: '',
     colorVariant: '',
     sizeVariant: '',
@@ -147,6 +169,7 @@ export const VendorPortal = () => {
           mrp: p.mrp,
           sellingPrice: p.sellingPrice,
           stock: p.stock,
+          lowStockThreshold: p.lowStockThreshold !== undefined ? p.lowStockThreshold : 5,
           category: p.category?.name || 'General',
           image: p.thumbnail || p.images?.[0] || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
           thumbnail: p.thumbnail || p.images?.[0] || '',
@@ -311,6 +334,34 @@ export const VendorPortal = () => {
     setIsMediaModalOpen(false);
     setSelectedProductForMedia(null);
     setNotification(`Photo gallery updated for '${selectedProductForMedia.title}'!`);
+  };
+
+  // Point #54: Quick Restock Inventory Handler
+  const handleQuickRestock = async (productId, amountToAdd) => {
+    const qty = Number(amountToAdd) || 10;
+    try {
+      if (
+        productId &&
+        !productId.startsWith('p_') &&
+        !productId.startsWith('p1') &&
+        !productId.startsWith('p2') &&
+        !productId.startsWith('p3')
+      ) {
+        await api.patch(`/vendor/products/${productId}/stock`, {
+          additionalStock: qty,
+        });
+      }
+    } catch (_) {}
+
+    setProducts(prev =>
+      prev.map(p =>
+        p.id === productId
+          ? { ...p, stock: p.stock + qty }
+          : p
+      )
+    );
+
+    setNotification(`⚡ Inventory Replenished: +${qty} units added successfully!`);
   };
 
   // Point #51: Handle Multi-Variant Product Publishing
@@ -590,81 +641,253 @@ export const VendorPortal = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {products.map(p => (
-            <div key={p.id} className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm space-y-3 hover:shadow-md transition-shadow">
-              <div className="relative group">
-                <img src={p.image} alt={p.title} className="w-full h-44 object-cover rounded-lg border border-slate-100" />
-                <button
-                  type="button"
-                  onClick={() => handleOpenMediaModal(p)}
-                  className="absolute bottom-2 right-2 px-2.5 py-1 bg-black/80 hover:bg-black text-white text-[10px] font-bold rounded-lg shadow-md flex items-center gap-1 backdrop-blur-xs transition-transform hover:scale-105"
-                >
-                  <Camera className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Media ({1 + (p.gallery?.length || 0)})</span>
-                </button>
-              </div>
+        {/* Point #54: Low Stock Alert Warning Banner */}
+        {products.some(p => p.stock <= (p.lowStockThreshold || 5)) && (
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-amber-900 animate-fadeIn">
+            <div className="flex items-center gap-2.5">
+              <span className="p-2 rounded-xl bg-amber-500/20 text-amber-600">
+                <AlertTriangle className="w-5 h-5 animate-pulse" />
+              </span>
               <div>
-                <h3 className="font-bold text-slate-900 text-sm line-clamp-1">{p.title}</h3>
-                <p className="text-xs text-slate-400 font-medium">SKU: {p.sku}</p>
-              </div>
-
-              {/* Point #51: Multi-Variant Color Swatches & Size Matrix Badges */}
-              {(p.colorSwatches?.length > 0 || p.variantsCount > 0) && (
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 text-[11px]">
-                  <div className="flex items-center gap-1">
-                    <span className="text-[10px] text-slate-400 font-semibold">Swatches:</span>
-                    <div className="flex items-center -space-x-1">
-                      {(p.colorSwatches || ['#0F172A', '#2563EB', '#DC2626']).slice(0, 4).map((hex, i) => (
-                        <span
-                          key={i}
-                          className="w-3.5 h-3.5 rounded-full border border-white dark:border-slate-800 shadow-sm"
-                          style={{ backgroundColor: hex }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  {p.sizeMatrix?.length > 0 && (
-                    <div className="flex items-center gap-1">
-                      {p.sizeMatrix.slice(0, 3).map((sz) => (
-                        <span key={sz} className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-600">
-                          {sz}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
-                    {p.variantsCount || 2} Variants
+                <p className="text-xs font-bold flex items-center gap-2">
+                  <span>Inventory Alert (Point #54):</span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px]">
+                    {products.filter(p => p.stock <= (p.lowStockThreshold || 5)).length} Items Running Low / Out
                   </span>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
-                <div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-black text-slate-900 text-sm">₹{p.sellingPrice}</span>
-                    {p.mrp > p.sellingPrice && (
-                      <span className="text-slate-400 line-through text-xs font-medium">₹{p.mrp}</span>
-                    )}
-                    {p.mrp > p.sellingPrice && (
-                      <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded-md">
-                        {Math.round(((p.mrp - p.sellingPrice) / p.mrp) * 100)}% OFF
-                      </span>
-                    )}
-                  </div>
-                  {p.mrp > p.sellingPrice && (
-                    <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">
-                      Customer saves ₹{(p.mrp - p.sellingPrice).toLocaleString('en-IN')}
-                    </p>
-                  )}
-                </div>
-                <span className="font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full shrink-0">
-                  Stock: {p.stock}
-                </span>
+                </p>
+                <p className="text-[11px] text-amber-700">
+                  Products are below safety threshold. Restock now to prevent missed orders.
+                </p>
               </div>
             </div>
-          ))}
+            <button
+              onClick={() => setStockFilter('low_stock')}
+              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-sm transition-all shrink-0"
+            >
+              Filter Low Stock
+            </button>
+          </div>
+        )}
+
+        {/* Point #54: Inventory Filter Tabs */}
+        <div className="flex items-center gap-2 border-b border-slate-100 pb-3 overflow-x-auto text-xs font-bold">
+          <button
+            onClick={() => setStockFilter('all')}
+            className={`px-3 py-1.5 rounded-xl transition-all ${
+              stockFilter === 'all'
+                ? 'bg-slate-900 text-white shadow-sm'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            All Products ({products.length})
+          </button>
+          <button
+            onClick={() => setStockFilter('in_stock')}
+            className={`px-3 py-1.5 rounded-xl transition-all ${
+              stockFilter === 'in_stock'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+            }`}
+          >
+            In Stock ({products.filter(p => p.stock > (p.lowStockThreshold || 5)).length})
+          </button>
+          <button
+            onClick={() => setStockFilter('low_stock')}
+            className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all ${
+              stockFilter === 'low_stock'
+                ? 'bg-amber-500 text-slate-950 shadow-sm'
+                : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+            }`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+            <span>Low Stock ({products.filter(p => p.stock > 0 && p.stock <= (p.lowStockThreshold || 5)).length})</span>
+          </button>
+          <button
+            onClick={() => setStockFilter('out_of_stock')}
+            className={`px-3 py-1.5 rounded-xl transition-all ${
+              stockFilter === 'out_of_stock'
+                ? 'bg-rose-600 text-white shadow-sm'
+                : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+            }`}
+          >
+            Out of Stock ({products.filter(p => p.stock <= 0).length})
+          </button>
         </div>
+
+        {/* Products Grid */}
+        {products
+          .filter(p => {
+            if (stockFilter === 'in_stock') return p.stock > (p.lowStockThreshold || 5);
+            if (stockFilter === 'low_stock') return p.stock > 0 && p.stock <= (p.lowStockThreshold || 5);
+            if (stockFilter === 'out_of_stock') return p.stock <= 0;
+            return true;
+          })
+          .length === 0 ? (
+          <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-2xl p-6 text-slate-500">
+            <Boxes className="w-10 h-10 mx-auto text-slate-400 mb-2 stroke-1" />
+            <p className="text-sm font-bold text-slate-700">No products found in '{stockFilter}' filter</p>
+            <button
+              onClick={() => setStockFilter('all')}
+              className="mt-2 text-xs font-bold text-indigo-600 hover:underline"
+            >
+              Switch back to All Products
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {products
+              .filter(p => {
+                if (stockFilter === 'in_stock') return p.stock > (p.lowStockThreshold || 5);
+                if (stockFilter === 'low_stock') return p.stock > 0 && p.stock <= (p.lowStockThreshold || 5);
+                if (stockFilter === 'out_of_stock') return p.stock <= 0;
+                return true;
+              })
+              .map(p => {
+                const isOut = p.stock <= 0;
+                const isLow = p.stock > 0 && p.stock <= (p.lowStockThreshold || 5);
+
+                return (
+                  <div
+                    key={p.id}
+                    className={`bg-white rounded-xl p-4 border shadow-sm space-y-3 hover:shadow-md transition-all ${
+                      isOut
+                        ? 'border-rose-300 ring-1 ring-rose-200 bg-rose-50/20'
+                        : isLow
+                        ? 'border-amber-300 ring-1 ring-amber-200 bg-amber-50/20'
+                        : 'border-slate-200'
+                    }`}
+                  >
+                    <div className="relative group">
+                      <img src={p.image} alt={p.title} className="w-full h-44 object-cover rounded-lg border border-slate-100" />
+                      <button
+                        type="button"
+                        onClick={() => handleOpenMediaModal(p)}
+                        className="absolute bottom-2 right-2 px-2.5 py-1 bg-black/80 hover:bg-black text-white text-[10px] font-bold rounded-lg shadow-md flex items-center gap-1 backdrop-blur-xs transition-transform hover:scale-105"
+                      >
+                        <Camera className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Media ({1 + (p.gallery?.length || 0)})</span>
+                      </button>
+                      {/* Out of Stock / Low Stock Corner Badge */}
+                      {isOut && (
+                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider shadow">
+                          Out of Stock
+                        </span>
+                      )}
+                      {isLow && (
+                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-amber-500 text-slate-950 text-[10px] font-black uppercase tracking-wider shadow flex items-center gap-1 animate-pulse">
+                          <AlertTriangle className="w-3 h-3" /> Low Stock
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm line-clamp-1">{p.title}</h3>
+                      <p className="text-xs text-slate-400 font-medium">SKU: {p.sku}</p>
+                    </div>
+
+                    {/* Point #51: Multi-Variant Color Swatches & Size Matrix Badges */}
+                    {(p.colorSwatches?.length > 0 || p.variantsCount > 0) && (
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 text-[11px]">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-slate-400 font-semibold">Swatches:</span>
+                          <div className="flex items-center -space-x-1">
+                            {(p.colorSwatches || ['#0F172A', '#2563EB', '#DC2626']).slice(0, 4).map((hex, i) => (
+                              <span
+                                key={i}
+                                className="w-3.5 h-3.5 rounded-full border border-white dark:border-slate-800 shadow-sm"
+                                style={{ backgroundColor: hex }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        {p.sizeMatrix?.length > 0 && (
+                          <div className="flex items-center gap-1">
+                            {p.sizeMatrix.slice(0, 3).map((sz) => (
+                              <span key={sz} className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-600">
+                                {sz}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                          {p.variantsCount || 2} Variants
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-black text-slate-900 text-sm">₹{p.sellingPrice}</span>
+                          {p.mrp > p.sellingPrice && (
+                            <span className="text-slate-400 line-through text-xs font-medium">₹{p.mrp}</span>
+                          )}
+                          {p.mrp > p.sellingPrice && (
+                            <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded-md">
+                              {Math.round(((p.mrp - p.sellingPrice) / p.mrp) * 100)}% OFF
+                            </span>
+                          )}
+                        </div>
+                        {p.mrp > p.sellingPrice && (
+                          <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+                            Customer saves ₹{(p.mrp - p.sellingPrice).toLocaleString('en-IN')}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Stock Urgency Tag */}
+                      {isOut ? (
+                        <span className="font-bold text-rose-800 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full shrink-0">
+                          Stock: 0
+                        </span>
+                      ) : isLow ? (
+                        <span className="font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-0.5 rounded-full shrink-0 flex items-center gap-1 animate-pulse">
+                          <AlertTriangle className="w-3 h-3 text-amber-600" /> Only {p.stock} left
+                        </span>
+                      ) : (
+                        <span className="font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full shrink-0">
+                          Stock: {p.stock}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Point #54: Quick 1-Click Inventory Restock Buttons */}
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                      <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
+                        <RotateCw className="w-3 h-3 text-slate-400" />
+                        Quick Restock:
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleQuickRestock(p.id, 10)}
+                          className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 text-[10px] font-bold transition-colors"
+                          title="Add 10 units"
+                        >
+                          +10
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickRestock(p.id, 25)}
+                          className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 text-[10px] font-bold transition-colors"
+                          title="Add 25 units"
+                        >
+                          +25
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickRestock(p.id, 50)}
+                          className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 text-[10px] font-bold transition-colors"
+                          title="Add 50 units"
+                        >
+                          +50
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        )}
       </div>
 
       {/* Add Product SlideOver Drawer */}

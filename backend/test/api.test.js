@@ -3610,6 +3610,84 @@ const runTests = async () => {
       assert.strictEqual(dataPublic.data.mrp, 4000);
     });
 
+    await test('Point 54: Low Stock Alert Warning system (Threshold alert, low_stock filter & quick restock)', async () => {
+      // 1. Fetch category id
+      const resCat = await fetch(`${baseUrl}/products/categories`);
+      const dataCat = await resCat.json();
+      const catId = dataCat.data[0]._id;
+
+      // 2. Vendor creates low stock product: stock = 3, threshold = 6
+      const resCreate = await fetch(`${baseUrl}/vendor/products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Limited Edition Wireless Gaming Mouse',
+          description: 'High precision wireless mouse with low inventory alert.',
+          category: catId,
+          brand: 'Apex Tech',
+          mrp: 3999,
+          sellingPrice: 2499,
+          stock: 3,
+          lowStockThreshold: 6,
+          sku: 'APX-MSE-LOW-' + Date.now(),
+        }),
+      });
+
+      assert.strictEqual(resCreate.status, 201);
+      const dataCreated = await resCreate.json();
+      assert.strictEqual(dataCreated.success, true);
+      assert.strictEqual(dataCreated.data.stock, 3);
+      assert.strictEqual(dataCreated.data.lowStockThreshold, 6);
+      assert.strictEqual(dataCreated.data.isLowStock, true, 'Product with stock 3 <= threshold 6 must trigger isLowStock');
+
+      const lowStockId = dataCreated.data._id;
+
+      // 3. Test GET /vendor/products?filter=low_stock returns low stock products and stats
+      const resFilter = await fetch(`${baseUrl}/vendor/products?filter=low_stock`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resFilter.status, 200);
+      const dataFilter = await resFilter.json();
+      assert.strictEqual(dataFilter.success, true);
+      assert.ok(dataFilter.stats);
+      assert.ok(dataFilter.stats.lowStock >= 1, 'Stats must count at least 1 low-stock item');
+      assert.ok(dataFilter.data.some(p => p._id === lowStockId), 'Low stock filter must contain the product');
+
+      // 4. Quick Restock via PATCH /vendor/products/:id/stock: add 40 units
+      const resRestock = await fetch(`${baseUrl}/vendor/products/${lowStockId}/stock`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({ additionalStock: 40 }),
+      });
+
+      assert.strictEqual(resRestock.status, 200);
+      const dataRestock = await resRestock.json();
+      assert.strictEqual(dataRestock.success, true);
+      assert.strictEqual(dataRestock.data.stock, 43, 'Stock must now be 3 + 40 = 43');
+      assert.strictEqual(dataRestock.data.isLowStock, false, 'Product with stock 43 > 6 must no longer be low stock');
+
+      // 5. Test setting lowStockThreshold dynamically to 50
+      const resThreshold = await fetch(`${baseUrl}/vendor/products/${lowStockId}/stock`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({ lowStockThreshold: 50 }),
+      });
+
+      assert.strictEqual(resThreshold.status, 200);
+      const dataThreshold = await resThreshold.json();
+      assert.strictEqual(dataThreshold.data.lowStockThreshold, 50);
+      assert.strictEqual(dataThreshold.data.isLowStock, true, 'Stock 43 <= new threshold 50 must trigger isLowStock');
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

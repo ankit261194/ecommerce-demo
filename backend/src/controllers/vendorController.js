@@ -48,7 +48,7 @@ exports.getVendorDashboard = async (req, res, next) => {
   }
 };
 
-// @desc    Get All Products of Logged-in Vendor
+// @desc    Get All Products of Logged-in Vendor (Point #54: Low Stock Alert Filter & Inventory Stats)
 // @route   GET /api/vendor/products
 exports.getVendorProducts = async (req, res, next) => {
   try {
@@ -57,11 +57,32 @@ exports.getVendorProducts = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Vendor profile not found' });
     }
 
-    const products = await Product.find({ vendor: vendor._id })
+    const allProducts = await Product.find({ vendor: vendor._id })
       .populate('category', 'name slug')
       .sort({ createdAt: -1 });
 
-    res.status(200).json({ success: true, count: products.length, data: products });
+    const stats = {
+      total: allProducts.length,
+      inStock: allProducts.filter(p => p.stock > (p.lowStockThreshold !== undefined ? p.lowStockThreshold : 5)).length,
+      lowStock: allProducts.filter(p => p.stock > 0 && p.stock <= (p.lowStockThreshold !== undefined ? p.lowStockThreshold : 5)).length,
+      outOfStock: allProducts.filter(p => p.stock <= 0).length,
+    };
+
+    let filtered = allProducts;
+    if (req.query.filter === 'low_stock') {
+      filtered = allProducts.filter(p => p.stock > 0 && p.stock <= (p.lowStockThreshold !== undefined ? p.lowStockThreshold : 5));
+    } else if (req.query.filter === 'out_of_stock') {
+      filtered = allProducts.filter(p => p.stock <= 0);
+    } else if (req.query.filter === 'in_stock') {
+      filtered = allProducts.filter(p => p.stock > (p.lowStockThreshold !== undefined ? p.lowStockThreshold : 5));
+    }
+
+    res.status(200).json({
+      success: true,
+      count: filtered.length,
+      stats,
+      data: filtered,
+    });
   } catch (error) {
     next(error);
   }
@@ -79,7 +100,7 @@ exports.createProduct = async (req, res, next) => {
       });
     }
 
-    const { title, description, category, brand, images, thumbnail, gallery, mrp, sellingPrice, stock, sku, hasVariants, variants, tags } = req.body;
+    const { title, description, category, brand, images, thumbnail, gallery, mrp, sellingPrice, stock, sku, hasVariants, variants, tags, lowStockThreshold } = req.body;
 
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString().slice(-4);
 
@@ -117,6 +138,7 @@ exports.createProduct = async (req, res, next) => {
       discountPercentage: discPct,
       savingsAmount: savings,
       stock: calculatedStock,
+      lowStockThreshold: typeof lowStockThreshold === 'number' ? lowStockThreshold : (Number(lowStockThreshold) || 5),
       sku: sku || 'SKU-' + Date.now(),
       hasVariants: !!hasVariants,
       variants: variants || [],
@@ -392,6 +414,43 @@ exports.requestPayout = async (req, res, next) => {
       success: true,
       message: 'Payout request submitted successfully. Funds will transfer in 24-48 hours.',
       data: ledger,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Quick Restock Product (Point #54)
+// @route   PATCH /api/vendor/products/:id/stock
+exports.updateProductStock = async (req, res, next) => {
+  try {
+    const vendor = await VendorProfile.findOne({ user: req.user._id });
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor profile not found' });
+    }
+
+    let product = await Product.findOne({ _id: req.params.id, vendor: vendor._id });
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found or not owned by your store' });
+    }
+
+    const { stock, additionalStock, lowStockThreshold } = req.body;
+    if (typeof stock === 'number') {
+      product.stock = Math.max(0, stock);
+    } else if (typeof additionalStock === 'number') {
+      product.stock = Math.max(0, product.stock + additionalStock);
+    }
+
+    if (typeof lowStockThreshold === 'number') {
+      product.lowStockThreshold = Math.max(0, lowStockThreshold);
+    }
+
+    await product.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Stock updated successfully. Current stock: ${product.stock}`,
+      data: product,
     });
   } catch (error) {
     next(error);

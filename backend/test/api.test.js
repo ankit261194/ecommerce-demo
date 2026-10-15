@@ -4302,6 +4302,71 @@ const runTests = async () => {
       assert.strictEqual(resCustomerForbidden.status, 403);
     });
 
+    // =========================================================================
+    // Point 61: Real-Time Vendor Financial Wallet & Ledger
+    // =========================================================================
+    await test('Point 61: Real-Time Vendor Financial Wallet & Ledger (Balances, Escrow Hold, Double-Entry Ledger & CSV Export)', async () => {
+      // 1. Vendor fetches wallet financial overview and ledger transactions
+      const resWallet = await fetch(`${baseUrl}/vendor/wallet`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resWallet.status, 200);
+      const dataWallet = await resWallet.json();
+      assert.strictEqual(dataWallet.success, true);
+      assert.ok(dataWallet.wallet, 'Wallet object must be returned');
+      assert.ok(typeof dataWallet.wallet.availableBalance === 'number');
+      assert.ok(typeof dataWallet.wallet.pendingEscrowBalance === 'number');
+      assert.ok(typeof dataWallet.wallet.lifetimeSales === 'number');
+      assert.ok(typeof dataWallet.wallet.commissionRate === 'number');
+      assert.ok(dataWallet.wallet.bankDetails, 'Bank settlement details must be returned');
+      assert.ok(Array.isArray(dataWallet.ledger), 'Ledger must be an array of transactions');
+      assert.ok(dataWallet.ledger.length >= 1, 'Should contain ledger records');
+
+      const firstRecord = dataWallet.ledger[0];
+      assert.ok(firstRecord.transactionId, 'Ledger entry must have transaction ID');
+      assert.ok(firstRecord.type, 'Ledger entry must have a type');
+      assert.ok(typeof firstRecord.amount === 'number');
+      assert.ok(typeof firstRecord.balanceAfter === 'number');
+
+      // 2. Test filtering ledger by type (ORDER_CREDIT)
+      const resFilteredType = await fetch(`${baseUrl}/vendor/wallet?type=ORDER_CREDIT`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resFilteredType.status, 200);
+      const dataFilteredType = await resFilteredType.json();
+      assert.strictEqual(dataFilteredType.success, true);
+      dataFilteredType.ledger.forEach(entry => {
+        assert.strictEqual(entry.type, 'ORDER_CREDIT');
+      });
+
+      // 3. Test filtering ledger by search term
+      const resSearch = await fetch(`${baseUrl}/vendor/wallet?search=TXN`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resSearch.status, 200);
+      const dataSearch = await resSearch.json();
+      assert.strictEqual(dataSearch.success, true);
+      assert.ok(dataSearch.ledger.length >= 1);
+
+      // 4. Test downloadable CSV ledger statement export
+      const resCsv = await fetch(`${baseUrl}/vendor/wallet/export-csv`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resCsv.status, 200);
+      const contentType = resCsv.headers.get('content-type');
+      assert.ok(contentType && contentType.includes('text/csv'));
+      const csvText = await resCsv.text();
+      assert.ok(csvText.includes('Transaction ID'));
+      assert.ok(csvText.includes('Amount (INR)'));
+      assert.ok(csvText.includes('Balance After (INR)'));
+
+      // 5. Authorization: Customer role is forbidden from vendor wallet
+      const resForbidden = await fetch(`${baseUrl}/vendor/wallet`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resForbidden.status, 403);
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

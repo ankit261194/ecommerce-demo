@@ -21,6 +21,8 @@ const {
   getVendorReviews,
   replyVendorReview,
   deleteVendorReviewReply,
+  getVendorWallet,
+  exportVendorLedgerCSV,
 } = require('../controllers/vendorController');
 const { protect, authorize } = require('../middlewares/auth');
 
@@ -42,6 +44,10 @@ router.put('/vacation-mode', updateVacationMode);
 router.get('/reviews', getVendorReviews);
 router.post('/reviews/:id/reply', replyVendorReview);
 router.delete('/reviews/:id/reply', deleteVendorReviewReply);
+
+// Point 61: Real-Time Vendor Financial Wallet & Ledger
+router.get('/wallet', getVendorWallet);
+router.get('/wallet/export-csv', exportVendorLedgerCSV);
 
 router.get('/dashboard', getVendorDashboard);
 router.get('/products', getVendorProducts);

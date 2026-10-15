@@ -5015,6 +5015,235 @@ const runTests = async () => {
       assert.strictEqual(res404.status, 404);
     });
 
+    // =========================================================================
+    // Point 70: Delivery Failure Workflow (Reason selector, Rescheduling & RTO)
+    // =========================================================================
+    await test('Point 70: Delivery Failure Workflow (Reason Selector, Next Attempt Rescheduling, Attempt Counter & RTO Trigger)', async () => {
+      // 1. Reject reporting failure on an already DELIVERED task
+      const resDeliveredFail = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/fail`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ reason: 'CUSTOMER_UNAVAILABLE' }),
+      });
+      assert.strictEqual(resDeliveredFail.status, 400);
+      const dataDeliveredFail = await resDeliveredFail.json();
+      assert.strictEqual(dataDeliveredFail.success, false);
+      assert.ok(dataDeliveredFail.message.includes('already been delivered'));
+
+      // 2. Reject non-delivery role (Customer) from reporting failure (403 Forbidden)
+      const resCustomerFail = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/fail`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ reason: 'CUSTOMER_UNAVAILABLE' }),
+      });
+      assert.strictEqual(resCustomerFail.status, 403);
+
+      // 3. Create fresh SubOrder and active DeliveryTask for multi-attempt testing
+      const riderUser = await User.findOne({ role: 'delivery' });
+      const parentSubOrder = await SubOrder.findById(riderTask.subOrder);
+      const testSubOrder = await SubOrder.create({
+        parentOrder: parentSubOrder.parentOrder,
+        order: parentSubOrder.parentOrder,
+        subOrderId: `SUB-FAIL-${Date.now().toString().slice(-4)}`,
+        vendor: parentSubOrder.vendor,
+        customer: parentSubOrder.customer,
+        items: [{
+          product: parentSubOrder.items[0]?.product || new mongoose.Types.ObjectId(),
+          title: 'Point 70 Test Item',
+          price: 1299,
+          quantity: 1,
+          totalPrice: 1299,
+        }],
+        subTotal: 1299,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 129.9,
+        vendorEarning: 1169.1,
+        totalAmount: 1299,
+        status: 'out_for_delivery',
+        trackingHistory: [{ status: 'out_for_delivery', timestamp: new Date(), note: 'Out for delivery' }],
+      });
+
+      const activeTask = await DeliveryTask.create({
+        subOrder: testSubOrder._id,
+        deliveryPartner: riderUser._id,
+        pickupLocation: { storeName: 'Test Vendor Electronics', phone: '9876543210' },
+        dropLocation: {
+          recipientName: 'Aarav Gupta',
+          phone: '9876543210',
+          address: 'Flat 901, Palm Court',
+          city: 'Mumbai',
+          pincode: '400001',
+        },
+        status: 'OUT_FOR_DELIVERY',
+        isCod: true,
+        amountToCollect: 1299,
+      });
+
+      // 4. Reject missing reason
+      const resNoReason = await fetch(`${baseUrl}/delivery/tasks/${activeTask._id}/fail`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(resNoReason.status, 400);
+
+      // 5. First Attempt: Log failure & reschedule for tomorrow
+      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const resAttempt1 = await fetch(`${baseUrl}/delivery/tasks/${activeTask._id}/fail`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          reason: 'CUSTOMER_UNAVAILABLE',
+          notes: 'Doorbell unanswered, phone switched off after 3 calls.',
+          rescheduledFor: tomorrow,
+          timeSlot: 'Morning (9 AM - 1 PM)',
+        }),
+      });
+      assert.strictEqual(resAttempt1.status, 200);
+      const dataAttempt1 = await resAttempt1.json();
+      assert.strictEqual(dataAttempt1.success, true);
+      assert.strictEqual(dataAttempt1.data.status, 'FAILED');
+      assert.strictEqual(dataAttempt1.data.failureLog.attemptCount, 1);
+      assert.strictEqual(dataAttempt1.data.failureLog.isRto, false);
+      assert.strictEqual(dataAttempt1.data.failureLog.reason, 'CUSTOMER_UNAVAILABLE');
+      assert.strictEqual(dataAttempt1.data.failureLog.timeSlot, 'Morning (9 AM - 1 PM)');
+      assert.strictEqual(dataAttempt1.data.failureLog.history.length, 1);
+
+      // Verify SubOrder tracking entry
+      const subOrderAttempt1 = await SubOrder.findById(testSubOrder._id);
+      const track1 = subOrderAttempt1.trackingHistory.find(th => th.note && th.note.includes('Attempt #1 failed'));
+      assert.ok(track1, 'SubOrder tracking should log Attempt #1 failure');
+
+      // 6. Reschedule and resume transit (Back to OUT_FOR_DELIVERY)
+      const resResume1 = await fetch(`${baseUrl}/delivery/tasks/${activeTask._id}/reschedule`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resResume1.status, 200);
+      const dataResume1 = await resResume1.json();
+      assert.strictEqual(dataResume1.success, true);
+      assert.strictEqual(dataResume1.data.status, 'OUT_FOR_DELIVERY');
+
+      const subOrderResumed = await SubOrder.findById(testSubOrder._id);
+      assert.strictEqual(subOrderResumed.status, 'out_for_delivery');
+
+      // 7. Second Attempt: Log failure
+      const resAttempt2 = await fetch(`${baseUrl}/delivery/tasks/${activeTask._id}/fail`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          reason: 'BAD_WEATHER',
+          notes: 'Heavy monsoon waterlogging on access road.',
+        }),
+      });
+      assert.strictEqual(resAttempt2.status, 200);
+      const dataAttempt2 = await resAttempt2.json();
+      assert.strictEqual(dataAttempt2.data.failureLog.attemptCount, 2);
+      assert.strictEqual(dataAttempt2.data.failureLog.isRto, false);
+      assert.strictEqual(dataAttempt2.data.failureLog.history.length, 2);
+
+      // 8. Third Attempt: Max attempts reached -> Trigger Automatic Return to Origin (RTO)
+      await fetch(`${baseUrl}/delivery/tasks/${activeTask._id}/reschedule`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+
+      const resAttempt3 = await fetch(`${baseUrl}/delivery/tasks/${activeTask._id}/fail`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          reason: 'CUSTOMER_UNAVAILABLE',
+          notes: '3rd consecutive attempt failed. Customer unreachable.',
+        }),
+      });
+      assert.strictEqual(resAttempt3.status, 200);
+      const dataAttempt3 = await resAttempt3.json();
+      assert.strictEqual(dataAttempt3.data.failureLog.attemptCount, 3);
+      assert.strictEqual(dataAttempt3.data.failureLog.isRto, true, 'isRto must be true after 3 failed attempts');
+      assert.ok(dataAttempt3.message.includes('Return to Origin initiated'));
+
+      // Verify SubOrder status is cancelled (RTO returned to origin)
+      const subOrderRto = await SubOrder.findById(testSubOrder._id);
+      assert.strictEqual(subOrderRto.status, 'cancelled');
+      const trackRto = subOrderRto.trackingHistory.find(th => th.note && th.note.includes('Return to Origin (RTO) initiated'));
+      assert.ok(trackRto, 'SubOrder tracking must indicate RTO initiation');
+
+      // 9. Rescheduling on finalized RTO task must be rejected with 400
+      const resRescheduleRto = await fetch(`${baseUrl}/delivery/tasks/${activeTask._id}/reschedule`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resRescheduleRto.status, 400);
+      const dataRescheduleRto = await resRescheduleRto.json();
+      assert.strictEqual(dataRescheduleRto.success, false);
+      assert.ok(dataRescheduleRto.message.includes('Return to Origin (RTO) has already been finalized'));
+
+      // 10. Immediate RTO on Customer Refused (Attempt 1)
+      const refusedSubOrder = await SubOrder.create({
+        parentOrder: parentSubOrder.parentOrder,
+        order: parentSubOrder.parentOrder,
+        subOrderId: `SUB-REF-${Date.now().toString().slice(-4)}`,
+        vendor: parentSubOrder.vendor,
+        customer: parentSubOrder.customer,
+        items: [{
+          product: parentSubOrder.items[0]?.product || new mongoose.Types.ObjectId(),
+          title: 'Refused Item',
+          price: 599,
+          quantity: 1,
+          totalPrice: 599,
+        }],
+        subTotal: 599,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 59.9,
+        vendorEarning: 539.1,
+        totalAmount: 599,
+        status: 'out_for_delivery',
+      });
+      const refusedTask = await DeliveryTask.create({
+        subOrder: refusedSubOrder._id,
+        deliveryPartner: riderUser._id,
+        dropLocation: { recipientName: 'Priya Verma', phone: '9876543210', address: 'B-12, Sector 62', city: 'Noida', pincode: '201301' },
+        status: 'OUT_FOR_DELIVERY',
+      });
+
+      const resRefused = await fetch(`${baseUrl}/delivery/tasks/${refusedTask._id}/fail`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          reason: 'CUSTOMER_REFUSED',
+          notes: 'Customer explicitly cancelled on doorstep.',
+        }),
+      });
+      assert.strictEqual(resRefused.status, 200);
+      const dataRefused = await resRefused.json();
+      assert.strictEqual(dataRefused.data.failureLog.attemptCount, 1);
+      assert.strictEqual(dataRefused.data.failureLog.isRto, true, 'CUSTOMER_REFUSED must trigger immediate RTO on attempt 1');
+
+      const refusedSubOrderCheck = await SubOrder.findById(refusedSubOrder._id);
+      assert.strictEqual(refusedSubOrderCheck.status, 'cancelled');
+    });
+
     // 9b. Edge Case & Security Validations
     await test('POST /delivery/tasks/:id/verify-otp rejects re-delivery on already DELIVERED task with 400', async () => {
       const targetSubOrder = await SubOrder.findById(riderTask.subOrder);

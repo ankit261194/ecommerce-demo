@@ -113,8 +113,21 @@ const deliveryTaskSchema = new mongoose.Schema(
       reason: String,
       attemptCount: { type: Number, default: 0 },
       rescheduledFor: Date,
+      timeSlot: { type: String, default: 'ANYTIME' },
       reportedAt: Date,
       notes: String,
+      isRto: { type: Boolean, default: false },
+      history: [
+        {
+          reason: String,
+          notes: String,
+          attemptNumber: Number,
+          rescheduledFor: Date,
+          timeSlot: String,
+          reportedAt: { type: Date, default: Date.now },
+          riderName: String,
+        },
+      ],
     },
     // Point #65: Instant WhatsApp / Direct Call to Customer contact attempts audit
     contactLogs: [

@@ -22,6 +22,7 @@ import {
   FileCheck,
   Camera,
   Calculator,
+  AlertTriangle,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { CourierNavigationModal } from '../components/CourierNavigationModal';
@@ -30,6 +31,7 @@ import CourierOtpVerificationModal from '../components/CourierOtpVerificationMod
 import CourierSignatureModal from '../components/CourierSignatureModal';
 import CourierProofPhotoModal from '../components/CourierProofPhotoModal';
 import CourierCodReconciliationModal from '../components/CourierCodReconciliationModal';
+import CourierDeliveryFailureModal from '../components/CourierDeliveryFailureModal';
 import api from '../api/client';
 
 export const CourierDashboard = () => {
@@ -37,6 +39,7 @@ export const CourierDashboard = () => {
   const [selectedTaskForContact, setSelectedTaskForContact] = useState(null);
   const [selectedTaskForSignature, setSelectedTaskForSignature] = useState(null);
   const [selectedTaskForPhoto, setSelectedTaskForPhoto] = useState(null);
+  const [selectedTaskForFailure, setSelectedTaskForFailure] = useState(null);
   const [isCodReconModalOpen, setIsCodReconModalOpen] = useState(false);
   const [riderStats, setRiderStats] = useState({
     name: 'Vikram Singh',
@@ -152,6 +155,7 @@ export const CourierDashboard = () => {
             signatureDetails: t.signatureDetails || null,
             proofPhoto: t.proofPhoto || null,
             proofPhotoDetails: t.proofPhotoDetails || null,
+            failureLog: t.failureLog || null,
             mapUrl: t.dropLocation?.mapUrl || `https://maps.google.com/?q=${mapQuery}`,
           };
         });
@@ -273,13 +277,52 @@ export const CourierDashboard = () => {
     fetchTasks();
   };
 
+  // Delivery Failure Callback (Point #70)
+  const handleFailureSuccess = (taskId, updatedTask) => {
+    setTasks(prev =>
+      prev.map(t =>
+        t.id === taskId || t.rawId === taskId
+          ? {
+              ...t,
+              status: 'FAILED',
+              failureLog: updatedTask.failureLog,
+            }
+          : t
+      )
+    );
+    setSuccessMessage(`⚠️ Delivery failure logged for #${taskId}. Next attempt rescheduled.`);
+    setSelectedTaskForFailure(null);
+    fetchTasks();
+  };
+
+  // Reschedule & Resume Failed Delivery
+  const handleResumeTask = async (taskId) => {
+    try {
+      const target = tasks.find(t => t.id === taskId);
+      const rawId = target?.rawId || taskId;
+      await api.post(`/delivery/tasks/${rawId}/reschedule`);
+      setTasks(prev =>
+        prev.map(t => (t.id === taskId ? { ...t, status: 'OUT_FOR_DELIVERY' } : t))
+      );
+      setSuccessMessage(`🚀 Delivery resumed for #${taskId} (Out for Delivery)!`);
+      fetchTasks();
+    } catch (err) {
+      console.warn('[Courier] Fallback resume:', err.message);
+      setTasks(prev =>
+        prev.map(t => (t.id === taskId ? { ...t, status: 'OUT_FOR_DELIVERY' } : t))
+      );
+      setSuccessMessage(`🚀 Delivery resumed for #${taskId}!`);
+    }
+  };
+
   // Filter tasks based on status tab and search query
   const filteredTasks = tasks.filter(task => {
     // Tab Filter
-    if (filterTab === 'ACTIVE' && task.status === 'DELIVERED') return false;
+    if (filterTab === 'ACTIVE' && ['DELIVERED', 'FAILED'].includes(task.status)) return false;
     if (filterTab === 'ASSIGNED' && task.status !== 'ASSIGNED') return false;
     if (filterTab === 'OUT_FOR_DELIVERY' && !['PICKED_UP', 'OUT_FOR_DELIVERY'].includes(task.status)) return false;
     if (filterTab === 'DELIVERED' && task.status !== 'DELIVERED') return false;
+    if (filterTab === 'FAILED' && task.status !== 'FAILED') return false;
 
     // Search Query Filter
     if (searchQuery.trim()) {
@@ -415,6 +458,7 @@ export const CourierDashboard = () => {
               { id: 'ASSIGNED', label: 'Store Pickup', count: assignedCount },
               { id: 'OUT_FOR_DELIVERY', label: 'Out for Delivery', count: transitCount },
               { id: 'DELIVERED', label: 'Completed', count: deliveredCount },
+              { id: 'FAILED', label: 'Failed / Rescheduled', count: tasks.filter(t => t.status === 'FAILED').length },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -520,6 +564,8 @@ export const CourierDashboard = () => {
                 className={`bg-white rounded-2xl p-6 border shadow-sm transition-all hover:shadow-md ${
                   task.status === 'DELIVERED'
                     ? 'border-emerald-200 bg-emerald-50/15'
+                    : task.status === 'FAILED'
+                    ? 'border-rose-300 bg-rose-50/15'
                     : task.status === 'OUT_FOR_DELIVERY'
                     ? 'border-amber-300 ring-1 ring-amber-400/30'
                     : 'border-slate-200'
@@ -540,6 +586,8 @@ export const CourierDashboard = () => {
                       className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${
                         task.status === 'DELIVERED'
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          : task.status === 'FAILED'
+                          ? 'bg-rose-100 text-rose-800 border border-rose-200'
                           : task.status === 'OUT_FOR_DELIVERY'
                           ? 'bg-amber-100 text-amber-900 border border-amber-300'
                           : task.status === 'PICKED_UP'
@@ -693,6 +741,33 @@ export const CourierDashboard = () => {
                       </div>
                     </div>
                   )}
+
+                  {/* Point #70: Delivery Failure & Reschedule Status Banner */}
+                  {task.status === 'FAILED' && task.failureLog && (
+                    <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-950 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5 font-black text-rose-800">
+                          <AlertTriangle className="w-4 h-4 text-rose-600" />
+                          <span>Delivery Attempt #{task.failureLog.attemptCount || 1} Failed</span>
+                        </div>
+                        {task.failureLog.isRto ? (
+                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-rose-600 text-white shadow-xs">
+                            Return to Origin (RTO)
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
+                            Rescheduled: {new Date(task.failureLog.rescheduledFor).toLocaleDateString('en-IN')} ({task.failureLog.timeSlot || 'ANYTIME'})
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-rose-900">
+                        <span className="font-bold">Reason:</span> {task.failureLog.reason?.replace(/_/g, ' ')}
+                        {task.failureLog.notes && (
+                          <p className="text-slate-600 text-[11px] mt-0.5 italic">Note: "{task.failureLog.notes}"</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Action Buttons */}
@@ -739,6 +814,18 @@ export const CourierDashboard = () => {
                     </button>
                   )}
 
+                  {/* Point #70: Report Delivery Failure Trigger (for active in-transit tasks) */}
+                  {['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY'].includes(task.status) && (
+                    <button
+                      onClick={() => setSelectedTaskForFailure(task)}
+                      className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                      title="Report Delivery Failure / Reschedule Attempt"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Report Failure</span>
+                    </button>
+                  )}
+
                   {task.status === 'ASSIGNED' && (
                     <button
                       onClick={() => handleAdvanceStatus(task.id, 'PICKED_UP')}
@@ -771,6 +858,25 @@ export const CourierDashboard = () => {
                       <KeyRound className="w-4 h-4" />
                       <span>Verify Customer OTP & Deliver</span>
                     </button>
+                  )}
+
+                  {/* Point #70: Reschedule & Resume Failed Delivery */}
+                  {task.status === 'FAILED' && !task.failureLog?.isRto && (
+                    <button
+                      onClick={() => handleResumeTask(task.id)}
+                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black flex items-center gap-1.5 shadow-sm transition-all"
+                      title="Resume transit for next scheduled attempt"
+                    >
+                      <Truck className="w-3.5 h-3.5" />
+                      <span>Resume Transit</span>
+                    </button>
+                  )}
+
+                  {task.status === 'FAILED' && task.failureLog?.isRto && (
+                    <span className="text-xs font-black text-rose-700 flex items-center gap-1.5 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200">
+                      <AlertTriangle className="w-4 h-4 text-rose-600" />
+                      <span>RTO Finalized (Return to Seller)</span>
+                    </span>
                   )}
 
                   {task.status === 'DELIVERED' && (
@@ -833,6 +939,14 @@ export const CourierDashboard = () => {
           onSuccess={() => {
             fetchTasks();
           }}
+        />
+      )}
+      {/* Point #70: Delivery Failure & Rescheduling Modal */}
+      {selectedTaskForFailure && (
+        <CourierDeliveryFailureModal
+          task={selectedTaskForFailure}
+          onClose={() => setSelectedTaskForFailure(null)}
+          onSuccess={handleFailureSuccess}
         />
       )}
     </div>

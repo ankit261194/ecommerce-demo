@@ -907,4 +907,183 @@ exports.verifyCodReconciliation = async (req, res, next) => {
   }
 };
 
+// @desc    Report Delivery Attempt Failure & Reschedule (Point #70)
+// @route   POST /api/delivery/tasks/:id/fail
+exports.reportDeliveryFailure = async (req, res, next) => {
+  try {
+    const { reason, notes, rescheduledFor, timeSlot } = req.body;
+
+    const allowedReasons = [
+      'CUSTOMER_UNAVAILABLE',
+      'INCOMPLETE_ADDRESS',
+      'CUSTOMER_REFUSED',
+      'BAD_WEATHER',
+      'OTP_MISMATCH',
+      'CASH_NOT_READY',
+      'OTHER',
+    ];
+
+    if (!reason || !allowedReasons.includes(reason)) {
+      return res.status(400).json({
+        success: false,
+        message: `Valid failure reason is required. Allowed reasons: ${allowedReasons.join(', ')}`,
+      });
+    }
+
+    const taskQuery = req.user.role === 'superadmin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, deliveryPartner: req.user._id };
+
+    const task = await DeliveryTask.findOne(taskQuery).populate({
+      path: 'subOrder',
+      populate: [
+        { path: 'vendor', select: 'storeName phone' },
+        { path: 'customer', select: 'name phone email' },
+      ],
+    });
+
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Delivery task not found' });
+    }
+
+    if (task.status === 'DELIVERED') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot report failure on an order that has already been delivered.',
+      });
+    }
+
+    if (task.status === 'CANCELLED') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot report failure on a cancelled delivery task.',
+      });
+    }
+
+    const nextAttemptDate = rescheduledFor ? new Date(rescheduledFor) : new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const assignedTimeSlot = timeSlot || 'Morning (9 AM - 1 PM)';
+    const cleanNotes = (notes && notes.trim()) || '';
+
+    // Initialize failureLog if null
+    task.failureLog = task.failureLog || { attemptCount: 0, history: [] };
+    const attemptNumber = (task.failureLog.attemptCount || 0) + 1;
+    task.failureLog.attemptCount = attemptNumber;
+    task.failureLog.reason = reason;
+    task.failureLog.notes = cleanNotes;
+    task.failureLog.reportedAt = new Date();
+    task.failureLog.rescheduledFor = nextAttemptDate;
+    task.failureLog.timeSlot = assignedTimeSlot;
+
+    const isMaxExceeded = attemptNumber >= 3 || reason === 'CUSTOMER_REFUSED';
+    task.failureLog.isRto = isMaxExceeded;
+
+    task.failureLog.history.push({
+      reason,
+      notes: cleanNotes,
+      attemptNumber,
+      rescheduledFor: nextAttemptDate,
+      timeSlot: assignedTimeSlot,
+      reportedAt: new Date(),
+      riderName: req.user.name || 'Courier Partner',
+    });
+
+    task.status = 'FAILED';
+    await task.save();
+
+    // Sync sub-order tracking
+    if (task.subOrder) {
+      const subOrder = await SubOrder.findById(task.subOrder._id || task.subOrder);
+      if (subOrder) {
+        if (isMaxExceeded) {
+          subOrder.status = 'cancelled';
+        }
+        subOrder.trackingHistory.push({
+          status: 'failed',
+          timestamp: new Date(),
+          note: isMaxExceeded
+            ? `Delivery Attempt #${attemptNumber} failed (${reason}). Maximum attempts exceeded — Return to Origin (RTO) initiated.`
+            : `Delivery Attempt #${attemptNumber} failed (${reason}). Next attempt rescheduled for ${nextAttemptDate.toLocaleDateString('en-IN')}.`,
+        });
+        await subOrder.save();
+      }
+    }
+
+    // Send customer notification via SMS & Email
+    const customerPhone = task.dropLocation?.phone || task.subOrder?.customer?.phone || '9876543210';
+    const subOrderCode = task.subOrder?.subOrderId || `TASK-${task._id.toString().slice(-4).toUpperCase()}`;
+
+    const smsMessage = isMaxExceeded
+      ? `AuraMarket Alert: Delivery attempt #${attemptNumber} for Order #${subOrderCode} failed (${reason}). Order is being returned to merchant.`
+      : `AuraMarket Alert: Delivery attempt #${attemptNumber} for Order #${subOrderCode} failed (${reason}). Next attempt is rescheduled for ${nextAttemptDate.toLocaleDateString('en-IN')} (${assignedTimeSlot}).`;
+
+    await smsService.sendSMS({
+      to: customerPhone,
+      message: smsMessage,
+    });
+
+    await mailService.sendMail({
+      to: task.subOrder?.customer?.email || 'customer@auramarket.com',
+      subject: `Delivery Attempt Update - Order #${subOrderCode}`,
+      text: smsMessage,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: isMaxExceeded
+        ? `Delivery failed (Attempt #${attemptNumber}). Maximum attempts reached — Return to Origin initiated.`
+        : `Delivery attempt #${attemptNumber} failure logged. Next attempt scheduled for ${nextAttemptDate.toLocaleDateString('en-IN')}.`,
+      data: task,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Reschedule Failed Delivery Back to Active Route (Point #70)
+// @route   POST /api/delivery/tasks/:id/reschedule
+exports.rescheduleTask = async (req, res, next) => {
+  try {
+    const taskQuery = req.user.role === 'superadmin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, deliveryPartner: req.user._id };
+
+    const task = await DeliveryTask.findOne(taskQuery).populate('subOrder');
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Delivery task not found' });
+    }
+
+    if (task.status === 'DELIVERED') {
+      return res.status(400).json({ success: false, message: 'Cannot reschedule an already delivered task.' });
+    }
+
+    if (task.failureLog?.isRto) {
+      return res.status(400).json({ success: false, message: 'Cannot reschedule a task where Return to Origin (RTO) has already been finalized.' });
+    }
+
+    task.status = 'OUT_FOR_DELIVERY';
+    await task.save();
+
+    if (task.subOrder) {
+      const subOrder = await SubOrder.findById(task.subOrder._id || task.subOrder);
+      if (subOrder) {
+        subOrder.status = 'out_for_delivery';
+        subOrder.trackingHistory.push({
+          status: 'out_for_delivery',
+          timestamp: new Date(),
+          note: 'Delivery retry initiated by courier partner (Out for Delivery)',
+        });
+        await subOrder.save();
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Delivery task rescheduled and resumed for active transit!',
+      data: task,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 

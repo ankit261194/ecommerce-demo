@@ -16,6 +16,8 @@ const {
   submitCodReconciliation,
   getCodReconciliations,
   verifyCodReconciliation,
+  reportDeliveryFailure,
+  rescheduleTask,
 } = require('../controllers/deliveryController');
 const { protect, authorize } = require('../middlewares/auth');
 
@@ -39,5 +41,9 @@ router.get('/cod/summary', getCodReconciliationSummary);
 router.post('/cod/reconcile', submitCodReconciliation);
 router.get('/cod/reconciliations', getCodReconciliations);
 router.put('/cod/reconciliations/:id/verify', verifyCodReconciliation);
+
+// Point #70: Delivery Failure & Reschedule Routes
+router.post('/tasks/:id/fail', reportDeliveryFailure);
+router.post('/tasks/:id/reschedule', rescheduleTask);
 
 module.exports = router;

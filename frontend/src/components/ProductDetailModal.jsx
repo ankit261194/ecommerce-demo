@@ -26,6 +26,7 @@ import ProductReviewsSection from './ProductReviewsSection';
 import ProductQnASection from './ProductQnASection';
 import FrequentlyBoughtTogether from './FrequentlyBoughtTogether';
 import { ProductRecommendationSlider } from './ProductRecommendationSlider';
+import PincodeChecker from './PincodeChecker';
 import { useLocalization } from '../context/LocalizationContext';
 
 export const ProductDetailModal = ({
@@ -654,6 +655,11 @@ export const ProductDetailModal = ({
                     <span>{isOrderingPaused ? '🌴 Orders Paused' : t('buyNow', 'Buy Now')}</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Point #1: Pincode Delivery & COD Serviceability Engine */}
+              <div className="pt-1">
+                <PincodeChecker compact={false} />
               </div>
 
               {/* Trust Badges Bar */}

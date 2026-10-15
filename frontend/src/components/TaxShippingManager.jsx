@@ -18,6 +18,7 @@ import {
   MapPin,
 } from 'lucide-react';
 import api from '../api/client';
+import PincodeZoneManager from './PincodeZoneManager';
 
 export default function TaxShippingManager({ onConfigSaved }) {
   const [isLoading, setIsLoading] = useState(true);
@@ -681,6 +682,20 @@ export default function TaxShippingManager({ onConfigSaved }) {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Point #1 & Point #10: Pincode Delivery & COD Serviceability Zone Engine */}
+      <div className="pt-6 border-t border-slate-800">
+        <div className="mb-4">
+          <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-amber-400" />
+            <span>Pincode Delivery & COD Serviceability Logistics Manager</span>
+          </h3>
+          <p className="text-xs text-slate-400 mt-1">
+            Configure delivery coverage, Metro fast-track hubs, COD permissions, estimated transit days, and zone shipping fees across India.
+          </p>
+        </div>
+        <PincodeZoneManager />
       </div>
     </div>
   );

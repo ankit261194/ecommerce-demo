@@ -7260,6 +7260,161 @@ const runTests = async () => {
       assert.strictEqual(toggleData.data.seo.metaTitle, 'AuraMarket Pro — Top E-Commerce Showcase', 'Other SEO fields must be preserved');
     });
 
+    // =========================================================================
+    // Point 1: Pincode Delivery & COD Serviceability Engine
+    // =========================================================================
+    await test('Point 1: GET /api/pincodes/check/:pincode checks Metro serviceability and COD', async () => {
+      // 1. Seed default hubs
+      const seedRes = await fetch(`${baseUrl}/pincodes/seed-defaults`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(seedRes.status, 200);
+
+      // 2. Check 110001 (New Delhi Metro Hub)
+      const res = await fetch(`${baseUrl}/pincodes/check/110001`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.pincode, '110001');
+      assert.strictEqual(data.data.isDeliverable, true);
+      assert.strictEqual(data.data.isCodAvailable, true);
+      assert.strictEqual(data.data.city, 'New Delhi');
+      assert.strictEqual(data.data.zone, 'METRO');
+      assert.ok(data.data.etaFormatted, 'Must provide formatted live ETA');
+      assert.strictEqual(typeof data.data.standardShippingFee, 'number');
+    });
+
+    await test('Point 1: POST /api/pincodes/check checks serviceability via request body', async () => {
+      const res = await fetch(`${baseUrl}/pincodes/check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pincode: '400001' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.pincode, '400001');
+      assert.strictEqual(data.data.city, 'Mumbai');
+      assert.strictEqual(data.data.isDeliverable, true);
+      assert.strictEqual(data.data.isCodAvailable, true);
+    });
+
+    await test('Point 1: Validates 6-digit postal code format and rejects invalid pincodes with 400', async () => {
+      const invalidCodes = ['123', 'abcdef', '1100019'];
+      for (const pin of invalidCodes) {
+        const res = await fetch(`${baseUrl}/pincodes/check/${pin}`);
+        assert.strictEqual(res.status, 400, `Expected 400 for invalid pin '${pin}'`);
+        const data = await res.json();
+        assert.strictEqual(data.success, false);
+      }
+    });
+
+    await test('Point 1: Correctly identifies non-deliverable / blocked outpost zone', async () => {
+      const res = await fetch(`${baseUrl}/pincodes/check/999999`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.pincode, '999999');
+      assert.strictEqual(data.data.isDeliverable, false, 'Must flag 999999 as non-deliverable');
+      assert.strictEqual(data.data.isCodAvailable, false);
+    });
+
+    await test('Point 1: Correctly enforces Prepaid-Only (COD disabled) for remote / high-risk zones', async () => {
+      const res = await fetch(`${baseUrl}/pincodes/check/190001`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.pincode, '190001');
+      assert.strictEqual(data.data.isDeliverable, true);
+      assert.strictEqual(data.data.isCodAvailable, false, 'Must restrict high-risk zone to prepaid only');
+    });
+
+    await test('Point 1: Fallback heuristic resolves unseeded valid 6-digit Indian pincode', async () => {
+      const res = await fetch(`${baseUrl}/pincodes/check/302005`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.pincode, '302005');
+      assert.strictEqual(data.data.isDeliverable, true);
+      assert.strictEqual(data.data.isCustomOverride, false, 'Must mark fallback as non-custom');
+      assert.ok(data.data.etaFormatted);
+    });
+
+    await test('Point 1: Super Admin can perform CRUD on Pincode Delivery Zones', async () => {
+      // 1. Create custom zone rule
+      const createRes = await fetch(`${baseUrl}/pincodes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          pincode: '302001',
+          city: 'Jaipur',
+          state: 'Rajasthan',
+          district: 'Jaipur',
+          zone: 'TIER_1',
+          isDeliverable: true,
+          isCodAvailable: true,
+          estimatedDays: 2,
+          estimatedDeliveryText: '2 Days Express Cargo',
+          standardShippingFee: 30,
+          expressShippingFee: 70,
+          expressAvailable: true,
+          remarks: 'Pink City Central Hub',
+        }),
+      });
+      assert.strictEqual(createRes.status, 201);
+      const createData = await createRes.json();
+      assert.strictEqual(createData.success, true);
+      const createdId = createData.data._id;
+
+      // 2. Verify via check endpoint
+      const checkRes = await fetch(`${baseUrl}/pincodes/check/302001`);
+      assert.strictEqual(checkRes.status, 200);
+      const checkData = await checkRes.json();
+      assert.strictEqual(checkData.data.city, 'Jaipur');
+      assert.strictEqual(checkData.data.standardShippingFee, 30);
+      assert.strictEqual(checkData.data.isCustomOverride, true);
+
+      // 3. Update zone rule (e.g. disable COD)
+      const updateRes = await fetch(`${baseUrl}/pincodes/${createdId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          isCodAvailable: false,
+          standardShippingFee: 0,
+        }),
+      });
+      assert.strictEqual(updateRes.status, 200);
+      const updateData = await updateRes.json();
+      assert.strictEqual(updateData.data.isCodAvailable, false);
+      assert.strictEqual(updateData.data.standardShippingFee, 0);
+
+      // 4. Verify admin list & pagination
+      const listRes = await fetch(`${baseUrl}/pincodes?search=Jaipur`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(listRes.status, 200);
+      const listData = await listRes.json();
+      assert.strictEqual(listData.success, true);
+      assert.ok(listData.data.length >= 1);
+      assert.ok(listData.stats.totalCount >= 1);
+
+      // 5. Delete zone rule
+      const deleteRes = await fetch(`${baseUrl}/pincodes/${createdId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(deleteRes.status, 200);
+      const deleteData = await deleteRes.json();
+      assert.strictEqual(deleteData.success, true);
+    });
+
   } finally {
     if (server) {
       server.close();

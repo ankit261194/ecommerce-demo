@@ -10,6 +10,7 @@ const UIConfig = require('../models/UIConfig');
 const Coupon = require('../models/Coupon');
 const Banner = require('../models/Banner');
 const AuditLog = require('../models/AuditLog');
+const PincodeZone = require('../models/PincodeZone');
 
 const seedDemoData = async () => {
   console.log('[DemoManager] Seeding demo multi-vendor data...');
@@ -784,6 +785,125 @@ const seedDemoData = async () => {
     ]);
   }
 
+  // Ensure default Pincode Serviceability Zones exist
+  const defaultHubs = [
+    {
+      pincode: '110001',
+      city: 'New Delhi',
+      state: 'Delhi',
+      district: 'Central Delhi',
+      zone: 'METRO',
+      isDeliverable: true,
+      isCodAvailable: true,
+      estimatedDays: 1,
+      estimatedDeliveryText: 'Delivery Tomorrow',
+      standardShippingFee: 0,
+      expressShippingFee: 49,
+      expressAvailable: true,
+      minOrderForFreeShipping: 499,
+      remarks: 'Connaught Place Main Metro Hub',
+    },
+    {
+      pincode: '201301',
+      city: 'Noida',
+      state: 'Uttar Pradesh',
+      district: 'Gautam Buddha Nagar',
+      zone: 'METRO',
+      isDeliverable: true,
+      isCodAvailable: true,
+      estimatedDays: 1,
+      estimatedDeliveryText: 'Next-Day Delivery',
+      standardShippingFee: 40,
+      expressShippingFee: 79,
+      expressAvailable: true,
+      minOrderForFreeShipping: 799,
+      remarks: 'NCR East Hub',
+    },
+    {
+      pincode: '122002',
+      city: 'Gurugram',
+      state: 'Haryana',
+      district: 'Gurugram',
+      zone: 'METRO',
+      isDeliverable: true,
+      isCodAvailable: true,
+      estimatedDays: 1,
+      estimatedDeliveryText: 'Next-Day Delivery',
+      standardShippingFee: 40,
+      expressShippingFee: 79,
+      expressAvailable: true,
+      minOrderForFreeShipping: 799,
+      remarks: 'Cyber City Hub',
+    },
+    {
+      pincode: '400001',
+      city: 'Mumbai',
+      state: 'Maharashtra',
+      district: 'South Mumbai',
+      zone: 'METRO',
+      isDeliverable: true,
+      isCodAvailable: true,
+      estimatedDays: 1,
+      estimatedDeliveryText: 'Same/Next Day Express',
+      standardShippingFee: 0,
+      expressShippingFee: 49,
+      expressAvailable: true,
+      minOrderForFreeShipping: 499,
+      remarks: 'Fort / Nariman Point Hub',
+    },
+    {
+      pincode: '560001',
+      city: 'Bengaluru',
+      state: 'Karnataka',
+      district: 'Bengaluru Urban',
+      zone: 'METRO',
+      isDeliverable: true,
+      isCodAvailable: true,
+      estimatedDays: 2,
+      estimatedDeliveryText: '1-2 Business Days',
+      standardShippingFee: 40,
+      expressShippingFee: 89,
+      expressAvailable: true,
+      minOrderForFreeShipping: 799,
+      remarks: 'MG Road Tech Hub',
+    },
+    {
+      pincode: '190001',
+      city: 'Srinagar',
+      state: 'Jammu & Kashmir',
+      district: 'Srinagar',
+      zone: 'SPECIAL',
+      isDeliverable: true,
+      isCodAvailable: false,
+      estimatedDays: 5,
+      estimatedDeliveryText: '4-6 Business Days',
+      standardShippingFee: 99,
+      expressShippingFee: 199,
+      expressAvailable: false,
+      minOrderForFreeShipping: 1499,
+      remarks: 'Prepaid-Only Security Zone',
+    },
+    {
+      pincode: '999999',
+      city: 'Non-Serviceable Outpost',
+      state: 'Remote Sector',
+      district: 'Unserviced',
+      zone: 'REMOTE',
+      isDeliverable: false,
+      isCodAvailable: false,
+      estimatedDays: 0,
+      estimatedDeliveryText: 'Unserviceable Area',
+      standardShippingFee: 0,
+      expressShippingFee: 0,
+      expressAvailable: false,
+      remarks: 'Strictly Non-Deliverable Area for Testing',
+    },
+  ];
+
+  for (const hub of defaultHubs) {
+    await PincodeZone.findOneAndUpdate({ pincode: hub.pincode }, hub, { upsert: true, new: true });
+  }
+
   console.log('[DemoManager] Seeding completed successfully!');
   return { success: true, message: 'Demo data seeded successfully' };
 };
@@ -791,7 +911,7 @@ const seedDemoData = async () => {
 const wipeDemoData = async () => {
   console.log('[DemoManager] Wiping demo products, orders, tasks, ledgers, coupons, and banners...');
 
-  // 1. Delete all products, categories, orders, suborders, delivery tasks, ledger entries, coupons, banners, audit logs
+  // 1. Delete all products, categories, orders, suborders, delivery tasks, ledger entries, coupons, banners, audit logs, pincode zones
   await Product.deleteMany({});
   await Order.deleteMany({});
   await SubOrder.deleteMany({});
@@ -801,6 +921,7 @@ const wipeDemoData = async () => {
   await Coupon.deleteMany({});
   await Banner.deleteMany({});
   await AuditLog.deleteMany({});
+  await PincodeZone.deleteMany({});
 
   // 2. Remove non-admin demo users if desired, or keep superadmin safe
   await User.deleteMany({ role: { $ne: 'superadmin' } });

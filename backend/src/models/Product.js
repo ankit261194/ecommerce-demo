@@ -57,9 +57,17 @@ const productSchema = new mongoose.Schema(
       default: 'Generic',
       trim: true,
     },
+    thumbnail: {
+      type: String,
+      default: '',
+    },
+    gallery: {
+      type: [String],
+      default: [],
+    },
     images: {
       type: [String],
-      validate: [array => array.length > 0, 'At least one product image is required'],
+      default: [],
     },
     mrp: {
       type: Number,
@@ -128,10 +136,30 @@ const productSchema = new mongoose.Schema(
 );
 
 // Point #51: Auto-calculate total product stock from variants when present
+// Point #52: Synchronize primary thumbnail & gallery photos
 productSchema.pre('save', function (next) {
   if (this.hasVariants && Array.isArray(this.variants) && this.variants.length > 0) {
     this.stock = this.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
   }
+
+  // Point #52: Thumbnail & Gallery Sync
+  if (this.thumbnail && typeof this.thumbnail === 'string' && this.thumbnail.trim()) {
+    const cleanGallery = Array.isArray(this.gallery) ? this.gallery.filter(img => img && img.trim() && img !== this.thumbnail) : [];
+    this.gallery = cleanGallery;
+    this.images = [this.thumbnail, ...cleanGallery];
+  } else if (Array.isArray(this.images) && this.images.length > 0) {
+    this.thumbnail = this.images[0];
+    this.gallery = this.images.slice(1);
+  } else if (Array.isArray(this.gallery) && this.gallery.length > 0) {
+    this.thumbnail = this.gallery[0];
+    this.gallery = this.gallery.slice(1);
+    this.images = [this.thumbnail, ...this.gallery];
+  } else {
+    this.thumbnail = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500';
+    this.gallery = [];
+    this.images = [this.thumbnail];
+  }
+
   next();
 });
 

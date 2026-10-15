@@ -11,10 +11,13 @@ import {
   ArrowUpRight,
   Boxes,
   Palette,
+  Camera,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import MultiVariantProductModal from '../components/MultiVariantProductModal';
+import ProductGalleryUploader from '../components/ProductGalleryUploader';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -37,7 +40,15 @@ export const VendorPortal = () => {
       stock: 45,
       category: 'Electronics & Audio',
       image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
-      variantsCount: 2,
+      thumbnail: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
+      gallery: [
+        'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=500',
+        'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=500',
+        'https://images.unsplash.com/photo-1583394838336-acd977736f90?w=500',
+      ],
+      variantsCount: 3,
+      colorSwatches: ['#0F172A', '#2563EB', '#DC2626'],
+      sizeMatrix: ['S', 'M', 'L'],
     },
     {
       id: 'p2',
@@ -48,7 +59,14 @@ export const VendorPortal = () => {
       stock: 30,
       category: 'Watches & Accessories',
       image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
-      variantsCount: 0,
+      thumbnail: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
+      gallery: [
+        'https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=500',
+        'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=500',
+      ],
+      variantsCount: 2,
+      colorSwatches: ['#1E293B', '#F59E0B'],
+      sizeMatrix: ['42mm', '46mm'],
     },
   ]);
 
@@ -81,6 +99,9 @@ export const VendorPortal = () => {
 
   const [isAddProductDrawerOpen, setIsAddProductDrawerOpen] = useState(false);
   const [isMultiVariantModalOpen, setIsMultiVariantModalOpen] = useState(false);
+  const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
+  const [selectedProductForMedia, setSelectedProductForMedia] = useState(null);
+  const [mediaDraft, setMediaDraft] = useState({ thumbnail: '', gallery: [] });
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
@@ -94,6 +115,8 @@ export const VendorPortal = () => {
     sku: '',
     colorVariant: '',
     sizeVariant: '',
+    thumbnail: '',
+    gallery: [],
   });
 
   const fetchVendorData = async () => {
@@ -125,8 +148,12 @@ export const VendorPortal = () => {
           sellingPrice: p.sellingPrice,
           stock: p.stock,
           category: p.category?.name || 'General',
-          image: p.images?.[0] || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
+          image: p.thumbnail || p.images?.[0] || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
+          thumbnail: p.thumbnail || p.images?.[0] || '',
+          gallery: Array.isArray(p.gallery) ? p.gallery : (p.images?.length > 1 ? p.images.slice(1) : []),
           variantsCount: p.variants?.length || 0,
+          colorSwatches: p.variants?.map(v => v.colorCode).filter(Boolean) || [],
+          sizeMatrix: Array.from(new Set(p.variants?.map(v => v.attributes?.size).filter(Boolean))) || [],
         }));
         setProducts(pList);
       }
@@ -183,6 +210,10 @@ export const VendorPortal = () => {
       return;
     }
 
+    const primaryImg = newProduct.thumbnail || 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=500';
+    const prodGallery = newProduct.gallery || [];
+    const allImgs = [primaryImg, ...prodGallery.filter(g => g !== primaryImg)];
+
     try {
       const catRes = await api.get('/products/categories');
       const firstCatId = catRes.data?.data?.[0]?._id;
@@ -195,7 +226,9 @@ export const VendorPortal = () => {
         sku: newProduct.sku || 'SKU-' + Date.now().toString().slice(-4),
         category: firstCatId || '66a123456789012345678901',
         description: `${newProduct.title} - Official authentic stock.`,
-        images: ['https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=500'],
+        thumbnail: primaryImg,
+        gallery: prodGallery,
+        images: allImgs,
       });
       await fetchVendorData();
     } catch (_) {}
@@ -208,13 +241,76 @@ export const VendorPortal = () => {
       sellingPrice: Number(newProduct.sellingPrice),
       stock: Number(newProduct.stock),
       category: newProduct.category,
-      image: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=500',
+      image: primaryImg,
+      thumbnail: primaryImg,
+      gallery: prodGallery,
       variantsCount: newProduct.colorVariant || newProduct.sizeVariant ? 2 : 0,
     };
 
     setProducts(prev => [created, ...prev]);
     setIsAddProductDrawerOpen(false);
+    setNewProduct({
+      title: '',
+      category: 'Electronics & Audio',
+      mrp: '',
+      sellingPrice: '',
+      stock: '',
+      sku: '',
+      colorVariant: '',
+      sizeVariant: '',
+      thumbnail: '',
+      gallery: [],
+    });
     setNotification(`Product '${created.title}' added to store inventory successfully!`);
+  };
+
+  // Point #52: Media Manager Handlers
+  const handleOpenMediaModal = (product) => {
+    setSelectedProductForMedia(product);
+    setMediaDraft({
+      thumbnail: product.thumbnail || product.image || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
+      gallery: product.gallery || [],
+    });
+    setIsMediaModalOpen(true);
+  };
+
+  const handleSaveMedia = async () => {
+    if (!selectedProductForMedia) return;
+
+    const { thumbnail, gallery } = mediaDraft;
+    const cleanThumb = thumbnail || selectedProductForMedia.thumbnail || selectedProductForMedia.image;
+    const cleanGal = Array.isArray(gallery) ? gallery.filter(g => g !== cleanThumb) : [];
+
+    try {
+      if (
+        selectedProductForMedia.id &&
+        !selectedProductForMedia.id.startsWith('p_') &&
+        !selectedProductForMedia.id.startsWith('p1') &&
+        !selectedProductForMedia.id.startsWith('p2')
+      ) {
+        await api.put(`/vendor/products/${selectedProductForMedia.id}/media`, {
+          thumbnail: cleanThumb,
+          gallery: cleanGal,
+        });
+      }
+    } catch (_) {}
+
+    setProducts(prev =>
+      prev.map(p =>
+        p.id === selectedProductForMedia.id
+          ? {
+              ...p,
+              image: cleanThumb,
+              thumbnail: cleanThumb,
+              gallery: cleanGal,
+            }
+          : p
+      )
+    );
+
+    setIsMediaModalOpen(false);
+    setSelectedProductForMedia(null);
+    setNotification(`Photo gallery updated for '${selectedProductForMedia.title}'!`);
   };
 
   // Point #51: Handle Multi-Variant Product Publishing
@@ -463,17 +559,30 @@ export const VendorPortal = () => {
               Manage variants, color swatches, stock inventories, and selling prices.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => {
+                if (products.length > 0) {
+                  handleOpenMediaModal(products[0]);
+                } else {
+                  setIsAddProductDrawerOpen(true);
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/20 transition-all hover:scale-105"
+            >
+              <Camera className="w-4 h-4 text-indigo-200" />
+              <span>+ Multi-Image Uploader (Point #52)</span>
+            </button>
             <button
               onClick={() => setIsMultiVariantModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-600/20 transition-all hover:scale-105"
+              className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-600/20 transition-all hover:scale-105"
             >
               <Palette className="w-4 h-4" />
               <span>+ Multi-Variant Creator (Point #51)</span>
             </button>
             <button
               onClick={() => setIsAddProductDrawerOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
             >
               <PlusCircle className="w-4 h-4 text-amber-400" />
               <span>+ Quick Item</span>
@@ -484,7 +593,17 @@ export const VendorPortal = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {products.map(p => (
             <div key={p.id} className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm space-y-3 hover:shadow-md transition-shadow">
-              <img src={p.image} alt={p.title} className="w-full h-44 object-cover rounded-lg border border-slate-100" />
+              <div className="relative group">
+                <img src={p.image} alt={p.title} className="w-full h-44 object-cover rounded-lg border border-slate-100" />
+                <button
+                  type="button"
+                  onClick={() => handleOpenMediaModal(p)}
+                  className="absolute bottom-2 right-2 px-2.5 py-1 bg-black/80 hover:bg-black text-white text-[10px] font-bold rounded-lg shadow-md flex items-center gap-1 backdrop-blur-xs transition-transform hover:scale-105"
+                >
+                  <Camera className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Media ({1 + (p.gallery?.length || 0)})</span>
+                </button>
+              </div>
               <div>
                 <h3 className="font-bold text-slate-900 text-sm line-clamp-1">{p.title}</h3>
                 <p className="text-xs text-slate-400 font-medium">SKU: {p.sku}</p>
@@ -622,6 +741,17 @@ export const VendorPortal = () => {
             </div>
           </div>
 
+          {/* Point #52: Embedded Photo Gallery & Thumbnail Uploader */}
+          <div className="pt-2">
+            <ProductGalleryUploader
+              thumbnail={newProduct.thumbnail}
+              gallery={newProduct.gallery}
+              onChange={({ thumbnail, gallery }) =>
+                setNewProduct(prev => ({ ...prev, thumbnail, gallery }))
+              }
+            />
+          </div>
+
           <button
             type="submit"
             className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-sm shadow-md transition-all mt-4"
@@ -678,6 +808,55 @@ export const VendorPortal = () => {
         onClose={() => setIsMultiVariantModalOpen(false)}
         onProductCreated={handleMultiVariantCreated}
       />
+
+      {/* Point #52: Media Gallery Studio Modal */}
+      {isMediaModalOpen && selectedProductForMedia && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-3xl w-full shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Camera className="w-5 h-5 text-indigo-400" />
+                  Media Gallery Studio — {selectedProductForMedia.title}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Select primary thumbnail cover, add high-res photos, and reorder customer gallery carousel.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMediaModalOpen(false)}
+                className="text-slate-400 hover:text-white text-xs px-2.5 py-1 rounded-lg hover:bg-slate-800"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <ProductGalleryUploader
+              thumbnail={mediaDraft.thumbnail}
+              gallery={mediaDraft.gallery}
+              onChange={({ thumbnail, gallery }) => setMediaDraft({ thumbnail, gallery })}
+            />
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsMediaModalOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveMedia}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition-all"
+              >
+                Save Media Gallery
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

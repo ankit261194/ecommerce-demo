@@ -79,7 +79,7 @@ exports.createProduct = async (req, res, next) => {
       });
     }
 
-    const { title, description, category, brand, images, mrp, sellingPrice, stock, sku, hasVariants, variants, tags } = req.body;
+    const { title, description, category, brand, images, thumbnail, gallery, mrp, sellingPrice, stock, sku, hasVariants, variants, tags } = req.body;
 
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString().slice(-4);
 
@@ -88,6 +88,11 @@ exports.createProduct = async (req, res, next) => {
       calculatedStock = variants.reduce((acc, v) => acc + (Number(v.stock) || 0), 0);
     }
 
+    const defaultImg = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500';
+    let primaryThumbnail = thumbnail || (images && images.length ? images[0] : (gallery && gallery.length ? gallery[0] : defaultImg));
+    let cleanGallery = Array.isArray(gallery) ? gallery.filter(img => img && img !== primaryThumbnail) : (images && images.length > 1 ? images.slice(1) : []);
+    let combinedImages = [primaryThumbnail, ...cleanGallery];
+
     const product = await Product.create({
       vendor: vendor._id,
       title,
@@ -95,7 +100,9 @@ exports.createProduct = async (req, res, next) => {
       description,
       category,
       brand: brand || vendor.storeName,
-      images: images && images.length ? images : ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'],
+      thumbnail: primaryThumbnail,
+      gallery: cleanGallery,
+      images: combinedImages,
       mrp,
       sellingPrice,
       stock: calculatedStock,
@@ -130,12 +137,59 @@ exports.updateProduct = async (req, res, next) => {
       req.body.stock = req.body.variants.reduce((acc, v) => acc + (Number(v.stock) || 0), 0);
     }
 
+    // Point #52: Sync media fields if updated
+    if (req.body.thumbnail || req.body.gallery || req.body.images) {
+      const primaryThumb = req.body.thumbnail || (req.body.images && req.body.images[0]) || product.thumbnail || product.images[0];
+      const gal = Array.isArray(req.body.gallery) ? req.body.gallery : (req.body.images && req.body.images.length > 1 ? req.body.images.slice(1) : product.gallery || []);
+      const cleanGal = gal.filter(img => img && img !== primaryThumb);
+      req.body.thumbnail = primaryThumb;
+      req.body.gallery = cleanGal;
+      req.body.images = [primaryThumb, ...cleanGal];
+    }
+
     product = await Product.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,
     });
 
     res.status(200).json({ success: true, message: 'Product updated successfully', data: product });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update Product Media Gallery (Point #52: Set primary thumbnail, reorder gallery photos)
+// @route   PUT /api/vendor/products/:id/media
+exports.updateProductMedia = async (req, res, next) => {
+  try {
+    const vendor = await VendorProfile.findOne({ user: req.user._id });
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor profile not found' });
+    }
+
+    let product = await Product.findOne({ _id: req.params.id, vendor: vendor._id });
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found or not owned by your store' });
+    }
+
+    const { thumbnail, gallery } = req.body;
+    const primaryThumb = thumbnail || product.thumbnail || (product.images && product.images[0]);
+    const cleanGallery = Array.isArray(gallery) ? gallery.filter(img => img && img !== primaryThumb) : (product.gallery || []);
+
+    product.thumbnail = primaryThumb;
+    product.gallery = cleanGallery;
+    product.images = [primaryThumb, ...cleanGallery];
+    await product.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Product media updated successfully',
+      data: {
+        thumbnail: product.thumbnail,
+        gallery: product.gallery,
+        images: product.images,
+      },
+    });
   } catch (error) {
     next(error);
   }

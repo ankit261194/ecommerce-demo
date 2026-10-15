@@ -3456,6 +3456,77 @@ const runTests = async () => {
       assert.strictEqual(dataUpdate.data.stock, 30, 'Total stock must update to 20 + 10 = 30');
     });
 
+    await test('Point 52: Multi-Image Media Uploader (Thumbnail + Gallery photos with primary cover selector & gallery reordering)', async () => {
+      // 1. Fetch category id
+      const resCat = await fetch(`${baseUrl}/products/categories`);
+      const dataCat = await resCat.json();
+      const catId = dataCat.data[0]._id;
+
+      const coverImg = 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=800';
+      const galleryImg1 = 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=800';
+      const galleryImg2 = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800';
+      const galleryImg3 = 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=800';
+
+      // 2. Create product with primary thumbnail and gallery photos
+      const resCreateMedia = await fetch(`${baseUrl}/vendor/products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({
+          title: 'AuraStudio Pro Wireless Over-Ear Headphones',
+          description: 'Studio-grade acoustics with multi-angle gallery photos and swappable earcups.',
+          category: catId,
+          brand: 'Apex Audio',
+          thumbnail: coverImg,
+          gallery: [galleryImg1, galleryImg2, galleryImg3],
+          mrp: 14999,
+          sellingPrice: 11999,
+          stock: 40,
+          sku: 'APX-STUDIO-PRO-' + Date.now(),
+        }),
+      });
+
+      assert.strictEqual(resCreateMedia.status, 201);
+      const dataMediaProd = await resCreateMedia.json();
+      assert.strictEqual(dataMediaProd.success, true);
+      assert.strictEqual(dataMediaProd.data.thumbnail, coverImg);
+      assert.strictEqual(dataMediaProd.data.gallery.length, 3);
+      assert.strictEqual(dataMediaProd.data.images[0], coverImg, 'images[0] must match primary thumbnail');
+      assert.strictEqual(dataMediaProd.data.images.length, 4, 'images array must contain thumbnail + 3 gallery images');
+
+      const mediaProdId = dataMediaProd.data._id;
+
+      // 3. Update media via PUT /api/vendor/products/:id/media: swap primary thumbnail to galleryImg2 and reorder gallery
+      const resUpdateMedia = await fetch(`${baseUrl}/vendor/products/${mediaProdId}/media`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({
+          thumbnail: galleryImg2, // promote galleryImg2 to primary thumbnail
+          gallery: [coverImg, galleryImg3, galleryImg1], // previous cover becomes secondary, gallery reordered
+        }),
+      });
+
+      assert.strictEqual(resUpdateMedia.status, 200);
+      const dataUpdatedMedia = await resUpdateMedia.json();
+      assert.strictEqual(dataUpdatedMedia.success, true);
+      assert.strictEqual(dataUpdatedMedia.data.thumbnail, galleryImg2, 'New primary thumbnail must be galleryImg2');
+      assert.strictEqual(dataUpdatedMedia.data.gallery[0], coverImg, 'Previous cover must now be first in gallery');
+      assert.strictEqual(dataUpdatedMedia.data.images[0], galleryImg2, 'images[0] must strictly reflect new thumbnail');
+      assert.strictEqual(dataUpdatedMedia.data.images.length, 4);
+
+      // 4. Verify public fetch gets the updated media schema
+      const resPublic = await fetch(`${baseUrl}/products/${mediaProdId}`);
+      assert.strictEqual(resPublic.status, 200);
+      const dataPublic = await resPublic.json();
+      assert.strictEqual(dataPublic.data.thumbnail, galleryImg2);
+      assert.strictEqual(dataPublic.data.images.length, 4);
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

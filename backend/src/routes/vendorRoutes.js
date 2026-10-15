@@ -5,6 +5,7 @@ const {
   getVendorProducts,
   createProduct,
   updateProduct,
+  updateProductMedia,
   deleteProduct,
   getVendorOrders,
   updateSubOrderStatus,
@@ -20,6 +21,7 @@ router.get('/dashboard', getVendorDashboard);
 router.get('/products', getVendorProducts);
 router.post('/products', createProduct);
 router.put('/products/:id', updateProduct);
+router.put('/products/:id/media', updateProductMedia);
 router.delete('/products/:id', deleteProduct);
 router.get('/orders', getVendorOrders);
 router.put('/orders/:id/status', updateSubOrderStatus);

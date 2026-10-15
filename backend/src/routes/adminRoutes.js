@@ -39,7 +39,7 @@ const {
   getDatabaseBackupStats,
   exportDatabaseBackup,
 } = require('../controllers/adminController');
-const { getTaxInvoice } = require('../controllers/orderController');
+const { getTaxInvoice, getSplitPackingSlips } = require('../controllers/orderController');
 const { protect, authorize, requirePermission } = require('../middlewares/auth');
 
 // All admin routes require Super Admin or Sub-Admin authorization
@@ -77,6 +77,7 @@ router.put('/orders/:id/status', updateOrderStatus);
 router.patch('/orders/:id/status', updateOrderStatus);
 router.get('/orders/:id/commission-split', getOrderCommissionSplit);
 router.get('/orders/:id/invoice', getTaxInvoice);
+router.get('/orders/:id/split-packing-slips', getSplitPackingSlips);
 router.get('/ledger', getPlatformLedger);
 
 // Customer CRM Directory (Point #43)

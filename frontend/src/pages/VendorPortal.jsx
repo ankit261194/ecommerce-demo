@@ -20,6 +20,7 @@ import {
   Printer,
   Store,
   Palmtree,
+  QrCode,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -27,6 +28,7 @@ import MultiVariantProductModal from '../components/MultiVariantProductModal';
 import ProductGalleryUploader from '../components/ProductGalleryUploader';
 import BulkProductExcelModal from '../components/BulkProductExcelModal';
 import ShippingLabelPrinterModal from '../components/ShippingLabelPrinterModal';
+import SmartSplitPackingSlipModal from '../components/SmartSplitPackingSlipModal';
 import VendorStoreProfileModal from '../components/VendorStoreProfileModal';
 import VendorPublicStoreModal from '../components/VendorPublicStoreModal';
 import VacationModeModal from '../components/VacationModeModal';
@@ -149,6 +151,8 @@ export const VendorPortal = () => {
   const [orderFilter, setOrderFilter] = useState('all'); // Point #56: all | pending | packaging | ready_for_pickup | dispatched | delivered
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false); // Point #57: Thermal & A4 Shipping Label Printer
   const [selectedOrderForLabel, setSelectedOrderForLabel] = useState(null);
+  const [isSplitSlipModalOpen, setIsSplitSlipModalOpen] = useState(false); // Point #73: Smart Multi-Vendor Split Packing Slip with QR Codes
+  const [selectedOrderForSplitSlip, setSelectedOrderForSplitSlip] = useState(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // Point #58: Store Profile Customization
   const [isPublicStorePreviewOpen, setIsPublicStorePreviewOpen] = useState(false); // Point #58: Public Storefront Preview
   const [isVacationModalOpen, setIsVacationModalOpen] = useState(false); // Point #59: Vacation Mode Toggle
@@ -874,6 +878,19 @@ export const VendorPortal = () => {
                         <span>Print Label / Slip</span>
                       </button>
 
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedOrderForSplitSlip(order.rawId || order.id);
+                          setIsSplitSlipModalOpen(true);
+                        }}
+                        className="px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs border border-indigo-200"
+                        title="Smart Split Packing Slip with Live Tracking QR Code (Point #73)"
+                      >
+                        <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Split Slip (QR)</span>
+                      </button>
+
                       {isPending && (
                         <button
                           type="button"
@@ -1477,6 +1494,17 @@ export const VendorPortal = () => {
         onClose={() => setIsLabelModalOpen(false)}
         order={selectedOrderForLabel}
         vendorData={vendorData}
+      />
+
+      {/* Point 73: Smart Multi-Vendor Split Packing Slip with QR Codes Modal */}
+      <SmartSplitPackingSlipModal
+        isOpen={isSplitSlipModalOpen}
+        onClose={() => {
+          setIsSplitSlipModalOpen(false);
+          setSelectedOrderForSplitSlip(null);
+        }}
+        orderId={selectedOrderForSplitSlip}
+        role="vendor"
       />
 
       {/* Point 58: Vendor Store Profile Customization Modal */}

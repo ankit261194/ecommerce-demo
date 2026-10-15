@@ -59,10 +59,12 @@ import {
   ShoppingCart,
   Building2,
   Database,
+  QrCode,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import TaxInvoiceModal from '../components/TaxInvoiceModal';
+import SmartSplitPackingSlipModal from '../components/SmartSplitPackingSlipModal';
 import CategoryTreeManager from '../components/CategoryTreeManager';
 import BrandDirectoryManager from '../components/BrandDirectoryManager';
 import BannerManager from '../components/BannerManager';
@@ -521,6 +523,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
   });
   const [selectedOrderForModal, setSelectedOrderForModal] = useState(null);
   const [selectedInvoiceOrderId, setSelectedInvoiceOrderId] = useState(null);
+  const [selectedSplitPackingSlipOrderId, setSelectedSplitPackingSlipOrderId] = useState(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [statusChangeTarget, setStatusChangeTarget] = useState(null);
   const [statusChangeNote, setStatusChangeNote] = useState('');
@@ -2146,6 +2149,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
                                   title="1-Click Master Tax Invoice (PDF / Print)"
                                 >
                                   <FileText className="w-4 h-4 text-amber-600" />
+                                </button>
+                                <button
+                                  onClick={() => setSelectedSplitPackingSlipOrderId(ord._id)}
+                                  className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 transition-colors"
+                                  title="Smart Multi-Vendor Split Packing Slip with QR Codes (Point #73)"
+                                >
+                                  <QrCode className="w-4 h-4 text-indigo-600" />
                                 </button>
                               </div>
                             </td>
@@ -4188,6 +4198,14 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
               </button>
 
               <button
+                onClick={() => setSelectedSplitPackingSlipOrderId(selectedOrderForModal._id)}
+                className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+              >
+                <QrCode className="w-4 h-4" />
+                <span>Smart Multi-Vendor Split Packing Slip (QR)</span>
+              </button>
+
+              <button
                 onClick={() => handleOpenCommissionSplit(selectedOrderForModal)}
                 className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
               >
@@ -4449,6 +4467,16 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           onClose={() => setSelectedInvoiceOrderId(null)}
           orderId={selectedInvoiceOrderId}
           apiUrl="/api"
+        />
+      )}
+
+      {/* Point #73: Smart Multi-Vendor Split Packing Slip with QR Codes Modal */}
+      {selectedSplitPackingSlipOrderId && (
+        <SmartSplitPackingSlipModal
+          isOpen={!!selectedSplitPackingSlipOrderId}
+          onClose={() => setSelectedSplitPackingSlipOrderId(null)}
+          orderId={selectedSplitPackingSlipOrderId}
+          role="admin"
         />
       )}
     </div>

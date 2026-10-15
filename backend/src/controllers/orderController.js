@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Product = require('../models/Product');
 const VendorProfile = require('../models/VendorProfile');
 const Order = require('../models/Order');
@@ -100,6 +101,7 @@ exports.createOrder = async (req, res, next) => {
         image: product.images[0] || '',
         variantSku: variantMatch ? variantMatch.sku : (item.variantSku || product.sku),
         variantName: variantName,
+        hsnCode: product.hsnCode || '85183000',
         quantity: qty,
         price: itemPrice,
         totalPrice: itemTotalPrice,
@@ -1251,6 +1253,116 @@ exports.getTaxInvoice = async (req, res, next) => {
         },
         printableHtml,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Multi-Vendor Split Packing Slips with Dynamic QR Codes (Point #73)
+// @route   GET /api/orders/:id/split-packing-slips
+// @route   GET /api/admin/orders/:id/split-packing-slips
+// @access  Private (Admin, Vendor, Customer)
+exports.getSplitPackingSlips = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { format, type, vendorId } = req.query;
+
+    const isMongoId = mongoose.Types.ObjectId.isValid(id);
+    const query = isMongoId ? { _id: id } : { orderNumber: id };
+
+    const order = await Order.findOne(query)
+      .populate('customer', 'name email phone')
+      .populate({
+        path: 'items.product',
+        select: 'title sku hsnCode category images mrp sellingPrice',
+      });
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found for split packing slips' });
+    }
+
+    // Role-based authorization
+    const userRole = req.user?.role;
+    let allowedVendorId = null;
+
+    if (userRole === 'customer') {
+      if (!order.customer._id.equals(req.user._id)) {
+        return res.status(403).json({ success: false, message: 'Unauthorized to view packing slips for this order' });
+      }
+    } else if (userRole === 'vendor') {
+      const vendorProfile = await VendorProfile.findOne({ user: req.user._id });
+      if (!vendorProfile) {
+        return res.status(403).json({ success: false, message: 'Vendor profile not found' });
+      }
+      allowedVendorId = vendorProfile._id.toString();
+    }
+
+    // Fetch all SubOrders for this order
+    let subOrders = await SubOrder.find({ parentOrder: order._id })
+      .populate('vendor')
+      .populate('customer', 'name email phone')
+      .populate('deliveryPartner', 'name phone');
+
+    const { buildSplitPackingSlipData, renderPrintableSplitSlipHtml } = require('../utils/packingSlipHelper');
+
+    let slips = [];
+
+    if (subOrders && subOrders.length > 0) {
+      for (const so of subOrders) {
+        const vId = so.vendor?._id?.toString();
+        if (allowedVendorId && vId !== allowedVendorId) continue;
+        if (vendorId && vId !== vendorId.toString()) continue;
+
+        const slip = buildSplitPackingSlipData({
+          order,
+          subOrder: so,
+          vendor: so.vendor || {},
+          customer: so.customer || order.customer,
+          items: so.items || [],
+        });
+        slips.push(slip);
+      }
+    } else {
+      // Fallback: Group items by vendor from parent order
+      const vendorGroups = {};
+      for (const item of order.items) {
+        const vId = item.vendor?.toString();
+        if (!vendorGroups[vId]) {
+          vendorGroups[vId] = [];
+        }
+        vendorGroups[vId].push(item);
+      }
+
+      for (const vId in vendorGroups) {
+        if (allowedVendorId && vId !== allowedVendorId) continue;
+        if (vendorId && vId !== vendorId.toString()) continue;
+
+        const vendorDoc = await VendorProfile.findById(vId);
+        const slip = buildSplitPackingSlipData({
+          order,
+          subOrder: null,
+          vendor: vendorDoc || { _id: vId, storeName: 'AuraMarket Merchant' },
+          customer: order.customer,
+          items: vendorGroups[vId],
+        });
+        slips.push(slip);
+      }
+    }
+
+    if (slips.length === 0) {
+      return res.status(404).json({ success: false, message: 'No split packing slips found for the specified criteria' });
+    }
+
+    if (format === 'html' || req.headers.accept?.includes('text/html')) {
+      const html = renderPrintableSplitSlipHtml(slips, { format: type || 'a4' });
+      return res.type('html').send(html);
+    }
+
+    res.status(200).json({
+      success: true,
+      count: slips.length,
+      data: slips,
     });
   } catch (error) {
     next(error);

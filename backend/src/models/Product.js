@@ -105,6 +105,11 @@ const productSchema = new mongoose.Schema(
       unique: true,
       trim: true,
     },
+    hsnCode: {
+      type: String,
+      default: '85183000',
+      trim: true,
+    },
     hasVariants: {
       type: Boolean,
       default: false,

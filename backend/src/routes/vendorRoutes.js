@@ -24,6 +24,7 @@ const {
   getVendorWallet,
   exportVendorLedgerCSV,
 } = require('../controllers/vendorController');
+const { getSplitPackingSlips } = require('../controllers/orderController');
 const { protect, authorize } = require('../middlewares/auth');
 
 // Point 58: Public Storefront Vendor Showcase (Accessible by any customer/visitor)
@@ -60,6 +61,7 @@ router.patch('/products/:id/stock', updateProductStock);
 router.delete('/products/:id', deleteProduct);
 router.get('/orders', getVendorOrders);
 router.get('/orders/:id/shipping-label', getShippingLabelData);
+router.get('/orders/:id/split-packing-slip', getSplitPackingSlips);
 router.put('/orders/:id/status', updateSubOrderStatus);
 router.post('/payout', requestPayout);
 

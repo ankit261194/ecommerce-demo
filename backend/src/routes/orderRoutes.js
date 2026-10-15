@@ -8,12 +8,14 @@ const {
   trackOrder,
   simulateOrderStep,
   getTaxInvoice,
+  getSplitPackingSlips,
 } = require('../controllers/orderController');
 const { protect } = require('../middlewares/auth');
 
 // Public live order tracking and 1-click tax invoice download
 router.get('/track/:identifier', trackOrder);
 router.get('/:id/invoice', getTaxInvoice);
+router.get('/:id/split-packing-slips', protect, getSplitPackingSlips);
 
 router.use(protect);
 

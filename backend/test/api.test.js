@@ -5728,6 +5728,201 @@ const runTests = async () => {
       await ScratchCardReward.deleteOne({ _id: raceCardId });
     });
 
+    // =========================================================================
+    // Point 73: Smart Multi-Vendor Split Packing Slip with QR Codes
+    // =========================================================================
+    await test('Point 73: Smart Multi-Vendor Split Packing Slip with QR Codes (Order split by vendor, dynamic QR code, HSN/Tax breakdown, printable HTML)', async () => {
+      // 1. Unauthenticated request returns 401
+      const resUnauth = await fetch(`${baseUrl}/orders/ORD-NONEXISTENT/split-packing-slips`);
+      assert.strictEqual(resUnauth.status, 401, 'Unauthenticated request must be rejected with 401');
+
+      // 2. Setup Multi-Vendor Order with 2 vendors
+      const customer = await User.findOne({ email: 'customer@auramarket.com' });
+      const vendors = await VendorProfile.find({}).limit(2);
+      assert.ok(vendors.length >= 2, 'At least 2 vendors must exist in database for multi-vendor testing');
+
+      const vendor1 = vendors[0];
+      const vendor2 = vendors[1];
+
+      const testOrder = await Order.create({
+        orderNumber: `SPLIT-ORD-${Date.now()}`,
+        customer: customer._id,
+        items: [
+          {
+            product: new mongoose.Types.ObjectId(),
+            vendor: vendor1._id,
+            title: 'Pro ANC Wireless Headphones',
+            variantSku: 'APX-HEAD-001',
+            variantName: 'Midnight Black',
+            hsnCode: '8518',
+            quantity: 2,
+            price: 4999,
+            totalPrice: 9998,
+          },
+          {
+            product: new mongoose.Types.ObjectId(),
+            vendor: vendor2._id,
+            title: 'Urban Oversized Heavyweight Hoodie',
+            variantSku: 'VOG-HOD-001',
+            variantName: 'Sage Green / L',
+            hsnCode: '6109',
+            quantity: 1,
+            price: 2499,
+            totalPrice: 2499,
+          },
+        ],
+        subtotal: 12497,
+        totalAmount: 12497,
+        paymentMethod: 'COD',
+        paymentStatus: 'PENDING',
+        status: 'PLACED',
+        shippingAddress: {
+          recipientName: 'Aman Sharma',
+          phone: '9876543210',
+          street: 'Flat 402, Green Valley Apartments',
+          city: 'Noida',
+          state: 'Uttar Pradesh',
+          pincode: '201301',
+        },
+      });
+
+      // Create matching SubOrders for each vendor
+      const subOrder1 = await SubOrder.create({
+        parentOrder: testOrder._id,
+        vendor: vendor1._id,
+        customer: customer._id,
+        items: [
+          {
+            product: new mongoose.Types.ObjectId(),
+            title: 'Pro ANC Wireless Headphones',
+            variantSku: 'APX-HEAD-001',
+            variantName: 'Midnight Black',
+            hsnCode: '8518',
+            quantity: 2,
+            price: 4999,
+            totalPrice: 9998,
+          },
+        ],
+        subTotal: 9998,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 999.8,
+        vendorEarning: 8998.2,
+        shippingAddress: testOrder.shippingAddress,
+      });
+
+      const subOrder2 = await SubOrder.create({
+        parentOrder: testOrder._id,
+        vendor: vendor2._id,
+        customer: customer._id,
+        items: [
+          {
+            product: new mongoose.Types.ObjectId(),
+            title: 'Urban Oversized Heavyweight Hoodie',
+            variantSku: 'VOG-HOD-001',
+            variantName: 'Sage Green / L',
+            hsnCode: '6109',
+            quantity: 1,
+            price: 2499,
+            totalPrice: 2499,
+          },
+        ],
+        subTotal: 2499,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 249.9,
+        vendorEarning: 2249.1,
+        shippingAddress: testOrder.shippingAddress,
+      });
+
+      testOrder.subOrders = [subOrder1._id, subOrder2._id];
+      await testOrder.save();
+
+      // 3. Customer views split packing slips via GET /orders/:id/split-packing-slips
+      const resCustomer = await fetch(`${baseUrl}/orders/${testOrder._id}/split-packing-slips`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustomer.status, 200);
+      const dataCustomer = await resCustomer.json();
+      assert.strictEqual(dataCustomer.success, true);
+      assert.strictEqual(dataCustomer.count, 2, 'Should return exactly 2 split slips (one per vendor)');
+
+      // Verify structure of first vendor slip
+      const slip1 = dataCustomer.data[0];
+      assert.ok(slip1.slipId);
+      assert.strictEqual(slip1.orderNumber, testOrder.orderNumber);
+      assert.ok(slip1.subOrderNumber);
+      assert.ok(slip1.routingCode);
+      assert.strictEqual(slip1.isCOD, true);
+      assert.strictEqual(slip1.amountToCollect, 9998);
+
+      // Verify dynamic QR Code SVG and data URI
+      assert.ok(slip1.qrCodeSvg.includes('<svg'), 'QR code must be a valid SVG string');
+      assert.ok(slip1.qrCodeSvg.includes('<rect'), 'QR code SVG must contain module rectangles');
+      assert.ok(slip1.qrCodeDataUri.startsWith('data:image/svg+xml'), 'QR code must include a valid data URI');
+      assert.ok(slip1.trackingUrl.includes(testOrder.orderNumber), 'Tracking URL must include orderNumber');
+
+      // Verify itemized HSN & Tax breakdown
+      assert.strictEqual(slip1.items.length, 1);
+      const item1 = slip1.items[0];
+      assert.strictEqual(item1.hsnCode, '8518');
+      assert.strictEqual(item1.quantity, 2);
+      assert.strictEqual(item1.unitPrice, 4999);
+      assert.strictEqual(item1.totalPrice, 9998);
+      assert.strictEqual(item1.gstRate, 18);
+      assert.strictEqual(item1.cgstRate, 9);
+      assert.strictEqual(item1.sgstRate, 9);
+      assert.ok(item1.taxableValue > 0);
+      assert.strictEqual(Math.round(item1.taxableValue + item1.cgstAmount + item1.sgstAmount), 9998);
+
+      // Verify summary numbers
+      assert.ok(slip1.summary.totalTaxable > 0);
+      assert.ok(slip1.summary.totalCgst > 0);
+      assert.ok(slip1.summary.totalSgst > 0);
+      assert.strictEqual(slip1.summary.grandTotal, 9998);
+
+      // 4. Test Printable HTML Format via query param ?format=html
+      const resHtml = await fetch(`${baseUrl}/orders/${testOrder._id}/split-packing-slips?format=html`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resHtml.status, 200);
+      const htmlText = await resHtml.text();
+      assert.ok(htmlText.includes('<!DOCTYPE html>'), 'Must return valid HTML document');
+      assert.ok(htmlText.includes('Smart Multi-Vendor Split Packing Slip'), 'HTML must contain split packing slip title');
+      assert.ok(htmlText.includes('<svg'), 'HTML must contain embedded QR code SVG');
+      assert.ok(htmlText.includes('8518'), 'HTML must display electronics HSN code');
+      assert.ok(htmlText.includes('6109'), 'HTML must display clothing HSN code');
+
+      // 5. Super Admin inspects all split slips via /admin/orders/:id/split-packing-slips
+      const resAdmin = await fetch(`${baseUrl}/admin/orders/${testOrder._id}/split-packing-slips`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resAdmin.status, 200);
+      const dataAdmin = await resAdmin.json();
+      assert.strictEqual(dataAdmin.count, 2);
+
+      // 6. Super Admin filters by vendorId via ?vendorId=...
+      const resFiltered = await fetch(`${baseUrl}/admin/orders/${testOrder._id}/split-packing-slips?vendorId=${vendor1._id}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resFiltered.status, 200);
+      const dataFiltered = await resFiltered.json();
+      assert.strictEqual(dataFiltered.count, 1);
+      assert.strictEqual(dataFiltered.data[0].seller.id.toString(), vendor1._id.toString());
+
+      // 7. Vendor accesses their own split packing slip via /vendor/orders/:id/split-packing-slip
+      const resVendor = await fetch(`${baseUrl}/vendor/orders/${testOrder._id}/split-packing-slip`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      // Vendor token is for Apex Tech Hub (vendor1)
+      assert.strictEqual(resVendor.status, 200);
+      const dataVendor = await resVendor.json();
+      assert.strictEqual(dataVendor.success, true);
+      assert.strictEqual(dataVendor.count, 1, 'Vendor should only receive their own split packing slip');
+
+      // Clean up test records
+      await SubOrder.deleteMany({ parentOrder: testOrder._id });
+      await Order.deleteOne({ _id: testOrder._id });
+    });
+
     // 9b. Edge Case & Security Validations
     await test('POST /delivery/tasks/:id/verify-otp rejects re-delivery on already DELIVERED task with 400', async () => {
       const targetSubOrder = await SubOrder.findById(riderTask.subOrder);

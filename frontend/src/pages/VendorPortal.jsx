@@ -15,11 +15,13 @@ import {
   Image as ImageIcon,
   AlertTriangle,
   RotateCw,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import MultiVariantProductModal from '../components/MultiVariantProductModal';
 import ProductGalleryUploader from '../components/ProductGalleryUploader';
+import BulkProductExcelModal from '../components/BulkProductExcelModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -123,6 +125,7 @@ export const VendorPortal = () => {
   const [selectedProductForMedia, setSelectedProductForMedia] = useState(null);
   const [mediaDraft, setMediaDraft] = useState({ thumbnail: '', gallery: [] });
   const [stockFilter, setStockFilter] = useState('all'); // Point #54: all | in_stock | low_stock | out_of_stock
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false); // Point #55: Bulk Excel / CSV Suite
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
@@ -632,6 +635,13 @@ export const VendorPortal = () => {
               <span>+ Multi-Variant Creator (Point #51)</span>
             </button>
             <button
+              onClick={() => setIsBulkModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition-all hover:scale-105"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+              <span>Bulk Excel / CSV (Point #55)</span>
+            </button>
+            <button
               onClick={() => setIsAddProductDrawerOpen(true)}
               className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
             >
@@ -1109,6 +1119,47 @@ export const VendorPortal = () => {
           </div>
         </div>
       )}
+
+      {/* Point #55: Bulk Product Excel / CSV Upload & Export Modal */}
+      <BulkProductExcelModal
+        isOpen={isBulkModalOpen}
+        onClose={() => setIsBulkModalOpen(false)}
+        currentProducts={products}
+        vendorToken={localStorage.getItem('token')}
+        onProductsImported={(importedList) => {
+          setProducts(prev => {
+            const updated = [...prev];
+            importedList.forEach(item => {
+              const idx = updated.findIndex(p => p.sku === item.sku || p.id === item._id || p.id === item.id);
+              const formatted = {
+                id: item._id || item.id || 'p-bulk-' + Date.now(),
+                title: item.title,
+                sku: item.sku,
+                category: item.category?.name || item.category || 'Electronics',
+                brand: item.brand || 'Apex Tech',
+                mrp: item.mrp || item.sellingPrice,
+                sellingPrice: item.sellingPrice,
+                stock: item.stock,
+                lowStockThreshold: item.lowStockThreshold || 5,
+                image: item.thumbnail || (item.images && item.images[0]) || item.image || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
+                thumbnail: item.thumbnail || (item.images && item.images[0]) || item.image || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
+                gallery: item.gallery || [],
+                description: item.description,
+              };
+              if (idx >= 0) {
+                updated[idx] = { ...updated[idx], ...formatted };
+              } else {
+                updated.unshift(formatted);
+              }
+            });
+            return updated;
+          });
+          setNotification({
+            type: 'success',
+            message: `Successfully synchronized ${importedList.length} products to store catalog.`,
+          });
+        }}
+      />
     </div>
   );
 };

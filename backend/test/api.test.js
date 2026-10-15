@@ -3688,6 +3688,103 @@ const runTests = async () => {
       assert.strictEqual(dataThreshold.data.isLowStock, true, 'Stock 43 <= new threshold 50 must trigger isLowStock');
     });
 
+    await test('Point 55: Bulk Product Excel / CSV Upload & Export (Downloadable catalog CSV, bulk CSV parsing, validation & upsert)', async () => {
+      // 1. Test CSV Export (GET /vendor/products/export-csv)
+      const resExportJson = await fetch(`${baseUrl}/vendor/products/export-csv`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resExportJson.status, 200);
+      const dataExportJson = await resExportJson.json();
+      assert.strictEqual(dataExportJson.success, true);
+      assert.ok(dataExportJson.csv, 'Must return CSV string');
+      assert.ok(dataExportJson.csv.includes('Title,SKU,Category,Brand,MRP,SellingPrice'));
+      assert.ok(typeof dataExportJson.count === 'number');
+
+      // Test direct CSV attachment download format (?format=csv)
+      const resExportCsv = await fetch(`${baseUrl}/vendor/products/export-csv?format=csv`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resExportCsv.status, 200);
+      assert.ok(resExportCsv.headers.get('content-type').includes('text/csv'));
+      assert.ok(resExportCsv.headers.get('content-disposition').includes('attachment; filename="auramarket_catalog_'));
+
+      // 2. Test Bulk CSV Upload with new products and existing SKU update
+      const resCat = await fetch(`${baseUrl}/products/categories`);
+      const dataCat = await resCat.json();
+      const catId = dataCat.data[0]._id;
+
+      const testSkuExisting = 'BULK-UPDATE-SKU-' + Date.now();
+      const existingProduct = await Product.create({
+        vendor: headphonesProduct.vendor._id,
+        title: 'Initial Standalone Product Before Bulk',
+        slug: 'initial-standalone-product-' + Date.now(),
+        description: 'Initial product description',
+        category: catId,
+        brand: 'Apex Tech',
+        mrp: 15000,
+        sellingPrice: 10000,
+        stock: 20,
+        sku: testSkuExisting,
+        hasVariants: false,
+        variants: [],
+      });
+
+      const testSkuNew1 = 'BULK-TEST-ITEM-1-' + Date.now();
+      const testSkuNew2 = 'BULK-TEST-ITEM-2-' + Date.now();
+
+      const csvDataToUpload = [
+        'Title,SKU,Category,Brand,MRP,SellingPrice,Stock,LowStockThreshold,Description,Image',
+        `"Bulk Imported Ergonomic Keyboard",${testSkuNew1},"Electronics","Apex Peripherals",4999,2999,50,8,"Premium wireless ergonomic keyboard with wrist rest","https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=500"`,
+        `"Bulk Imported Ultra-Wide Monitor",${testSkuNew2},"Electronics","Apex Displays",35000,24999,15,3,"34-inch curved ultra-wide productivity monitor","https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=500"`,
+        `"Initial Standalone Product (Updated via Bulk)",${testSkuExisting},"Electronics","Apex Audio",18000,12500,85,10,"Updated product description via bulk CSV upload","https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=500"`,
+        `"",INVALID-SKU-NO-TITLE,"Electronics","Apex",1000,500,10,2,"Invalid row with no title",""`,
+      ].join('\r\n');
+
+      const resUpload = await fetch(`${baseUrl}/vendor/products/bulk-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({ csvData: csvDataToUpload }),
+      });
+
+      assert.strictEqual(resUpload.status, 200);
+      const dataUpload = await resUpload.json();
+      assert.strictEqual(dataUpload.success, true);
+      assert.strictEqual(dataUpload.insertedCount, 2, 'Must insert 2 new products');
+      assert.strictEqual(dataUpload.updatedCount, 1, 'Must update 1 existing product SKU');
+      assert.strictEqual(dataUpload.errorCount, 1, 'Must record 1 error for missing title');
+      assert.strictEqual(dataUpload.errors[0].error, 'Product title is required');
+
+      // Verify new products were saved to database
+      const savedProd1 = await Product.findOne({ sku: testSkuNew1 });
+      assert.ok(savedProd1, 'Product 1 must exist in DB');
+      assert.strictEqual(savedProd1.title, 'Bulk Imported Ergonomic Keyboard');
+      assert.strictEqual(savedProd1.mrp, 4999);
+      assert.strictEqual(savedProd1.sellingPrice, 2999);
+      assert.strictEqual(savedProd1.stock, 50);
+      assert.strictEqual(savedProd1.discountPercentage, 40);
+
+      // Verify existing product was updated
+      const updatedProd = await Product.findOne({ sku: testSkuExisting });
+      assert.strictEqual(updatedProd.stock, 85, 'Stock must update to 85');
+      assert.strictEqual(updatedProd.sellingPrice, 12500);
+
+      // 3. Test Rejection when neither csvData nor products provided
+      const resBad = await fetch(`${baseUrl}/vendor/products/bulk-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(resBad.status, 400);
+      const dataBad = await resBad.json();
+      assert.strictEqual(dataBad.success, false);
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

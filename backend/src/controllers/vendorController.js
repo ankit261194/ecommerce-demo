@@ -3,6 +3,7 @@ const Product = require('../models/Product');
 const SubOrder = require('../models/SubOrder');
 const Ledger = require('../models/Ledger');
 const DeliveryTask = require('../models/DeliveryTask');
+const Category = require('../models/Category');
 
 // @desc    Get Vendor Dashboard metrics
 // @route   GET /api/vendor/dashboard
@@ -456,3 +457,283 @@ exports.updateProductStock = async (req, res, next) => {
     next(error);
   }
 };
+
+// Helper for parsing CSV lines robustly
+function parseCSVLine(line) {
+  const values = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"' || char === "'") {
+      if (inQuotes && line[i + 1] === char) {
+        current += char;
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      values.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  values.push(current);
+  return values;
+}
+
+// Helper for parsing raw CSV string into row objects
+function parseCSV(csvString) {
+  if (!csvString || typeof csvString !== 'string') return [];
+  const lines = csvString.split(/\r?\n/).filter(line => line.trim().length > 0);
+  if (lines.length < 2) return [];
+
+  const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase().replace(/[^a-z0-9]/g, ''));
+  const rows = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const values = parseCSVLine(lines[i]);
+    if (values.length === 0 || (values.length === 1 && !values[0])) continue;
+    const row = {};
+    headers.forEach((h, idx) => {
+      row[h] = values[idx] !== undefined ? values[idx].trim() : '';
+    });
+    rows.push(row);
+  }
+  return rows;
+}
+
+// @desc    Bulk Upload / Upsert Products via CSV or JSON (Point #55)
+// @route   POST /api/vendor/products/bulk-upload
+exports.bulkUploadProducts = async (req, res, next) => {
+  try {
+    const vendor = await VendorProfile.findOne({ user: req.user._id });
+    if (!vendor || vendor.status !== 'approved') {
+      return res.status(403).json({
+        success: false,
+        message: 'Your store must be approved by SuperAdmin to publish products.',
+      });
+    }
+
+    let items = [];
+    if (req.body.csvData && typeof req.body.csvData === 'string') {
+      items = parseCSV(req.body.csvData);
+    } else if (Array.isArray(req.body.products)) {
+      items = req.body.products;
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide either csvData (string) or products (array).',
+      });
+    }
+
+    if (items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No product rows found to import.',
+      });
+    }
+
+    // Default category fallback
+    let defaultCategory = await Category.findOne({});
+    if (!defaultCategory) {
+      defaultCategory = await Category.create({
+        name: 'General',
+        slug: 'general',
+        description: 'General category for bulk imports',
+      });
+    }
+
+    const defaultImg = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500';
+    let insertedCount = 0;
+    let updatedCount = 0;
+    const errors = [];
+    const processedProducts = [];
+
+    for (let idx = 0; idx < items.length; idx++) {
+      const raw = items[idx];
+      const rowNum = idx + 2;
+
+      const title = (raw.title || raw.productname || raw.name || '').trim();
+      if (!title) {
+        errors.push({ row: rowNum, error: 'Product title is required' });
+        continue;
+      }
+
+      let sku = (raw.sku || '').trim();
+      if (!sku) {
+        sku = `SKU-BULK-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
+      }
+
+      const sellPrice = Math.max(0, Number(raw.sellingprice || raw.price || raw.sellprice) || 0);
+      let mrpVal = Number(raw.mrp || raw.originalprice) || Math.round(sellPrice * 1.25);
+      if (mrpVal < sellPrice) {
+        mrpVal = sellPrice;
+      }
+      const savings = Math.max(0, mrpVal - sellPrice);
+      const discPct = mrpVal > 0 ? Math.round((savings / mrpVal) * 100) : 0;
+
+      const stockVal = Math.max(0, parseInt(raw.stock || raw.quantity || raw.qty, 10) || 0);
+      const lowStockThresh = Math.max(1, parseInt(raw.lowstockthreshold || raw.threshold || raw.lowstock, 10) || 5);
+      const description = (raw.description || raw.desc || `${title} - Quality product from ${vendor.storeName}`).trim();
+      const image = (raw.image || raw.imageurl || raw.thumbnail || defaultImg).trim();
+      const brand = (raw.brand || vendor.storeName).trim();
+
+      // Resolve category
+      let categoryId = defaultCategory._id;
+      const catField = (raw.category || raw.cat || '').trim();
+      if (catField) {
+        if (/^[0-9a-fA-F]{24}$/.test(catField)) {
+          categoryId = catField;
+        } else {
+          const foundCat = await Category.findOne({ name: new RegExp('^' + catField + '$', 'i') });
+          if (foundCat) {
+            categoryId = foundCat._id;
+          }
+        }
+      }
+
+      // Check for existing SKU for this vendor
+      let existingProduct = await Product.findOne({ vendor: vendor._id, sku: sku });
+      if (existingProduct) {
+        existingProduct.title = title;
+        existingProduct.description = description;
+        existingProduct.mrp = mrpVal;
+        existingProduct.sellingPrice = sellPrice;
+        existingProduct.discountPercentage = discPct;
+        existingProduct.savingsAmount = savings;
+        existingProduct.stock = stockVal;
+        existingProduct.lowStockThreshold = lowStockThresh;
+        existingProduct.category = categoryId;
+        existingProduct.brand = brand;
+        if (image) {
+          existingProduct.thumbnail = image;
+          if (!existingProduct.images.includes(image)) {
+            existingProduct.images = [image, ...existingProduct.images.slice(0, 4)];
+          }
+        }
+        await existingProduct.save();
+        updatedCount++;
+        processedProducts.push(existingProduct);
+      } else {
+        const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString().slice(-4) + '-' + Math.floor(Math.random() * 1000);
+        const newProd = await Product.create({
+          vendor: vendor._id,
+          title,
+          slug,
+          description,
+          category: categoryId,
+          brand,
+          thumbnail: image,
+          gallery: [],
+          images: [image],
+          mrp: mrpVal,
+          sellingPrice: sellPrice,
+          discountPercentage: discPct,
+          savingsAmount: savings,
+          stock: stockVal,
+          lowStockThreshold: lowStockThresh,
+          sku,
+          hasVariants: false,
+          variants: [],
+          tags: [brand.toLowerCase(), 'bulk-upload'],
+        });
+        insertedCount++;
+        processedProducts.push(newProd);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Bulk import completed: ${insertedCount} added, ${updatedCount} updated, ${errors.length} errors`,
+      totalProcessed: items.length,
+      insertedCount,
+      updatedCount,
+      errorCount: errors.length,
+      errors,
+      data: processedProducts,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Export Vendor Catalog as CSV (Point #55)
+// @route   GET /api/vendor/products/export-csv
+exports.exportProductsCSV = async (req, res, next) => {
+  try {
+    const vendor = await VendorProfile.findOne({ user: req.user._id });
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor profile not found' });
+    }
+
+    const products = await Product.find({ vendor: vendor._id })
+      .populate('category', 'name')
+      .sort({ createdAt: -1 });
+
+    const headers = [
+      'Title',
+      'SKU',
+      'Category',
+      'Brand',
+      'MRP',
+      'SellingPrice',
+      'DiscountPercent',
+      'SavingsAmount',
+      'Stock',
+      'LowStockThreshold',
+      'Status',
+      'Image',
+      'Description',
+    ];
+
+    const escapeCSV = (str) => {
+      if (str === null || str === undefined) return '""';
+      const s = String(str).replace(/"/g, '""');
+      return `"${s}"`;
+    };
+
+    const rows = products.map((p) => {
+      const isOut = p.stock <= 0;
+      const isLow = p.stock > 0 && p.stock <= (p.lowStockThreshold || 5);
+      const status = isOut ? 'OUT_OF_STOCK' : isLow ? 'LOW_STOCK' : 'IN_STOCK';
+      const catName = p.category && p.category.name ? p.category.name : 'General';
+
+      return [
+        escapeCSV(p.title),
+        escapeCSV(p.sku),
+        escapeCSV(catName),
+        escapeCSV(p.brand || vendor.storeName),
+        p.mrp || 0,
+        p.sellingPrice || 0,
+        p.discountPercentage || 0,
+        p.savingsAmount || 0,
+        p.stock || 0,
+        p.lowStockThreshold || 5,
+        escapeCSV(status),
+        escapeCSV(p.thumbnail || (p.images && p.images[0]) || ''),
+        escapeCSV(p.description || ''),
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\r\n');
+    const filename = `auramarket_catalog_${vendor.storeSlug || 'export'}_${new Date().toISOString().slice(0, 10)}.csv`;
+
+    if (req.query.format === 'csv' || req.headers.accept?.includes('text/csv')) {
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.send(csvContent);
+    }
+
+    res.status(200).json({
+      success: true,
+      filename,
+      count: products.length,
+      csv: csvContent,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

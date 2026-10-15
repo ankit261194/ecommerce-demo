@@ -7,6 +7,8 @@ const {
   updateProduct,
   updateProductMedia,
   updateProductStock,
+  bulkUploadProducts,
+  exportProductsCSV,
   deleteProduct,
   getVendorOrders,
   updateSubOrderStatus,
@@ -21,6 +23,8 @@ router.use(authorize('vendor'));
 router.get('/dashboard', getVendorDashboard);
 router.get('/products', getVendorProducts);
 router.post('/products', createProduct);
+router.post('/products/bulk-upload', bulkUploadProducts);
+router.get('/products/export-csv', exportProductsCSV);
 router.put('/products/:id', updateProduct);
 router.put('/products/:id/media', updateProductMedia);
 router.patch('/products/:id/stock', updateProductStock);

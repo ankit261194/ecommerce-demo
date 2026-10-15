@@ -29,6 +29,7 @@ import ProductGalleryUploader from '../components/ProductGalleryUploader';
 import BulkProductExcelModal from '../components/BulkProductExcelModal';
 import ShippingLabelPrinterModal from '../components/ShippingLabelPrinterModal';
 import SmartSplitPackingSlipModal from '../components/SmartSplitPackingSlipModal';
+import ThermalReceiptPrinterModal from '../components/ThermalReceiptPrinterModal';
 import VendorStoreProfileModal from '../components/VendorStoreProfileModal';
 import VendorPublicStoreModal from '../components/VendorPublicStoreModal';
 import VacationModeModal from '../components/VacationModeModal';
@@ -153,6 +154,8 @@ export const VendorPortal = () => {
   const [selectedOrderForLabel, setSelectedOrderForLabel] = useState(null);
   const [isSplitSlipModalOpen, setIsSplitSlipModalOpen] = useState(false); // Point #73: Smart Multi-Vendor Split Packing Slip with QR Codes
   const [selectedOrderForSplitSlip, setSelectedOrderForSplitSlip] = useState(null);
+  const [isThermalModalOpen, setIsThermalModalOpen] = useState(false); // Point #75: Thermal Receipt Printer Modal
+  const [selectedOrderForThermal, setSelectedOrderForThermal] = useState(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // Point #58: Store Profile Customization
   const [isPublicStorePreviewOpen, setIsPublicStorePreviewOpen] = useState(false); // Point #58: Public Storefront Preview
   const [isVacationModalOpen, setIsVacationModalOpen] = useState(false); // Point #59: Vacation Mode Toggle
@@ -891,6 +894,19 @@ export const VendorPortal = () => {
                         <span>Split Slip (QR)</span>
                       </button>
 
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedOrderForThermal(order.rawId || order.id);
+                          setIsThermalModalOpen(true);
+                        }}
+                        className="px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs border border-amber-300"
+                        title="In-Browser Direct Thermal Receipt Printer (ESC/POS 80mm & 58mm) (Point #75)"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Thermal POS</span>
+                      </button>
+
                       {isPending && (
                         <button
                           type="button"
@@ -1504,6 +1520,17 @@ export const VendorPortal = () => {
           setSelectedOrderForSplitSlip(null);
         }}
         orderId={selectedOrderForSplitSlip}
+        role="vendor"
+      />
+
+      {/* Point 75: In-Browser Direct Thermal Receipt Printer (ESC/POS) Modal */}
+      <ThermalReceiptPrinterModal
+        isOpen={isThermalModalOpen}
+        onClose={() => {
+          setIsThermalModalOpen(false);
+          setSelectedOrderForThermal(null);
+        }}
+        orderId={selectedOrderForThermal}
         role="vendor"
       />
 

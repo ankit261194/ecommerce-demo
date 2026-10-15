@@ -6116,6 +6116,124 @@ const runTests = async () => {
       await Order.deleteMany({ _id: { $in: [highRiskOrder._id, overrideOrder._id] } });
     });
 
+    // =========================================================================
+    // Point 75: In-Browser Direct Thermal Receipt Printer (ESC/POS 80mm & 58mm)
+    // =========================================================================
+    await test('Point 75: In-Browser Direct Thermal Receipt Printer (ESC/POS 80mm & 58mm emulation, raw text/canvas, zero-clip print)', async () => {
+      // 1. Unauthenticated request rejected with 401
+      const resUnauth = await fetch(`${baseUrl}/orders/ORD-NONEXISTENT/thermal-receipt`);
+      assert.strictEqual(resUnauth.status, 401);
+
+      // 2. Create multi-item test order
+      const customer = await User.findOne({ email: 'customer@auramarket.com' });
+      const vendor = await VendorProfile.findOne();
+
+      const testOrder = await Order.create({
+        orderNumber: `THERM-ORD-${Date.now()}`,
+        customer: customer._id,
+        items: [
+          {
+            product: new mongoose.Types.ObjectId(),
+            vendor: vendor._id,
+            title: 'Wireless Gaming Mouse',
+            variantSku: 'MS-WRL-01',
+            variantName: 'RGB Edition',
+            quantity: 2,
+            price: 1299,
+            totalPrice: 2598,
+          },
+          {
+            product: new mongoose.Types.ObjectId(),
+            vendor: vendor._id,
+            title: 'Extended Gaming Desk Mat',
+            variantSku: 'MAT-EXT-02',
+            quantity: 1,
+            price: 699,
+            totalPrice: 699,
+          },
+        ],
+        subtotal: 3297,
+        discountAmount: 200,
+        shippingFee: 99,
+        taxAmount: 288,
+        totalAmount: 3484,
+        paymentMethod: 'UPI',
+        paymentStatus: 'PAID',
+        status: 'PLACED',
+        deliveryOtp: '7412',
+        shippingAddress: {
+          recipientName: 'Aman Sharma',
+          phone: '9876543210',
+          street: 'Flat 402, Green Valley Apartments',
+          city: 'Noida',
+          state: 'Uttar Pradesh',
+          pincode: '201301',
+        },
+      });
+
+      // 3. Customer requests 80mm receipt (default JSON format)
+      const res80 = await fetch(`${baseUrl}/orders/${testOrder._id}/thermal-receipt?width=80mm`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res80.status, 200);
+      const data80 = await res80.json();
+      assert.strictEqual(data80.success, true);
+      assert.strictEqual(data80.data.paperWidth, '80mm');
+      assert.strictEqual(data80.data.columns, 48, '80mm should format to standard 48 columns');
+      assert.ok(data80.data.rawText.includes('Wireless Gaming Mouse'));
+      assert.ok(data80.data.rawText.includes('7412'), 'Must include delivery OTP');
+      assert.ok(data80.data.escPosBase64, 'Must return base64 binary ESC/POS stream');
+      assert.ok(data80.data.html.includes('80mm auto'), 'HTML must set @page size 80mm auto');
+
+      // 4. Customer requests 58mm receipt
+      const res58 = await fetch(`${baseUrl}/orders/${testOrder._id}/thermal-receipt?width=58mm`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res58.status, 200);
+      const data58 = await res58.json();
+      assert.strictEqual(data58.success, true);
+      assert.strictEqual(data58.data.paperWidth, '58mm');
+      assert.strictEqual(data58.data.columns, 32, '58mm should format to compact 32 columns');
+      assert.ok(data58.data.html.includes('58mm auto'));
+
+      // 5. Test raw text format directly (?format=raw)
+      const resRaw = await fetch(`${baseUrl}/orders/${testOrder._id}/thermal-receipt?format=raw`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resRaw.status, 200);
+      assert.ok(resRaw.headers.get('content-type').includes('text/plain'));
+      const textBody = await resRaw.text();
+      assert.ok(textBody.includes('TAX INVOICE & DELIVERY RECEIPT'));
+
+      // 6. Test direct HTML format (?format=html)
+      const resHtml = await fetch(`${baseUrl}/orders/${testOrder._id}/thermal-receipt?format=html&width=58mm`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resHtml.status, 200);
+      assert.ok(resHtml.headers.get('content-type').includes('text/html'));
+      const htmlBody = await resHtml.text();
+      assert.ok(htmlBody.includes('size: 58mm auto'));
+
+      // 7. Super Admin fetches thermal receipt via admin route
+      const resAdmin = await fetch(`${baseUrl}/admin/orders/${testOrder._id}/thermal-receipt`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resAdmin.status, 200);
+      const dataAdmin = await resAdmin.json();
+      assert.strictEqual(dataAdmin.success, true);
+
+      // 8. Vendor fetches thermal receipt via vendor route
+      const resVendor = await fetch(`${baseUrl}/vendor/orders/${testOrder._id}/thermal-receipt`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resVendor.status, 200);
+      const dataVendor = await resVendor.json();
+      assert.strictEqual(dataVendor.success, true);
+
+      // Clean up test order
+      await Order.deleteOne({ _id: testOrder._id });
+    });
+
     // 9b. Edge Case & Security Validations
     await test('POST /delivery/tasks/:id/verify-otp rejects re-delivery on already DELIVERED task with 400', async () => {
       const targetSubOrder = await SubOrder.findById(riderTask.subOrder);

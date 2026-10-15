@@ -120,6 +120,11 @@ const orderSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    // Point #66 & Point #75: Secure Delivery Handover OTP
+    deliveryOtp: {
+      type: String,
+      default: '4821',
+    },
     // Point #28: 1-Click Self-Cancel Order Reason & Audit
     cancellationReason: {
       type: String,

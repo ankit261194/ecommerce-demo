@@ -361,6 +361,7 @@ exports.createOrder = async (req, res, next) => {
       taxDetails,
       shippingAddress,
       deliveryInstructions: deliveryInstructions || '',
+      deliveryOtp: req.body.deliveryOtp || '4821',
       paymentMethod: activePaymentMethod,
       paymentStatus: resolvedPaymentStatus,
       paymentId: resolvedPaymentId,
@@ -1618,6 +1619,80 @@ exports.overrideRtoGuard = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Get In-Browser Direct Thermal Receipt (ESC/POS 80mm & 58mm emulation)
+// @route   GET /api/orders/:id/thermal-receipt
+// @access  Private (Customer, Vendor, Admin)
+exports.getThermalReceipt = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { width = '80mm', format = 'json', vendorId } = req.query;
+
+    const paperWidth = width === '58mm' ? '58mm' : '80mm';
+
+    const isMongoId = mongoose.Types.ObjectId.isValid(id);
+    const query = isMongoId ? { _id: id } : { orderNumber: id };
+
+    const order = await Order.findOne(query)
+      .populate('customer', 'name email phone')
+      .populate('items.product', 'title sku images hsnCode')
+      .populate('items.vendor', 'storeName contactEmail phone');
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    // Authorization check
+    let targetVendor = null;
+    if (req.user?.role === 'customer' && order.customer?._id?.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Not authorized to access receipt for this order' });
+    }
+
+    if (req.user?.role === 'vendor') {
+      const vendorProfile = await VendorProfile.findOne({ user: req.user._id });
+      if (!vendorProfile) {
+        return res.status(403).json({ success: false, message: 'Vendor profile not found' });
+      }
+      targetVendor = vendorProfile;
+    } else if (vendorId) {
+      targetVendor = await VendorProfile.findById(vendorId);
+    }
+
+    const { generateThermalReceipt } = require('../utils/escPosGenerator');
+    const UIConfig = require('../models/UIConfig');
+    let uiConfig = null;
+    try {
+      uiConfig = await UIConfig.findOne();
+    } catch (_) {}
+
+    const storeName = uiConfig?.platformName || 'AuraMarket Store';
+
+    const receipt = generateThermalReceipt({
+      order,
+      vendorProfile: targetVendor,
+      paperWidth,
+      storeName,
+    });
+
+    if (format === 'html') {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(receipt.html);
+    }
+
+    if (format === 'raw') {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.send(receipt.rawText);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: receipt,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 
 

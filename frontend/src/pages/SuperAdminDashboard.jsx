@@ -80,6 +80,7 @@ import TaxShippingManager from '../components/TaxShippingManager';
 import StaffRoleManager from '../components/StaffRoleManager';
 import SystemAuditBackupManager from '../components/SystemAuditBackupManager';
 import RtoGuardManager from '../components/RtoGuardManager';
+import ThermalReceiptPrinterModal from '../components/ThermalReceiptPrinterModal';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -526,6 +527,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
   const [selectedOrderForModal, setSelectedOrderForModal] = useState(null);
   const [selectedInvoiceOrderId, setSelectedInvoiceOrderId] = useState(null);
   const [selectedSplitPackingSlipOrderId, setSelectedSplitPackingSlipOrderId] = useState(null);
+  const [selectedThermalOrderId, setSelectedThermalOrderId] = useState(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [statusChangeTarget, setStatusChangeTarget] = useState(null);
   const [statusChangeNote, setStatusChangeNote] = useState('');
@@ -2173,6 +2175,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
                                   title="Smart Multi-Vendor Split Packing Slip with QR Codes (Point #73)"
                                 >
                                   <QrCode className="w-4 h-4 text-indigo-600" />
+                                </button>
+                                <button
+                                  onClick={() => setSelectedThermalOrderId(ord._id)}
+                                  className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 transition-colors"
+                                  title="In-Browser Direct Thermal Receipt Printer (Point #75)"
+                                >
+                                  <Printer className="w-4 h-4 text-amber-600" />
                                 </button>
                               </div>
                             </td>
@@ -4230,6 +4239,14 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
               </button>
 
               <button
+                onClick={() => setSelectedThermalOrderId(selectedOrderForModal._id)}
+                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-400 font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all border border-amber-500/30"
+              >
+                <Printer className="w-4 h-4 text-amber-400" />
+                <span>In-Browser Thermal POS Receipt (80mm & 58mm)</span>
+              </button>
+
+              <button
                 onClick={() => handleOpenCommissionSplit(selectedOrderForModal)}
                 className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
               >
@@ -4500,6 +4517,16 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           isOpen={!!selectedSplitPackingSlipOrderId}
           onClose={() => setSelectedSplitPackingSlipOrderId(null)}
           orderId={selectedSplitPackingSlipOrderId}
+          role="admin"
+        />
+      )}
+
+      {/* Point #75: In-Browser Direct Thermal Receipt Printer (ESC/POS) Modal */}
+      {selectedThermalOrderId && (
+        <ThermalReceiptPrinterModal
+          isOpen={!!selectedThermalOrderId}
+          onClose={() => setSelectedThermalOrderId(null)}
+          orderId={selectedThermalOrderId}
           role="admin"
         />
       )}

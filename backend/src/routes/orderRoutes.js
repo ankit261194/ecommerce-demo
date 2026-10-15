@@ -11,6 +11,7 @@ const {
   getSplitPackingSlips,
   verifyRtoRisk,
   resendRtoOtp,
+  getThermalReceipt,
 } = require('../controllers/orderController');
 const { protect } = require('../middlewares/auth');
 
@@ -18,6 +19,7 @@ const { protect } = require('../middlewares/auth');
 router.get('/track/:identifier', trackOrder);
 router.get('/:id/invoice', getTaxInvoice);
 router.get('/:id/split-packing-slips', protect, getSplitPackingSlips);
+router.get('/:id/thermal-receipt', protect, getThermalReceipt);
 
 router.use(protect);
 

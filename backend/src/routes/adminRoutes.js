@@ -44,6 +44,7 @@ const {
   getSplitPackingSlips,
   getRtoGuardOverview,
   overrideRtoGuard,
+  getThermalReceipt,
 } = require('../controllers/orderController');
 const { protect, authorize, requirePermission } = require('../middlewares/auth');
 
@@ -83,6 +84,7 @@ router.patch('/orders/:id/status', updateOrderStatus);
 router.get('/orders/:id/commission-split', getOrderCommissionSplit);
 router.get('/orders/:id/invoice', getTaxInvoice);
 router.get('/orders/:id/split-packing-slips', getSplitPackingSlips);
+router.get('/orders/:id/thermal-receipt', getThermalReceipt);
 router.get('/rto-guard/overview', getRtoGuardOverview);
 router.post('/rto-guard/override', overrideRtoGuard);
 router.get('/ledger', getPlatformLedger);

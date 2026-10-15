@@ -35,6 +35,7 @@ export const ProductDetailModal = ({
   isWishlisted,
   onToggleWishlist,
   onSelectProduct,
+  onOpenVendorStore,
 }) => {
   if (!isOpen || !product) return null;
 
@@ -786,6 +787,18 @@ export const ProductDetailModal = ({
                       </p>
                     </div>
                   </div>
+
+                  {onOpenVendorStore && product.vendor && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenVendorStore(product.vendor)}
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-2 transition-all shadow-sm w-fit"
+                    >
+                      <Store className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Visit {product.vendor?.storeName || 'Merchant'} Storefront</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                    </button>
+                  )}
 
                   <p className="text-slate-600 font-medium">
                     {product.vendor?.description ||

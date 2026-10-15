@@ -18,6 +18,7 @@ import {
   FileSpreadsheet,
   ShieldCheck,
   Printer,
+  Store,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -25,12 +26,18 @@ import MultiVariantProductModal from '../components/MultiVariantProductModal';
 import ProductGalleryUploader from '../components/ProductGalleryUploader';
 import BulkProductExcelModal from '../components/BulkProductExcelModal';
 import ShippingLabelPrinterModal from '../components/ShippingLabelPrinterModal';
+import VendorStoreProfileModal from '../components/VendorStoreProfileModal';
+import VendorPublicStoreModal from '../components/VendorPublicStoreModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
   // Vendor store state
   const [vendorData, setVendorData] = useState({
     storeName: 'Apex Tech Hub',
+    storeSlug: 'apex-tech-hub',
+    storeLogo: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200',
+    storeBanner: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1200',
+    bio: 'Premier supplier of audiophile gear, smart home electronics, and next-gen wearable gadgets since 2020.',
     walletBalance: 24500,
     totalSales: 185000,
     commissionRate: 8,
@@ -132,6 +139,8 @@ export const VendorPortal = () => {
   const [orderFilter, setOrderFilter] = useState('all'); // Point #56: all | pending | packaging | ready_for_pickup | dispatched | delivered
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false); // Point #57: Thermal & A4 Shipping Label Printer
   const [selectedOrderForLabel, setSelectedOrderForLabel] = useState(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // Point #58: Store Profile Customization
+  const [isPublicStorePreviewOpen, setIsPublicStorePreviewOpen] = useState(false); // Point #58: Public Storefront Preview
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
@@ -456,7 +465,20 @@ export const VendorPortal = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setIsProfileModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all"
+            title="Customize Shop Logo, Cover Banner, Bio, Slug & Social Links"
+          >
+            <Store className="w-4 h-4 text-amber-400" />
+            <span>Store Branding & Profile</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
+              #58
+            </span>
+          </button>
+
           <button
             onClick={() => setIsPayoutModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs font-bold shadow-sm transition-all"
@@ -1381,6 +1403,47 @@ export const VendorPortal = () => {
         onClose={() => setIsLabelModalOpen(false)}
         order={selectedOrderForLabel}
         vendorData={vendorData}
+      />
+
+      {/* Point 58: Vendor Store Profile Customization Modal */}
+      <VendorStoreProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        initialData={vendorData}
+        onProfileUpdated={(updated) => {
+          setVendorData(prev => ({
+            ...prev,
+            storeName: updated.storeName || prev.storeName,
+            storeSlug: updated.storeSlug || prev.storeSlug,
+            storeLogo: updated.storeLogo || prev.storeLogo,
+            storeBanner: updated.storeBanner || prev.storeBanner,
+            bio: updated.bio || prev.bio,
+          }));
+          setNotification(`Store profile '${updated.storeName}' updated successfully!`);
+        }}
+        onOpenPublicPreview={() => {
+          setIsProfileModalOpen(false);
+          setIsPublicStorePreviewOpen(true);
+        }}
+      />
+
+      {/* Point 58: Vendor Public Storefront Showcase Modal */}
+      <VendorPublicStoreModal
+        isOpen={isPublicStorePreviewOpen}
+        onClose={() => setIsPublicStorePreviewOpen(false)}
+        storeSlugOrId={vendorData.storeSlug}
+        initialStoreData={{
+          storeName: vendorData.storeName,
+          storeSlug: vendorData.storeSlug || 'apex-tech-enterprise',
+          storeLogo: vendorData.storeLogo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200',
+          storeBanner: vendorData.storeBanner || 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1200',
+          bio: vendorData.bio || 'Premier supplier of audiophile gear, smart home electronics, and next-gen wearable gadgets.',
+          rating: vendorData.rating || 4.9,
+          products: products,
+        }}
+        onAddToCart={(p) => {
+          setNotification(`Added '${p.title}' to cart!`);
+        }}
       />
     </div>
   );

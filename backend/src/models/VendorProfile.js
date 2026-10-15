@@ -31,6 +31,35 @@ const vendorProfileSchema = new mongoose.Schema(
       type: String,
       default: 'Official verified brand on our platform.',
     },
+    bio: {
+      type: String,
+      default: '',
+    },
+    supportPhone: {
+      type: String,
+      default: '',
+    },
+    supportEmail: {
+      type: String,
+      default: '',
+    },
+    returnPolicy: {
+      type: String,
+      default: 'Standard 7-day return and replacement policy for damaged or defective items.',
+    },
+    socialLinks: {
+      instagram: { type: String, default: '' },
+      twitter: { type: String, default: '' },
+      facebook: { type: String, default: '' },
+      youtube: { type: String, default: '' },
+      website: { type: String, default: '' },
+    },
+    vacationMode: {
+      isVacation: { type: Boolean, default: false },
+      noticeMessage: { type: String, default: 'This store is temporarily on vacation. Orders will resume shortly.' },
+      startDate: { type: Date },
+      endDate: { type: Date },
+    },
     gstNumber: {
       type: String,
       trim: true,

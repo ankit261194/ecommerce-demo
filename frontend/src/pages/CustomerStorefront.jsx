@@ -54,6 +54,7 @@ import DynamicCheckoutPayment from '../components/DynamicCheckoutPayment';
 import LiveOrderTrackerModal from '../components/LiveOrderTrackerModal';
 import TaxInvoiceModal from '../components/TaxInvoiceModal';
 import WalletDrawer from '../components/WalletDrawer';
+import VendorPublicStoreModal from '../components/VendorPublicStoreModal';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -85,6 +86,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [trackedOrderId, setTrackedOrderId] = useState(null);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [invoiceOrderId, setInvoiceOrderId] = useState(null);
+  const [selectedVendorForModal, setSelectedVendorForModal] = useState(null); // Point #58: Public Storefront Showcase
 
   // Point #31: In-App Wallet & Reward Coins State
   const [isWalletOpen, setIsWalletOpen] = useState(false);
@@ -1841,7 +1843,19 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                     <div>
                       <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400 uppercase font-black tracking-wider">
                         <span className="truncate max-w-[90px]">{product.brand}</span>
-                        <span className="text-amber-600 font-bold truncate max-w-[100px]">🏪 {product.vendor.storeName}</span>
+                        {product.vendor && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedVendorForModal(product.vendor);
+                            }}
+                            className="text-amber-600 hover:text-amber-700 font-bold truncate max-w-[120px] hover:underline flex items-center gap-1 transition-colors"
+                            title={`View ${product.vendor.storeName} storefront`}
+                          >
+                            <span>🏪 {product.vendor.storeName}</span>
+                          </button>
+                        )}
                       </div>
 
                       <h3
@@ -1943,6 +1957,10 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           if (fullProduct.hasVariants && fullProduct.variants?.length > 0) {
             setSelectedVariant(fullProduct.variants[0]);
           }
+        }}
+        onOpenVendorStore={(vendor) => {
+          setSelectedProduct(null);
+          setSelectedVendorForModal(vendor);
         }}
       />
 
@@ -2665,6 +2683,23 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               });
             }
           }).catch(() => {});
+        }}
+      />
+
+      {/* Point #58: Public Vendor Storefront Showcase Modal */}
+      <VendorPublicStoreModal
+        isOpen={Boolean(selectedVendorForModal)}
+        onClose={() => setSelectedVendorForModal(null)}
+        storeSlugOrId={selectedVendorForModal?.storeSlug || selectedVendorForModal?._id}
+        initialStoreData={selectedVendorForModal}
+        onAddToCart={(prod) => {
+          addToCart(prod, null, 1);
+          setToastMessage(`Added ${prod.title} to your cart! 🛍️`);
+          setTimeout(() => setToastMessage(null), 2500);
+        }}
+        onSelectProduct={(prod) => {
+          setSelectedVendorForModal(null);
+          setSelectedProduct(prod);
         }}
       />
     </div>

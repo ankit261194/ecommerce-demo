@@ -14,12 +14,22 @@ const {
   updateSubOrderStatus,
   getShippingLabelData,
   requestPayout,
+  getVendorProfile,
+  updateVendorProfile,
+  getPublicVendorStore,
 } = require('../controllers/vendorController');
 const { protect, authorize } = require('../middlewares/auth');
 
-// All vendor routes require Vendor role
+// Point 58: Public Storefront Vendor Showcase (Accessible by any customer/visitor)
+router.get('/store/:slugOrId', getPublicVendorStore);
+
+// All subsequent vendor routes require Vendor authentication & role
 router.use(protect);
 router.use(authorize('vendor'));
+
+// Point 58: Vendor Profile & Branding Customization
+router.get('/profile', getVendorProfile);
+router.put('/profile', updateVendorProfile);
 
 router.get('/dashboard', getVendorDashboard);
 router.get('/products', getVendorProducts);

@@ -1040,3 +1040,179 @@ exports.exportProductsCSV = async (req, res, next) => {
   }
 };
 
+// =========================================================================
+// Point 58: Vendor Store Profile Customization (Logo, Banner, Bio, Social, Slug)
+// =========================================================================
+
+// @desc    Get Current Vendor's Store Profile (Point #58)
+// @route   GET /api/vendor/profile
+exports.getVendorProfile = async (req, res, next) => {
+  try {
+    const vendor = await VendorProfile.findOne({ user: req.user._id });
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor profile not found' });
+    }
+    res.status(200).json({ success: true, data: vendor });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update Vendor Store Profile & Branding Customization (Point #58)
+// @route   PUT /api/vendor/profile
+exports.updateVendorProfile = async (req, res, next) => {
+  try {
+    let vendor = await VendorProfile.findOne({ user: req.user._id });
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor profile not found' });
+    }
+
+    const {
+      storeName,
+      storeSlug,
+      storeLogo,
+      storeBanner,
+      description,
+      bio,
+      supportPhone,
+      supportEmail,
+      returnPolicy,
+      pickupAddress,
+      socialLinks,
+      vacationMode,
+      bankDetails,
+    } = req.body;
+
+    if (storeName && storeName.trim()) {
+      vendor.storeName = storeName.trim();
+    }
+
+    // Slug management: lowercase, alpha-numeric and hyphens
+    if (storeSlug !== undefined) {
+      const cleanSlug = String(storeSlug)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+      if (cleanSlug) {
+        // Verify uniqueness
+        const existing = await VendorProfile.findOne({
+          storeSlug: cleanSlug,
+          _id: { $ne: vendor._id },
+        });
+        if (existing) {
+          return res.status(400).json({
+            success: false,
+            message: `Store slug '${cleanSlug}' is already taken by another merchant. Please choose a different slug.`,
+          });
+        }
+        vendor.storeSlug = cleanSlug;
+      }
+    } else if (!vendor.storeSlug && vendor.storeName) {
+      vendor.storeSlug = vendor.storeName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+    }
+
+    if (storeLogo !== undefined) vendor.storeLogo = storeLogo;
+    if (storeBanner !== undefined) vendor.storeBanner = storeBanner;
+    if (description !== undefined) vendor.description = description;
+    if (bio !== undefined) vendor.bio = bio;
+    if (supportPhone !== undefined) vendor.supportPhone = supportPhone;
+    if (supportEmail !== undefined) vendor.supportEmail = supportEmail;
+    if (returnPolicy !== undefined) vendor.returnPolicy = returnPolicy;
+
+    if (pickupAddress && typeof pickupAddress === 'object') {
+      vendor.pickupAddress = {
+        ...(vendor.pickupAddress?.toObject ? vendor.pickupAddress.toObject() : vendor.pickupAddress || {}),
+        ...pickupAddress,
+      };
+    }
+
+    if (socialLinks && typeof socialLinks === 'object') {
+      vendor.socialLinks = {
+        ...(vendor.socialLinks?.toObject ? vendor.socialLinks.toObject() : vendor.socialLinks || {}),
+        ...socialLinks,
+      };
+    }
+
+    if (vacationMode && typeof vacationMode === 'object') {
+      vendor.vacationMode = {
+        ...(vendor.vacationMode?.toObject ? vendor.vacationMode.toObject() : vendor.vacationMode || {}),
+        ...vacationMode,
+      };
+    }
+
+    if (bankDetails && typeof bankDetails === 'object') {
+      vendor.bankDetails = {
+        ...(vendor.bankDetails?.toObject ? vendor.bankDetails.toObject() : vendor.bankDetails || {}),
+        ...bankDetails,
+      };
+    }
+
+    await vendor.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Store profile and branding updated successfully!',
+      data: vendor,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Public Storefront Profile and Catalog for a Merchant (Point #58)
+// @route   GET /api/vendor/store/:slugOrId
+exports.getPublicVendorStore = async (req, res, next) => {
+  try {
+    const { slugOrId } = req.params;
+    let vendor = null;
+
+    if (slugOrId.match(/^[0-9a-fA-F]{24}$/)) {
+      vendor = await VendorProfile.findById(slugOrId);
+    }
+    if (!vendor) {
+      vendor = await VendorProfile.findOne({ storeSlug: slugOrId.toLowerCase() });
+    }
+
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor store not found' });
+    }
+
+    // Fetch published products for this vendor
+    const products = await Product.find({ vendor: vendor._id, status: 'published' })
+      .populate('category', 'name slug')
+      .sort({ createdAt: -1 });
+
+    const publicStore = {
+      id: vendor._id,
+      storeName: vendor.storeName,
+      storeSlug: vendor.storeSlug,
+      storeLogo: vendor.storeLogo,
+      storeBanner: vendor.storeBanner,
+      description: vendor.description,
+      bio: vendor.bio || vendor.description,
+      rating: vendor.rating || 4.8,
+      status: vendor.status,
+      supportPhone: vendor.supportPhone || vendor.pickupAddress?.phone || '',
+      supportEmail: vendor.supportEmail || '',
+      returnPolicy: vendor.returnPolicy,
+      socialLinks: vendor.socialLinks || {},
+      vacationMode: vendor.vacationMode || { isVacation: false },
+      pickupCity: vendor.pickupAddress?.city || '',
+      pickupState: vendor.pickupAddress?.state || '',
+      createdAt: vendor.createdAt,
+      productsCount: products.length,
+      products,
+    };
+
+    res.status(200).json({
+      success: true,
+      data: publicStore,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

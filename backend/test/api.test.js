@@ -11,6 +11,7 @@ const SubOrder = require('../src/models/SubOrder');
 const DeliveryTask = require('../src/models/DeliveryTask');
 const VendorProfile = require('../src/models/VendorProfile');
 const Ledger = require('../src/models/Ledger');
+const jwt = require('jsonwebtoken');
 
 let server;
 let baseUrl;
@@ -32,6 +33,22 @@ const runTests = async () => {
   server = app.listen(PORT);
   baseUrl = `http://127.0.0.1:${PORT}/api`;
   console.log(`[Test Server] Running at ${baseUrl}\n`);
+
+  // Wrap global.fetch with retry for Windows socket pool resilience
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options, retries = 2) => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        return await originalFetch(url, options);
+      } catch (err) {
+        if (attempt < retries && (err.message?.includes('fetch failed') || err.cause?.code === 'ECONNRESET')) {
+          await new Promise(r => setTimeout(r, 100));
+          continue;
+        }
+        throw err;
+      }
+    }
+  };
 
   let passed = 0;
   let failed = 0;
@@ -3950,6 +3967,112 @@ const runTests = async () => {
       assert.strictEqual(resNotFound.status, 404);
       const dataNotFound = await resNotFound.json();
       assert.strictEqual(dataNotFound.success, false);
+    });
+
+    await test('Point 58: Vendor Store Profile Customization (Logo, Banner, Bio, Social links, Slug Uniqueness & Public Showcase)', async () => {
+      // 1. GET /api/vendor/profile returns logged-in vendor's profile
+      const resProfile = await fetch(`${baseUrl}/vendor/profile`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resProfile.status, 200);
+      const dataProfile = await resProfile.json();
+      assert.strictEqual(dataProfile.success, true);
+      assert.ok(dataProfile.data.storeName);
+
+      // 2. PUT /api/vendor/profile updates branding, bio, social links, support info, and slug
+      const updatePayload = {
+        storeName: 'Apex Tech Enterprise',
+        storeSlug: 'apex-tech-enterprise',
+        storeLogo: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200',
+        storeBanner: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1200',
+        bio: 'Premier supplier of audiophile gear, smart home electronics, and next-gen wearable gadgets since 2020.',
+        supportPhone: '+91 98765 43210',
+        supportEmail: 'support@apextech.io',
+        returnPolicy: 'Hassle-free 10-day replacement on all electronic items.',
+        socialLinks: {
+          instagram: 'https://instagram.com/apextechhub',
+          twitter: 'https://x.com/apextechhub',
+          facebook: 'https://facebook.com/apextechhub',
+          youtube: 'https://youtube.com/@apextechhub',
+          website: 'https://apextechhub.io',
+        },
+      };
+
+      const resUpdate = await fetch(`${baseUrl}/vendor/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify(updatePayload),
+      });
+      assert.strictEqual(resUpdate.status, 200);
+      const dataUpdate = await resUpdate.json();
+      assert.strictEqual(dataUpdate.success, true);
+      assert.strictEqual(dataUpdate.data.storeName, 'Apex Tech Enterprise');
+      assert.strictEqual(dataUpdate.data.storeSlug, 'apex-tech-enterprise');
+      assert.strictEqual(dataUpdate.data.bio, updatePayload.bio);
+      assert.strictEqual(dataUpdate.data.supportPhone, '+91 98765 43210');
+      assert.strictEqual(dataUpdate.data.socialLinks.instagram, 'https://instagram.com/apextechhub');
+      assert.strictEqual(dataUpdate.data.socialLinks.website, 'https://apextechhub.io');
+
+      // 3. Uniqueness check: Create a second vendor profile and verify duplicate slug is rejected
+      const secondVendorUser = await User.create({
+        name: 'Second Vendor',
+        email: `second_vendor_${Date.now()}@auramarket.com`,
+        phone: '9876543299',
+        password: 'password123',
+        role: 'vendor',
+      });
+      const secondVendorToken = jwt.sign({ id: secondVendorUser._id }, process.env.JWT_SECRET || 'fallback_secret_jwt_auramarket_key_2026', { expiresIn: '1h' });
+      const secondProfile = await VendorProfile.create({
+        user: secondVendorUser._id,
+        storeName: 'Second Store',
+        storeSlug: `second-store-${Date.now()}`,
+        status: 'approved',
+      });
+
+      // Attempt to take apex-tech-enterprise slug
+      const resDupSlug = await fetch(`${baseUrl}/vendor/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${secondVendorToken}`,
+        },
+        body: JSON.stringify({ storeSlug: 'apex-tech-enterprise' }),
+      });
+      assert.strictEqual(resDupSlug.status, 400);
+      const dataDupSlug = await resDupSlug.json();
+      assert.strictEqual(dataDupSlug.success, false);
+      assert.ok(dataDupSlug.message.includes('already taken'));
+
+      // 4. Public Storefront GET /api/vendor/store/:slugOrId (no auth required)
+      const resPublic = await fetch(`${baseUrl}/vendor/store/apex-tech-enterprise`);
+      assert.strictEqual(resPublic.status, 200);
+      const dataPublic = await resPublic.json();
+      assert.strictEqual(dataPublic.success, true);
+      assert.strictEqual(dataPublic.data.storeName, 'Apex Tech Enterprise');
+      assert.strictEqual(dataPublic.data.storeSlug, 'apex-tech-enterprise');
+      assert.strictEqual(dataPublic.data.bio, updatePayload.bio);
+      assert.strictEqual(dataPublic.data.supportEmail, 'support@apextech.io');
+      assert.strictEqual(dataPublic.data.socialLinks.youtube, 'https://youtube.com/@apextechhub');
+      // Verify sensitive vendor financials are NOT leaked in public storefront
+      assert.strictEqual(dataPublic.data.walletBalance, undefined);
+      assert.strictEqual(dataPublic.data.commissionRate, undefined);
+      assert.strictEqual(dataPublic.data.panNumber, undefined);
+      assert.strictEqual(dataPublic.data.bankDetails, undefined);
+      // Products list must be included
+      assert.ok(Array.isArray(dataPublic.data.products));
+
+      // 5. Public storefront with non-existent slug returns 404
+      const resPublic404 = await fetch(`${baseUrl}/vendor/store/non-existent-store-slug-9999`);
+      assert.strictEqual(resPublic404.status, 404);
+      const dataPublic404 = await resPublic404.json();
+      assert.strictEqual(dataPublic404.success, false);
+
+      // Clean up second vendor
+      await VendorProfile.deleteOne({ _id: secondProfile._id });
+      await User.deleteOne({ _id: secondVendorUser._id });
     });
 
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {

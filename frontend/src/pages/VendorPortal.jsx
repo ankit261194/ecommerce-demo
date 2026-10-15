@@ -22,6 +22,7 @@ import {
   Palmtree,
   QrCode,
   Users,
+  MessageSquare,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -39,6 +40,7 @@ import VendorReviewsModal from '../components/VendorReviewsModal';
 import VendorWalletLedgerModal from '../components/VendorWalletLedgerModal';
 import VendorPayoutModal from '../components/VendorPayoutModal';
 import VendorStaffManagerModal from '../components/VendorStaffManagerModal';
+import VendorChatInboxModal from '../components/VendorChatInboxModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -167,6 +169,8 @@ export const VendorPortal = () => {
   const [isWalletLedgerModalOpen, setIsWalletLedgerModalOpen] = useState(false); // Point #61: Financial Wallet & Ledger
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+  const [isChatInboxOpen, setIsChatInboxOpen] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
 
@@ -251,6 +255,26 @@ export const VendorPortal = () => {
 
   useEffect(() => {
     fetchVendorData();
+
+    // Point #14: Periodic poll for unread customer inquiries
+    const fetchChatUnread = async () => {
+      try {
+        const token = localStorage.getItem('vendorToken') || localStorage.getItem('token');
+        if (token) {
+          const res = await fetch('/api/chat/vendor/summary', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const json = await res.json();
+            setUnreadChatCount(json.data?.totalUnread || 0);
+          }
+        }
+      } catch (_) {}
+    };
+
+    fetchChatUnread();
+    const interval = setInterval(fetchChatUnread, 8000);
+    return () => clearInterval(interval);
   }, []);
 
   // Handle Order Status Stepper
@@ -535,7 +559,7 @@ export const VendorPortal = () => {
             </span>
           </button>
 
-                    <button
+          <button
             type="button"
             onClick={() => setIsStaffModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all"
@@ -546,6 +570,22 @@ export const VendorPortal = () => {
             <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
               #13
             </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsChatInboxOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all relative"
+            title="Live Customer-to-Vendor Direct Chat & Inquiry Desk (Point #14)"
+          >
+            <MessageSquare className="w-4 h-4 text-amber-400" />
+            <span>Customer Inquiries</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
+              #14
+            </span>
+            {unreadChatCount > 0 && (
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 absolute -top-1 -right-1 ring-2 ring-white animate-pulse" />
+            )}
           </button>
 
           <button
@@ -1698,6 +1738,14 @@ export const VendorPortal = () => {
         isOpen={isStaffModalOpen}
         onClose={() => setIsStaffModalOpen(false)}
         onStaffUpdated={fetchVendorData}
+      />
+
+      {/* Point 14: Customer Inquiries & Live Chat Desk Modal */}
+      <VendorChatInboxModal
+        isOpen={isChatInboxOpen}
+        onClose={() => setIsChatInboxOpen(false)}
+        vendorToken={localStorage.getItem('vendorToken') || localStorage.getItem('token')}
+        storeName={vendorData.storeName}
       />
     </div>
   );

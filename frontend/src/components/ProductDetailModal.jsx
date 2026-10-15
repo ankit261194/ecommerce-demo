@@ -22,6 +22,7 @@ import {
   Ruler,
   Bell,
   TrendingDown,
+  MessageCircle,
 } from 'lucide-react';
 import StockUrgencyBadge from './StockUrgencyBadge';
 import RecentPurchaseCounter from './RecentPurchaseCounter';
@@ -32,6 +33,7 @@ import { ProductRecommendationSlider } from './ProductRecommendationSlider';
 import PincodeChecker from './PincodeChecker';
 import SizeGuideModal from './SizeGuideModal';
 import PriceDropAlertModal from './PriceDropAlertModal';
+import CustomerVendorChatModal from './CustomerVendorChatModal';
 import { useLocalization } from '../context/LocalizationContext';
 
 export const ProductDetailModal = ({
@@ -73,6 +75,9 @@ export const ProductDetailModal = ({
 
   // Price Drop Alert Modal state (Point #6)
   const [isPriceDropModalOpen, setIsPriceDropModalOpen] = useState(false);
+
+  // Live Customer-to-Vendor Chat Modal state (Point #14)
+  const [isChatModalOpen, setIsChatModalOpen] = useState(false);
 
   // Hover zoom coordinates
   const [zoomStyle, setZoomStyle] = useState({ display: 'none' });
@@ -695,6 +700,36 @@ export const ProductDetailModal = ({
                 <PincodeChecker compact={false} />
               </div>
 
+              {/* Point #14: Direct Customer-to-Vendor Live Inquiry Chat */}
+              <div className="pt-1">
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-amber-50/70 border border-amber-200/80 shadow-2xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-xs font-black">
+                      <MessageCircle className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-black text-slate-900 block text-xs">
+                        Have questions before buying?
+                      </span>
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        Chat directly with {product.vendor?.storeName || 'Merchant'} • Real-time replies
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsChatModalOpen(true)}
+                    className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-400 font-black text-xs flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Chat with Seller</span>
+                    <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
+                      #14
+                    </span>
+                  </button>
+                </div>
+              </div>
+
               {/* Trust Badges Bar */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2 border-t border-slate-100 text-[11px]">
                 <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-700">
@@ -887,17 +922,32 @@ export const ProductDetailModal = ({
                     </div>
                   )}
 
-                  {onOpenVendorStore && product.vendor && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {onOpenVendorStore && product.vendor && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenVendorStore(product.vendor)}
+                        className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-2 transition-all shadow-sm w-fit"
+                      >
+                        <Store className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Visit {product.vendor?.storeName || 'Merchant'} Storefront</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                      </button>
+                    )}
+
                     <button
                       type="button"
-                      onClick={() => onOpenVendorStore(product.vendor)}
-                      className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-2 transition-all shadow-sm w-fit"
+                      onClick={() => setIsChatModalOpen(true)}
+                      className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-2 transition-all shadow-sm w-fit"
+                      title="Direct Customer-to-Vendor Chat (Point #14)"
                     >
-                      <Store className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Visit {product.vendor?.storeName || 'Merchant'} Storefront</span>
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span>Chat with Seller</span>
+                      <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-amber-400">
+                        #14
+                      </span>
                     </button>
-                  )}
+                  </div>
 
                   <p className="text-slate-600 font-medium">
                     {product.vendor?.description ||
@@ -962,6 +1012,14 @@ export const ProductDetailModal = ({
         isOpen={isPriceDropModalOpen}
         onClose={() => setIsPriceDropModalOpen(false)}
         product={product}
+      />
+
+      {/* Point 14: Direct Customer-to-Vendor Live Inquiry Chat Modal */}
+      <CustomerVendorChatModal
+        isOpen={isChatModalOpen}
+        onClose={() => setIsChatModalOpen(false)}
+        product={product}
+        vendor={product.vendor}
       />
     </div>
   );

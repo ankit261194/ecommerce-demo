@@ -22,6 +22,7 @@ const { seedDefaultCommissionRules } = require('../controllers/commissionControl
 const CronJob = require('../models/CronJob');
 const SystemBackup = require('../models/SystemBackup');
 const ShippingManifest = require('../models/ShippingManifest');
+const ChatInquiry = require('../models/ChatInquiry');
 const { seedDefaultCronJobs } = require('../controllers/telemetryController');
 
 const seedDemoData = async () => {
@@ -925,6 +926,48 @@ const seedDemoData = async () => {
   await seedDefaultCommissionRules();
   await seedDefaultCronJobs();
 
+  // Point #14: Seed demo customer-to-vendor chat inquiries
+  try {
+    const demoCustomer = await User.findOne({ role: 'customer' });
+    const demoVendor = await VendorProfile.findOne();
+    const demoProduct = await Product.findOne({ vendor: demoVendor?._id });
+
+    if (demoCustomer && demoVendor) {
+      await ChatInquiry.create({
+        customer: demoCustomer._id,
+        vendor: demoVendor._id,
+        product: demoProduct?._id,
+        productSnapshot: {
+          title: demoProduct?.title || 'Aura Pro ANC Headphones',
+          image: demoProduct?.thumbnail || '',
+          price: demoProduct?.sellingPrice || 8999,
+          sku: demoProduct?.sku || 'AUD-HEAD-001',
+          category: 'Electronics & Audio',
+        },
+        subject: `Inquiry regarding ${demoProduct?.title || 'Aura Pro ANC Headphones'}`,
+        status: 'open',
+        priority: 'normal',
+        messages: [
+          {
+            sender: 'customer',
+            senderUser: demoCustomer._id,
+            senderName: demoCustomer.name,
+            text: 'Hello! Does this headphone model support dual Bluetooth pairing with both Mac and Android phone?',
+            timestamp: new Date(Date.now() - 3600000),
+            read: false,
+          },
+        ],
+        lastMessage: 'Hello! Does this headphone model support dual Bluetooth pairing with both Mac and Android phone?',
+        lastMessageSender: 'customer',
+        lastMessageAt: new Date(Date.now() - 3600000),
+        unreadByVendor: 1,
+        unreadByCustomer: 0,
+      });
+    }
+  } catch (err) {
+    console.warn('Demo chat seeding warning:', err.message);
+  }
+
   console.log('[DemoManager] Seeding completed successfully!');
   return { success: true, message: 'Demo data seeded successfully' };
 };
@@ -950,6 +993,7 @@ const wipeDemoData = async () => {
   await CronJob.deleteMany({});
   await SystemBackup.deleteMany({});
   await ShippingManifest.deleteMany({});
+  await ChatInquiry.deleteMany({});
 
   // 2. Remove non-admin demo users if desired, or keep superadmin safe
   await User.deleteMany({ role: { $ne: 'superadmin' } });

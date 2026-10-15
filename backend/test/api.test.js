@@ -9180,6 +9180,217 @@ const runTests = async () => {
       assert.strictEqual(res.status, 403);
     });
 
+    // ====================================================
+    // POINT #14: LIVE CUSTOMER-TO-VENDOR INQUIRY CHAT
+    // ====================================================
+    let liveCustomerToken = '';
+    let liveVendorProfileId = '';
+    let testProductId = '';
+    let testInquiryId = '';
+
+    await test('Point 14: Setup: Obtain fresh customer token and vendor profile', async () => {
+      const custRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'customer@auramarket.com', password: 'customer123456' }),
+      });
+      assert.strictEqual(custRes.status, 200);
+      const custData = await custRes.json();
+      liveCustomerToken = custData.token;
+      assert.ok(liveCustomerToken, 'Fresh customer token must exist');
+
+      const vpRes = await fetch(`${baseUrl}/vendor/profile`, {
+        headers: { Authorization: `Bearer ${liveVendorToken}` },
+      });
+      assert.strictEqual(vpRes.status, 200);
+      const vpData = await vpRes.json();
+      liveVendorProfileId = vpData.data._id;
+      assert.ok(liveVendorProfileId, 'Vendor profile ID must exist');
+
+      const prodRes = await fetch(`${baseUrl}/products`);
+      assert.strictEqual(prodRes.status, 200);
+      const prodData = await prodRes.json();
+      assert.ok(prodData.data && prodData.data.length > 0);
+      testProductId = prodData.data[0]._id;
+      assert.ok(testProductId, 'Test product ID must exist');
+    });
+
+    await test('Point 14: GET /api/chat/vendor/summary returns summary stats for merchant inbox', async () => {
+      const res = await fetch(`${baseUrl}/chat/vendor/summary`, {
+        headers: { Authorization: `Bearer ${liveVendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.totalInquiries !== undefined);
+      assert.ok(data.data.openCount !== undefined);
+      assert.ok(data.data.resolvedCount !== undefined);
+      assert.ok(data.data.totalUnread !== undefined);
+    });
+
+    await test('Point 14: POST /api/chat/inquiries validates missing text with 400', async () => {
+      const res = await fetch(`${baseUrl}/chat/inquiries`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${liveCustomerToken}`,
+        },
+        body: JSON.stringify({
+          vendorId: liveVendorProfileId,
+          productId: testProductId,
+          text: '',
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 14: POST /api/chat/inquiries customer creates a new product inquiry with merchant', async () => {
+      const res = await fetch(`${baseUrl}/chat/inquiries`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${liveCustomerToken}`,
+        },
+        body: JSON.stringify({
+          vendorId: liveVendorProfileId,
+          productId: testProductId,
+          text: 'Hello! Does this product include official brand warranty?',
+          subject: 'Warranty Inquiry',
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data._id);
+      assert.strictEqual(data.data.status, 'open');
+      assert.strictEqual(data.data.lastMessageSender, 'customer');
+      assert.ok(data.data.unreadByVendor >= 1);
+      testInquiryId = data.data._id;
+    });
+
+    await test('Point 14: GET /api/chat/customer/inquiries lists inquiries for authenticated customer', async () => {
+      const res = await fetch(`${baseUrl}/chat/customer/inquiries`, {
+        headers: { Authorization: `Bearer ${liveCustomerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.count >= 1);
+      const found = data.data.find(i => i._id === testInquiryId);
+      assert.ok(found, 'Created inquiry must be returned in customer list');
+      assert.ok(found.productSnapshot?.title);
+    });
+
+    await test('Point 14: GET /api/chat/customer/inquiries/:id returns inquiry thread details', async () => {
+      assert.ok(testInquiryId, 'Test inquiry ID must exist');
+      const res = await fetch(`${baseUrl}/chat/customer/inquiries/${testInquiryId}`, {
+        headers: { Authorization: `Bearer ${liveCustomerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.messages.length >= 1);
+      assert.strictEqual(data.data.unreadByCustomer, 0);
+    });
+
+    await test('Point 14: POST /api/chat/vendor/inquiries/:id/reply validates empty reply with 400', async () => {
+      assert.ok(testInquiryId, 'Test inquiry ID must exist');
+      const res = await fetch(`${baseUrl}/chat/vendor/inquiries/${testInquiryId}/reply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${liveVendorToken}`,
+        },
+        body: JSON.stringify({ text: '' }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 14: POST /api/chat/vendor/inquiries/:id/reply merchant dispatches official response', async () => {
+      assert.ok(testInquiryId, 'Test inquiry ID must exist');
+      const res = await fetch(`${baseUrl}/chat/vendor/inquiries/${testInquiryId}/reply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${liveVendorToken}`,
+        },
+        body: JSON.stringify({
+          text: 'Yes! Official 1-year brand warranty is included with doorstep pickup service.',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'in_progress');
+      assert.strictEqual(data.data.lastMessageSender, 'vendor');
+      assert.ok(data.data.unreadByCustomer >= 1);
+    });
+
+    await test('Point 14: POST /api/chat/customer/inquiries/:id/reply customer sends follow-up query', async () => {
+      assert.ok(testInquiryId, 'Test inquiry ID must exist');
+      const res = await fetch(`${baseUrl}/chat/customer/inquiries/${testInquiryId}/reply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${liveCustomerToken}`,
+        },
+        body: JSON.stringify({
+          text: 'Great! How quickly can it be shipped to Mumbai?',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.lastMessageSender, 'customer');
+      assert.ok(data.data.unreadByVendor >= 1);
+    });
+
+    await test('Point 14: GET /api/chat/vendor/inquiries/:id vendor views inquiry and resets unread counter', async () => {
+      assert.ok(testInquiryId, 'Test inquiry ID must exist');
+      const res = await fetch(`${baseUrl}/chat/vendor/inquiries/${testInquiryId}`, {
+        headers: { Authorization: `Bearer ${liveVendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.unreadByVendor, 0);
+    });
+
+    await test('Point 14: PATCH /api/chat/vendor/inquiries/:id/status updates inquiry resolution status', async () => {
+      assert.ok(testInquiryId, 'Test inquiry ID must exist');
+      const res = await fetch(`${baseUrl}/chat/vendor/inquiries/${testInquiryId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${liveVendorToken}`,
+        },
+        body: JSON.stringify({ status: 'resolved' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'resolved');
+    });
+
+    await test('Point 14: Role Security: Customer token is rejected on vendor chat endpoints with 403', async () => {
+      const res = await fetch(`${baseUrl}/chat/vendor/inquiries`, {
+        headers: { Authorization: `Bearer ${liveCustomerToken}` },
+      });
+      assert.strictEqual(res.status, 403);
+    });
+
+    await test('Point 14: Auth Security: Unauthenticated request to /api/chat/inquiries is rejected with 401', async () => {
+      const res = await fetch(`${baseUrl}/chat/inquiries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'Unauthorized chat attempt' }),
+      });
+      assert.strictEqual(res.status, 401);
+    });
 
   } finally {
     if (server) {

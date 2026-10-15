@@ -17,12 +17,21 @@ const deliveryTaskSchema = new mongoose.Schema(
       storeName: String,
       phone: String,
       address: String,
+      city: String,
+      pincode: String,
     },
     dropLocation: {
       recipientName: String,
       phone: String,
       address: String,
+      city: String,
       pincode: String,
+      landmark: String,
+      coordinates: {
+        lat: Number,
+        lng: Number,
+      },
+      mapUrl: String,
     },
     status: {
       type: String,
@@ -54,6 +63,36 @@ const deliveryTaskSchema = new mongoose.Schema(
       type: String,
       default: '',
       trim: true,
+    },
+    // Point #67: Digital Customer Signature Pad on screen
+    customerSignature: {
+      type: String,
+      default: null,
+    },
+    // Point #68: Doorstep Photo Proof of Delivery upload
+    proofPhoto: {
+      type: String,
+      default: null,
+    },
+    // Point #69: Cash on Delivery (COD) Cash Collection Reconciliation
+    codReconciliation: {
+      status: {
+        type: String,
+        enum: ['PENDING', 'SUBMITTED', 'VERIFIED'],
+        default: 'PENDING',
+      },
+      submittedAt: Date,
+      reconciledAt: Date,
+      referenceCode: String,
+      notes: String,
+    },
+    // Point #70: Delivery Failure Workflow (Reason & reschedule)
+    failureLog: {
+      reason: String,
+      attemptCount: { type: Number, default: 0 },
+      rescheduledFor: Date,
+      reportedAt: Date,
+      notes: String,
     },
   },
   { timestamps: true }

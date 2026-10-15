@@ -4490,6 +4490,56 @@ const runTests = async () => {
       assert.strictEqual(dataFinalWallet.wallet.availableBalance, initialBalance - withdrawAmountBank);
     });
 
+    // =========================================================================
+    // Point 63: Assigned Deliveries Dashboard with Map Pin & Customer Phone
+    // =========================================================================
+    await test('Point 63: Assigned Deliveries Dashboard with Map Pin & Customer Phone (Status Filter, Search, Contact & Route Metrics)', async () => {
+      // 1. Fetch courier dashboard assigned deliveries
+      const resDeliveries = await fetch(`${baseUrl}/delivery/tasks`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resDeliveries.status, 200);
+      const dataDeliveries = await resDeliveries.json();
+      assert.strictEqual(dataDeliveries.success, true);
+      assert.ok(Array.isArray(dataDeliveries.data));
+      assert.ok(dataDeliveries.data.length > 0, 'Rider should have assigned deliveries');
+      assert.ok(dataDeliveries.stats, 'Dashboard must compute rider stats summary');
+      assert.ok(typeof dataDeliveries.stats.totalAssigned === 'number');
+      assert.ok(typeof dataDeliveries.stats.activeTransit === 'number');
+      assert.ok(typeof dataDeliveries.stats.codPendingAmount === 'number');
+
+      // 2. Validate Map Pin & Customer Phone data attributes on assigned drops
+      const sampleDrop = dataDeliveries.data[0];
+      assert.ok(sampleDrop.dropLocation, 'Drop location must exist');
+      assert.ok(sampleDrop.dropLocation.phone, 'Customer phone must be present on drop location');
+      assert.ok(sampleDrop.dropLocation.address, 'Customer destination address must be present for map pin navigation');
+      assert.ok(sampleDrop.dropLocation.recipientName, 'Customer recipient name must be present');
+      assert.ok(sampleDrop.pickupLocation.storeName, 'Vendor store name must be present on pickup location');
+      assert.ok(sampleDrop.pickupLocation.phone, 'Vendor contact phone must be present');
+
+      // 3. Status Filtering: Test query ?status=ACTIVE
+      const resActive = await fetch(`${baseUrl}/delivery/tasks?status=ACTIVE`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resActive.status, 200);
+      const dataActive = await resActive.json();
+      assert.strictEqual(dataActive.success, true);
+      dataActive.data.forEach(task => {
+        assert.ok(['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY'].includes(task.status));
+      });
+
+      // 4. Search Filter: Test query ?search=phone or customer recipientName
+      const recipientPhone = sampleDrop.dropLocation.phone;
+      const resSearch = await fetch(`${baseUrl}/delivery/tasks?search=${recipientPhone}`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resSearch.status, 200);
+      const dataSearch = await resSearch.json();
+      assert.strictEqual(dataSearch.success, true);
+      assert.ok(dataSearch.data.length >= 1);
+      assert.strictEqual(dataSearch.data[0].dropLocation.phone, recipientPhone);
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

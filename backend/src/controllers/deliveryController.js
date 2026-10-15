@@ -6,18 +6,61 @@ const Order = require('../models/Order');
 // @route   GET /api/delivery/tasks
 exports.getMyDeliveries = async (req, res, next) => {
   try {
-    const filter = req.user.role === 'superadmin' ? {} : { deliveryPartner: req.user._id };
+    const { status, search } = req.query;
+    const baseFilter = req.user.role === 'superadmin' ? {} : { deliveryPartner: req.user._id };
+    const filter = { ...baseFilter };
+
+    if (status && status !== 'ALL') {
+      if (status === 'ACTIVE') {
+        filter.status = { $in: ['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY'] };
+      } else {
+        filter.status = status;
+      }
+    }
+
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      filter.$or = [
+        { 'dropLocation.recipientName': searchRegex },
+        { 'dropLocation.phone': searchRegex },
+        { 'dropLocation.address': searchRegex },
+        { 'dropLocation.city': searchRegex },
+        { 'dropLocation.pincode': searchRegex },
+        { 'pickupLocation.storeName': searchRegex },
+      ];
+    }
+
     const tasks = await DeliveryTask.find(filter)
       .populate({
         path: 'subOrder',
         populate: [
-          { path: 'vendor', select: 'storeName storeLogo pickupAddress' },
-          { path: 'customer', select: 'name phone' },
+          { path: 'vendor', select: 'storeName storeLogo pickupAddress phone email' },
+          { path: 'customer', select: 'name phone email' },
         ],
       })
       .sort({ createdAt: -1 });
 
-    res.status(200).json({ success: true, count: tasks.length, data: tasks });
+    // Compute comprehensive rider stats
+    const allRiderTasks = await DeliveryTask.find(baseFilter);
+    const stats = {
+      totalAssigned: allRiderTasks.length,
+      activeTransit: allRiderTasks.filter(t => ['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY'].includes(t.status)).length,
+      deliveredToday: allRiderTasks.filter(t => t.status === 'DELIVERED').length,
+      failedCount: allRiderTasks.filter(t => t.status === 'FAILED').length,
+      codPendingAmount: allRiderTasks
+        .filter(t => t.isCod && t.status !== 'DELIVERED')
+        .reduce((sum, t) => sum + (t.amountToCollect || 0), 0),
+      codCollectedToday: allRiderTasks
+        .filter(t => t.isCod && t.status === 'DELIVERED')
+        .reduce((sum, t) => sum + (t.amountCollected || t.amountToCollect || 0), 0),
+    };
+
+    res.status(200).json({
+      success: true,
+      count: tasks.length,
+      stats,
+      data: tasks,
+    });
   } catch (error) {
     next(error);
   }

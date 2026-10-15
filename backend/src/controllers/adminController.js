@@ -720,3 +720,207 @@ exports.getBulkInvoices = async (req, res, next) => {
   }
 };
 
+// =========================================================================
+// POINT #43: CUSTOMER CRM DIRECTORY CONTROLLERS
+// =========================================================================
+
+// @desc    Get All Customers with CRM Lifetime Value & Order History Stats
+// @route   GET /api/admin/customers
+// @access  Private (Super Admin)
+exports.getAllCustomers = async (req, res, next) => {
+  try {
+    const { search, status, sort = 'createdAt' } = req.query;
+
+    const query = { role: 'customer' };
+
+    if (status && status !== 'all') {
+      if (status === 'active') {
+        query.isActive = true;
+        query.status = 'ACTIVE';
+      } else if (status === 'blocked') {
+        query.status = 'BLOCKED';
+      } else if (status === 'verified') {
+        query.isVerified = true;
+      }
+    }
+
+    if (search && search.trim() !== '') {
+      query.$or = [
+        { name: { $regex: search.trim(), $options: 'i' } },
+        { email: { $regex: search.trim(), $options: 'i' } },
+        { phone: { $regex: search.trim(), $options: 'i' } },
+      ];
+    }
+
+    const customers = await User.find(query).sort({ createdAt: -1 });
+
+    // Aggregate lifetime orders & spending per customer
+    const enrichedCustomers = await Promise.all(
+      customers.map(async (cust) => {
+        const orders = await Order.find({ customer: cust._id });
+        const validOrders = orders.filter((o) => o.status !== 'CANCELLED');
+        const lifetimeSpend = validOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+        const lastOrder = orders.length > 0 ? orders[0].createdAt : null;
+
+        return {
+          _id: cust._id,
+          name: cust.name,
+          email: cust.email,
+          phone: cust.phone,
+          role: cust.role,
+          isActive: cust.isActive,
+          status: cust.status || 'ACTIVE',
+          isVerified: cust.isVerified !== undefined ? cust.isVerified : true,
+          tags: cust.tags || ['Verified Shopper'],
+          adminNotes: cust.adminNotes || '',
+          walletBalance: cust.walletBalance || 0,
+          walletCoins: cust.walletCoins || 0,
+          addresses: cust.addresses || [],
+          ordersCount: orders.length,
+          lifetimeSpend,
+          lastOrderDate: lastOrder,
+          createdAt: cust.createdAt,
+        };
+      })
+    );
+
+    // Global CRM Metrics
+    const totalCustomers = await User.countDocuments({ role: 'customer' });
+    const activeCustomers = await User.countDocuments({ role: 'customer', isActive: true });
+    const blockedCustomers = await User.countDocuments({ role: 'customer', status: 'BLOCKED' });
+    const verifiedCustomers = await User.countDocuments({ role: 'customer', isVerified: true });
+    const totalCustomerLTV = enrichedCustomers.reduce((acc, c) => acc + c.lifetimeSpend, 0);
+
+    res.status(200).json({
+      success: true,
+      count: enrichedCustomers.length,
+      stats: {
+        totalCustomers,
+        activeCustomers,
+        blockedCustomers,
+        verifiedCustomers,
+        totalCustomerLTV,
+        averageCustomerLTV:
+          totalCustomers > 0 ? Math.round(totalCustomerLTV / totalCustomers) : 0,
+      },
+      data: enrichedCustomers,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Single Customer Full CRM Profile with Order History
+// @route   GET /api/admin/customers/:id
+// @access  Private (Super Admin)
+exports.getCustomerDetails = async (req, res, next) => {
+  try {
+    const customer = await User.findById(req.params.id);
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Customer not found',
+      });
+    }
+
+    const orders = await Order.find({ customer: customer._id }).sort({ createdAt: -1 });
+    const validOrders = orders.filter((o) => o.status !== 'CANCELLED');
+    const lifetimeSpend = validOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        customer,
+        ordersCount: orders.length,
+        lifetimeSpend,
+        orders,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Toggle Customer Active / Blocked Status
+// @route   PATCH /api/admin/customers/:id/status
+// @access  Private (Super Admin)
+exports.toggleCustomerStatus = async (req, res, next) => {
+  try {
+    const customer = await User.findById(req.params.id);
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Customer not found',
+      });
+    }
+
+    const isCurrentlyBlocked = customer.status === 'BLOCKED' || !customer.isActive;
+    customer.status = isCurrentlyBlocked ? 'ACTIVE' : 'BLOCKED';
+    customer.isActive = isCurrentlyBlocked ? true : false;
+    await customer.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Customer account ${customer.status === 'ACTIVE' ? 'activated' : 'blocked'} successfully`,
+      data: customer,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Toggle Customer Verification Badge
+// @route   PATCH /api/admin/customers/:id/verify
+// @access  Private (Super Admin)
+exports.toggleCustomerVerification = async (req, res, next) => {
+  try {
+    const customer = await User.findById(req.params.id);
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Customer not found',
+      });
+    }
+
+    customer.isVerified = !customer.isVerified;
+    await customer.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Customer ${customer.isVerified ? 'marked as verified' : 'unverified'}`,
+      data: customer,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update Customer Admin Notes & Tags
+// @route   PUT /api/admin/customers/:id/notes
+// @access  Private (Super Admin)
+exports.updateCustomerNotes = async (req, res, next) => {
+  try {
+    const { adminNotes, tags } = req.body;
+    const customer = await User.findById(req.params.id);
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Customer not found',
+      });
+    }
+
+    if (adminNotes !== undefined) customer.adminNotes = adminNotes;
+    if (tags !== undefined) customer.tags = tags;
+    await customer.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Customer CRM notes updated successfully',
+      data: customer,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+

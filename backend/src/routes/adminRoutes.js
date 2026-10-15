@@ -17,6 +17,11 @@ const {
   bulkUpdateOrderStatus,
   exportOrdersCSV,
   getBulkInvoices,
+  getAllCustomers,
+  getCustomerDetails,
+  toggleCustomerStatus,
+  toggleCustomerVerification,
+  updateCustomerNotes,
 } = require('../controllers/adminController');
 const { getTaxInvoice } = require('../controllers/orderController');
 const { protect, authorize } = require('../middlewares/auth');
@@ -41,6 +46,13 @@ router.patch('/orders/:id/status', updateOrderStatus);
 router.get('/orders/:id/commission-split', getOrderCommissionSplit);
 router.get('/orders/:id/invoice', getTaxInvoice);
 router.get('/ledger', getPlatformLedger);
+
+// Customer CRM Directory (Point #43)
+router.get('/customers', getAllCustomers);
+router.get('/customers/:id', getCustomerDetails);
+router.patch('/customers/:id/status', toggleCustomerStatus);
+router.patch('/customers/:id/verify', toggleCustomerVerification);
+router.put('/customers/:id/notes', updateCustomerNotes);
 
 // Category & Sub-Category Tree Manager (Point #36)
 const {

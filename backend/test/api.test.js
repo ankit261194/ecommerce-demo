@@ -2838,6 +2838,82 @@ const runTests = async () => {
       assert.strictEqual(dataDelete.success, true);
     });
 
+    await test('Point 43: Customer CRM Directory (List, spending history, verify/block switch, lifetime value metrics)', async () => {
+      // 1. Super Admin fetches customers list with CRM analytics
+      const resList = await fetch(`${baseUrl}/admin/customers`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resList.status, 200);
+      const dataList = await resList.json();
+      assert.strictEqual(dataList.success, true);
+      assert.ok(dataList.stats);
+      assert.ok(dataList.stats.totalCustomers >= 1);
+      assert.ok(Array.isArray(dataList.data));
+
+      const customerObj = dataList.data.find((c) => c.email === 'customer@auramarket.com') || dataList.data[0];
+      assert.ok(customerObj, 'Demo customer must exist');
+      assert.strictEqual(typeof customerObj.lifetimeSpend, 'number');
+      assert.strictEqual(typeof customerObj.ordersCount, 'number');
+
+      // 2. Fetch single customer details with order history
+      const resDetails = await fetch(`${baseUrl}/admin/customers/${customerObj._id}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resDetails.status, 200);
+      const dataDetails = await resDetails.json();
+      assert.strictEqual(dataDetails.success, true);
+      assert.ok(dataDetails.data.customer);
+      assert.ok(Array.isArray(dataDetails.data.orders));
+
+      // 3. Block customer account via PATCH /api/admin/customers/:id/status
+      const resBlock = await fetch(`${baseUrl}/admin/customers/${customerObj._id}/status`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resBlock.status, 200);
+      const dataBlock = await resBlock.json();
+      assert.strictEqual(dataBlock.success, true);
+      assert.strictEqual(dataBlock.data.status, 'BLOCKED');
+      assert.strictEqual(dataBlock.data.isActive, false);
+
+      // 4. Unblock customer account
+      const resUnblock = await fetch(`${baseUrl}/admin/customers/${customerObj._id}/status`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resUnblock.status, 200);
+      const dataUnblock = await resUnblock.json();
+      assert.strictEqual(dataUnblock.data.status, 'ACTIVE');
+      assert.strictEqual(dataUnblock.data.isActive, true);
+
+      // 5. Toggle verification badge
+      const resVerify = await fetch(`${baseUrl}/admin/customers/${customerObj._id}/verify`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resVerify.status, 200);
+      const dataVerify = await resVerify.json();
+      assert.strictEqual(dataVerify.success, true);
+
+      // 6. Update internal CRM notes and tags
+      const resNotes = await fetch(`${baseUrl}/admin/customers/${customerObj._id}/notes`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          adminNotes: 'High-value customer, prefers express delivery.',
+          tags: ['VIP Shopper', 'Loyalty Member'],
+        }),
+      });
+      assert.strictEqual(resNotes.status, 200);
+      const dataNotes = await resNotes.json();
+      assert.strictEqual(dataNotes.success, true);
+      assert.strictEqual(dataNotes.data.adminNotes, 'High-value customer, prefers express delivery.');
+      assert.ok(dataNotes.data.tags.includes('VIP Shopper'));
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

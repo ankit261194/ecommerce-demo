@@ -35,6 +35,24 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Point #43: Customer CRM Directory & Verification
+    status: {
+      type: String,
+      enum: ['ACTIVE', 'BLOCKED', 'SUSPENDED'],
+      default: 'ACTIVE',
+    },
+    isVerified: {
+      type: Boolean,
+      default: true,
+    },
+    tags: {
+      type: [String],
+      default: ['Verified Shopper'],
+    },
+    adminNotes: {
+      type: String,
+      default: '',
+    },
     addresses: [
       {
         recipientName: { type: String, required: true },

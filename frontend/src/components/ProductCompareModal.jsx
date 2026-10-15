@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import StockUrgencyBadge from './StockUrgencyBadge';
 import api from '../api/client';
+import { useLocalization } from '../context/LocalizationContext';
 
 export const ProductCompareModal = ({
   isOpen,
@@ -28,6 +29,7 @@ export const ProductCompareModal = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [compareData, setCompareData] = useState(null);
+  const { formatPrice } = useLocalization();
   const [highlightDifferences, setHighlightDifferences] = useState(false);
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export const ProductCompareModal = ({
             },
             {
               attribute: 'Price',
-              values: selected.map(p => `₹${(p.sellingPrice || p.price || 0).toLocaleString('en-IN')}`),
+              values: selected.map(p => formatPrice(p.sellingPrice || p.price || 0)),
               isDifferent: new Set(selected.map(p => p.sellingPrice || p.price)).size > 1,
             },
             {
@@ -236,11 +238,11 @@ export const ProductCompareModal = ({
                           <div className="space-y-0.5">
                             <div className="flex items-baseline gap-1.5">
                               <span className="font-black text-base text-slate-950">
-                                ₹{(prod.sellingPrice || 0).toLocaleString('en-IN')}
+                                {formatPrice(prod.sellingPrice || 0)}
                               </span>
                               {prod.mrp && prod.mrp > prod.sellingPrice && (
                                 <span className="text-[11px] text-slate-400 line-through">
-                                  ₹{prod.mrp.toLocaleString('en-IN')}
+                                  {formatPrice(prod.mrp)}
                                 </span>
                               )}
                             </div>

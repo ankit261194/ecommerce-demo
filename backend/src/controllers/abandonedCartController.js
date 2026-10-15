@@ -78,6 +78,13 @@ const ensureRecoveryCoupon = async (code = 'RECOVER10', discountValue = 10) => {
         expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       });
     } catch (_) {}
+  } else {
+    // If coupon exists but is inactive or expired, revitalize it for recovery
+    if (!coupon.isActive || (coupon.expiryDate && coupon.expiryDate < new Date())) {
+      coupon.isActive = true;
+      coupon.expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      await coupon.save();
+    }
   }
   return cleanCode;
 };
@@ -248,9 +255,12 @@ exports.syncCartSession = async (req, res, next) => {
         ? Number(cartTotal)
         : formattedItems.reduce((acc, i) => acc + i.price * i.quantity, 0);
 
-    // Check if an existing open abandoned cart exists for this customer email
+    // Check if an existing open abandoned cart exists for this customer email or authenticated user
     let cart = await AbandonedCart.findOne({
-      customerEmail: cleanEmail,
+      $or: [
+        { customerEmail: cleanEmail },
+        ...(req.user?._id ? [{ user: req.user._id }] : []),
+      ],
       status: { $in: ['ABANDONED', 'REMINDER_SENT'] },
     });
 
@@ -259,10 +269,12 @@ exports.syncCartSession = async (req, res, next) => {
       cart.cartTotal = calculatedTotal;
       if (customerName) cart.customerName = customerName;
       if (customerPhone) cart.customerPhone = customerPhone;
+      if (req.user?._id) cart.user = req.user._id;
       cart.abandonedAt = new Date();
       await cart.save();
     } else {
       cart = await AbandonedCart.create({
+        user: req.user?._id || null,
         customerName: customerName || 'Valued Customer',
         customerEmail: cleanEmail,
         customerPhone: customerPhone || '',

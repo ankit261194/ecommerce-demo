@@ -160,11 +160,11 @@ export const WishlistDrawer = ({
 
                           <div className="flex items-baseline gap-1.5 mt-1">
                             <span className="font-black text-sm text-slate-950">
-                              ₹{(product.sellingPrice || product.price || 0).toLocaleString('en-IN')}
+                              {formatPrice(product.sellingPrice || product.price || 0)}
                             </span>
                             {product.mrp && product.mrp > (product.sellingPrice || product.price) && (
                               <span className="text-[10px] text-slate-400 line-through">
-                                ₹{product.mrp.toLocaleString('en-IN')}
+                                {formatPrice(product.mrp)}
                               </span>
                             )}
                             {discount > 0 && (

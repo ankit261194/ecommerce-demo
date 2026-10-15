@@ -1338,7 +1338,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             setToastMessage(`⚡ "${deal.title}" claimed and added to cart!`);
             setTimeout(() => setToastMessage(null), 2500);
           }}
-          currency="₹"
+          currency={activeCurrencyConfig?.symbol || "₹"}
         />
 
         {/* Category Circular Cards / Filter Pills */}
@@ -1485,7 +1485,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             {/* Active Range Display & Reset Pill */}
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-slate-900 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 shadow-inner">
-                ₹{priceRange[0].toLocaleString('en-IN')} — ₹{priceRange[1].toLocaleString('en-IN')}
+                {formatPrice(priceRange[0])} — {formatPrice(priceRange[1])}
               </span>
               {(priceRange[0] > 0 || priceRange[1] < 50000) && (
                 <button
@@ -1503,10 +1503,10 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-device-scrollbar">
             {[
               { label: 'All Budgets', min: 0, max: 50000 },
-              { label: 'Under ₹2,000', min: 0, max: 2000 },
-              { label: '₹2,000 - ₹5,000', min: 2000, max: 5000 },
-              { label: '₹5,000 - ₹10,000', min: 5000, max: 10000 },
-              { label: 'Above ₹10,000', min: 10000, max: 50000 },
+              { label: `Under ${formatPrice(2000)}`, min: 0, max: 2000 },
+              { label: `${formatPrice(2000)} - ${formatPrice(5000)}`, min: 2000, max: 5000 },
+              { label: `${formatPrice(5000)} - ${formatPrice(10000)}`, min: 5000, max: 10000 },
+              { label: `Above ${formatPrice(10000)}`, min: 10000, max: 50000 },
             ].map(preset => {
               const isSelected = priceRange[0] === preset.min && priceRange[1] === preset.max;
               return (
@@ -1530,7 +1530,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] font-bold text-slate-500">
-                <span>Min Price: ₹{priceRange[0].toLocaleString('en-IN')}</span>
+                <span>{t('minPrice', 'Min Price')}: {formatPrice(priceRange[0])}</span>
                 <span>₹0</span>
               </div>
               <input
@@ -1549,7 +1549,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
             <div className="space-y-1">
               <div className="flex justify-between text-[11px] font-bold text-slate-500">
-                <span>Max Price: ₹{priceRange[1].toLocaleString('en-IN')}</span>
+                <span>{t('maxPrice', 'Max Price')}: {formatPrice(priceRange[1])}</span>
                 <span>₹50,000</span>
               </div>
               <input
@@ -2349,7 +2349,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-slate-600 font-bold">Applied Discount:</span>
                           <span className="font-black text-amber-800 font-mono">
-                            -₹{redeemedCoins} ({redeemedCoins} Coins)
+                            -{formatPrice(redeemedCoins)} ({redeemedCoins} Coins)
                           </span>
                         </div>
                         <input
@@ -2362,7 +2362,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                           className="w-full accent-amber-500 cursor-pointer"
                         />
                         <div className="flex justify-between items-center text-[10px]">
-                          <span className="text-slate-500">₹0 OFF</span>
+                          <span className="text-slate-500">{formatPrice(0)} OFF</span>
                           <button
                             type="button"
                             onClick={() =>
@@ -2375,7 +2375,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                             }
                             className="font-black text-amber-800 hover:text-amber-950 underline cursor-pointer"
                           >
-                            Apply Max (₹{Math.min(customerWallet.coins, Math.max(0, cartTotal - (appliedCoupon?.discountAmount || 0)))})
+                            Apply Max ({formatPrice(Math.min(customerWallet.coins, Math.max(0, cartTotal - (appliedCoupon?.discountAmount || 0))))})
                           </button>
                         </div>
                       </div>
@@ -2502,7 +2502,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                     <span className="font-extrabold text-slate-900 block">{sub.vendorName}</span>
                     <span className="text-[10px] text-slate-500">Tracking Code: {sub.subOrderId}</span>
                   </div>
-                  <span className="font-black text-slate-950">₹{sub.subTotal.toLocaleString('en-IN')}</span>
+                  <span className="font-black text-slate-950">{formatPrice(sub.subTotal)}</span>
                 </div>
               ))}
             </div>
@@ -2545,7 +2545,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   {activeOrderConfirmation.paymentStatus === 'PAID' ? '✓ PAID PREPAID' : '💵 COD PAY AT DOOR'}
                 </span>
                 <span className="block text-slate-900 font-black text-sm mt-0.5">
-                  ₹{activeOrderConfirmation.totalAmount?.toLocaleString('en-IN')}
+                  {formatPrice(activeOrderConfirmation.totalAmount)}
                 </span>
               </div>
             </div>
@@ -2695,7 +2695,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                 {cartItems.length}
               </div>
               <div className="text-left leading-tight">
-                <p className="text-xs font-black text-white">₹{cartTotal.toLocaleString('en-IN')}</p>
+                <p className="text-xs font-black text-white">{formatPrice(cartTotal)}</p>
                 <p className="text-[9px] text-slate-400">View items in cart</p>
               </div>
             </div>
@@ -2723,7 +2723,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             setSelectedVariant(fullProduct.variants[0]);
           }
         }}
-        currency="₹"
+        currency={activeCurrencyConfig?.symbol || "₹"}
       />
 
       {/* Point #23: Interactive 1-Click Copy Coupons & Gamified Scratch Card */}

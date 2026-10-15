@@ -8,10 +8,10 @@ const {
   markCartRecovered,
   deleteAbandonedCart,
 } = require('../controllers/abandonedCartController');
-const { protect, authorize } = require('../middlewares/auth');
+const { protect, authorize, optionalAuth } = require('../middlewares/auth');
 
 // Public Storefront Cart Sync endpoint
-router.post('/sync', syncCartSession);
+router.post('/sync', optionalAuth, syncCartSession);
 
 // Super Admin Management routes
 router.get('/admin/all', protect, authorize('superadmin', 'admin'), getAdminAbandonedCarts);

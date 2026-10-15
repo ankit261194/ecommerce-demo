@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, ShoppingBag, Sparkles, Check, CheckCircle2, ShieldCheck } from 'lucide-react';
 import api from '../api/client';
+import { useLocalization } from '../context/LocalizationContext';
 
 export const FrequentlyBoughtTogether = ({
   productId,
@@ -10,6 +11,7 @@ export const FrequentlyBoughtTogether = ({
   const [bundleData, setBundleData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const { formatPrice, t } = useLocalization();
 
   useEffect(() => {
     const id = productId || mainProduct?._id || mainProduct?.slug;
@@ -173,17 +175,17 @@ export const FrequentlyBoughtTogether = ({
             </span>
             <div className="flex items-baseline gap-2">
               <span className="text-xl sm:text-2xl font-black text-slate-950">
-                ₹{finalBundlePrice.toLocaleString('en-IN')}
+                {formatPrice(finalBundlePrice)}
               </span>
               {rawMrpTotal > finalBundlePrice && (
                 <span className="text-xs text-slate-400 line-through">
-                  ₹{rawMrpTotal.toLocaleString('en-IN')}
+                  {formatPrice(rawMrpTotal)}
                 </span>
               )}
             </div>
             {totalSavings > 0 && (
               <p className="text-[11px] font-black text-emerald-600">
-                You save ₹{totalSavings.toLocaleString('en-IN')} with this combo!
+                {t('save', 'You save')} {formatPrice(totalSavings)} with this combo!
               </p>
             )}
           </div>
@@ -223,7 +225,7 @@ export const FrequentlyBoughtTogether = ({
                 </strong>
                 {item.title} —{' '}
                 <span className="font-black text-slate-900">
-                  ₹{(item.sellingPrice || 0).toLocaleString('en-IN')}
+                  {formatPrice(item.sellingPrice || 0)}
                 </span>
               </span>
             </label>

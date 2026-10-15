@@ -26,6 +26,7 @@ import ProductReviewsSection from './ProductReviewsSection';
 import ProductQnASection from './ProductQnASection';
 import FrequentlyBoughtTogether from './FrequentlyBoughtTogether';
 import { ProductRecommendationSlider } from './ProductRecommendationSlider';
+import { useLocalization } from '../context/LocalizationContext';
 
 export const ProductDetailModal = ({
   product,
@@ -38,6 +39,7 @@ export const ProductDetailModal = ({
   onSelectProduct,
   onOpenVendorStore,
 }) => {
+  const { formatPrice, t } = useLocalization();
   if (!isOpen || !product) return null;
 
   // Active Image Gallery State
@@ -428,16 +430,16 @@ export const ProductDetailModal = ({
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
                 <div className="flex items-baseline gap-3 flex-wrap">
                   <span className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tight">
-                    ₹{currentSellingPrice.toLocaleString('en-IN')}
+                    {formatPrice(currentSellingPrice)}
                   </span>
                   {currentMrp > currentSellingPrice && (
                     <span className="text-base sm:text-lg text-slate-400 font-bold line-through">
-                      ₹{currentMrp.toLocaleString('en-IN')}
+                      {formatPrice(currentMrp)}
                     </span>
                   )}
                   {discountPercentage > 0 && (
                     <span className="text-xs font-extrabold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-300">
-                      Save ₹{discountAmount.toLocaleString('en-IN')} ({discountPercentage}% OFF)
+                      {t('save', 'Save')} {formatPrice(discountAmount)} ({discountPercentage}% OFF)
                     </span>
                   )}
                 </div>
@@ -557,7 +559,7 @@ export const ProductDetailModal = ({
                               </div>
                             </div>
                             <span className="font-black text-slate-900 flex-shrink-0">
-                              ₹{varPrice.toLocaleString('en-IN')}
+                              {formatPrice(varPrice)}
                             </span>
                           </button>
                         );
@@ -649,7 +651,7 @@ export const ProductDetailModal = ({
                     className="flex-1 py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white font-black text-sm shadow-lg hover:shadow-xl transition-all transform active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Zap className="w-4 h-4 fill-amber-400 text-amber-400 stroke-none" />
-                    <span>{isOrderingPaused ? '🌴 Orders Paused' : 'Buy Now'}</span>
+                    <span>{isOrderingPaused ? '🌴 Orders Paused' : t('buyNow', 'Buy Now')}</span>
                   </button>
                 </div>
               </div>

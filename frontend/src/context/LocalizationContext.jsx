@@ -247,16 +247,19 @@ export const LocalizationProvider = ({ children }) => {
     const converted = activeCurrencyConfig.code === 'INR' ? num : num * rate;
     const decimals = activeCurrencyConfig.decimals !== undefined ? activeCurrencyConfig.decimals : 2;
 
-    const formattedNum = converted.toLocaleString('en-US', {
+    const isNegative = converted < 0;
+    const absConverted = Math.abs(converted);
+
+    const formattedNum = absConverted.toLocaleString('en-US', {
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     });
 
     let display = '';
     if (activeCurrencyConfig.position === 'after') {
-      display = `${formattedNum} ${activeCurrencyConfig.symbol}`;
+      display = `${isNegative ? '-' : ''}${formattedNum} ${activeCurrencyConfig.symbol}`;
     } else {
-      display = `${activeCurrencyConfig.symbol}${formattedNum}`;
+      display = `${isNegative ? '-' : ''}${activeCurrencyConfig.symbol}${formattedNum}`;
     }
 
     if (showCode && activeCurrencyConfig.code !== 'INR') {
@@ -266,17 +269,28 @@ export const LocalizationProvider = ({ children }) => {
     return display;
   };
 
-  // Translation Function
-  const t = (key, fallback = '') => {
+  // Translation Function with parameter interpolation support
+  const t = (key, fallback = '', params = {}) => {
     const dict = translationsDict[language] || translationsDict.en || fallbackTranslations.en;
+    let result = '';
     if (dict && dict[key] !== undefined) {
-      return dict[key];
+      result = dict[key];
+    } else {
+      const enDict = translationsDict.en || fallbackTranslations.en;
+      if (enDict && enDict[key] !== undefined) {
+        result = enDict[key];
+      } else {
+        result = fallback || key;
+      }
     }
-    const enDict = translationsDict.en || fallbackTranslations.en;
-    if (enDict && enDict[key] !== undefined) {
-      return enDict[key];
+
+    if (params && typeof params === 'object') {
+      for (const [pKey, pVal] of Object.entries(params)) {
+        result = result.replace(new RegExp(`\\{${pKey}\\}`, 'g'), String(pVal));
+      }
     }
-    return fallback || key;
+
+    return result;
   };
 
   return (

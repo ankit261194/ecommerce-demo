@@ -1,11 +1,13 @@
 import React from 'react';
 import { Truck, Sparkles, CheckCircle2 } from 'lucide-react';
+import { useLocalization } from '../context/LocalizationContext';
 
 export const FreeShippingMeter = ({
   cartTotal = 0,
   threshold = 999,
   defaultFee = 99,
 }) => {
+  const { formatPrice, t } = useLocalization();
   const isUnlocked = cartTotal >= threshold;
   const amountLeft = Math.max(0, threshold - cartTotal);
   const percent = threshold > 0 ? Math.min(100, Math.round((cartTotal / threshold) * 100)) : 100;
@@ -38,13 +40,13 @@ export const FreeShippingMeter = ({
               </p>
             ) : (
               <p className="text-xs font-black text-slate-900">
-                Add <span className="text-amber-600 font-extrabold">₹{amountLeft.toLocaleString('en-IN')}</span> more for <span className="text-emerald-700 underline decoration-amber-400 decoration-2">FREE Delivery</span>
+                Add <span className="text-amber-600 font-extrabold">{formatPrice(amountLeft)}</span> more for <span className="text-emerald-700 underline decoration-amber-400 decoration-2">FREE Delivery</span>
               </p>
             )}
             <p className="text-[10px] text-slate-500 font-medium">
               {isUnlocked
-                ? 'Standard ₹' + defaultFee + ' shipping fee is waived on this order'
-                : 'Free doorstep shipping on orders above ₹' + threshold.toLocaleString('en-IN')}
+                ? `Standard ${formatPrice(defaultFee)} shipping fee is waived on this order`
+                : `Free doorstep shipping on orders above ${formatPrice(threshold)}`}
             </p>
           </div>
         </div>
@@ -75,8 +77,8 @@ export const FreeShippingMeter = ({
       {/* Footer milestone hint */}
       {!isUnlocked && (
         <div className="mt-1.5 flex justify-between items-center text-[10px] text-slate-500 font-bold">
-          <span>₹0</span>
-          <span className="text-amber-700">₹{threshold.toLocaleString('en-IN')} (Target)</span>
+          <span>{formatPrice(0)}</span>
+          <span className="text-amber-700">{formatPrice(threshold)} (Target)</span>
         </div>
       )}
     </div>

@@ -47,20 +47,20 @@ exports.convertCurrency = async (req, res, next) => {
     const fromCode = from.toUpperCase();
     const toCode = to.toUpperCase();
 
-    const fromCurr = config.currencies.find((c) => c.code === fromCode);
-    const toCurr = config.currencies.find((c) => c.code === toCode);
+    const fromCurr = config.currencies.find((c) => c.code === fromCode && c.isActive);
+    const toCurr = config.currencies.find((c) => c.code === toCode && c.isActive);
 
     if (!fromCurr) {
       return res.status(400).json({
         success: false,
-        message: `Unsupported source currency: ${fromCode}`,
+        message: `Unsupported or inactive source currency: ${fromCode}`,
       });
     }
 
     if (!toCurr) {
       return res.status(400).json({
         success: false,
-        message: `Unsupported target currency: ${toCode}`,
+        message: `Unsupported or inactive target currency: ${toCode}`,
       });
     }
 
@@ -74,18 +74,17 @@ exports.convertCurrency = async (req, res, next) => {
     const decimals = toCurr.decimals !== undefined ? toCurr.decimals : 2;
     const roundedTarget = Number(targetRaw.toFixed(decimals));
 
-    // Formatted string
+    // Formatted string with clean negative sign placement
+    const isNegative = roundedTarget < 0;
+    const absVal = Math.abs(roundedTarget).toLocaleString('en-US', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
     let formatted = '';
     if (toCurr.position === 'after') {
-      formatted = `${roundedTarget.toLocaleString('en-US', {
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals,
-      })} ${toCurr.symbol}`;
+      formatted = `${isNegative ? '-' : ''}${absVal} ${toCurr.symbol}`;
     } else {
-      formatted = `${toCurr.symbol}${roundedTarget.toLocaleString('en-US', {
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals,
-      })}`;
+      formatted = `${isNegative ? '-' : ''}${toCurr.symbol}${absVal}`;
     }
 
     const effectiveRate = Number((targetRaw / numericAmount).toFixed(6));
@@ -159,10 +158,16 @@ exports.updateRates = async (req, res, next) => {
 
     const config = await getOrSeedConfig();
 
+    const baseCode = (config.baseCurrency || 'INR').toUpperCase();
     for (const [code, rateVal] of Object.entries(rates)) {
       const numRate = Number(rateVal);
+      const upperCode = code.toUpperCase();
+      // Base currency rate is anchored at 1.0 and cannot be altered
+      if (upperCode === baseCode) {
+        continue;
+      }
       if (numRate > 0) {
-        const curr = config.currencies.find((c) => c.code === code.toUpperCase());
+        const curr = config.currencies.find((c) => c.code === upperCode);
         if (curr) {
           curr.rate = numRate;
         }

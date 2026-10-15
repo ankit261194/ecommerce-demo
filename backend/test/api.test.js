@@ -6426,7 +6426,36 @@ const runTests = async () => {
       assert.strictEqual(recoverData.success, true);
       assert.strictEqual(recoverData.data.status, 'RECOVERED');
 
-      // 7. Clean up / Delete Abandoned Cart
+      // 7. Robustness: Expired / Deactivated Recovery Coupon Revitalization
+      const expiredCouponCode = 'EXPRECOVER10';
+      await Coupon.deleteOne({ code: expiredCouponCode });
+      await Coupon.create({
+        code: expiredCouponCode,
+        title: 'Old Expired Recovery Promo',
+        discountType: 'PERCENTAGE',
+        discountValue: 10,
+        isActive: false,
+        expiryDate: new Date(Date.now() - 24 * 60 * 60 * 1000), // Expired yesterday
+      });
+
+      // Send reminder using the expired coupon on the active cart before cleanup
+      const resRevitalize = await fetch(`${baseUrl}/abandoned-carts/admin/${createdCartId}/send-reminder`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ couponCode: expiredCouponCode }),
+      });
+      assert.strictEqual(resRevitalize.status, 200);
+
+      const refreshedCoupon = await Coupon.findOne({ code: expiredCouponCode });
+      assert.ok(refreshedCoupon, 'Revitalized coupon must exist');
+      assert.strictEqual(refreshedCoupon.isActive, true, 'Revitalized recovery coupon must be set to active');
+      assert.ok(refreshedCoupon.expiryDate > new Date(), 'Revitalized recovery coupon must have a future expiry date');
+      await Coupon.deleteOne({ code: expiredCouponCode });
+
+      // 8. Clean up / Delete Abandoned Cart
       const resDelete = await fetch(`${baseUrl}/abandoned-carts/admin/${createdCartId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${adminToken}` },
@@ -6437,6 +6466,36 @@ const runTests = async () => {
 
       // Clean up coupon
       await Coupon.deleteOne({ code: customCouponCode });
+
+      // 9. Robustness: Authenticated Cart Sync Links Customer User ID via optionalAuth
+      const authSyncEmail = `customer.auth.${Date.now()}@example.com`;
+      const resAuthSync = await fetch(`${baseUrl}/abandoned-carts/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          customerName: 'Authenticated Customer',
+          customerEmail: authSyncEmail,
+          items: [
+            {
+              productId: '654321654321654321654321',
+              title: 'Synced Auth Cart Item',
+              price: 1999,
+              quantity: 1,
+            },
+          ],
+          cartTotal: 1999,
+        }),
+      });
+      assert.strictEqual(resAuthSync.status, 200);
+      const authSyncData = await resAuthSync.json();
+      assert.strictEqual(authSyncData.success, true);
+      assert.ok(authSyncData.data.user, 'Authenticated cart session sync must attach user ID to cart');
+
+      // Clean up auth synced cart
+      await AbandonedCart.deleteOne({ _id: authSyncData.data._id });
     });
 
     // =========================================================================
@@ -6553,7 +6612,7 @@ const runTests = async () => {
       });
       assert.strictEqual(resCustomerRates.status, 403, 'Customer token must be forbidden from updating rates');
 
-      // Admin successfully updates rates
+      // Admin attempts to tamper with base currency rate (INR: 5.0) alongside USD rate
       const resAdminRates = await fetch(`${baseUrl}/localization/admin/rates`, {
         method: 'PUT',
         headers: {
@@ -6562,6 +6621,7 @@ const runTests = async () => {
         },
         body: JSON.stringify({
           rates: {
+            INR: 5.0, // Should be rejected / ignored
             USD: 0.0125,
             EUR: 0.0115,
             AED: 0.045,
@@ -6572,11 +6632,37 @@ const runTests = async () => {
       const adminRatesData = await resAdminRates.json();
       assert.strictEqual(adminRatesData.success, true);
 
-      // Verify updated rate persisted in GET /localization/currencies
+      // Verify updated rate persisted in GET /localization/currencies, but INR remains anchored at 1.0
       const resVerifyRates = await fetch(`${baseUrl}/localization/currencies`);
       const verifyData = await resVerifyRates.json();
+      const inrCurr = verifyData.currencies.find((c) => c.code === 'INR');
       const updatedUsd = verifyData.currencies.find((c) => c.code === 'USD');
+      assert.strictEqual(inrCurr.rate, 1.0, 'Base currency INR rate must remain strictly 1.0');
       assert.strictEqual(updatedUsd.rate, 0.0125, 'Persisted USD rate must reflect updated rate');
+
+      // Negative Amount Conversion Test (Proper sign formatting: -$12.00, not $-12.00)
+      const resNegConvert = await fetch(`${baseUrl}/localization/convert?amount=-1000&from=INR&to=USD`);
+      assert.strictEqual(resNegConvert.status, 200);
+      const negData = await resNegConvert.json();
+      assert.strictEqual(negData.targetAmount, -12.5);
+      assert.ok(negData.formatted.startsWith('-$'), 'Negative USD amount must be formatted as -$X.XX');
+
+      // Inactive currency conversion rejection test
+      const LocalizationConfig = require('../src/models/LocalizationConfig');
+      const locConfig = await LocalizationConfig.findOne();
+      const eurCurr = locConfig.currencies.find((c) => c.code === 'EUR');
+      if (eurCurr) {
+        eurCurr.isActive = false;
+        await locConfig.save();
+
+        const resInactiveConvert = await fetch(`${baseUrl}/localization/convert?amount=100&from=INR&to=EUR`);
+        assert.strictEqual(resInactiveConvert.status, 400, 'Conversion to inactive currency must return 400');
+        const inactiveData = await resInactiveConvert.json();
+        assert.strictEqual(inactiveData.success, false);
+
+        eurCurr.isActive = true;
+        await locConfig.save();
+      }
 
       // Restore default USD rate to 0.012
       await fetch(`${baseUrl}/localization/admin/rates`, {

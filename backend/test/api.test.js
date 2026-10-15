@@ -9533,6 +9533,70 @@ const runTests = async () => {
       assert.notStrictEqual(generalData.data._id, testInquiryId, 'General inquiry must be a separate thread');
     });
 
+    // ==========================================
+    // POINT 15: Vendor GST/VAT & HSN Tax Filing Report
+    // ==========================================
+    await test('Point 15: GET /api/vendor/tax-report returns complete tax breakdown & HSN summary', async () => {
+      const res = await fetch(`${baseUrl}/vendor/tax-report`, {
+        headers: { Authorization: `Bearer ${liveVendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.vendor);
+      assert.ok(data.data.vendor.gstin);
+      assert.ok(data.data.summary);
+      assert.ok(typeof data.data.summary.totalTaxableValue === 'number');
+      assert.ok(Array.isArray(data.data.hsnSummary));
+      assert.ok(Array.isArray(data.data.b2csSummary));
+      assert.ok(Array.isArray(data.data.invoices));
+    });
+
+    await test('Point 15: GET /api/vendor/tax-report?year=2026&month=10 filters by specified month', async () => {
+      const res = await fetch(`${baseUrl}/vendor/tax-report?year=2026&month=10`, {
+        headers: { Authorization: `Bearer ${liveVendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.filingPeriod.year, 2026);
+      assert.strictEqual(data.data.filingPeriod.month, '10');
+    });
+
+    await test('Point 15: GET /api/vendor/tax-report?year=2026&quarter=Q3 filters by financial/calendar quarter', async () => {
+      const res = await fetch(`${baseUrl}/vendor/tax-report?year=2026&quarter=Q3`, {
+        headers: { Authorization: `Bearer ${liveVendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.filingPeriod.quarter, 'Q3');
+    });
+
+    await test('Point 15: GET /api/vendor/tax-report/export-csv returns downloadable GSTR-1 CSV file', async () => {
+      const res = await fetch(`${baseUrl}/vendor/tax-report/export-csv?year=2026&month=10`, {
+        headers: { Authorization: `Bearer ${liveVendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      assert.ok(res.headers.get('content-type')?.includes('text/csv'));
+      const csvText = await res.text();
+      assert.ok(csvText.includes('GSTR-1 TAX FILING REPORT'));
+      assert.ok(csvText.includes('TABLE 12: HSN SUMMARY'));
+      assert.ok(csvText.includes('TABLE 7: B2CS'));
+    });
+
+    await test('Point 15: Role Security: Customer token is rejected with 403 on vendor tax report', async () => {
+      const res = await fetch(`${baseUrl}/vendor/tax-report`, {
+        headers: { Authorization: `Bearer ${liveCustomerToken}` },
+      });
+      assert.strictEqual(res.status, 403);
+    });
+
+    await test('Point 15: Auth Security: Unauthenticated request to /api/vendor/tax-report is rejected with 401', async () => {
+      const res = await fetch(`${baseUrl}/vendor/tax-report`);
+      assert.strictEqual(res.status, 401);
+    });
+
   } finally {
     if (server) {
       server.close();

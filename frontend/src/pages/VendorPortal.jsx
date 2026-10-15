@@ -41,6 +41,7 @@ import VendorWalletLedgerModal from '../components/VendorWalletLedgerModal';
 import VendorPayoutModal from '../components/VendorPayoutModal';
 import VendorStaffManagerModal from '../components/VendorStaffManagerModal';
 import VendorChatInboxModal from '../components/VendorChatInboxModal';
+import VendorTaxReportModal from '../components/VendorTaxReportModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -171,6 +172,7 @@ export const VendorPortal = () => {
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [isChatInboxOpen, setIsChatInboxOpen] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [isTaxReportModalOpen, setIsTaxReportModalOpen] = useState(false); // Point #15: Vendor GST/VAT & HSN Tax Filing Report
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
 
@@ -611,6 +613,19 @@ export const VendorPortal = () => {
             <span>Wallet & Ledger</span>
             <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-emerald-400 text-slate-950">
               #61
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsTaxReportModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all"
+            title="Vendor GST/VAT & HSN Tax Filing Report with GSTR-1 Preparation Sheet"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-amber-400" />
+            <span>Tax & GSTR-1</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
+              #15
             </span>
           </button>
 
@@ -1745,6 +1760,13 @@ export const VendorPortal = () => {
         isOpen={isChatInboxOpen}
         onClose={() => setIsChatInboxOpen(false)}
         vendorToken={localStorage.getItem('vendorToken') || localStorage.getItem('token')}
+        storeName={vendorData.storeName}
+      />
+
+      {/* Point 15: Vendor GST/VAT & HSN Tax Filing Report Modal */}
+      <VendorTaxReportModal
+        isOpen={isTaxReportModalOpen}
+        onClose={() => setIsTaxReportModalOpen(false)}
         storeName={vendorData.storeName}
       />
     </div>

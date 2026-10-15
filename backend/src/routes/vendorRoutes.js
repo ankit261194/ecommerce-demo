@@ -31,6 +31,7 @@ const {
   updateVendorStaff,
   deleteVendorStaff,
 } = require('../controllers/vendorController');
+const { getVendorTaxReport, exportVendorTaxReportCSV } = require('../controllers/taxController');
 const { getSplitPackingSlips, getThermalReceipt } = require('../controllers/orderController');
 const { protect, authorize, requireVendorPermission } = require('../middlewares/auth');
 
@@ -56,6 +57,10 @@ router.delete('/reviews/:id/reply', deleteVendorReviewReply);
 // Point 61: Real-Time Vendor Financial Wallet & Ledger
 router.get('/wallet', getVendorWallet);
 router.get('/wallet/export-csv', exportVendorLedgerCSV);
+
+// Point 15: Vendor GST/VAT & HSN Tax Filing Report
+router.get('/tax-report', getVendorTaxReport);
+router.get('/tax-report/export-csv', exportVendorTaxReportCSV);
 
 router.get('/dashboard', getVendorDashboard);
 router.get('/products', getVendorProducts);

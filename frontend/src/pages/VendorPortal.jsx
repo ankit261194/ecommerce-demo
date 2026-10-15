@@ -30,6 +30,7 @@ import ShippingLabelPrinterModal from '../components/ShippingLabelPrinterModal';
 import VendorStoreProfileModal from '../components/VendorStoreProfileModal';
 import VendorPublicStoreModal from '../components/VendorPublicStoreModal';
 import VacationModeModal from '../components/VacationModeModal';
+import VendorReviewsModal from '../components/VendorReviewsModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -149,6 +150,7 @@ export const VendorPortal = () => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // Point #58: Store Profile Customization
   const [isPublicStorePreviewOpen, setIsPublicStorePreviewOpen] = useState(false); // Point #58: Public Storefront Preview
   const [isVacationModalOpen, setIsVacationModalOpen] = useState(false); // Point #59: Vacation Mode Toggle
+  const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false); // Point #60: Customer Reviews Management
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
@@ -504,6 +506,19 @@ export const VendorPortal = () => {
             <span>Store Branding & Profile</span>
             <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
               #58
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsReviewsModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all"
+            title="Customer Reviews & Reputation Management: View ratings & post official replies"
+          >
+            <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+            <span>Customer Reviews</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
+              #60
             </span>
           </button>
 
@@ -1522,6 +1537,13 @@ export const VendorPortal = () => {
               : '🌴 Vacation mode disabled. Store ordering is now live!'
           );
         }}
+      />
+
+      {/* Point 60: Customer Reviews & Reputation Management Modal */}
+      <VendorReviewsModal
+        isOpen={isReviewsModalOpen}
+        onClose={() => setIsReviewsModalOpen(false)}
+        onRefreshStoreData={fetchVendorData}
       />
     </div>
   );

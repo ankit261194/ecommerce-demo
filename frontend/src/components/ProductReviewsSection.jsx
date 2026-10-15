@@ -11,6 +11,7 @@ import {
   Camera,
   X,
   Send,
+  Store,
 } from 'lucide-react';
 
 /**
@@ -554,6 +555,35 @@ export default function ProductReviewsSection({
                         className="w-16 h-16 rounded-xl object-cover border border-slate-200 hover:scale-105 transition-transform cursor-pointer shadow-xs"
                       />
                     ))}
+                  </div>
+                )}
+
+                {/* Point 60: Official Merchant Response */}
+                {review.vendorReply && review.vendorReply.comment && (
+                  <div className="p-3.5 rounded-2xl bg-amber-50/60 border border-amber-200/80 space-y-1.5 shadow-xs">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-extrabold text-slate-900 flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded-md bg-amber-500 text-slate-950 flex items-center justify-center font-black text-[10px]">
+                          <Store className="w-3 h-3" />
+                        </span>
+                        <span>Official Merchant Response</span>
+                        <span className="text-[10px] font-black uppercase text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded">
+                          Verified Seller
+                        </span>
+                      </span>
+                      {review.vendorReply.repliedAt && (
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {new Date(review.vendorReply.repliedAt).toLocaleDateString('en-IN', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-700 font-medium pl-3 border-l-2 border-amber-500 leading-relaxed">
+                      {review.vendorReply.comment}
+                    </p>
                   </div>
                 )}
 

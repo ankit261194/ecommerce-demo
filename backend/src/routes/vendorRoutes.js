@@ -18,6 +18,9 @@ const {
   updateVendorProfile,
   getPublicVendorStore,
   updateVacationMode,
+  getVendorReviews,
+  replyVendorReview,
+  deleteVendorReviewReply,
 } = require('../controllers/vendorController');
 const { protect, authorize } = require('../middlewares/auth');
 
@@ -34,6 +37,11 @@ router.put('/profile', updateVendorProfile);
 
 // Point 59: Vacation Mode Toggle (Pause orders without deleting items)
 router.put('/vacation-mode', updateVacationMode);
+
+// Point 60: Customer Reviews Management (View reviews & post vendor responses)
+router.get('/reviews', getVendorReviews);
+router.post('/reviews/:id/reply', replyVendorReview);
+router.delete('/reviews/:id/reply', deleteVendorReviewReply);
 
 router.get('/dashboard', getVendorDashboard);
 router.get('/products', getVendorProducts);

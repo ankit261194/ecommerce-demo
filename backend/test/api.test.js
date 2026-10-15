@@ -4185,6 +4185,123 @@ const runTests = async () => {
       }
     });
 
+    // =========================================================================
+    // Point 60: Customer Reviews Management (Vendor review inbox, rating breakdown, filtering & vendor responses)
+    // =========================================================================
+    await test('Point 60: Customer Reviews Management (Vendor review inbox, rating breakdown, filtering & official responses)', async () => {
+      // 1. Vendor fetches customer reviews inbox and rating breakdown
+      const resReviews = await fetch(`${baseUrl}/vendor/reviews`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resReviews.status, 200);
+      const dataReviews = await resReviews.json();
+      assert.strictEqual(dataReviews.success, true);
+      assert.ok(Array.isArray(dataReviews.data), 'Reviews should be an array');
+      assert.ok(dataReviews.analytics, 'Analytics object should be present');
+      assert.ok(dataReviews.analytics.totalReviews >= 1, 'Total reviews should be at least 1');
+      assert.ok(typeof dataReviews.analytics.averageRating === 'number');
+      assert.ok(Array.isArray(dataReviews.analytics.breakdown), 'Breakdown should be an array of 5 star categories');
+      assert.strictEqual(dataReviews.analytics.breakdown.length, 5);
+
+      const targetReview = dataReviews.data[0];
+      assert.ok(targetReview._id, 'Review should have an ID');
+
+      // 2. Test filtering by star rating (5-star filter)
+      const res5Star = await fetch(`${baseUrl}/vendor/reviews?rating=5`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(res5Star.status, 200);
+      const data5Star = await res5Star.json();
+      assert.strictEqual(data5Star.success, true);
+      data5Star.data.forEach(r => {
+        assert.strictEqual(r.rating, 5);
+      });
+
+      // 3. Test filtering by reply status (unreplied)
+      const resUnreplied = await fetch(`${baseUrl}/vendor/reviews?status=unreplied`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resUnreplied.status, 200);
+      const dataUnreplied = await resUnreplied.json();
+      assert.strictEqual(dataUnreplied.success, true);
+      dataUnreplied.data.forEach(r => {
+        assert.ok(!r.vendorReply || !r.vendorReply.comment, 'Should only return unreplied reviews');
+      });
+
+      // 4. Vendor posts an official merchant reply
+      const officialReplyText = 'Thank you for your review! Our team takes great pride in offering authentic products with express dispatch.';
+      const resReply = await fetch(`${baseUrl}/vendor/reviews/${targetReview._id}/reply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({ reply: officialReplyText }),
+      });
+      assert.strictEqual(resReply.status, 200);
+      const dataReply = await resReply.json();
+      assert.strictEqual(dataReply.success, true);
+      assert.strictEqual(dataReply.data.vendorReply.comment, officialReplyText);
+      assert.ok(dataReply.data.vendorReply.repliedAt);
+
+      // 5. Verify customer PDP reviews endpoint reflects official merchant reply
+      const targetProductId = targetReview.product?._id || targetReview.product;
+      const resPdpReviews = await fetch(`${baseUrl}/reviews/product/${targetProductId}`);
+      assert.strictEqual(resPdpReviews.status, 200);
+      const dataPdpReviews = await resPdpReviews.json();
+      assert.strictEqual(dataPdpReviews.success, true);
+      const matchedPdpReview = dataPdpReviews.data.find(r => r._id.toString() === targetReview._id.toString());
+      if (matchedPdpReview) {
+        assert.ok(matchedPdpReview.vendorReply);
+        assert.strictEqual(matchedPdpReview.vendorReply.comment, officialReplyText);
+      }
+
+      // 6. Vendor updates official reply
+      const updatedReplyText = 'Updated: Thank you for your continued trust in our official storefront!';
+      const resUpdateReply = await fetch(`${baseUrl}/vendor/reviews/${targetReview._id}/reply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({ reply: updatedReplyText }),
+      });
+      assert.strictEqual(resUpdateReply.status, 200);
+      const dataUpdateReply = await resUpdateReply.json();
+      assert.strictEqual(dataUpdateReply.data.vendorReply.comment, updatedReplyText);
+
+      // 7. Vendor deletes official reply
+      const resDeleteReply = await fetch(`${baseUrl}/vendor/reviews/${targetReview._id}/reply`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resDeleteReply.status, 200);
+      const dataDeleteReply = await resDeleteReply.json();
+      assert.strictEqual(dataDeleteReply.success, true);
+
+      // 8. Validation: Rejects empty reply with 400
+      const resEmptyReply = await fetch(`${baseUrl}/vendor/reviews/${targetReview._id}/reply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({ reply: '   ' }),
+      });
+      assert.strictEqual(resEmptyReply.status, 400);
+
+      // 9. Authorization: Rejects customer attempting vendor reply with 403
+      const resCustomerForbidden = await fetch(`${baseUrl}/vendor/reviews/${targetReview._id}/reply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ reply: 'Hacker reply' }),
+      });
+      assert.strictEqual(resCustomerForbidden.status, 403);
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

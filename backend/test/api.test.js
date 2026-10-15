@@ -7415,6 +7415,128 @@ const runTests = async () => {
       assert.strictEqual(deleteData.success, true);
     });
 
+    // =========================================================================
+    // Point 2: Real-Time Customer Notification Center
+    // =========================================================================
+    // Refresh customerToken following prior demo wipe & re-seed
+    const custLoginRes = await fetch(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'customer@auramarket.com', password: 'customer123456' }),
+    });
+    if (custLoginRes.status === 200) {
+      const custData = await custLoginRes.json();
+      customerToken = custData.token;
+    }
+
+    await test('Point 2: GET /api/notifications retrieves customer notifications and unread badge count', async () => {
+      const res = await fetch(`${baseUrl}/notifications`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data), 'Notifications must be an array');
+      assert.ok(data.data.length >= 1, 'Customer should have seeded welcome notifications');
+      assert.strictEqual(typeof data.unreadCount, 'number');
+      assert.ok(data.unreadCount >= 1, 'Must report active unreadCount for bell badge');
+    });
+
+    await test('Point 2: GET /api/notifications rejects unauthenticated access with 401', async () => {
+      const res = await fetch(`${baseUrl}/notifications`);
+      assert.strictEqual(res.status, 401);
+    });
+
+    await test('Point 2: POST /api/notifications/simulate triggers live order alert and increments unread count', async () => {
+      const simulateRes = await fetch(`${baseUrl}/notifications/simulate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          title: '🚚 Order Out for Delivery!',
+          message: 'Express rider Rajesh is arriving in 15 mins. OTP is required.',
+          type: 'OUT_FOR_DELIVERY',
+          orderNumber: 'ORD-LIVE-TEST-1',
+        }),
+      });
+      assert.strictEqual(simulateRes.status, 201);
+      const simData = await simulateRes.json();
+      assert.strictEqual(simData.success, true);
+      assert.strictEqual(simData.data.title, '🚚 Order Out for Delivery!');
+      assert.strictEqual(simData.data.type, 'OUT_FOR_DELIVERY');
+      assert.strictEqual(simData.data.isRead, false);
+      assert.ok(simData.unreadCount >= 1);
+    });
+
+    await test('Point 2: PUT /api/notifications/:id/read marks single notification as read', async () => {
+      // 1. Get an unread notification
+      const listRes = await fetch(`${baseUrl}/notifications?unreadOnly=true`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      const listData = await listRes.json();
+      assert.ok(listData.data.length > 0);
+      const targetNotif = listData.data[0];
+
+      // 2. Mark as read
+      const readRes = await fetch(`${baseUrl}/notifications/${targetNotif._id}/read`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(readRes.status, 200);
+      const readData = await readRes.json();
+      assert.strictEqual(readData.success, true);
+      assert.strictEqual(readData.data.isRead, true);
+      assert.ok(readData.data.readAt);
+    });
+
+    await test('Point 2: PUT /api/notifications/mark-all-read clears all unread badges to 0', async () => {
+      const res = await fetch(`${baseUrl}/notifications/mark-all-read`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.unreadCount, 0);
+
+      // Verify list has 0 unread
+      const verifyRes = await fetch(`${baseUrl}/notifications?unreadOnly=true`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      const verifyData = await verifyRes.json();
+      assert.strictEqual(verifyData.data.length, 0);
+      assert.strictEqual(verifyData.unreadCount, 0);
+    });
+
+    await test('Point 2: DELETE /api/notifications/:id deletes customer notification', async () => {
+      // 1. Create a notification to delete
+      const simRes = await fetch(`${baseUrl}/notifications/simulate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Temporary Flash Notification',
+          message: 'Will be deleted shortly',
+          type: 'SYSTEM',
+        }),
+      });
+      const simData = await simRes.json();
+      const notifId = simData.data._id;
+
+      // 2. Delete
+      const deleteRes = await fetch(`${baseUrl}/notifications/${notifId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(deleteRes.status, 200);
+      const deleteData = await deleteRes.json();
+      assert.strictEqual(deleteData.success, true);
+    });
+
   } finally {
     if (server) {
       server.close();

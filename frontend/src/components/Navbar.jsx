@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Search, MapPin, Sparkles, ChevronDown, Heart, X, Check, Truck, Wallet, Coins } from 'lucide-react';
+import { ShoppingBag, Search, MapPin, Sparkles, ChevronDown, Heart, X, Check, Truck, Wallet, Coins, Bell } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useLocalization } from '../context/LocalizationContext';
 import LiveSearchAutocomplete from './LiveSearchAutocomplete';
 import TopAnnouncementBar from './TopAnnouncementBar';
 import LocalizationSelector from './LocalizationSelector';
+import NotificationCenterModal from './NotificationCenterModal';
+import api from '../api/client';
 
 export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect, isMobileMode = false }) => {
   const { user } = useAuth();
@@ -78,6 +80,31 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
     return () => {
       window.removeEventListener('auramarket_wallet_update', handleWalletUpdate);
       window.removeEventListener('storage', handleStorageUpdate);
+    };
+  }, []);
+
+  // Point #2: Customer Notification Center State
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(2);
+
+  const fetchUnreadNotifications = async () => {
+    try {
+      const res = await api.get('/notifications');
+      if (res.data?.success) {
+        setUnreadCount(res.data.unreadCount || 0);
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    fetchUnreadNotifications();
+    const handleOpenNotif = () => setIsNotificationOpen(true);
+    const handleRefreshNotif = () => fetchUnreadNotifications();
+    window.addEventListener('auramarket_open_notifications', handleOpenNotif);
+    window.addEventListener('auramarket_refresh_notifications', handleRefreshNotif);
+    return () => {
+      window.removeEventListener('auramarket_open_notifications', handleOpenNotif);
+      window.removeEventListener('auramarket_refresh_notifications', handleRefreshNotif);
     };
   }, []);
 
@@ -164,6 +191,20 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
                 )}
               </button>
 
+              {/* Point #2: Mobile Notification Center Bell */}
+              <button
+                onClick={() => setIsNotificationOpen(true)}
+                className="relative p-2 rounded-lg bg-white/10 text-amber-400 hover:text-amber-300 transition-colors"
+                title="Notifications"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center animate-pulse">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
               {/* Track Order Link Mobile */}
               <button
                 onClick={() => {
@@ -234,6 +275,23 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
             >
               <Truck className="w-4 h-4 text-emerald-400" />
               <span className="text-xs font-bold hidden lg:inline">Track Order</span>
+            </button>
+
+            {/* Point #2: Desktop Notification Center Bell */}
+            <button
+              onClick={() => setIsNotificationOpen(true)}
+              className="relative p-2 rounded-xl bg-white/10 hover:bg-white/15 text-white transition-all flex items-center gap-1.5"
+              title="Notifications & Live Alerts"
+            >
+              <div className="relative">
+                <Bell className="w-4 h-4 text-amber-400" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center animate-pulse">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </div>
+              <span className="text-xs font-bold hidden lg:inline">Alerts</span>
             </button>
 
             {/* Wishlist Link */}
@@ -404,6 +462,18 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
           </div>
         </div>
       )}
+
+      {/* Point #2: Real-Time Customer Notification Center Drawer Modal */}
+      <NotificationCenterModal
+        isOpen={isNotificationOpen}
+        onClose={() => {
+          setIsNotificationOpen(false);
+          fetchUnreadNotifications();
+        }}
+        onTrackOrder={(ordNumber) => {
+          window.dispatchEvent(new CustomEvent('auramarket_open_order_tracker', { detail: ordNumber }));
+        }}
+      />
     </header>
   );
 };

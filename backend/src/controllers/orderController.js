@@ -559,6 +559,23 @@ exports.createOrder = async (req, res, next) => {
       .sendOrderEmail({ order: populatedOrder, email: customerEmail })
       .catch(err => console.log('[Email Warning] Could not dispatch order email:', err.message));
 
+    // Point 2: In-App Order Confirmation Notification
+    try {
+      const Notification = require('../models/Notification');
+      await Notification.create({
+        recipient: req.user._id,
+        role: 'customer',
+        title: `🛍️ Order Placed #${populatedOrder.orderNumber}`,
+        message: `Your order for ₹${populatedOrder.totalAmount} has been confirmed. Secret delivery OTP is ${populatedOrder.deliveryOtp}.`,
+        type: 'ORDER_PLACED',
+        orderId: populatedOrder._id,
+        orderNumber: populatedOrder.orderNumber,
+        actionUrl: '/orders',
+      });
+    } catch (notifErr) {
+      console.warn('[Notification] Could not record in-app order notification:', notifErr.message);
+    }
+
     // Point #77: Automatically mark customer's open abandoned carts as RECOVERED
     try {
       const AbandonedCart = require('../models/AbandonedCart');

@@ -7537,6 +7537,121 @@ const runTests = async () => {
       assert.strictEqual(deleteData.success, true);
     });
 
+    // =========================================================================
+    // Point 3: Instant Google 1-Tap & Mobile SMS OTP Frictionless Login
+    // =========================================================================
+    let testMobileOtpCode = '';
+    const testPhone = '9812345678';
+
+    await test('Point 3: POST /api/auth/otp/request generates OTP and dispatches SMS for valid mobile', async () => {
+      const res = await fetch(`${baseUrl}/auth/otp/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: testPhone }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.phone, testPhone);
+      assert.strictEqual(data.expiresInSeconds, 600);
+      assert.ok(data.demoOtp, 'Demo OTP must be returned in non-prod test suite');
+      testMobileOtpCode = data.demoOtp;
+    });
+
+    await test('Point 3: POST /api/auth/otp/request rejects invalid mobile numbers with 400', async () => {
+      const badPhones = ['12345', '1234567890', 'abcdefghij', '5555555555'];
+      for (const p of badPhones) {
+        const res = await fetch(`${baseUrl}/auth/otp/request`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: p }),
+        });
+        assert.strictEqual(res.status, 400, `Expected 400 for bad phone '${p}'`);
+        const data = await res.json();
+        assert.strictEqual(data.success, false);
+      }
+    });
+
+    await test('Point 3: POST /api/auth/otp/verify rejects incorrect OTP code with 400', async () => {
+      const res = await fetch(`${baseUrl}/auth/otp/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: testPhone, otp: '000000' }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Invalid'));
+    });
+
+    await test('Point 3: POST /api/auth/otp/verify logs in customer with valid OTP and issues JWT', async () => {
+      const res = await fetch(`${baseUrl}/auth/otp/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: testPhone,
+          otp: testMobileOtpCode,
+          name: 'Pooja Verma',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token, 'Must return JWT token');
+      assert.strictEqual(data.user.name, 'Pooja Verma');
+      assert.strictEqual(data.user.phone, testPhone);
+      assert.strictEqual(data.user.role, 'customer');
+
+      // Verify authenticated call works with issued token
+      const meRes = await fetch(`${baseUrl}/auth/me`, {
+        headers: { Authorization: `Bearer ${data.token}` },
+      });
+      assert.strictEqual(meRes.status, 200);
+    });
+
+    await test('Point 3: POST /api/auth/google/one-tap provisions and authenticates Google customer account', async () => {
+      const googlePayload = {
+        email: 'priya.sharma.test2026@gmail.com',
+        name: 'Priya Sharma',
+        picture: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120',
+        sub: 'goog_sub_unique_test_987654',
+      };
+
+      const res = await fetch(`${baseUrl}/auth/google/one-tap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(googlePayload),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token, 'Must return valid JWT token');
+      assert.strictEqual(data.user.email, 'priya.sharma.test2026@gmail.com');
+      assert.strictEqual(data.user.name, 'Priya Sharma');
+      assert.strictEqual(data.user.role, 'customer');
+
+      // Subsequent 1-tap call for same account returns existing session without duplication
+      const repeatRes = await fetch(`${baseUrl}/auth/google/one-tap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(googlePayload),
+      });
+      assert.strictEqual(repeatRes.status, 200);
+      const repeatData = await repeatRes.json();
+      assert.strictEqual(repeatData.user.id, data.user.id);
+    });
+
+    await test('Point 3: POST /api/auth/google/one-tap rejects invalid/empty email with 400', async () => {
+      const res = await fetch(`${baseUrl}/auth/google/one-tap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'not-an-email', name: 'Bad Data' }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
   } finally {
     if (server) {
       server.close();

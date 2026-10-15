@@ -7,6 +7,7 @@ import LiveSearchAutocomplete from './LiveSearchAutocomplete';
 import TopAnnouncementBar from './TopAnnouncementBar';
 import LocalizationSelector from './LocalizationSelector';
 import NotificationCenterModal from './NotificationCenterModal';
+import FrictionlessAuthModal from './FrictionlessAuthModal';
 import api from '../api/client';
 
 export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect, isMobileMode = false }) => {
@@ -106,6 +107,15 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
       window.removeEventListener('auramarket_open_notifications', handleOpenNotif);
       window.removeEventListener('auramarket_refresh_notifications', handleRefreshNotif);
     };
+  }, []);
+
+  // Point #3: Frictionless Auth Modal State
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpenAuth = () => setIsAuthModalOpen(true);
+    window.addEventListener('auramarket_open_auth', handleOpenAuth);
+    return () => window.removeEventListener('auramarket_open_auth', handleOpenAuth);
   }, []);
 
   const handleSaveLocation = (loc) => {
@@ -327,7 +337,11 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
             </button>
 
             {/* Account / User */}
-            <div className="flex items-center gap-2 cursor-pointer text-xs">
+            <div
+              onClick={() => setIsAuthModalOpen(true)}
+              className="flex items-center gap-2 cursor-pointer text-xs p-1.5 rounded-xl hover:bg-white/10 transition-colors"
+              title="Sign In with Google 1-Tap or Mobile OTP"
+            >
               <div className="w-8 h-8 rounded-full bg-blue-950/70 border border-blue-800 flex items-center justify-center font-black text-amber-400 shadow-inner flex-shrink-0">
                 {user?.name?.charAt(0) || 'U'}
               </div>
@@ -473,6 +487,12 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
         onTrackOrder={(ordNumber) => {
           window.dispatchEvent(new CustomEvent('auramarket_open_order_tracker', { detail: ordNumber }));
         }}
+      />
+
+      {/* Point #3: Instant Google 1-Tap & Mobile SMS OTP Frictionless Login Modal */}
+      <FrictionlessAuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
       />
     </header>
   );

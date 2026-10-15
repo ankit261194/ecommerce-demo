@@ -22,9 +22,29 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, 'Please provide password'],
+      required: function () {
+        return !this.authProvider || this.authProvider === 'LOCAL';
+      },
       minlength: 6,
       select: false,
+    },
+    authProvider: {
+      type: String,
+      enum: ['LOCAL', 'GOOGLE', 'PHONE_OTP'],
+      default: 'LOCAL',
+    },
+    googleId: {
+      type: String,
+      default: '',
+      index: true,
+    },
+    avatar: {
+      type: String,
+      default: '',
+    },
+    otp: {
+      code: { type: String, default: '' },
+      expiresAt: { type: Date, default: null },
     },
     role: {
       type: String,
@@ -101,7 +121,7 @@ const userSchema = new mongoose.Schema(
 
 // Hash password before saving
 userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
+  if (!this.isModified('password') || !this.password) return next();
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
   next();

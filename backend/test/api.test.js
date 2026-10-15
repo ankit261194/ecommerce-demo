@@ -3118,6 +3118,97 @@ const runTests = async () => {
       assert.ok(csvText.includes('UTR-HDFC-9988776655'));
     });
 
+    await test('Point 48: Tax (GST/VAT) & Dynamic Shipping Charges Engine (Config persistence, free shipping threshold, express shipping & GST calculation)', async () => {
+      // 1. Super Admin updates Tax & Dynamic Shipping Settings
+      const resConfig = await fetch(`${baseUrl}/ui/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          taxSettings: {
+            enabled: true,
+            defaultGSTRate: 18,
+            calculationMode: 'INCLUSIVE',
+            gstin: '07AAAAA0000A1Z5',
+            state: 'Delhi',
+          },
+          shipping: {
+            freeShippingThreshold: 1000,
+            defaultShippingFee: 99,
+            expressShippingFee: 149,
+            codFee: 29,
+            enabled: true,
+          },
+        }),
+      });
+      assert.strictEqual(resConfig.status, 200);
+      const dataConfig = await resConfig.json();
+      assert.strictEqual(dataConfig.success, true);
+      assert.strictEqual(dataConfig.data.shipping.freeShippingThreshold, 1000);
+      assert.strictEqual(dataConfig.data.shipping.defaultShippingFee, 99);
+      assert.strictEqual(dataConfig.data.taxSettings.defaultGSTRate, 18);
+
+      // 2. Place Order with subtotal > 1000: Shipping must be FREE (0) and GST split recorded
+      const resFreeShip = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: headphonesProduct._id, quantity: 1 }],
+          shippingAddress: {
+            recipientName: 'Tax Test Customer',
+            phone: '9876543210',
+            street: '12 Connaught Place',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'UPI',
+        }),
+      });
+      assert.strictEqual(resFreeShip.status, 201);
+      const dataFreeShip = await resFreeShip.json();
+      assert.strictEqual(dataFreeShip.success, true);
+      assert.strictEqual(dataFreeShip.data.shippingFee, 0, 'Shipping must be 0 for order exceeding threshold');
+      assert.ok(dataFreeShip.data.taxAmount > 0, 'Tax amount must be calculated');
+      assert.strictEqual(dataFreeShip.data.taxDetails.mode, 'INCLUSIVE');
+      assert.ok(dataFreeShip.data.taxDetails.cgst > 0, 'Intra-state must have CGST');
+      assert.ok(dataFreeShip.data.taxDetails.sgst > 0, 'Intra-state must have SGST');
+      assert.strictEqual(dataFreeShip.data.taxDetails.igst, 0, 'Intra-state IGST must be 0');
+
+      // 3. Place Order with EXPRESS shipping method: Express surcharge (149) must be applied
+      const resExpress = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: headphonesProduct._id, quantity: 1 }],
+          shippingMethod: 'EXPRESS',
+          shippingAddress: {
+            recipientName: 'Express Delivery User',
+            phone: '9876543210',
+            street: 'Bandra West',
+            city: 'Mumbai',
+            state: 'Maharashtra',
+            pincode: '400050',
+          },
+          paymentMethod: 'RAZORPAY',
+        }),
+      });
+      assert.strictEqual(resExpress.status, 201);
+      const dataExpress = await resExpress.json();
+      assert.strictEqual(dataExpress.success, true);
+      assert.strictEqual(dataExpress.data.shippingFee, 149, 'Express shipping surcharge must be 149');
+      assert.ok(dataExpress.data.taxDetails.igst > 0, 'Inter-state order must record IGST');
+      assert.strictEqual(dataExpress.data.taxDetails.cgst, 0, 'Inter-state CGST must be 0');
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

@@ -72,6 +72,7 @@ import AbandonedCartManager from '../components/AbandonedCartManager';
 import CustomerCRMManager from '../components/CustomerCRMManager';
 import VendorKYCManager from '../components/VendorKYCManager';
 import VendorPayoutManager from '../components/VendorPayoutManager';
+import TaxShippingManager from '../components/TaxShippingManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1414,6 +1415,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
               Point #47
             </span>
           </button>
+
+          <button
+            onClick={() => setActiveDashboardTab('tax-shipping')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'tax-shipping'
+                ? 'bg-blue-600 text-white shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Receipt className="w-4 h-4 text-blue-300" />
+            <span>Tax & Shipping Engine</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-blue-500/30 text-blue-200 ml-1">
+              Point #48
+            </span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -2189,6 +2205,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'payouts' && (
         <VendorPayoutManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 13: TAX (GST) & DYNAMIC SHIPPING ENGINE (Point #48) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'tax-shipping' && (
+        <TaxShippingManager uiConfig={uiConfig} setUiConfig={setUiConfig} />
       )}
 
       {/* ========================================================================= */}

@@ -212,6 +212,18 @@ const uiConfigSchema = new mongoose.Schema(
         type: Number,
         default: 149,
       },
+      codFee: {
+        type: Number,
+        default: 0,
+      },
+      estimatedStandardDays: {
+        type: String,
+        default: '2-4 business days',
+      },
+      estimatedExpressDays: {
+        type: String,
+        default: '24-48 hours',
+      },
       enabled: {
         type: Boolean,
         default: true,
@@ -260,6 +272,19 @@ const uiConfigSchema = new mongoose.Schema(
       },
     },
     taxSettings: {
+      enabled: {
+        type: Boolean,
+        default: true,
+      },
+      defaultGSTRate: {
+        type: Number,
+        default: 18,
+      },
+      calculationMode: {
+        type: String,
+        enum: ['INCLUSIVE', 'EXCLUSIVE'],
+        default: 'INCLUSIVE',
+      },
       companyName: {
         type: String,
         default: 'AuraMarket E-Commerce Private Limited',

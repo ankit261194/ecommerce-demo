@@ -82,6 +82,8 @@ exports.updateUIConfig = async (req, res, next) => {
       demoWhatsAppUrl,
       integrations,
       seo,
+      shipping,
+      taxSettings,
     } = req.body;
 
     let config = await UIConfig.findOne();
@@ -103,6 +105,24 @@ exports.updateUIConfig = async (req, res, next) => {
     if (demoModeActive !== undefined) config.demoModeActive = demoModeActive;
     if (demoNoticeContact !== undefined) config.demoNoticeContact = demoNoticeContact;
     if (demoWhatsAppUrl !== undefined) config.demoWhatsAppUrl = demoWhatsAppUrl;
+
+    if (shipping) {
+      const curShip = config.shipping ? (config.shipping.toObject ? config.shipping.toObject() : config.shipping) : {};
+      config.shipping = {
+        ...curShip,
+        ...shipping,
+      };
+      config.markModified('shipping');
+    }
+
+    if (taxSettings) {
+      const curTax = config.taxSettings ? (config.taxSettings.toObject ? config.taxSettings.toObject() : config.taxSettings) : {};
+      config.taxSettings = {
+        ...curTax,
+        ...taxSettings,
+      };
+      config.markModified('taxSettings');
+    }
 
     if (announcement) {
       const curAnn = config.announcement ? (config.announcement.toObject ? config.announcement.toObject() : config.announcement) : {};

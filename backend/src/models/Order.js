@@ -67,6 +67,17 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    taxAmount: {
+      type: Number,
+      default: 0,
+    },
+    taxDetails: {
+      rate: { type: Number, default: 18 },
+      mode: { type: String, enum: ['INCLUSIVE', 'EXCLUSIVE'], default: 'INCLUSIVE' },
+      cgst: { type: Number, default: 0 },
+      sgst: { type: Number, default: 0 },
+      igst: { type: Number, default: 0 },
+    },
     shippingAddress: {
       recipientName: { type: String, required: true },
       phone: { type: String, required: true },

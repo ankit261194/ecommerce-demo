@@ -206,15 +206,52 @@ exports.createOrder = async (req, res, next) => {
       }
     }
 
-    // Dynamic Shipping Calculation (Free Shipping above threshold on net item subtotal)
+    // Point #48: Dynamic Tax (GST/VAT) & Shipping Charges Engine
     const UIConfig = require('../models/UIConfig');
     let uiConfigDoc = null;
     try {
       uiConfigDoc = await UIConfig.findOne();
     } catch (e) {}
+
     const freeThreshold = uiConfigDoc?.shipping?.freeShippingThreshold ?? 999;
     const defaultFee = uiConfigDoc?.shipping?.defaultShippingFee ?? 99;
-    const shippingFee = totalOrderAmount >= freeThreshold ? 0 : defaultFee;
+    const expressFee = uiConfigDoc?.shipping?.expressShippingFee ?? 149;
+    const codHandlingFee = paymentMethod === 'COD' ? (uiConfigDoc?.shipping?.codFee ?? 0) : 0;
+
+    let baseShippingFee = 0;
+    if (req.body.shippingMethod === 'EXPRESS') {
+      baseShippingFee = expressFee;
+    } else {
+      baseShippingFee = totalOrderAmount >= freeThreshold ? 0 : defaultFee;
+    }
+    const shippingFee = baseShippingFee + codHandlingFee;
+
+    // Tax Engine: GST Calculation
+    const taxSettings = uiConfigDoc?.taxSettings;
+    const isTaxEnabled = taxSettings?.enabled !== false;
+    const gstRate = isTaxEnabled ? (taxSettings?.defaultGSTRate ?? 18) : 0;
+    const calculationMode = taxSettings?.calculationMode || 'INCLUSIVE';
+
+    let taxAmount = 0;
+    if (isTaxEnabled && gstRate > 0) {
+      if (calculationMode === 'EXCLUSIVE') {
+        taxAmount = Math.round((totalOrderAmount * gstRate) / 100);
+      } else {
+        taxAmount = Math.round(totalOrderAmount - totalOrderAmount / (1 + gstRate / 100));
+      }
+    }
+
+    // Tax Split: Intra-state (CGST+SGST) vs Inter-state (IGST)
+    const storeState = (taxSettings?.state || 'Delhi').toLowerCase();
+    const destState = (shippingAddress?.state || '').toLowerCase();
+    const isIntraState = storeState === destState;
+    const taxDetails = {
+      rate: gstRate,
+      mode: calculationMode,
+      cgst: isIntraState ? Math.round(taxAmount / 2) : 0,
+      sgst: isIntraState ? Math.round(taxAmount / 2) : 0,
+      igst: !isIntraState ? taxAmount : 0,
+    };
 
     // Point #31: Customer In-App Wallet & Reward Coins Redemption
     const coinsToRedeem = Number(req.body.coinsToRedeem || req.body.walletCoinsUsed || 0);
@@ -234,7 +271,11 @@ exports.createOrder = async (req, res, next) => {
       coinDiscount = Math.min(coinsToRedeem, maxRedeemable);
     }
 
-    const finalTotalAmount = Math.max(0, totalOrderAmount - couponDiscountAmount + shippingFee - coinDiscount);
+    const netTaxAdd = calculationMode === 'EXCLUSIVE' ? taxAmount : 0;
+    const finalTotalAmount = Math.max(
+      0,
+      totalOrderAmount + netTaxAdd - couponDiscountAmount + shippingFee - coinDiscount
+    );
 
     // Point #26 & #31: Resolve Payment Gateway & Verification
     const validMethods = ['COD', 'RAZORPAY', 'STRIPE', 'UPI', 'WALLET'];
@@ -281,6 +322,8 @@ exports.createOrder = async (req, res, next) => {
       cashbackEarned,
       totalAmount: finalTotalAmount,
       shippingFee,
+      taxAmount,
+      taxDetails,
       shippingAddress,
       deliveryInstructions: deliveryInstructions || '',
       paymentMethod: activePaymentMethod,

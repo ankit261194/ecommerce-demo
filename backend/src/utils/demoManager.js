@@ -15,6 +15,8 @@ const SizeChart = require('../models/SizeChart');
 const defaultSizeCharts = require('./defaultSizeCharts');
 const CmsPage = require('../models/CmsPage');
 const { seedDefaultCmsPages } = require('../controllers/cmsController');
+const Faq = require('../models/Faq');
+const { seedDefaultFaqs } = require('../controllers/faqController');
 
 const seedDemoData = async () => {
   console.log('[DemoManager] Seeding demo multi-vendor data...');
@@ -913,6 +915,7 @@ const seedDemoData = async () => {
   }
 
   await seedDefaultCmsPages();
+  await seedDefaultFaqs();
 
   console.log('[DemoManager] Seeding completed successfully!');
   return { success: true, message: 'Demo data seeded successfully' };
@@ -921,7 +924,7 @@ const seedDemoData = async () => {
 const wipeDemoData = async () => {
   console.log('[DemoManager] Wiping demo products, orders, tasks, ledgers, coupons, and banners...');
 
-  // 1. Delete all products, categories, orders, suborders, delivery tasks, ledger entries, coupons, banners, audit logs, pincode zones, size charts, cms pages
+  // 1. Delete all products, categories, orders, suborders, delivery tasks, ledger entries, coupons, banners, audit logs, pincode zones, size charts, cms pages, faqs
   await Product.deleteMany({});
   await Order.deleteMany({});
   await SubOrder.deleteMany({});
@@ -934,6 +937,7 @@ const wipeDemoData = async () => {
   await PincodeZone.deleteMany({});
   await SizeChart.deleteMany({});
   await CmsPage.deleteMany({});
+  await Faq.deleteMany({});
 
   // 2. Remove non-admin demo users if desired, or keep superadmin safe
   await User.deleteMany({ role: { $ne: 'superadmin' } });

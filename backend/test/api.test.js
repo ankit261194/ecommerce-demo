@@ -8205,6 +8205,134 @@ const runTests = async () => {
       assert.strictEqual(checkRes.status, 404);
     });
 
+    // =========================================================================
+    // POINT 8: CATEGORIZED INTERACTIVE FAQ BUILDER
+    // =========================================================================
+    let testFaqId = null;
+
+    await test('Point 8: GET /api/faqs returns seeded categorized FAQs', async () => {
+      const res = await fetch(`${baseUrl}/faqs`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.data.length >= 8, 'Should have at least 8 seeded FAQs');
+
+      testFaqId = data.data[0]._id;
+    });
+
+    await test('Point 8: GET /api/faqs?category=ORDERS filters FAQs by category', async () => {
+      const res = await fetch(`${baseUrl}/faqs?category=ORDERS`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.every(f => f.category === 'ORDERS'));
+    });
+
+    await test('Point 8: GET /api/faqs?search=exchange searches FAQs by keyword', async () => {
+      const res = await fetch(`${baseUrl}/faqs?search=exchange`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.length >= 1);
+      assert.ok(data.data.some(f => f.question.toLowerCase().includes('exchange') || f.answer.toLowerCase().includes('exchange')));
+    });
+
+    await test('Point 8: POST /api/faqs/:id/vote increments helpful vote count', async () => {
+      const res = await fetch(`${baseUrl}/faqs/${testFaqId}/vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'helpful' }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.helpfulCount, 1);
+    });
+
+    await test('Point 8: POST /api/faqs/:id/vote validates invalid vote type with 400', async () => {
+      const res = await fetch(`${baseUrl}/faqs/${testFaqId}/vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'invalid_vote' }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 8: POST /api/faqs rejects unauthorized customer with 403', async () => {
+      const res = await fetch(`${baseUrl}/faqs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          question: 'Can I hack this platform?',
+          answer: 'No.',
+        }),
+      });
+
+      assert.strictEqual(res.status, 403);
+    });
+
+    let createdFaqId = null;
+    await test('Point 8: Super Admin can create new categorized FAQ', async () => {
+      const res = await fetch(`${baseUrl}/faqs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          question: 'Can I change delivery address after dispatch?',
+          answer: 'Once an order is in out-for-delivery status, the rider route is locked. Please contact our 24/7 helpline for urgent changes.',
+          category: 'SHIPPING',
+          displayOrder: 15,
+          isPublished: true,
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.category, 'SHIPPING');
+      createdFaqId = data.data._id;
+    });
+
+    await test('Point 8: PUT /api/faqs/:id updates FAQ question & display order', async () => {
+      const res = await fetch(`${baseUrl}/faqs/${createdFaqId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          question: 'Can I change delivery address after rider dispatch? (Updated)',
+          displayOrder: 20,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.displayOrder, 20);
+    });
+
+    await test('Point 8: DELETE /api/faqs/:id removes FAQ item', async () => {
+      const res = await fetch(`${baseUrl}/faqs/${createdFaqId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+    });
+
   } finally {
     if (server) {
       server.close();

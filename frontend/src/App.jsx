@@ -11,6 +11,7 @@ import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { VendorPortal } from './pages/VendorPortal';
 import { CourierDashboard } from './pages/CourierDashboard';
 import { CmsPolicyViewerModal } from './components/CmsPolicyViewerModal';
+import { FaqSection } from './components/FaqSection';
 import { ShoppingBag, Flame, Layers, LayoutGrid, MessageCircle, Phone, BookOpen, ChevronUp } from 'lucide-react';
 import api from './api/client';
 
@@ -21,6 +22,7 @@ const MainLayout = () => {
   const [isBarCollapsed, setIsBarCollapsed] = useState(false);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [activePolicySlug, setActivePolicySlug] = useState(null);
+  const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [scrollProgress, setScrollProgress] = useState(0);
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -506,7 +508,7 @@ const MainLayout = () => {
                 <li>Helpline: <strong className="text-slate-800">{uiConfig.supportPhone}</strong></li>
                 <li>Email: <strong className="text-slate-800">{uiConfig.supportEmail}</strong></li>
                 <li><span>24/7 Order Tracking with OTP</span></li>
-                <li><span>Express 24h Courier Dispatch</span></li>
+                <li><button onClick={() => setIsFaqModalOpen(true)} className="hover:text-amber-600 font-bold text-amber-700">❓ Help Center & FAQs</button></li>
               </ul>
             </div>
 
@@ -683,6 +685,11 @@ const MainLayout = () => {
         initialSlug={activePolicySlug || 'privacy-policy'}
         onClose={() => setActivePolicySlug(null)}
       />
+
+      {/* Categorized Interactive FAQ Hub Modal */}
+      {isFaqModalOpen && (
+        <FaqSection isModal={true} onClose={() => setIsFaqModalOpen(false)} />
+      )}
     </div>
   );
 };

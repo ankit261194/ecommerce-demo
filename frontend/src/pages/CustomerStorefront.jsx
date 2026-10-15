@@ -59,6 +59,7 @@ import WalletDrawer from '../components/WalletDrawer';
 import VendorPublicStoreModal from '../components/VendorPublicStoreModal';
 import WhatsAppOrderBotModal from '../components/WhatsAppOrderBotModal';
 import RtoRiskOtpModal from '../components/RtoRiskOtpModal';
+import FaqSection from '../components/FaqSection';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useLocalization } from '../context/LocalizationContext';
@@ -2002,6 +2003,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       </div>
       </div>
       </div>
+
+      {/* Point #8: Categorized Interactive FAQ Hub */}
+      <FaqSection isModal={false} />
 
       {/* Rich Product Detail Page (PDP) & Quick-View Modal */}
       <ProductDetailModal

@@ -63,6 +63,34 @@ const vendorProfileSchema = new mongoose.Schema(
       enum: ['pending', 'approved', 'rejected', 'suspended'],
       default: 'pending',
     },
+    kycStatus: {
+      type: String,
+      enum: ['NOT_SUBMITTED', 'PENDING', 'VERIFIED', 'REJECTED'],
+      default: 'PENDING',
+    },
+    businessType: {
+      type: String,
+      enum: ['Proprietorship', 'Partnership', 'Private Limited', 'Individual'],
+      default: 'Proprietorship',
+    },
+    kycDocuments: {
+      businessRegistrationProof: { type: String, default: '' },
+      gstCertificate: { type: String, default: '' },
+      panCard: { type: String, default: '' },
+      bankProof: { type: String, default: '' },
+      idProof: { type: String, default: '' },
+    },
+    kycRejectionReason: {
+      type: String,
+      default: '',
+    },
+    kycVerifiedAt: {
+      type: Date,
+    },
+    adminNotes: {
+      type: String,
+      default: '',
+    },
     walletBalance: {
       type: Number,
       default: 0,

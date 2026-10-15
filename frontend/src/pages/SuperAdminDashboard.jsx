@@ -57,6 +57,7 @@ import {
   Ticket,
   Flame,
   ShoppingCart,
+  Building2,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -69,6 +70,7 @@ import CouponManager from '../components/CouponManager';
 import FlashDealManager from '../components/FlashDealManager';
 import AbandonedCartManager from '../components/AbandonedCartManager';
 import CustomerCRMManager from '../components/CustomerCRMManager';
+import VendorKYCManager from '../components/VendorKYCManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1338,6 +1340,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('vendors')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'vendors'
+                ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Building2 className="w-4 h-4 text-amber-300" />
+            <span>Vendor KYC & Stores</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-400/30 text-amber-200 ml-1">
+              Point #44
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveDashboardTab('layout')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
               activeDashboardTab === 'layout'
@@ -2142,6 +2159,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'customers' && (
         <CustomerCRMManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 11: VENDOR KYC & STORE APPROVAL CENTER (Point #44) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'vendors' && (
+        <VendorKYCManager />
       )}
 
       {/* ========================================================================= */}

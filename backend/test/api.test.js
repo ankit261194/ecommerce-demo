@@ -2914,6 +2914,93 @@ const runTests = async () => {
       assert.ok(dataNotes.data.tags.includes('VIP Shopper'));
     });
 
+    await test('Point 44: Vendor KYC & Store Approval Center (Verify docs, approve/reject, custom commission rate)', async () => {
+      // 1. Fetch all vendors with KYC stats
+      const resVendors = await fetch(`${baseUrl}/admin/vendors`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resVendors.status, 200);
+      const dataVendors = await resVendors.json();
+      assert.strictEqual(dataVendors.success, true);
+      assert.ok(dataVendors.stats);
+      assert.strictEqual(typeof dataVendors.stats.totalVendors, 'number');
+      assert.ok(Array.isArray(dataVendors.data));
+      assert.ok(dataVendors.data.length >= 1);
+
+      const targetVendor = dataVendors.data[0];
+      const vendorId = targetVendor._id;
+
+      // 2. Fetch single vendor full profile
+      const resDetail = await fetch(`${baseUrl}/admin/vendors/${vendorId}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resDetail.status, 200);
+      const dataDetail = await resDetail.json();
+      assert.strictEqual(dataDetail.success, true);
+      assert.strictEqual(dataDetail.data._id.toString(), vendorId.toString());
+
+      // 3. Update KYC verification (Approve KYC)
+      const resApproveKYC = await fetch(`${baseUrl}/admin/vendors/${vendorId}/kyc`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          kycStatus: 'VERIFIED',
+          adminNotes: 'All business and tax documents verified successfully.',
+        }),
+      });
+      assert.strictEqual(resApproveKYC.status, 200);
+      const dataApproveKYC = await resApproveKYC.json();
+      assert.strictEqual(dataApproveKYC.success, true);
+      assert.strictEqual(dataApproveKYC.data.kycStatus, 'VERIFIED');
+      assert.strictEqual(dataApproveKYC.data.status, 'approved');
+
+      // 4. Update Custom Commission Rate
+      const resComm = await fetch(`${baseUrl}/admin/vendors/${vendorId}/commission`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ commissionRate: 14.5 }),
+      });
+      assert.strictEqual(resComm.status, 200);
+      const dataComm = await resComm.json();
+      assert.strictEqual(dataComm.success, true);
+      assert.strictEqual(dataComm.data.commissionRate, 14.5);
+
+      // 5. Test KYC Rejection flow
+      const resRejectKYC = await fetch(`${baseUrl}/admin/vendors/${vendorId}/kyc`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          kycStatus: 'REJECTED',
+          rejectionReason: 'GST certificate number does not match registered trade name.',
+        }),
+      });
+      assert.strictEqual(resRejectKYC.status, 200);
+      const dataRejectKYC = await resRejectKYC.json();
+      assert.strictEqual(dataRejectKYC.success, true);
+      assert.strictEqual(dataRejectKYC.data.kycStatus, 'REJECTED');
+      assert.strictEqual(dataRejectKYC.data.status, 'rejected');
+      assert.ok(dataRejectKYC.data.kycRejectionReason.includes('GST certificate'));
+
+      // 6. Reset back to approved for demo consistency
+      await fetch(`${baseUrl}/admin/vendors/${vendorId}/kyc`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ kycStatus: 'VERIFIED' }),
+      });
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

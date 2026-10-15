@@ -59,42 +59,189 @@ exports.getDashboardAnalytics = async (req, res, next) => {
   }
 };
 
-// @desc    Get All Vendors with Status Filter
+// @desc    Get All Vendors with Status & KYC Filters, Search, and Aggregated Stats (Point #44)
 // @route   GET /api/admin/vendors
 exports.getAllVendors = async (req, res, next) => {
   try {
-    const { status } = req.query;
-    const filter = status ? { status } : {};
+    const { status, kycStatus, search } = req.query;
+    const filter = {};
+
+    if (status && status !== 'ALL') {
+      filter.status = status.toLowerCase();
+    }
+    if (kycStatus && kycStatus !== 'ALL') {
+      filter.kycStatus = kycStatus.toUpperCase();
+    }
+
+    if (search && search.trim()) {
+      const term = search.trim();
+      const userMatches = await User.find({
+        $or: [
+          { name: { $regex: term, $options: 'i' } },
+          { email: { $regex: term, $options: 'i' } },
+          { phone: { $regex: term, $options: 'i' } },
+        ],
+      }).select('_id');
+      const userIds = userMatches.map((u) => u._id);
+
+      filter.$or = [
+        { storeName: { $regex: term, $options: 'i' } },
+        { gstNumber: { $regex: term, $options: 'i' } },
+        { panNumber: { $regex: term, $options: 'i' } },
+        { user: { $in: userIds } },
+      ];
+    }
 
     const vendors = await VendorProfile.find(filter)
-      .populate('user', 'name email phone createdAt')
+      .populate('user', 'name email phone createdAt isVerified')
       .sort({ createdAt: -1 });
 
-    res.status(200).json({ success: true, count: vendors.length, data: vendors });
+    const allVendors = await VendorProfile.find({});
+    const stats = {
+      totalVendors: allVendors.length,
+      pendingApproval: allVendors.filter((v) => v.status === 'pending' || v.kycStatus === 'PENDING').length,
+      approvedVendors: allVendors.filter((v) => v.status === 'approved').length,
+      rejectedVendors: allVendors.filter((v) => v.status === 'rejected' || v.kycStatus === 'REJECTED').length,
+      kycVerified: allVendors.filter((v) => v.kycStatus === 'VERIFIED').length,
+    };
+
+    res.status(200).json({
+      success: true,
+      count: vendors.length,
+      stats,
+      data: vendors,
+    });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Approve / Reject / Suspend Vendor & Update Commission
+// @desc    Get Single Vendor Full Profile with KYC Docs & Store Performance
+// @route   GET /api/admin/vendors/:id
+exports.getVendorDetails = async (req, res, next) => {
+  try {
+    const vendor = await VendorProfile.findById(req.params.id).populate(
+      'user',
+      'name email phone createdAt isVerified'
+    );
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor not found' });
+    }
+    res.status(200).json({ success: true, data: vendor });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Approve / Reject / Suspend Vendor & Update Commission (Point #44)
 // @route   PUT /api/admin/vendors/:id/status
 exports.updateVendorStatus = async (req, res, next) => {
   try {
-    const { status, commissionRate } = req.body;
+    const { status, commissionRate, rejectionReason, adminNotes } = req.body;
     const vendor = await VendorProfile.findById(req.params.id);
 
     if (!vendor) {
       return res.status(404).json({ success: false, message: 'Vendor not found' });
     }
 
-    if (status) vendor.status = status;
-    if (commissionRate !== undefined) vendor.commissionRate = Number(commissionRate);
+    if (status) {
+      vendor.status = status.toLowerCase();
+      if (status.toLowerCase() === 'approved') {
+        vendor.kycStatus = 'VERIFIED';
+        vendor.kycVerifiedAt = new Date();
+      } else if (status.toLowerCase() === 'rejected') {
+        vendor.kycStatus = 'REJECTED';
+        if (rejectionReason) vendor.kycRejectionReason = rejectionReason;
+      }
+    }
+
+    if (commissionRate !== undefined) {
+      const parsedRate = Number(commissionRate);
+      if (parsedRate < 0 || parsedRate > 100) {
+        return res.status(400).json({ success: false, message: 'Commission rate must be between 0 and 100%' });
+      }
+      vendor.commissionRate = parsedRate;
+    }
+
+    if (rejectionReason !== undefined) vendor.kycRejectionReason = rejectionReason;
+    if (adminNotes !== undefined) vendor.adminNotes = adminNotes;
 
     await vendor.save();
 
     res.status(200).json({
       success: true,
       message: `Vendor status updated to ${vendor.status}`,
+      data: vendor,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Review and Approve / Reject Vendor KYC Documents (Point #44)
+// @route   PUT /api/admin/vendors/:id/kyc
+exports.updateVendorKYC = async (req, res, next) => {
+  try {
+    const { kycStatus, rejectionReason, adminNotes } = req.body;
+    const vendor = await VendorProfile.findById(req.params.id);
+
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor not found' });
+    }
+
+    if (!['VERIFIED', 'REJECTED', 'PENDING'].includes(kycStatus)) {
+      return res.status(400).json({ success: false, message: 'Invalid KYC status' });
+    }
+
+    vendor.kycStatus = kycStatus;
+    if (kycStatus === 'VERIFIED') {
+      vendor.status = 'approved';
+      vendor.kycVerifiedAt = new Date();
+      vendor.kycRejectionReason = '';
+    } else if (kycStatus === 'REJECTED') {
+      vendor.status = 'rejected';
+      vendor.kycRejectionReason = rejectionReason || 'KYC documents did not meet verification criteria';
+    }
+
+    if (adminNotes !== undefined) vendor.adminNotes = adminNotes;
+
+    await vendor.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Vendor KYC set to ${vendor.kycStatus}`,
+      data: vendor,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Set Custom Commission Rate for a specific Vendor (Point #44)
+// @route   PUT /api/admin/vendors/:id/commission
+exports.updateVendorCommission = async (req, res, next) => {
+  try {
+    const { commissionRate } = req.body;
+    const rate = Number(commissionRate);
+
+    if (isNaN(rate) || rate < 0 || rate > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Commission rate must be a valid number between 0% and 100%',
+      });
+    }
+
+    const vendor = await VendorProfile.findById(req.params.id);
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor not found' });
+    }
+
+    vendor.commissionRate = rate;
+    await vendor.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Custom commission rate updated to ${vendor.commissionRate}%`,
       data: vendor,
     });
   } catch (error) {

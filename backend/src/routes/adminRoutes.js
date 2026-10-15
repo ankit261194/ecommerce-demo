@@ -3,7 +3,10 @@ const router = express.Router();
 const {
   getDashboardAnalytics,
   getAllVendors,
+  getVendorDetails,
   updateVendorStatus,
+  updateVendorKYC,
+  updateVendorCommission,
   getAllOrders,
   updateOrderStatus,
   getOrderCommissionSplit,
@@ -31,10 +34,16 @@ router.use(protect);
 router.use(authorize('superadmin'));
 
 router.get('/analytics', getDashboardAnalytics);
+
+// Vendor KYC & Store Approval Center (Point #44)
 router.get('/vendors', getAllVendors);
+router.get('/vendors/:id', getVendorDetails);
 router.put('/vendors/:id/status', updateVendorStatus);
 router.patch('/vendors/:id/status', updateVendorStatus);
-router.patch('/vendors/:id/commission', updateVendorStatus);
+router.put('/vendors/:id/kyc', updateVendorKYC);
+router.patch('/vendors/:id/kyc', updateVendorKYC);
+router.put('/vendors/:id/commission', updateVendorCommission);
+router.patch('/vendors/:id/commission', updateVendorCommission);
 router.get('/orders', getAllOrders);
 router.post('/orders/bulk-status', bulkUpdateOrderStatus);
 router.put('/orders/bulk-status', bulkUpdateOrderStatus);

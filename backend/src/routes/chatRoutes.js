@@ -11,7 +11,7 @@ const {
   vendorReplyInquiry,
   updateInquiryStatus,
 } = require('../controllers/chatController');
-const { protect, authorize } = require('../middlewares/auth');
+const { protect, authorize, requireVendorPermission } = require('../middlewares/auth');
 
 // Customer Chat Endpoints
 router.post('/inquiries', protect, createCustomerInquiry);
@@ -21,9 +21,9 @@ router.post('/customer/inquiries/:id/reply', protect, customerReplyInquiry);
 
 // Vendor & Sub-Staff Chat Inbox Endpoints
 router.get('/vendor/summary', protect, authorize('vendor', 'vendor_staff', 'superadmin'), getVendorChatSummary);
-router.get('/vendor/inquiries', protect, authorize('vendor', 'vendor_staff', 'superadmin'), getVendorInquiries);
-router.get('/vendor/inquiries/:id', protect, authorize('vendor', 'vendor_staff', 'superadmin'), getVendorInquiryById);
-router.post('/vendor/inquiries/:id/reply', protect, authorize('vendor', 'vendor_staff', 'superadmin'), vendorReplyInquiry);
-router.patch('/vendor/inquiries/:id/status', protect, authorize('vendor', 'vendor_staff', 'superadmin'), updateInquiryStatus);
+router.get('/vendor/inquiries', protect, authorize('vendor', 'vendor_staff', 'superadmin'), requireVendorPermission('REVIEWS_MANAGE'), getVendorInquiries);
+router.get('/vendor/inquiries/:id', protect, authorize('vendor', 'vendor_staff', 'superadmin'), requireVendorPermission('REVIEWS_MANAGE'), getVendorInquiryById);
+router.post('/vendor/inquiries/:id/reply', protect, authorize('vendor', 'vendor_staff', 'superadmin'), requireVendorPermission('REVIEWS_MANAGE'), vendorReplyInquiry);
+router.patch('/vendor/inquiries/:id/status', protect, authorize('vendor', 'vendor_staff', 'superadmin'), requireVendorPermission('REVIEWS_MANAGE'), updateInquiryStatus);
 
 module.exports = router;

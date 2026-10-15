@@ -71,10 +71,12 @@ export default function CustomerVendorChatModal({
         const matched = json.data?.find((inq) => {
           const inqVendorId = inq.vendor?._id || inq.vendor;
           const inqProdId = inq.product?._id || inq.product;
-          return (
-            String(inqVendorId) === String(vendorId) &&
-            (!prodId || !inqProdId || String(inqProdId) === String(prodId))
-          );
+          const vendorMatch = String(inqVendorId) === String(vendorId);
+          if (!vendorMatch) return false;
+          if (prodId) {
+            return inqProdId && String(inqProdId) === String(prodId);
+          }
+          return !inqProdId;
         });
 
         if (matched) {
@@ -195,7 +197,7 @@ export default function CustomerVendorChatModal({
 
   if (!isOpen) return null;
 
-  const storeName = vendor?.storeName || product?.vendor?.storeName || 'Official Merchant Store';
+  const storeName = inquiry?.vendor?.storeName || vendor?.storeName || product?.vendor?.storeName || 'Official Merchant Store';
   const productTitle = product?.title || 'General Store Inquiry';
   const productPrice = product?.sellingPrice || product?.price;
   const productImg = product?.thumbnail || (product?.images && product.images[0]) || '';

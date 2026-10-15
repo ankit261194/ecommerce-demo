@@ -65,9 +65,11 @@ const protect = async (req, res, next) => {
 
     req.user = user;
 
-    // If user is a vendor, attach their vendor profile for easy access
-    if (user.role === 'vendor') {
-      const vendorProfile = await VendorProfile.findOne({ user: user._id });
+    // If user is a vendor or vendor staff, attach their vendor profile for easy access
+    if (user.role === 'vendor' || user.role === 'vendor_staff' || user.isVendorStaff) {
+      const vendorProfile = await VendorProfile.findOne({
+        $or: [{ user: user._id }, { _id: user.vendorProfile }],
+      });
       req.vendorProfile = vendorProfile;
     }
 

@@ -68,15 +68,18 @@ exports.createCustomerInquiry = async (req, res, next) => {
       });
     }
 
-    // Check if an open inquiry exists within the last 24 hours for the same customer, vendor, and product
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    let inquiry = await ChatInquiry.findOne({
+    // Check if an active open/in-progress inquiry exists for the same customer, vendor, and product
+    const existingQuery = {
       customer: req.user._id,
       vendor: vendorDoc._id,
-      product: productDoc ? productDoc._id : null,
       status: { $in: ['open', 'in_progress'] },
-      updatedAt: { $gte: twentyFourHoursAgo },
-    });
+    };
+    if (productDoc) {
+      existingQuery.product = productDoc._id;
+    } else {
+      existingQuery.$or = [{ product: null }, { product: { $exists: false } }];
+    }
+    let inquiry = await ChatInquiry.findOne(existingQuery).sort({ updatedAt: -1 });
 
     const newMessage = {
       sender: 'customer',
@@ -115,6 +118,7 @@ exports.createCustomerInquiry = async (req, res, next) => {
     await inquiry.populate([
       { path: 'customer', select: 'name email phone avatar' },
       { path: 'vendor', select: 'storeName logo storeSlug rating phone email' },
+      { path: 'product', select: 'title thumbnail sellingPrice stock sku' },
     ]);
 
     res.status(201).json({
@@ -166,7 +170,8 @@ exports.getCustomerInquiryById = async (req, res, next) => {
       });
     }
 
-    if (inquiry.customer.toString() !== req.user._id.toString() && req.user.role !== 'superadmin') {
+    const customerId = String(inquiry.customer?._id || inquiry.customer);
+    if (customerId !== String(req.user._id) && req.user.role !== 'superadmin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to view this inquiry thread.',
@@ -217,7 +222,8 @@ exports.customerReplyInquiry = async (req, res, next) => {
       });
     }
 
-    if (inquiry.customer.toString() !== req.user._id.toString() && req.user.role !== 'superadmin') {
+    const customerId = String(inquiry.customer?._id || inquiry.customer);
+    if (customerId !== String(req.user._id) && req.user.role !== 'superadmin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to reply to this inquiry thread.',
@@ -275,7 +281,13 @@ exports.getVendorInquiries = async (req, res, next) => {
     const filter = { vendor: vendorProfile._id };
 
     if (status && status !== 'all') {
-      filter.status = status;
+      if (status === 'unread') {
+        filter.unreadByVendor = { $gt: 0 };
+      } else if (status === 'open') {
+        filter.status = { $in: ['open', 'in_progress'] };
+      } else {
+        filter.status = status;
+      }
     }
 
     let inquiries = await ChatInquiry.find(filter)
@@ -373,7 +385,8 @@ exports.getVendorInquiryById = async (req, res, next) => {
       });
     }
 
-    if (inquiry.vendor.toString() !== vendorProfile._id.toString() && req.user.role !== 'superadmin') {
+    const vendorId = String(inquiry.vendor?._id || inquiry.vendor);
+    if (vendorId !== String(vendorProfile._id) && req.user.role !== 'superadmin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to view inquiries for this merchant.',
@@ -432,7 +445,8 @@ exports.vendorReplyInquiry = async (req, res, next) => {
       });
     }
 
-    if (inquiry.vendor.toString() !== vendorProfile._id.toString() && req.user.role !== 'superadmin') {
+    const vendorId = String(inquiry.vendor?._id || inquiry.vendor);
+    if (vendorId !== String(vendorProfile._id) && req.user.role !== 'superadmin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to reply to inquiries for this merchant.',
@@ -504,7 +518,8 @@ exports.updateInquiryStatus = async (req, res, next) => {
       });
     }
 
-    if (inquiry.vendor.toString() !== vendorProfile._id.toString() && req.user.role !== 'superadmin') {
+    const vendorId = String(inquiry.vendor?._id || inquiry.vendor);
+    if (vendorId !== String(vendorProfile._id) && req.user.role !== 'superadmin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to modify this inquiry.',

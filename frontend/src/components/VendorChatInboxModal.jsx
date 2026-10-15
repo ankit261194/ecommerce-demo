@@ -102,10 +102,18 @@ export default function VendorChatInboxModal({
           if (current) {
             setSelectedInquiry(current);
             setMessages(current.messages || []);
+          } else if (list.length > 0) {
+            handleSelectInquiry(list[0]);
+          } else {
+            setSelectedInquiry(null);
+            setMessages([]);
           }
         } else if (list.length > 0 && !silent) {
           // Select first inquiry by default
           handleSelectInquiry(list[0]);
+        } else if (list.length === 0) {
+          setSelectedInquiry(null);
+          setMessages([]);
         }
       }
     } catch (err) {

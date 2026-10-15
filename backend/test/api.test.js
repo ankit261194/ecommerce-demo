@@ -9392,6 +9392,147 @@ const runTests = async () => {
       assert.strictEqual(res.status, 401);
     });
 
+    await test('Point 14 (Refined): Vendor sub-staff lacking REVIEWS_MANAGE is blocked from chat inbox with 403', async () => {
+      // Create staff member with ORDERS_MANAGE only
+      const createStaffRes = await fetch(`${baseUrl}/vendor/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${liveVendorToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Vikram Logistician',
+          email: 'vikram.orders@auramarket.com',
+          phone: '9811223344',
+          password: 'password123',
+          staffRoleTitle: 'Dispatch Executive',
+          permissions: ['ORDERS_MANAGE'],
+        }),
+      });
+      assert.strictEqual(createStaffRes.status, 201);
+
+      // Login as Vikram
+      const loginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'vikram.orders@auramarket.com', password: 'password123' }),
+      });
+      assert.strictEqual(loginRes.status, 200);
+      const loginData = await loginRes.json();
+      const ordersOnlyStaffToken = loginData.token;
+
+      // Attempt to access vendor chat inbox
+      const chatRes = await fetch(`${baseUrl}/chat/vendor/inquiries`, {
+        headers: { Authorization: `Bearer ${ordersOnlyStaffToken}` },
+      });
+      assert.strictEqual(chatRes.status, 403);
+      const chatData = await chatRes.json();
+      assert.strictEqual(chatData.requiredPermission, 'REVIEWS_MANAGE');
+    });
+
+    await test('Point 14 (Refined): Vendor sub-staff with REVIEWS_MANAGE can access inquiries and post official reply', async () => {
+      // Create support staff member with REVIEWS_MANAGE
+      const createSupportRes = await fetch(`${baseUrl}/vendor/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${liveVendorToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Kavita Support',
+          email: 'kavita.support@auramarket.com',
+          phone: '9822334466',
+          password: 'password123',
+          staffRoleTitle: 'Customer Care Lead',
+          permissions: ['REVIEWS_MANAGE'],
+        }),
+      });
+      assert.strictEqual(createSupportRes.status, 201);
+
+      // Login as Kavita
+      const loginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'kavita.support@auramarket.com', password: 'password123' }),
+      });
+      assert.strictEqual(loginRes.status, 200);
+      const loginData = await loginRes.json();
+      const supportStaffToken = loginData.token;
+
+      // Access vendor inquiries successfully
+      const listRes = await fetch(`${baseUrl}/chat/vendor/inquiries`, {
+        headers: { Authorization: `Bearer ${supportStaffToken}` },
+      });
+      assert.strictEqual(listRes.status, 200);
+      const listData = await listRes.json();
+      assert.strictEqual(listData.success, true);
+
+      // Post reply as sub-staff
+      const replyRes = await fetch(`${baseUrl}/chat/vendor/inquiries/${testInquiryId}/reply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${supportStaffToken}`,
+        },
+        body: JSON.stringify({ text: 'Our customer support team is tracking your parcel closely.' }),
+      });
+      assert.strictEqual(replyRes.status, 200);
+      const replyData = await replyRes.json();
+      assert.strictEqual(replyData.success, true);
+      assert.ok(replyData.data.lastMessageSender === 'vendor');
+    });
+
+    await test('Point 14 (Refined): GET /api/chat/vendor/inquiries?status=unread filters only unread inquiries', async () => {
+      // Customer sends a message to make it unread by vendor
+      await fetch(`${baseUrl}/chat/customer/inquiries/${testInquiryId}/reply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${liveCustomerToken}`,
+        },
+        body: JSON.stringify({ text: 'Do you offer gift wrapping?' }),
+      });
+
+      const res = await fetch(`${baseUrl}/chat/vendor/inquiries?status=unread`, {
+        headers: { Authorization: `Bearer ${liveVendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.length >= 1);
+      assert.ok(data.data.every(i => i.unreadByVendor > 0));
+    });
+
+    await test('Point 14 (Refined): GET /api/chat/vendor/inquiries?status=open includes in_progress active inquiries', async () => {
+      const res = await fetch(`${baseUrl}/chat/vendor/inquiries?status=open`, {
+        headers: { Authorization: `Bearer ${liveVendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.length >= 1);
+      assert.ok(data.data.every(i => ['open', 'in_progress'].includes(i.status)));
+    });
+
+    await test('Point 14 (Refined): General merchant inquiry without productId maintains distinct conversation thread', async () => {
+      const resGeneral = await fetch(`${baseUrl}/chat/inquiries`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${liveCustomerToken}`,
+        },
+        body: JSON.stringify({
+          vendorId: liveVendorProfileId,
+          text: 'What are your store operating hours and holiday schedule?',
+        }),
+      });
+      assert.strictEqual(resGeneral.status, 201);
+      const generalData = await resGeneral.json();
+      assert.strictEqual(generalData.success, true);
+      assert.ok(!generalData.data.product, 'General inquiry should not be tied to a specific product');
+      assert.notStrictEqual(generalData.data._id, testInquiryId, 'General inquiry must be a separate thread');
+    });
+
   } finally {
     if (server) {
       server.close();

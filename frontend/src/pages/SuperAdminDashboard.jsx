@@ -82,11 +82,14 @@ import SystemAuditBackupManager from '../components/SystemAuditBackupManager';
 import RtoGuardManager from '../components/RtoGuardManager';
 import ThermalReceiptPrinterModal from '../components/ThermalReceiptPrinterModal';
 import LocalizationManager from '../components/LocalizationManager';
+import CmsPageBuilderManager from '../components/CmsPageBuilderManager';
+import CmsPolicyViewerModal from '../components/CmsPolicyViewerModal';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
-  // Master Dashboard Tab: 'overview' | 'orders' | 'layout' | 'integrations' | 'seo'
+  // Master Dashboard Tab: 'overview' | 'orders' | 'layout' | 'integrations' | 'seo' | 'cms-pages'
   const [activeDashboardTab, setActiveDashboardTab] = useState('overview');
+  const [previewPolicySlug, setPreviewPolicySlug] = useState(null);
 
   // Integrations Hub Sub-Tab: 'payments' | 'sms' | 'email' | 'storage'
   const [integrationSubTab, setIntegrationSubTab] = useState('payments');
@@ -1501,6 +1504,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
               Point #78
             </span>
           </button>
+
+          <button
+            onClick={() => setActiveDashboardTab('cms-pages')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'cms-pages'
+                ? 'bg-amber-600 text-white shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <FileText className="w-4 h-4 text-amber-300" />
+            <span>CMS & Legal Pages</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-200 ml-1">
+              Point #7
+            </span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -2325,6 +2343,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'localization' && (
         <LocalizationManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 18: FULL DYNAMIC CMS & LEGAL POLICY PAGES BUILDER (Point #7) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'cms-pages' && (
+        <CmsPageBuilderManager onViewPublicPage={(slug) => setPreviewPolicySlug(slug)} />
       )}
 
       {/* ========================================================================= */}
@@ -4551,6 +4576,15 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           onClose={() => setSelectedThermalOrderId(null)}
           orderId={selectedThermalOrderId}
           role="admin"
+        />
+      )}
+
+      {/* Point 7: Storefront CMS Policy Preview Modal */}
+      {previewPolicySlug && (
+        <CmsPolicyViewerModal
+          isOpen={!!previewPolicySlug}
+          initialSlug={previewPolicySlug}
+          onClose={() => setPreviewPolicySlug(null)}
         />
       )}
     </div>

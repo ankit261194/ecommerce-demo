@@ -10,6 +10,7 @@ import { CustomerStorefront } from './pages/CustomerStorefront';
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { VendorPortal } from './pages/VendorPortal';
 import { CourierDashboard } from './pages/CourierDashboard';
+import { CmsPolicyViewerModal } from './components/CmsPolicyViewerModal';
 import { ShoppingBag, Flame, Layers, LayoutGrid, MessageCircle, Phone, BookOpen, ChevronUp } from 'lucide-react';
 import api from './api/client';
 
@@ -19,6 +20,7 @@ const MainLayout = () => {
   const [deviceMode, setDeviceMode] = useState('desktop'); // 'desktop' | 'tablet' | 'mobile'
   const [isBarCollapsed, setIsBarCollapsed] = useState(false);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
+  const [activePolicySlug, setActivePolicySlug] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [scrollProgress, setScrollProgress] = useState(0);
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -465,7 +467,7 @@ const MainLayout = () => {
           )}
 
           {/* Standard White-Label Multi-Vendor Client Storefront Footer */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pt-4 border-t border-slate-100 text-xs text-left">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-8 pt-4 border-t border-slate-100 text-xs text-left">
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-amber-400 flex items-center justify-center font-black text-slate-950 text-base shadow">
@@ -505,6 +507,19 @@ const MainLayout = () => {
                 <li>Email: <strong className="text-slate-800">{uiConfig.supportEmail}</strong></li>
                 <li><span>24/7 Order Tracking with OTP</span></li>
                 <li><span>Express 24h Courier Dispatch</span></li>
+              </ul>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="font-black text-slate-900 uppercase tracking-wider text-[11px]">
+                Legal & Policies
+              </h4>
+              <ul className="space-y-1.5 text-slate-600 font-medium">
+                <li><button onClick={() => setActivePolicySlug('privacy-policy')} className="hover:text-amber-600 text-left">🔒 Privacy Policy (DPDP)</button></li>
+                <li><button onClick={() => setActivePolicySlug('terms-and-conditions')} className="hover:text-amber-600 text-left">⚖️ Terms & Conditions</button></li>
+                <li><button onClick={() => setActivePolicySlug('refund-and-cancellation')} className="hover:text-amber-600 text-left">🔄 1-Click Exchange & Refund</button></li>
+                <li><button onClick={() => setActivePolicySlug('shipping-and-delivery')} className="hover:text-amber-600 text-left">🚚 Shipping & Delivery SLAs</button></li>
+                <li><button onClick={() => setActivePolicySlug('about-us')} className="hover:text-amber-600 text-left">🏢 About AuraMarket</button></li>
               </ul>
             </div>
 
@@ -660,6 +675,13 @@ const MainLayout = () => {
       <DocumentationModal
         isOpen={isDocsOpen}
         onClose={() => setIsDocsOpen(false)}
+      />
+
+      {/* Dynamic CMS & Legal Policy Pages Modal */}
+      <CmsPolicyViewerModal
+        isOpen={!!activePolicySlug}
+        initialSlug={activePolicySlug || 'privacy-policy'}
+        onClose={() => setActivePolicySlug(null)}
       />
     </div>
   );

@@ -8075,6 +8075,136 @@ const runTests = async () => {
       assert.strictEqual(data.data.status, 'CANCELLED');
     });
 
+    // =========================================================================
+    // POINT 7: FULL DYNAMIC CMS & LEGAL POLICY PAGES BUILDER
+    // =========================================================================
+    let testCmsSlug = 'security-standards';
+
+    await test('Point 7: GET /api/cms/pages returns seeded legal policy pages', async () => {
+      const res = await fetch(`${baseUrl}/cms/pages`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.data.length >= 4, 'Should contain at least 4 default seeded pages');
+
+      const slugs = data.data.map(p => p.slug);
+      assert.ok(slugs.includes('privacy-policy'), 'Must contain privacy-policy');
+      assert.ok(slugs.includes('terms-and-conditions'), 'Must contain terms-and-conditions');
+      assert.ok(slugs.includes('refund-and-cancellation'), 'Must contain refund-and-cancellation');
+    });
+
+    await test('Point 7: GET /api/cms/pages/:slug returns verified policy document', async () => {
+      const res = await fetch(`${baseUrl}/cms/pages/privacy-policy`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.slug, 'privacy-policy');
+      assert.strictEqual(data.data.category, 'LEGAL');
+      assert.ok(data.data.contentHtml.includes('DPDP'));
+    });
+
+    await test('Point 7: GET /api/cms/pages/:slug returns 404 for non-existent page', async () => {
+      const res = await fetch(`${baseUrl}/cms/pages/invalid-page-does-not-exist`);
+      assert.strictEqual(res.status, 404);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 7: POST /api/cms/pages rejects unauthorized/customer token with 403', async () => {
+      const res = await fetch(`${baseUrl}/cms/pages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Hacked Policy',
+          contentHtml: '<p>Malicious content</p>',
+        }),
+      });
+      assert.strictEqual(res.status, 403);
+    });
+
+    await test('Point 7: Super Admin can create new CMS policy page with auto-slug generation', async () => {
+      const res = await fetch(`${baseUrl}/cms/pages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Enterprise Security Standards',
+          category: 'COMPANY',
+          contentHtml: '<h2>256-bit AES Encryption</h2><p>Our micro-services utilize zero-trust architecture.</p>',
+          metaTitle: 'Security Standards | AuraMarket',
+          metaDescription: 'Overview of enterprise cryptography and data protection standards.',
+          isPublished: true,
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.slug, 'enterprise-security-standards');
+      assert.strictEqual(data.data.version, 1);
+      testCmsSlug = data.data.slug;
+    });
+
+    await test('Point 7: POST /api/cms/pages prevents duplicate slug with 400', async () => {
+      const res = await fetch(`${baseUrl}/cms/pages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Enterprise Security Standards',
+          slug: testCmsSlug,
+          contentHtml: '<p>Duplicate content</p>',
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 7: PUT /api/cms/pages/:slug updates document content and increments version', async () => {
+      const res = await fetch(`${baseUrl}/cms/pages/${testCmsSlug}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Enterprise Security Standards v2',
+          contentHtml: '<h2>Updated Cryptographic Standards</h2><p>Enhanced with quantum-resistant keys.</p>',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.title, 'Enterprise Security Standards v2');
+      assert.strictEqual(data.data.version, 2);
+    });
+
+    await test('Point 7: DELETE /api/cms/pages/:slug removes policy page', async () => {
+      const res = await fetch(`${baseUrl}/cms/pages/${testCmsSlug}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+
+      // Verify page is no longer found
+      const checkRes = await fetch(`${baseUrl}/cms/pages/${testCmsSlug}`);
+      assert.strictEqual(checkRes.status, 404);
+    });
+
   } finally {
     if (server) {
       server.close();

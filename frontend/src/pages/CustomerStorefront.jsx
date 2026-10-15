@@ -427,6 +427,32 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   // Point #25: Order Delivery Instructions / Rider Notes State
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('COD');
+
+  // Point #77: Storefront Abandoned Cart Tracking & Sync Engine
+  useEffect(() => {
+    if (!cartItems || cartItems.length === 0) return;
+    const syncEmail = user?.email || (address?.phone ? `${address.phone}@guest.auramarket.com` : null);
+    if (!syncEmail) return;
+
+    const timer = setTimeout(() => {
+      api.post('/abandoned-carts/sync', {
+        customerName: address?.recipientName || user?.name || 'Valued Shopper',
+        customerEmail: syncEmail,
+        customerPhone: address?.phone || user?.phone || '',
+        items: cartItems.map(item => ({
+          productId: item.productId,
+          title: item.title,
+          price: item.price,
+          quantity: item.quantity,
+          image: item.image,
+          variant: item.variantName || item.variantSku || '',
+        })),
+        cartTotal,
+      }).catch(() => {});
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [cartItems, cartTotal, user, address?.recipientName, address?.phone]);
   // Point #26: Multi-Gateway Dynamic Checkout Payment Details State
   const [paymentDetails, setPaymentDetails] = useState({ gateway: 'COD' });
 

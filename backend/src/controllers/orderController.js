@@ -559,6 +559,29 @@ exports.createOrder = async (req, res, next) => {
       .sendOrderEmail({ order: populatedOrder, email: customerEmail })
       .catch(err => console.log('[Email Warning] Could not dispatch order email:', err.message));
 
+    // Point #77: Automatically mark customer's open abandoned carts as RECOVERED
+    try {
+      const AbandonedCart = require('../models/AbandonedCart');
+      await AbandonedCart.updateMany(
+        {
+          $or: [
+            { user: req.user._id },
+            { customerEmail: customerEmail.toLowerCase() },
+            ...(customerPhone ? [{ customerPhone }] : []),
+          ],
+          status: { $in: ['ABANDONED', 'REMINDER_SENT'] },
+        },
+        {
+          $set: {
+            status: 'RECOVERED',
+            recoveredOrder: masterOrder._id,
+          },
+        }
+      );
+    } catch (abandonedErr) {
+      console.warn('[AbandonedCart] Auto-recovery link warning:', abandonedErr.message);
+    }
+
     res.status(201).json({
       success: true,
       message: 'Order placed successfully! Sub-orders generated for vendors.',

@@ -6307,6 +6307,138 @@ const runTests = async () => {
       assert.ok(dataSeo.data.searchTags.includes('hoodie') || dataSeo.data.searchTags.includes('fashion'));
     });
 
+    // =========================================================================
+    // Point 77: Abandoned Cart Recovery Automation
+    // =========================================================================
+    await test('Point 77: Abandoned Cart Recovery Automation (Cart tracking, recovery reminder email/SMS triggers with custom discount coupons, recovery metrics)', async () => {
+      const AbandonedCart = require('../src/models/AbandonedCart');
+      const Coupon = require('../src/models/Coupon');
+
+      // 1. RBAC & Validation Checks
+      const resUnauth = await fetch(`${baseUrl}/abandoned-carts/admin/all`);
+      assert.strictEqual(resUnauth.status, 401, 'Unauthenticated admin carts request must return 401');
+
+      const resCustomer = await fetch(`${baseUrl}/abandoned-carts/admin/all`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustomer.status, 403, 'Customer token must be forbidden from admin abandoned carts with 403');
+
+      const resInvalidSync = await fetch(`${baseUrl}/abandoned-carts/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerEmail: '', items: [] }),
+      });
+      assert.strictEqual(resInvalidSync.status, 400, 'Sync without email or items must fail with 400');
+
+      // 2. Public Storefront Cart Session Sync
+      const testEmail = `rohan.cart.${Date.now()}@example.com`;
+      const resSync = await fetch(`${baseUrl}/abandoned-carts/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName: 'Rohan Sharma',
+          customerEmail: testEmail,
+          customerPhone: '9876543219',
+          items: [
+            {
+              productId: '654321654321654321654321',
+              title: 'Aura Studio Wireless ANC Headphones',
+              price: 4999,
+              quantity: 2,
+              image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
+              variant: 'Midnight Black',
+            },
+          ],
+          cartTotal: 9998,
+        }),
+      });
+      assert.strictEqual(resSync.status, 200);
+      const syncData = await resSync.json();
+      assert.strictEqual(syncData.success, true);
+      assert.strictEqual(syncData.data.customerEmail, testEmail.toLowerCase());
+      assert.strictEqual(syncData.data.cartTotal, 9998);
+      assert.strictEqual(syncData.data.status, 'ABANDONED');
+      assert.strictEqual(syncData.data.items.length, 1);
+      const createdCartId = syncData.data._id;
+
+      // 3. Super Admin Abandoned Carts Dashboard & Analytics API
+      const resAdminList = await fetch(`${baseUrl}/abandoned-carts/admin/all`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resAdminList.status, 200);
+      const listData = await resAdminList.json();
+      assert.strictEqual(listData.success, true);
+      assert.ok(listData.stats, 'Recovery stats must be returned');
+      assert.ok(listData.stats.total >= 1, 'Total carts should include synced cart');
+      assert.ok(listData.stats.potentialRevenue >= 9998, 'Potential revenue should include synced cart total');
+      assert.ok(typeof listData.stats.recoveryRate === 'number');
+
+      // 4. Send 1-Click Recovery Reminder with Custom Promo Coupon
+      const customCouponCode = `RECOVER${Date.now().toString().slice(-4)}`;
+      const resReminder = await fetch(`${baseUrl}/abandoned-carts/admin/${createdCartId}/send-reminder`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          couponCode: customCouponCode,
+          customMessage: 'Finish checkout within 24 hours for special 10% discount savings!',
+        }),
+      });
+      assert.strictEqual(resReminder.status, 200);
+      const reminderData = await resReminder.json();
+      assert.strictEqual(reminderData.success, true);
+      assert.strictEqual(reminderData.data.reminderCount, 1);
+      assert.strictEqual(reminderData.data.status, 'REMINDER_SENT');
+      assert.strictEqual(reminderData.data.recoveryCoupon, customCouponCode);
+      assert.ok(reminderData.data.lastReminderSentAt);
+      assert.strictEqual(reminderData.emailSent, true);
+      assert.strictEqual(reminderData.smsSent, true);
+
+      // Verify custom coupon was auto-provisioned in Coupon collection
+      const couponDoc = await Coupon.findOne({ code: customCouponCode });
+      assert.ok(couponDoc, 'Recovery coupon must be auto-provisioned');
+      assert.strictEqual(couponDoc.isActive, true);
+      assert.strictEqual(couponDoc.discountType, 'PERCENTAGE');
+
+      // 5. Bulk Recovery Reminder Dispatch
+      const resBulk = await fetch(`${baseUrl}/abandoned-carts/admin/bulk-reminder`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ couponCode: customCouponCode }),
+      });
+      assert.strictEqual(resBulk.status, 200);
+      const bulkData = await resBulk.json();
+      assert.strictEqual(bulkData.success, true);
+      assert.ok(typeof bulkData.count === 'number');
+
+      // 6. Mark Cart as Recovered
+      const resRecover = await fetch(`${baseUrl}/abandoned-carts/admin/${createdCartId}/mark-recovered`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resRecover.status, 200);
+      const recoverData = await resRecover.json();
+      assert.strictEqual(recoverData.success, true);
+      assert.strictEqual(recoverData.data.status, 'RECOVERED');
+
+      // 7. Clean up / Delete Abandoned Cart
+      const resDelete = await fetch(`${baseUrl}/abandoned-carts/admin/${createdCartId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resDelete.status, 200);
+      const deleteData = await resDelete.json();
+      assert.strictEqual(deleteData.success, true);
+
+      // Clean up coupon
+      await Coupon.deleteOne({ code: customCouponCode });
+    });
+
     // 9b. Edge Case & Security Validations
     await test('POST /delivery/tasks/:id/verify-otp rejects re-delivery on already DELIVERED task with 400', async () => {
       const targetSubOrder = await SubOrder.findById(riderTask.subOrder);

@@ -1332,7 +1332,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
             <ShoppingCart className="w-4 h-4 text-blue-400" />
             <span>Abandoned Carts</span>
             <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-blue-500/30 text-blue-300 ml-1">
-              Point #42
+              Point #77
             </span>
           </button>
 
@@ -2249,7 +2249,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 9: ABANDONED CART AUTO-RECOVERY SYSTEM (Point #42) */}
+      {/* TAB 9: ABANDONED CART AUTO-RECOVERY SYSTEM (Point #77) */}
       {/* ========================================================================= */}
       {activeDashboardTab === 'abandoned-carts' && (
         <AbandonedCartManager />

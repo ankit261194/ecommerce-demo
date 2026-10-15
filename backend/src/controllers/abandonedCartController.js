@@ -1,6 +1,8 @@
 const AbandonedCart = require('../models/AbandonedCart');
+const Coupon = require('../models/Coupon');
 const smsService = require('../services/smsService');
 const mailService = require('../services/mailService');
+const mongoose = require('mongoose');
 
 // @desc    Get All Abandoned Carts with Recovery Analytics for Super Admin
 // @route   GET /api/admin/abandoned-carts
@@ -57,6 +59,29 @@ exports.getAdminAbandonedCarts = async (req, res, next) => {
   }
 };
 
+// Helper: Ensure recovery discount coupon exists in database
+const ensureRecoveryCoupon = async (code = 'RECOVER10', discountValue = 10) => {
+  const cleanCode = (code || 'RECOVER10').trim().toUpperCase();
+  let coupon = await Coupon.findOne({ code: cleanCode });
+  if (!coupon) {
+    try {
+      coupon = await Coupon.create({
+        code: cleanCode,
+        title: 'Abandoned Cart Recovery Discount',
+        description: `Special ${discountValue}% off voucher to complete your checkout!`,
+        discountType: 'PERCENTAGE',
+        discountValue,
+        maxDiscountAmount: 500,
+        minOrderAmount: 299,
+        isActive: true,
+        isFeatured: false,
+        expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      });
+    } catch (_) {}
+  }
+  return cleanCode;
+};
+
 // @desc    1-Click Send Auto-Recovery Reminder (Email + SMS)
 // @route   POST /api/admin/abandoned-carts/:id/send-reminder
 // @access  Private (Super Admin)
@@ -72,6 +97,8 @@ exports.sendCartReminder = async (req, res, next) => {
       });
     }
 
+    const activeCouponCode = await ensureRecoveryCoupon(couponCode, 10);
+
     const itemsSummary = cart.items
       .map((i) => `${i.quantity}x ${i.title}`)
       .slice(0, 3)
@@ -80,10 +107,10 @@ exports.sendCartReminder = async (req, res, next) => {
     const emailSubject = `🛒 Don't miss out on your cart, ${cart.customerName}! Extra 10% OFF inside`;
     const messageBody =
       customMessage ||
-      `Hi ${cart.customerName}, you left ${cart.items.length} item(s) in your cart (${itemsSummary}) totaling ₹${cart.cartTotal.toLocaleString('en-IN')}. Complete your order today and use promo code "${couponCode}" at checkout for an instant discount!`;
+      `Hi ${cart.customerName}, you left ${cart.items.length} item(s) in your cart (${itemsSummary}) totaling ₹${cart.cartTotal.toLocaleString('en-IN')}. Complete your order today and use promo code "${activeCouponCode}" at checkout for an instant discount!`;
 
     const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; rounded: 16px;">
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px;">
         <h2 style="color: #0f172a;">You left something behind at AuraMarket!</h2>
         <p>Hi <strong>${cart.customerName}</strong>,</p>
         <p>${messageBody}</p>
@@ -97,7 +124,7 @@ exports.sendCartReminder = async (req, res, next) => {
         <div style="text-align: center; margin: 30px 0;">
           <a href="https://shribalajikripadham.online/ecommerce-demo/" style="background-color: #f59e0b; color: #0f172a; font-weight: bold; padding: 14px 28px; text-decoration: none; border-radius: 12px; display: inline-block;">Complete Checkout Now</a>
         </div>
-        <p style="color: #94a3b8; font-size: 12px; text-align: center;">Use recovery coupon <strong>${couponCode}</strong> at checkout for bonus savings.</p>
+        <p style="color: #94a3b8; font-size: 12px; text-align: center;">Use recovery coupon <strong>${activeCouponCode}</strong> at checkout for bonus savings.</p>
       </div>
     `;
 
@@ -114,7 +141,7 @@ exports.sendCartReminder = async (req, res, next) => {
     if (cart.customerPhone) {
       smsRes = await smsService.sendSMS({
         to: cart.customerPhone,
-        message: `AuraMarket: Hi ${cart.customerName}, your cart with ₹${cart.cartTotal} in items is waiting! Use code ${couponCode} for extra savings: https://shribalajikripadham.online/ecommerce-demo/`,
+        message: `AuraMarket: Hi ${cart.customerName}, your cart with ₹${cart.cartTotal} in items is waiting! Use code ${activeCouponCode} for extra savings: https://shribalajikripadham.online/ecommerce-demo/`,
       });
     }
 
@@ -122,7 +149,7 @@ exports.sendCartReminder = async (req, res, next) => {
     cart.reminderCount += 1;
     cart.lastReminderSentAt = new Date();
     cart.status = 'REMINDER_SENT';
-    cart.recoveryCoupon = couponCode;
+    cart.recoveryCoupon = activeCouponCode;
     await cart.save();
 
     res.status(200).json({
@@ -143,6 +170,7 @@ exports.sendCartReminder = async (req, res, next) => {
 exports.sendBulkReminders = async (req, res, next) => {
   try {
     const { couponCode = 'RECOVER10' } = req.body;
+    const activeCouponCode = await ensureRecoveryCoupon(couponCode, 10);
 
     const pendingCarts = await AbandonedCart.find({
       status: { $in: ['ABANDONED', 'REMINDER_SENT'] },
@@ -155,21 +183,21 @@ exports.sendBulkReminders = async (req, res, next) => {
         await mailService.sendMail({
           to: cart.customerEmail,
           subject: `🛒 Complete your AuraMarket order, ${cart.customerName}! Extra 10% OFF`,
-          text: `Hi ${cart.customerName}, finish your checkout for ₹${cart.cartTotal} with code ${couponCode}!`,
-          html: `<p>Hi ${cart.customerName}, complete your order totaling ₹${cart.cartTotal} with code ${couponCode}!</p>`,
+          text: `Hi ${cart.customerName}, finish your checkout for ₹${cart.cartTotal} with code ${activeCouponCode}!`,
+          html: `<p>Hi ${cart.customerName}, complete your order totaling ₹${cart.cartTotal} with code ${activeCouponCode}!</p>`,
         });
 
         if (cart.customerPhone) {
           await smsService.sendSMS({
             to: cart.customerPhone,
-            message: `AuraMarket: Hi ${cart.customerName}, finish your checkout for ₹${cart.cartTotal} with code ${couponCode}!`,
+            message: `AuraMarket: Hi ${cart.customerName}, finish your checkout for ₹${cart.cartTotal} with code ${activeCouponCode}!`,
           });
         }
 
         cart.reminderCount += 1;
         cart.lastReminderSentAt = new Date();
         cart.status = 'REMINDER_SENT';
-        cart.recoveryCoupon = couponCode;
+        cart.recoveryCoupon = activeCouponCode;
         await cart.save();
         sentCount += 1;
       } catch (sendErr) {
@@ -188,13 +216,13 @@ exports.sendBulkReminders = async (req, res, next) => {
 };
 
 // @desc    Storefront Cart Sync / Tracking
-// @route   POST /api/cart/sync
+// @route   POST /api/abandoned-carts/sync
 // @access  Public / Customer
 exports.syncCartSession = async (req, res, next) => {
   try {
     const { customerName, customerEmail, customerPhone, items = [], cartTotal = 0 } = req.body;
 
-    if (!customerEmail || items.length === 0) {
+    if (!customerEmail || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
         success: false,
         message: 'Customer email and at least one item are required to sync cart session',
@@ -203,6 +231,23 @@ exports.syncCartSession = async (req, res, next) => {
 
     const cleanEmail = customerEmail.trim().toLowerCase();
 
+    const formattedItems = items.map((item) => ({
+      product: mongoose.Types.ObjectId.isValid(item.product || item.productId)
+        ? (item.product || item.productId)
+        : undefined,
+      productId: String(item.productId || item.product || ''),
+      title: item.title || 'Cart Item',
+      price: Number(item.price) || 0,
+      quantity: Number(item.quantity) || 1,
+      image: item.image || '',
+      variant: item.variant || item.variantName || '',
+    }));
+
+    const calculatedTotal =
+      Number(cartTotal) > 0
+        ? Number(cartTotal)
+        : formattedItems.reduce((acc, i) => acc + i.price * i.quantity, 0);
+
     // Check if an existing open abandoned cart exists for this customer email
     let cart = await AbandonedCart.findOne({
       customerEmail: cleanEmail,
@@ -210,9 +255,9 @@ exports.syncCartSession = async (req, res, next) => {
     });
 
     if (cart) {
-      cart.items = items;
-      cart.cartTotal = Number(cartTotal) || 0;
-      cart.customerName = customerName || cart.customerName;
+      cart.items = formattedItems;
+      cart.cartTotal = calculatedTotal;
+      if (customerName) cart.customerName = customerName;
       if (customerPhone) cart.customerPhone = customerPhone;
       cart.abandonedAt = new Date();
       await cart.save();
@@ -221,8 +266,8 @@ exports.syncCartSession = async (req, res, next) => {
         customerName: customerName || 'Valued Customer',
         customerEmail: cleanEmail,
         customerPhone: customerPhone || '',
-        items,
-        cartTotal: Number(cartTotal) || 0,
+        items: formattedItems,
+        cartTotal: calculatedTotal,
         status: 'ABANDONED',
         abandonedAt: new Date(),
       });

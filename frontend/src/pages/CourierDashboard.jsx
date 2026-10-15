@@ -32,6 +32,7 @@ import CourierSignatureModal from '../components/CourierSignatureModal';
 import CourierProofPhotoModal from '../components/CourierProofPhotoModal';
 import CourierCodReconciliationModal from '../components/CourierCodReconciliationModal';
 import CourierDeliveryFailureModal from '../components/CourierDeliveryFailureModal';
+import RiderRouteOptimizerModal from '../components/RiderRouteOptimizerModal';
 import api from '../api/client';
 
 export const CourierDashboard = () => {
@@ -41,6 +42,7 @@ export const CourierDashboard = () => {
   const [selectedTaskForPhoto, setSelectedTaskForPhoto] = useState(null);
   const [selectedTaskForFailure, setSelectedTaskForFailure] = useState(null);
   const [isCodReconModalOpen, setIsCodReconModalOpen] = useState(false);
+  const [isRouteOptimizerModalOpen, setIsRouteOptimizerModalOpen] = useState(false); // Point #17: Multi-Stop Route Optimizer
   const [riderStats, setRiderStats] = useState({
     name: 'Vikram Singh',
     assignedTasks: 2,
@@ -385,6 +387,17 @@ export const CourierDashboard = () => {
           >
             <Calculator className="w-4 h-4" />
             <span>Reconcile COD Cash</span>
+          </button>
+          <button
+            onClick={() => setIsRouteOptimizerModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-sm transition-all flex items-center gap-1.5 text-xs font-bold"
+            title="Multi-Stop Rider Delivery Route Optimizer (Point #17)"
+          >
+            <Compass className="w-4 h-4 text-amber-400" />
+            <span>Route Optimizer</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
+              #17
+            </span>
           </button>
           <button
             onClick={fetchTasks}
@@ -947,6 +960,13 @@ export const CourierDashboard = () => {
           task={selectedTaskForFailure}
           onClose={() => setSelectedTaskForFailure(null)}
           onSuccess={handleFailureSuccess}
+        />
+      )}
+      {/* Point #17: Multi-Stop Rider Delivery Route Optimizer Modal */}
+      {isRouteOptimizerModalOpen && (
+        <RiderRouteOptimizerModal
+          isOpen={isRouteOptimizerModalOpen}
+          onClose={() => setIsRouteOptimizerModalOpen(false)}
         />
       )}
     </div>

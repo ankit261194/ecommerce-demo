@@ -9597,6 +9597,148 @@ const runTests = async () => {
       assert.strictEqual(res.status, 401);
     });
 
+    // ==========================================
+    // POINT 16: Live Real-Time GPS Delivery Tracking Map
+    // ==========================================
+    await test('Point 16: GET /api/delivery/live-tracking/:identifier returns live GPS telemetry and polyline', async () => {
+      const res = await fetch(`${baseUrl}/delivery/live-tracking/TEST-ORDER-16`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.rider);
+      assert.ok(typeof data.data.rider.currentLocation?.lat === 'number');
+      assert.ok(typeof data.data.rider.currentLocation?.lng === 'number');
+      assert.ok(data.data.origin);
+      assert.ok(data.data.destination);
+      assert.ok(data.data.route);
+      assert.ok(Array.isArray(data.data.route.polyline));
+      assert.ok(data.data.route.polyline.length >= 2);
+      assert.ok(typeof data.data.route.distanceRemainingKm === 'number');
+      assert.ok(typeof data.data.route.etaMinutes === 'number');
+      assert.ok(data.data.deliveryOtp);
+    });
+
+    await test('Point 16: Setup: Obtain fresh rider authentication token post-wipe', async () => {
+      const res = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'rider@auramarket.com', password: 'rider123456' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token, 'Rider token must be returned');
+      riderToken = data.token;
+    });
+
+    await test('Point 16: PATCH /api/delivery/rider/location updates rider GPS telemetry', async () => {
+      const res = await fetch(`${baseUrl}/delivery/rider/location`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          lat: 19.0850,
+          lng: 72.8750,
+          speed: 32,
+          heading: 65,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.lat, 19.0850);
+      assert.strictEqual(data.data.lng, 72.8750);
+      assert.strictEqual(data.data.speed, 32);
+    });
+
+    await test('Point 16: PATCH /api/delivery/rider/location validates missing coordinates with 400', async () => {
+      const res = await fetch(`${baseUrl}/delivery/rider/location`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ speed: 20 }),
+      });
+      assert.strictEqual(res.status, 400);
+    });
+
+    await test('Point 16: Role Security: Customer token is rejected with 403 on rider location update', async () => {
+      const res = await fetch(`${baseUrl}/delivery/rider/location`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ lat: 19.1, lng: 72.8 }),
+      });
+      assert.strictEqual(res.status, 403);
+    });
+
+    // ==========================================
+    // POINT 17: Multi-Stop Rider Delivery Route Optimizer
+    // ==========================================
+    await test('Point 17: GET /api/delivery/rider/optimize-route calculates fuel-minimized stop sequence', async () => {
+      const res = await fetch(`${baseUrl}/delivery/rider/optimize-route`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.depot);
+      assert.ok(typeof data.data.totalStops === 'number');
+      assert.ok(typeof data.data.optimizedDistanceKm === 'number');
+      assert.ok(data.data.savings);
+      assert.ok(typeof data.data.savings.distanceSavedKm === 'number');
+      assert.ok(typeof data.data.savings.timeSavedMinutes === 'number');
+      assert.ok(typeof data.data.savings.fuelSavedLitres === 'number');
+      assert.ok(typeof data.data.savings.co2SavedKg === 'number');
+      assert.ok(Array.isArray(data.data.stops));
+      assert.ok(data.data.stops.length > 0);
+      assert.strictEqual(data.data.stops[0].stopSequence, 1);
+    });
+
+    await test('Point 17: POST /api/delivery/rider/apply-route-sequence applies optimized sequence', async () => {
+      const res = await fetch(`${baseUrl}/delivery/rider/apply-route-sequence`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          sequence: [
+            { taskId: new mongoose.Types.ObjectId().toString(), stopSequence: 1 },
+            { taskId: new mongoose.Types.ObjectId().toString(), stopSequence: 2 },
+          ],
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.appliedSequenceCount, 2);
+    });
+
+    await test('Point 17: POST /api/delivery/rider/apply-route-sequence validates missing array with 400', async () => {
+      const res = await fetch(`${baseUrl}/delivery/rider/apply-route-sequence`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ sequence: [] }),
+      });
+      assert.strictEqual(res.status, 400);
+    });
+
+    await test('Point 17: Role Security: Customer token is rejected with 403 on route optimizer', async () => {
+      const res = await fetch(`${baseUrl}/delivery/rider/optimize-route`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

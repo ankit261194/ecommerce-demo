@@ -18,11 +18,25 @@ const {
   verifyCodReconciliation,
   reportDeliveryFailure,
   rescheduleTask,
+  getLiveGpsTracking,
+  updateRiderLocation,
+  getOptimizedRoute,
+  applyRouteSequence,
 } = require('../controllers/deliveryController');
 const { protect, authorize } = require('../middlewares/auth');
 
+// Point 16: Public Live Real-Time GPS Tracking Map (Accessible by customer)
+router.get('/live-tracking/:identifier', getLiveGpsTracking);
+
 router.use(protect);
 router.use(authorize('delivery', 'superadmin'));
+
+// Point 16: Rider GPS Location Updates
+router.patch('/rider/location', updateRiderLocation);
+
+// Point 17: Multi-Stop Rider Delivery Route Optimizer
+router.get('/rider/optimize-route', getOptimizedRoute);
+router.post('/rider/apply-route-sequence', applyRouteSequence);
 
 router.get('/tasks', getMyDeliveries);
 router.get('/tasks/:id/navigation', getTaskNavigationDetails);

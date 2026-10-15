@@ -30,6 +30,7 @@ import ReturnRefundModal from './ReturnRefundModal';
 import TaxInvoiceModal from './TaxInvoiceModal';
 import WhatsAppOrderBotModal from './WhatsAppOrderBotModal';
 import ScratchCardModal from './ScratchCardModal';
+import LiveGpsTrackingMap from './LiveGpsTrackingMap';
 
 export default function LiveOrderTrackerModal({
   isOpen,
@@ -602,6 +603,17 @@ export default function LiveOrderTrackerModal({
                     </span>
                   </div>
                 )}
+
+                {/* Point 16: Live Real-Time GPS Delivery Tracking Map */}
+                <div className="pt-2 pb-1">
+                  <LiveGpsTrackingMap
+                    orderId={orderData.orderId}
+                    subOrderId={currentPackage?.rawSubOrderId || currentPackage?.subOrderId}
+                    deliveryOtp={currentPackage?.deliveryOtp || orderData.deliveryOtp || '4821'}
+                    recipientName={orderData.shippingAddress?.recipientName || 'Valued Customer'}
+                    deliveryAddress={`${orderData.shippingAddress?.street || ''}, ${orderData.shippingAddress?.city || ''}`}
+                  />
+                </div>
 
                 {/* Courier Partner & Delivery Address Row */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">

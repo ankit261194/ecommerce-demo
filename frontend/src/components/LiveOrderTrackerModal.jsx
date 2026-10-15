@@ -24,10 +24,12 @@ import {
   RotateCcw,
   Printer,
   MessageSquare,
+  Gift,
 } from 'lucide-react';
 import ReturnRefundModal from './ReturnRefundModal';
 import TaxInvoiceModal from './TaxInvoiceModal';
 import WhatsAppOrderBotModal from './WhatsAppOrderBotModal';
+import ScratchCardModal from './ScratchCardModal';
 
 export default function LiveOrderTrackerModal({
   isOpen,
@@ -59,6 +61,9 @@ export default function LiveOrderTrackerModal({
 
   // Point #71: 1-Click WhatsApp Order Bot State
   const [showWhatsAppBot, setShowWhatsAppBot] = useState(false);
+
+  // Point #72: Post-Purchase Scratch Card State
+  const [showScratchCard, setShowScratchCard] = useState(false);
 
   const cancellationReasons = [
     'Ordered by mistake',
@@ -362,7 +367,17 @@ export default function LiveOrderTrackerModal({
                     title="1-Click WhatsApp Confirmation & AI Tracking Assistant"
                   >
                     <MessageSquare className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 fill-current" />
-                    <span>WhatsApp Bot & Updates</span>
+                    <span>WhatsApp Bot</span>
+                  </button>
+
+                  {/* Point #72: Post-Purchase Scratch Card Reward */}
+                  <button
+                    onClick={() => setShowScratchCard(true)}
+                    className="px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 text-xs font-bold border border-amber-300 dark:border-amber-700 flex items-center gap-1.5 transition shadow-sm active:scale-95"
+                    title="Unlock & Scratch Post-Purchase Reward Card"
+                  >
+                    <Gift className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 fill-current" />
+                    <span>Scratch Card</span>
                   </button>
 
                   {/* Point #28: 1-Click Self-Cancel Action Button */}
@@ -935,6 +950,15 @@ export default function LiveOrderTrackerModal({
             customer: orderData.customer,
             items: orderData.items || [],
           }}
+        />
+      )}
+
+      {/* Point #72: Gamified Post-Purchase Scratch Card Reward Modal */}
+      {showScratchCard && orderData && (
+        <ScratchCardModal
+          isOpen={showScratchCard}
+          onClose={() => setShowScratchCard(false)}
+          orderId={orderData._id || orderData.rawOrderId || orderData.orderId}
         />
       )}
     </div>

@@ -84,6 +84,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [isOffersHubOpen, setIsOffersHubOpen] = useState(false);
   const [isScratchCardOpen, setIsScratchCardOpen] = useState(false);
+  const [scratchCardOrderId, setScratchCardOrderId] = useState(null);
   const [isOrderTrackerOpen, setIsOrderTrackerOpen] = useState(false);
   const [trackedOrderId, setTrackedOrderId] = useState(null);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
@@ -188,9 +189,22 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
     fetchWalletState();
 
+    const handleWalletUpdate = (e) => {
+      if (e.detail) {
+        setCustomerWallet((prev) => ({
+          coins: e.detail.coins ?? e.detail.walletCoins ?? prev.coins,
+          balance: e.detail.balance ?? e.detail.walletBalance ?? prev.balance,
+        }));
+      }
+    };
+    window.addEventListener('auramarket_wallet_update', handleWalletUpdate);
+
     const handleOpenWallet = () => setIsWalletOpen(true);
     window.addEventListener('auramarket_open_wallet', handleOpenWallet);
-    return () => window.removeEventListener('auramarket_open_wallet', handleOpenWallet);
+    return () => {
+      window.removeEventListener('auramarket_wallet_update', handleWalletUpdate);
+      window.removeEventListener('auramarket_open_wallet', handleOpenWallet);
+    };
   }, []);
 
   // Wishlist state (persisted in localStorage + synced with backend /api/wishlist)
@@ -2497,6 +2511,33 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               </span>
             </div>
 
+            {/* Point #72: Gamified Post-Purchase Scratch Card Reward System */}
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-yellow-500/20 to-amber-500/15 border-2 border-amber-400/50 flex items-center justify-between text-xs text-amber-950 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 text-slate-950 flex items-center justify-center font-black shadow-sm shrink-0">
+                  <Gift className="w-5 h-5 fill-current" />
+                </div>
+                <div className="text-left">
+                  <span className="font-black block leading-tight text-slate-900 text-[13px]">
+                    🎁 Post-Purchase Scratch Card!
+                  </span>
+                  <span className="text-[11px] text-amber-900 font-semibold block">
+                    Scratch & win instant coins or wallet cash
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setScratchCardOrderId(activeOrderConfirmation.orderId);
+                  setIsScratchCardOpen(true);
+                }}
+                className="py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 active:scale-95 text-slate-950 font-black text-xs shadow-md transition flex items-center gap-1.5 shrink-0"
+              >
+                <span>Scratch Now</span>
+                <Sparkles className="w-3.5 h-3.5 fill-current" />
+              </button>
+            </div>
+
             {/* Point #30: 1-Click Tax Invoice Download Button */}
             <button
               onClick={() => {
@@ -2637,9 +2678,14 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
       <ScratchCardModal
         isOpen={isScratchCardOpen}
-        onClose={() => setIsScratchCardOpen(false)}
+        orderId={scratchCardOrderId}
+        onClose={() => {
+          setIsScratchCardOpen(false);
+          setScratchCardOrderId(null);
+        }}
         onApplyCouponCode={(code) => {
           setIsScratchCardOpen(false);
+          setScratchCardOrderId(null);
           setIsCartOpen(true);
           api.post('/coupons/validate', { code, cartTotal }).then(res => {
             if (res.data?.success && res.data.coupon) {

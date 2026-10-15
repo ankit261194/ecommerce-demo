@@ -12,6 +12,8 @@ const DeliveryTask = require('../src/models/DeliveryTask');
 const VendorProfile = require('../src/models/VendorProfile');
 const Ledger = require('../src/models/Ledger');
 const CodReconciliation = require('../src/models/CodReconciliation');
+const WalletTransaction = require('../src/models/WalletTransaction');
+const ScratchCardReward = require('../src/models/ScratchCardReward');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -5345,6 +5347,199 @@ const runTests = async () => {
         body: JSON.stringify({ query: '' }),
       });
       assert.strictEqual(resEmptyQuery.status, 400);
+    });
+
+    // =========================================================================
+    // Point 72: Gamified Post-Purchase Scratch Card Reward System
+    // =========================================================================
+    await test('Point 72: Gamified Post-Purchase Scratch Card Reward System (Generate, Reveal, Claim Coins & Cash to Wallet, Idempotency)', async () => {
+      // 1. Missing orderId returns 400
+      const resMissing = await fetch(`${baseUrl}/wallet/scratch-card/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(resMissing.status, 400);
+
+      // 2. Non-existent orderId returns 404
+      const res404 = await fetch(`${baseUrl}/wallet/scratch-card/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ orderId: new mongoose.Types.ObjectId() }),
+      });
+      assert.strictEqual(res404.status, 404);
+
+      // 3. Unauthenticated access returns 401
+      const resUnauth = await fetch(`${baseUrl}/wallet/scratch-card/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: new mongoose.Types.ObjectId() }),
+      });
+      assert.strictEqual(resUnauth.status, 401);
+
+      // 4. Generate scratch card for an actual Order
+      const testOrder = await Order.findOne().sort({ createdAt: -1 });
+      assert.ok(testOrder, 'An order must exist for scratch card testing');
+
+      // Clean up any existing scratch card for this order to start fresh
+      await ScratchCardReward.deleteMany({ order: testOrder._id });
+
+      const resGen = await fetch(`${baseUrl}/wallet/scratch-card/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          orderId: testOrder._id,
+          rewardType: 'WALLET_COINS',
+        }),
+      });
+      assert.strictEqual(resGen.status, 201);
+      const dataGen = await resGen.json();
+      assert.strictEqual(dataGen.success, true);
+      assert.ok(dataGen.card);
+      assert.strictEqual(dataGen.card.rewardType, 'WALLET_COINS');
+      assert.strictEqual(dataGen.card.isScratched, false);
+      assert.strictEqual(dataGen.card.isClaimed, false);
+      assert.ok(dataGen.card.badgeText);
+      const cardId = dataGen.card._id;
+
+      // 5. Idempotency: Calling generate again with same orderId returns existing card (200 OK)
+      const resIdempotent = await fetch(`${baseUrl}/wallet/scratch-card/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ orderId: testOrder._id }),
+      });
+      assert.strictEqual(resIdempotent.status, 200);
+      const dataIdempotent = await resIdempotent.json();
+      assert.strictEqual(dataIdempotent.card._id, cardId);
+
+      // 6. Scratch / Reveal the card
+      const resScratch = await fetch(`${baseUrl}/wallet/scratch-card/${cardId}/scratch`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${customerToken}`,
+        },
+      });
+      assert.strictEqual(resScratch.status, 200);
+      const dataScratch = await resScratch.json();
+      assert.strictEqual(dataScratch.success, true);
+      assert.strictEqual(dataScratch.card.isScratched, true);
+      assert.ok(dataScratch.card.scratchedAt);
+
+      // 7. Claim the reward: Credits walletCoins and creates WalletTransaction
+      const customerBefore = await User.findOne({ email: 'customer@auramarket.com' });
+      const coinsBefore = customerBefore.walletCoins || 0;
+
+      const resClaim = await fetch(`${baseUrl}/wallet/scratch-card/${cardId}/claim`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${customerToken}`,
+        },
+      });
+      assert.strictEqual(resClaim.status, 200);
+      const dataClaim = await resClaim.json();
+      assert.strictEqual(dataClaim.success, true);
+      assert.strictEqual(dataClaim.data.card.isClaimed, true);
+      assert.strictEqual(dataClaim.data.walletCoins, coinsBefore + dataGen.card.amount);
+
+      const customerAfter = await User.findOne({ email: 'customer@auramarket.com' });
+      assert.strictEqual(customerAfter.walletCoins, coinsBefore + dataGen.card.amount);
+
+      // Verify WalletTransaction created
+      const txn = await WalletTransaction.findOne({
+        user: customerAfter._id,
+        category: 'SCRATCH_CARD',
+        order: testOrder._id,
+      });
+      assert.ok(txn, 'WalletTransaction must be recorded for claimed scratch card');
+      assert.strictEqual(txn.currency, 'COINS');
+      assert.strictEqual(txn.amount, dataGen.card.amount);
+
+      // 8. Double-claim rejection: Calling claim again must return 400 Bad Request
+      const resDoubleClaim = await fetch(`${baseUrl}/wallet/scratch-card/${cardId}/claim`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${customerToken}`,
+        },
+      });
+      assert.strictEqual(resDoubleClaim.status, 400);
+      const dataDoubleClaim = await resDoubleClaim.json();
+      assert.strictEqual(dataDoubleClaim.success, false);
+
+      // 9. Query user's scratch cards via GET /wallet/scratch-cards
+      const resList = await fetch(`${baseUrl}/wallet/scratch-cards`, {
+        headers: {
+          Authorization: `Bearer ${customerToken}`,
+        },
+      });
+      assert.strictEqual(resList.status, 200);
+      const dataList = await resList.json();
+      assert.strictEqual(dataList.success, true);
+      assert.ok(dataList.cards.length >= 1);
+      const foundCard = dataList.cards.find(c => c._id === cardId);
+      assert.ok(foundCard);
+      assert.strictEqual(foundCard.isClaimed, true);
+
+      // 10. Test WALLET_CASH claim on a second order/card
+      const cashOrder = await Order.create({
+        orderNumber: `AURA-SCRATCH-${Date.now()}`,
+        customer: customerAfter._id,
+        totalAmount: 1500,
+        paymentStatus: 'PAID',
+        paymentMethod: 'UPI',
+        shippingAddress: {
+          recipientName: 'Customer Test',
+          phone: '9876543210',
+          street: 'Test St',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          pincode: '400001',
+        },
+      });
+
+      const resCashGen = await fetch(`${baseUrl}/wallet/scratch-card/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          orderId: cashOrder._id,
+          rewardType: 'WALLET_CASH',
+        }),
+      });
+      assert.strictEqual(resCashGen.status, 201);
+      const dataCashGen = await resCashGen.json();
+      assert.strictEqual(dataCashGen.card.rewardType, 'WALLET_CASH');
+
+      const balanceBefore = customerAfter.walletBalance || 0;
+      const resCashClaim = await fetch(`${baseUrl}/wallet/scratch-card/${dataCashGen.card._id}/claim`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${customerToken}`,
+        },
+      });
+      assert.strictEqual(resCashClaim.status, 200);
+      const dataCashClaim = await resCashClaim.json();
+      assert.strictEqual(dataCashClaim.data.walletBalance, balanceBefore + dataCashGen.card.amount);
+
+      const customerFinal = await User.findById(customerAfter._id);
+      assert.strictEqual(customerFinal.walletBalance, balanceBefore + dataCashGen.card.amount);
+
+      // Clean up temporary cash order & cards
+      await Order.deleteOne({ _id: cashOrder._id });
+      await ScratchCardReward.deleteOne({ _id: dataCashGen.card._id });
     });
 
     // 9b. Edge Case & Security Validations

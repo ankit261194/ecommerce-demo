@@ -20,18 +20,21 @@ import {
   Check,
   PenTool,
   FileCheck,
+  Camera,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { CourierNavigationModal } from '../components/CourierNavigationModal';
 import { CourierContactModal } from '../components/CourierContactModal';
 import CourierOtpVerificationModal from '../components/CourierOtpVerificationModal';
 import CourierSignatureModal from '../components/CourierSignatureModal';
+import CourierProofPhotoModal from '../components/CourierProofPhotoModal';
 import api from '../api/client';
 
 export const CourierDashboard = () => {
   const [selectedTaskForNav, setSelectedTaskForNav] = useState(null);
   const [selectedTaskForContact, setSelectedTaskForContact] = useState(null);
   const [selectedTaskForSignature, setSelectedTaskForSignature] = useState(null);
+  const [selectedTaskForPhoto, setSelectedTaskForPhoto] = useState(null);
   const [riderStats, setRiderStats] = useState({
     name: 'Vikram Singh',
     assignedTasks: 2,
@@ -144,6 +147,8 @@ export const CourierDashboard = () => {
             deliveryInstructions: t.deliveryInstructions || t.subOrder?.deliveryInstructions || '',
             customerSignature: t.customerSignature || null,
             signatureDetails: t.signatureDetails || null,
+            proofPhoto: t.proofPhoto || null,
+            proofPhotoDetails: t.proofPhotoDetails || null,
             mapUrl: t.dropLocation?.mapUrl || `https://maps.google.com/?q=${mapQuery}`,
           };
         });
@@ -245,6 +250,23 @@ export const CourierDashboard = () => {
       )
     );
     setSuccessMessage(`✍️ Customer signature captured & attached for #${taskId}!`);
+    fetchTasks();
+  };
+
+  // Doorstep Photo Proof Callback (Point #68)
+  const handlePhotoProofSuccess = (taskId, photoBase64, details) => {
+    setTasks(prev =>
+      prev.map(t =>
+        t.id === taskId || t.rawId === taskId
+          ? {
+              ...t,
+              proofPhoto: photoBase64,
+              proofPhotoDetails: details,
+            }
+          : t
+      )
+    );
+    setSuccessMessage(`📷 Doorstep photo proof attached for #${taskId}!`);
     fetchTasks();
   };
 
@@ -679,6 +701,27 @@ export const CourierDashboard = () => {
                     </button>
                   )}
 
+                  {/* Point #68: Doorstep Photo Proof of Delivery Button */}
+                  {task.proofPhoto ? (
+                    <button
+                      onClick={() => setSelectedTaskForPhoto(task)}
+                      className="px-3.5 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                      title="View Doorstep Photo Proof"
+                    >
+                      <Camera className="w-3.5 h-3.5 text-sky-600" />
+                      <span>Photo POD</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setSelectedTaskForPhoto(task)}
+                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                      title="Capture Doorstep Parcel Photo"
+                    >
+                      <Camera className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Photo Proof</span>
+                    </button>
+                  )}
+
                   {task.status === 'ASSIGNED' && (
                     <button
                       onClick={() => handleAdvanceStatus(task.id, 'PICKED_UP')}
@@ -732,6 +775,14 @@ export const CourierDashboard = () => {
           task={selectedTaskForSignature}
           onClose={() => setSelectedTaskForSignature(null)}
           onSuccess={handleSignatureSuccess}
+        />
+      )}
+      {/* Point #68: Doorstep Photo Proof Modal */}
+      {selectedTaskForPhoto && (
+        <CourierProofPhotoModal
+          task={selectedTaskForPhoto}
+          onClose={() => setSelectedTaskForPhoto(null)}
+          onSuccess={handlePhotoProofSuccess}
         />
       )}
       {/* Point #66: 4-Digit Secret Delivery OTP Verification Modal */}

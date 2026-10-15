@@ -10,6 +10,8 @@ const {
   resendDeliveryOtp,
   saveCustomerSignature,
   getTaskSignature,
+  uploadProofPhoto,
+  getTaskProofPhoto,
 } = require('../controllers/deliveryController');
 const { protect, authorize } = require('../middlewares/auth');
 
@@ -25,5 +27,7 @@ router.put('/tasks/:id/status', updateDeliveryStatus);
 router.post('/tasks/:id/verify-otp', verifyOtpAndCompleteDelivery);
 router.post('/tasks/:id/signature', saveCustomerSignature);
 router.get('/tasks/:id/signature', getTaskSignature);
+router.post('/tasks/:id/proof-photo', uploadProofPhoto);
+router.get('/tasks/:id/proof-photo', getTaskProofPhoto);
 
 module.exports = router;

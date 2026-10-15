@@ -86,6 +86,16 @@ const deliveryTaskSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    proofPhotoDetails: {
+      uploadedAt: { type: Date, default: null },
+      notes: { type: String, default: '' },
+      fileSize: { type: String, default: '' },
+      tag: { type: String, default: 'DOORSTEP_DROP' },
+      geoTag: {
+        lat: Number,
+        lng: Number,
+      },
+    },
     // Point #69: Cash on Delivery (COD) Cash Collection Reconciliation
     codReconciliation: {
       status: {

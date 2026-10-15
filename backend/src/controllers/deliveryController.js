@@ -195,6 +195,14 @@ exports.verifyOtpAndCompleteDelivery = async (req, res, next) => {
         ipAddress: req.ip || '',
       };
     }
+    if (req.body.proofPhoto) {
+      task.proofPhoto = req.body.proofPhoto;
+      task.proofPhotoDetails = {
+        uploadedAt: new Date(),
+        notes: req.body.photoNotes || '',
+        tag: req.body.photoTag || 'DOORSTEP_DROP',
+      };
+    }
     await task.save();
 
     // Update SubOrder to Delivered
@@ -571,6 +579,108 @@ exports.getTaskSignature = async (req, res, next) => {
         signatureDetails: task.signatureDetails,
         deliveredAt: task.deliveredAt,
         createdAt: task.createdAt,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Upload Doorstep Photo Proof of Delivery (Point #68)
+// @route   POST /api/delivery/tasks/:id/proof-photo
+exports.uploadProofPhoto = async (req, res, next) => {
+  try {
+    const { photo, notes, tag, geoTag, fileSize } = req.body;
+
+    if (!photo || typeof photo !== 'string' || !photo.trim()) {
+      return res.status(400).json({ success: false, message: 'Doorstep parcel photo proof (base64 or URL) is required.' });
+    }
+
+    const taskQuery = req.user.role === 'superadmin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, deliveryPartner: req.user._id };
+
+    const task = await DeliveryTask.findOne(taskQuery).populate('subOrder');
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Delivery task not found' });
+    }
+
+    if (task.status === 'CANCELLED') {
+      return res.status(400).json({ success: false, message: 'Cannot attach photo proof to a cancelled delivery task.' });
+    }
+
+    task.proofPhoto = photo.trim();
+    task.proofPhotoDetails = {
+      uploadedAt: new Date(),
+      notes: (notes && notes.trim()) || '',
+      tag: tag || 'DOORSTEP_DROP',
+      fileSize: fileSize || '',
+      geoTag: geoTag && geoTag.lat && geoTag.lng ? { lat: geoTag.lat, lng: geoTag.lng } : undefined,
+    };
+    await task.save();
+
+    // Log to suborder tracking history if available
+    if (task.subOrder) {
+      const subOrder = await SubOrder.findById(task.subOrder._id || task.subOrder);
+      if (subOrder) {
+        subOrder.trackingHistory.push({
+          status: subOrder.status,
+          timestamp: new Date(),
+          note: `Doorstep parcel photo proof uploaded (${task.proofPhotoDetails.tag})`,
+        });
+        await subOrder.save();
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Doorstep photo proof attached successfully!',
+      data: {
+        taskId: task._id,
+        proofPhoto: task.proofPhoto,
+        proofPhotoDetails: task.proofPhotoDetails,
+        status: task.status,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Doorstep Photo Proof Details (Point #68)
+// @route   GET /api/delivery/tasks/:id/proof-photo
+exports.getTaskProofPhoto = async (req, res, next) => {
+  try {
+    const taskQuery = req.user.role === 'superadmin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, deliveryPartner: req.user._id };
+
+    const task = await DeliveryTask.findOne(taskQuery).populate({
+      path: 'subOrder',
+      populate: [
+        { path: 'vendor', select: 'storeName storeLogo pickupAddress phone' },
+        { path: 'customer', select: 'name phone email' },
+      ],
+    });
+
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Delivery task not found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        taskId: task._id,
+        subOrderId: task.subOrder?._id,
+        orderNumber: task.subOrder?.subOrderId || `TASK-${task._id.toString().slice(-6).toUpperCase()}`,
+        status: task.status,
+        recipientName: task.dropLocation?.recipientName,
+        phone: task.dropLocation?.phone,
+        dropAddress: `${task.dropLocation?.address || ''}, ${task.dropLocation?.city || ''} ${task.dropLocation?.pincode || ''}`.trim(),
+        hasProofPhoto: Boolean(task.proofPhoto),
+        proofPhoto: task.proofPhoto,
+        proofPhotoDetails: task.proofPhotoDetails,
+        deliveredAt: task.deliveredAt,
       },
     });
   } catch (error) {

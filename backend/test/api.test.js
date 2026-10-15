@@ -4818,6 +4818,90 @@ const runTests = async () => {
       assert.strictEqual(res404.status, 404);
     });
 
+    // =========================================================================
+    // Point 68: Doorstep Photo Proof of Delivery upload
+    // =========================================================================
+    await test('Point 68: Doorstep Photo Proof of Delivery (Camera Capture, Geotag, Placement Tag & POD Retrieval)', async () => {
+      const mockBase64Photo = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+
+      // 1. Reject missing photo
+      const resEmpty = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/proof-photo`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ photo: '' }),
+      });
+      assert.strictEqual(resEmpty.status, 400);
+      const dataEmpty = await resEmpty.json();
+      assert.strictEqual(dataEmpty.success, false);
+      assert.ok(dataEmpty.message.includes('photo proof (base64 or URL) is required'));
+
+      // 2. Reject non-courier (customer) from uploading photo proof (403)
+      const resForbidden = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/proof-photo`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ photo: mockBase64Photo }),
+      });
+      assert.strictEqual(resForbidden.status, 403);
+
+      // 3. Upload valid photo proof with placement category and geotag
+      const resUpload = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/proof-photo`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          photo: mockBase64Photo,
+          notes: 'Placed safely behind front plant pot',
+          tag: 'DOORSTEP_DROP',
+          fileSize: '42.5 KB',
+          geoTag: { lat: 28.5355, lng: 77.3910 },
+        }),
+      });
+      assert.strictEqual(resUpload.status, 200);
+      const dataUpload = await resUpload.json();
+      assert.strictEqual(dataUpload.success, true);
+      assert.strictEqual(dataUpload.data.proofPhoto, mockBase64Photo);
+      assert.strictEqual(dataUpload.data.proofPhotoDetails.tag, 'DOORSTEP_DROP');
+      assert.strictEqual(dataUpload.data.proofPhotoDetails.notes, 'Placed safely behind front plant pot');
+      assert.strictEqual(dataUpload.data.proofPhotoDetails.fileSize, '42.5 KB');
+      assert.strictEqual(dataUpload.data.proofPhotoDetails.geoTag.lat, 28.5355);
+
+      // 4. Verify database persistence in DeliveryTask
+      const savedTask = await DeliveryTask.findById(riderTask._id);
+      assert.strictEqual(savedTask.proofPhoto, mockBase64Photo);
+      assert.strictEqual(savedTask.proofPhotoDetails.notes, 'Placed safely behind front plant pot');
+
+      // 5. Verify SubOrder tracking history update
+      const subOrderDoc = await SubOrder.findById(riderTask.subOrder);
+      const photoTrack = subOrderDoc.trackingHistory.find(th => th.note && th.note.includes('parcel photo proof uploaded'));
+      assert.ok(photoTrack, 'SubOrder trackingHistory should include photo proof upload entry');
+
+      // 6. GET /delivery/tasks/:id/proof-photo retrieves details
+      const resGet = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/proof-photo`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resGet.status, 200);
+      const dataGet = await resGet.json();
+      assert.strictEqual(dataGet.success, true);
+      assert.strictEqual(dataGet.data.hasProofPhoto, true);
+      assert.strictEqual(dataGet.data.proofPhoto, mockBase64Photo);
+      assert.strictEqual(dataGet.data.proofPhotoDetails.tag, 'DOORSTEP_DROP');
+
+      // 7. Non-existent task returns 404
+      const fakeId = new mongoose.Types.ObjectId();
+      const res404 = await fetch(`${baseUrl}/delivery/tasks/${fakeId}/proof-photo`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(res404.status, 404);
+    });
+
     // 9b. Edge Case & Security Validations
     await test('POST /delivery/tasks/:id/verify-otp rejects re-delivery on already DELIVERED task with 400', async () => {
       const targetSubOrder = await SubOrder.findById(riderTask.subOrder);

@@ -22,6 +22,47 @@ const seedDemoData = async () => {
       phone: '9876543210',
       password: 'admin123456',
       role: 'superadmin',
+      staffRoleTitle: 'Chief Executive Officer',
+      department: 'Executive',
+      permissions: ['all'],
+    });
+  } else {
+    admin.staffRoleTitle = admin.staffRoleTitle || 'Chief Executive Officer';
+    admin.department = admin.department || 'Executive';
+    admin.permissions = ['all'];
+    await admin.save();
+  }
+
+  // 1b. Ensure Demo Sub-Admin Staff exist (Point #49)
+  let staff1 = await User.findOne({ email: 'operations.lead@auramarket.com' });
+  if (!staff1) {
+    await User.create({
+      name: 'Rohan Deshmukh',
+      email: 'operations.lead@auramarket.com',
+      phone: '9876543220',
+      password: 'staff123456',
+      role: 'subadmin',
+      staffRoleTitle: 'Logistics & Dispatch Supervisor',
+      department: 'Operations',
+      permissions: ['orders:read', 'orders:write', 'customers:read'],
+      isActive: true,
+      status: 'ACTIVE',
+    });
+  }
+
+  let staff2 = await User.findOne({ email: 'finance.lead@auramarket.com' });
+  if (!staff2) {
+    await User.create({
+      name: 'Simran Walia',
+      email: 'finance.lead@auramarket.com',
+      phone: '9876543221',
+      password: 'staff123456',
+      role: 'subadmin',
+      staffRoleTitle: 'Accounts & Payouts Specialist',
+      department: 'Finance',
+      permissions: ['payouts:read', 'payouts:write', 'vendors:read', 'orders:read'],
+      isActive: true,
+      status: 'ACTIVE',
     });
   }
 

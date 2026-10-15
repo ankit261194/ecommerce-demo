@@ -30,13 +30,18 @@ const {
   approvePayout,
   rejectPayout,
   exportPayoutsCSV,
+  getStaffPermissionsCatalog,
+  getAllStaff,
+  createStaff,
+  updateStaff,
+  deleteStaff,
 } = require('../controllers/adminController');
 const { getTaxInvoice } = require('../controllers/orderController');
-const { protect, authorize } = require('../middlewares/auth');
+const { protect, authorize, requirePermission } = require('../middlewares/auth');
 
-// All admin routes require Super Admin authorization
+// All admin routes require Super Admin or Sub-Admin authorization
 router.use(protect);
-router.use(authorize('superadmin'));
+router.use(authorize('superadmin', 'subadmin'));
 
 router.get('/analytics', getDashboardAnalytics);
 
@@ -131,6 +136,14 @@ router.put('/integrations', updateIntegrations);
 router.post('/integrations/test-sms', testSMSIntegration);
 router.post('/integrations/test-email', testEmailIntegration);
 
+// Sub-Admin Staff Roles & Permissions (Point #49)
+router.get('/staff/permissions', getStaffPermissionsCatalog);
+router.get('/staff', getAllStaff);
+router.post('/staff', createStaff);
+router.put('/staff/:id', updateStaff);
+router.patch('/staff/:id', updateStaff);
+router.delete('/staff/:id', deleteStaff);
+
 // 1-Click Operations
 router.post('/wipe-demo', triggerWipeDemo);
 router.post('/demo/wipe', triggerWipeDemo);
@@ -138,3 +151,4 @@ router.post('/seed-demo', triggerSeedDemo);
 router.post('/demo/seed', triggerSeedDemo);
 
 module.exports = router;
+

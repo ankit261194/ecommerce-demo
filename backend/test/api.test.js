@@ -3209,6 +3209,99 @@ const runTests = async () => {
       assert.strictEqual(dataExpress.data.taxDetails.cgst, 0, 'Inter-state CGST must be 0');
     });
 
+    // Point 49: Sub-Admin Staff Roles & Permissions (Custom access rights per staff)
+    await test('Point 49: Sub-Admin Staff Roles & Permissions (Catalog, CRUD, Role Presets & SuperAdmin Deletion Protection)', async () => {
+      // 1. Fetch permissions catalog and role presets
+      const resPerms = await fetch(`${baseUrl}/admin/staff/permissions`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resPerms.status, 200);
+      const dataPerms = await resPerms.json();
+      assert.strictEqual(dataPerms.success, true);
+      assert.ok(Array.isArray(dataPerms.data.categories), 'Must return permission categories');
+      assert.ok(dataPerms.data.categories.length >= 6);
+      assert.ok(Array.isArray(dataPerms.data.presets), 'Must return role presets');
+      assert.ok(dataPerms.data.presets.some(p => p.id === 'order_lead'));
+
+      // 2. Get all staff members
+      const resStaff = await fetch(`${baseUrl}/admin/staff`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resStaff.status, 200);
+      const dataStaff = await resStaff.json();
+      assert.strictEqual(dataStaff.success, true);
+      assert.ok(dataStaff.data.length >= 1, 'Must return at least Super Admin');
+      const superAdminUser = dataStaff.data.find(u => u.role === 'superadmin' || u.email === 'admin@auramarket.com');
+      assert.ok(superAdminUser, 'Must contain Super Admin');
+
+      // 3. Create a new sub-admin staff member with granular permissions
+      const resCreate = await fetch(`${baseUrl}/admin/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Kavita Sharma',
+          email: 'kavita.catalog@auramarket.com',
+          phone: '9876543233',
+          password: 'secureStaffPassword123',
+          staffRoleTitle: 'Senior Catalog Specialist',
+          department: 'Catalog',
+          permissions: ['products:read', 'products:write', 'categories:write'],
+        }),
+      });
+      assert.strictEqual(resCreate.status, 201);
+      const dataCreate = await resCreate.json();
+      assert.strictEqual(dataCreate.success, true);
+      assert.strictEqual(dataCreate.data.name, 'Kavita Sharma');
+      assert.strictEqual(dataCreate.data.role, 'subadmin');
+      assert.strictEqual(dataCreate.data.staffRoleTitle, 'Senior Catalog Specialist');
+      assert.strictEqual(dataCreate.data.department, 'Catalog');
+      assert.strictEqual(dataCreate.data.password, undefined, 'Password must not be returned');
+      assert.deepStrictEqual(dataCreate.data.permissions, ['products:read', 'products:write', 'categories:write']);
+
+      const createdStaffId = dataCreate.data._id;
+
+      // 4. Update the staff member: assign extra permissions and update role title
+      const resUpdate = await fetch(`${baseUrl}/admin/staff/${createdStaffId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          staffRoleTitle: 'Lead Catalog & Merchandising Manager',
+          permissions: ['products:read', 'products:write', 'categories:write', 'marketing:write'],
+          isActive: true,
+        }),
+      });
+      assert.strictEqual(resUpdate.status, 200);
+      const dataUpdate = await resUpdate.json();
+      assert.strictEqual(dataUpdate.success, true);
+      assert.strictEqual(dataUpdate.data.staffRoleTitle, 'Lead Catalog & Merchandising Manager');
+      assert.ok(dataUpdate.data.permissions.includes('marketing:write'));
+
+      // 5. Deletion Protection: Verify that deleting SuperAdmin is rejected with 400
+      const resDeleteSuperAdmin = await fetch(`${baseUrl}/admin/staff/${superAdminUser._id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resDeleteSuperAdmin.status, 400);
+      const dataDeleteSA = await resDeleteSuperAdmin.json();
+      assert.strictEqual(dataDeleteSA.success, false);
+      assert.ok(dataDeleteSA.message.includes('Primary Super Administrator'));
+
+      // 6. Delete created sub-admin successfully
+      const resDeleteStaff = await fetch(`${baseUrl}/admin/staff/${createdStaffId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resDeleteStaff.status, 200);
+      const dataDeleteStaff = await resDeleteStaff.json();
+      assert.strictEqual(dataDeleteStaff.success, true);
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

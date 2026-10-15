@@ -124,5 +124,39 @@ const optionalAuth = async (req, res, next) => {
   next();
 };
 
-module.exports = { protect, authorize, optionalAuth };
+// Point #49: Granular Sub-Admin Permission Verification
+const requirePermission = (permission) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required.',
+      });
+    }
+
+    // Super Admin has unrestricted access to all endpoints
+    if (req.user.role === 'superadmin') {
+      return next();
+    }
+
+    // Sub-Admin with granular permissions
+    if (req.user.role === 'subadmin') {
+      const userPerms = req.user.permissions || [];
+      if (userPerms.includes('all') || userPerms.includes(permission)) {
+        return next();
+      }
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: Sub-admin staff lacks required permission '${permission}'.`,
+      });
+    }
+
+    return res.status(403).json({
+      success: false,
+      message: `Forbidden: User role '${req.user.role}' is not authorized.`,
+    });
+  };
+};
+
+module.exports = { protect, authorize, requirePermission, optionalAuth };
 

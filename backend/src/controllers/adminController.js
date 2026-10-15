@@ -1339,4 +1339,285 @@ exports.exportPayoutsCSV = async (req, res, next) => {
   }
 };
 
+// ==========================================
+// Point #49: Sub-Admin Staff Roles & Permissions
+// ==========================================
+
+const SYSTEM_PERMISSIONS = [
+  {
+    category: 'Orders & Shipments',
+    permissions: [
+      { key: 'orders:read', label: 'View Orders & Invoices', description: 'Can view customer orders, status, and PDF tax invoices' },
+      { key: 'orders:write', label: 'Manage Order Lifecycles', description: 'Can update order statuses, perform bulk fulfillment and export CSV' },
+    ],
+  },
+  {
+    category: 'Catalog & Inventory',
+    permissions: [
+      { key: 'products:read', label: 'View Products & Inventory', description: 'Can browse platform products, stock counts, and variants' },
+      { key: 'products:write', label: 'Moderate & Update Products', description: 'Can approve vendor products, modify pricing, edit details' },
+      { key: 'categories:write', label: 'Manage Categories & Brands', description: 'Can add, edit, reorder category tree and manufacturer brands' },
+    ],
+  },
+  {
+    category: 'Vendors & Store Approval',
+    permissions: [
+      { key: 'vendors:read', label: 'View Vendor Directory & KYC', description: 'Can view merchant store profiles, documents, and banking details' },
+      { key: 'vendors:write', label: 'Approve KYC & Commission Rates', description: 'Can verify KYC, approve/reject merchants, and customize commission fees' },
+    ],
+  },
+  {
+    category: 'Finance & Payouts',
+    permissions: [
+      { key: 'payouts:read', label: 'View Payout Requests & Ledgers', description: 'Can inspect withdrawal requests and financial balance ledgers' },
+      { key: 'payouts:write', label: 'Process & Reject Payouts', description: 'Can disburse payouts with bank UTRs and approve/reject transactions' },
+    ],
+  },
+  {
+    category: 'Customer CRM',
+    permissions: [
+      { key: 'customers:read', label: 'View Customer Profiles & LTV', description: 'Can view customer directory, spending histories, and lifetime value' },
+      { key: 'customers:write', label: 'Manage Customers & Verification', description: 'Can block, suspend, verify customer badges, and add internal notes' },
+    ],
+  },
+  {
+    category: 'Marketing & Promotions',
+    permissions: [
+      { key: 'marketing:write', label: 'Manage Coupons, Banners & Flash Deals', description: 'Can create promo vouchers, homepage hero banners, and flash campaigns' },
+    ],
+  },
+  {
+    category: 'System & Security',
+    permissions: [
+      { key: 'settings:read', label: 'View System Settings', description: 'Can view tax rules, shipping fees, SEO, and integration setups' },
+      { key: 'settings:write', label: 'Configure System Engines', description: 'Can modify GST rates, shipping zones, third-party APIs, and webmaster tags' },
+      { key: 'staff:manage', label: 'Manage Staff Accounts & Roles', description: 'Can create and configure permissions for sub-admin employees' },
+    ],
+  },
+];
+
+const ROLE_PRESETS = [
+  {
+    id: 'superadmin',
+    name: 'Super Admin',
+    title: 'Master Administrator',
+    department: 'Executive',
+    permissions: ['all'],
+  },
+  {
+    id: 'order_lead',
+    name: 'Order & Dispatch Lead',
+    title: 'Logistics Supervisor',
+    department: 'Operations',
+    permissions: ['orders:read', 'orders:write', 'customers:read'],
+  },
+  {
+    id: 'catalog_auditor',
+    name: 'Catalog & Brand Auditor',
+    title: 'Catalog Specialist',
+    department: 'Catalog',
+    permissions: ['products:read', 'products:write', 'categories:write'],
+  },
+  {
+    id: 'finance_officer',
+    name: 'Finance & Payouts Officer',
+    title: 'Accounts Executive',
+    department: 'Finance',
+    permissions: ['payouts:read', 'payouts:write', 'vendors:read', 'orders:read'],
+  },
+  {
+    id: 'merchant_manager',
+    name: 'Merchant Success Associate',
+    title: 'Vendor Partner Manager',
+    department: 'Operations',
+    permissions: ['vendors:read', 'vendors:write', 'products:read'],
+  },
+  {
+    id: 'customer_support',
+    name: 'Customer Support Representative',
+    title: 'Support Executive',
+    department: 'Support',
+    permissions: ['customers:read', 'customers:write', 'orders:read'],
+  },
+  {
+    id: 'marketing_lead',
+    name: 'Growth & Marketing Lead',
+    title: 'Marketing Manager',
+    department: 'Marketing',
+    permissions: ['marketing:write', 'orders:read', 'products:read'],
+  },
+];
+
+// @desc    Get permissions catalog & role presets
+// @route   GET /api/admin/staff/permissions
+exports.getStaffPermissionsCatalog = async (req, res, next) => {
+  try {
+    res.status(200).json({
+      success: true,
+      data: {
+        categories: SYSTEM_PERMISSIONS,
+        presets: ROLE_PRESETS,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all staff (superadmin & subadmins)
+// @route   GET /api/admin/staff
+exports.getAllStaff = async (req, res, next) => {
+  try {
+    const { search, department, role } = req.query;
+    let query = { role: { $in: ['superadmin', 'subadmin'] } };
+
+    if (role) {
+      query.role = role;
+    }
+    if (department && department !== 'all') {
+      query.department = department;
+    }
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+        { staffRoleTitle: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const staffMembers = await User.find(query)
+      .select('-password')
+      .sort({ role: 1, createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: staffMembers.length,
+      data: staffMembers,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Create new sub-admin staff member
+// @route   POST /api/admin/staff
+exports.createStaff = async (req, res, next) => {
+  try {
+    const { name, email, phone, password, staffRoleTitle, department, permissions } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, email, and password are required for new staff accounts.',
+      });
+    }
+
+    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'A user account with this email address already exists.',
+      });
+    }
+
+    const newStaff = await User.create({
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      phone: phone ? phone.trim() : '9876543210',
+      password,
+      role: 'subadmin',
+      staffRoleTitle: staffRoleTitle || 'Operations Associate',
+      department: department || 'Operations',
+      permissions: Array.isArray(permissions) ? permissions : [],
+      isActive: true,
+      status: 'ACTIVE',
+    });
+
+    const sanitized = newStaff.toObject();
+    delete sanitized.password;
+
+    res.status(201).json({
+      success: true,
+      message: 'Staff member account created successfully.',
+      data: sanitized,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update staff member
+// @route   PUT /api/admin/staff/:id
+exports.updateStaff = async (req, res, next) => {
+  try {
+    const staff = await User.findById(req.params.id);
+    if (!staff) {
+      return res.status(404).json({ success: false, message: 'Staff member not found.' });
+    }
+
+    const { name, phone, staffRoleTitle, department, permissions, isActive, status, password } = req.body;
+
+    // Protection: Primary superadmin cannot have their role demoted or deactivated
+    const isPrimarySuperAdmin = staff.role === 'superadmin' || staff.email === 'admin@auramarket.com';
+
+    if (name) staff.name = name.trim();
+    if (phone) staff.phone = phone.trim();
+    if (staffRoleTitle) staff.staffRoleTitle = staffRoleTitle.trim();
+    if (department) staff.department = department;
+    if (Array.isArray(permissions)) {
+      staff.permissions = isPrimarySuperAdmin ? ['all'] : permissions;
+    }
+    if (typeof isActive === 'boolean' && !isPrimarySuperAdmin) {
+      staff.isActive = isActive;
+    }
+    if (status && !isPrimarySuperAdmin) {
+      staff.status = status;
+    }
+    if (password && password.length >= 6) {
+      staff.password = password; // hashed via pre-save hook
+    }
+
+    await staff.save();
+
+    const sanitized = staff.toObject();
+    delete sanitized.password;
+
+    res.status(200).json({
+      success: true,
+      message: 'Staff details and access permissions updated successfully.',
+      data: sanitized,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Delete sub-admin staff member
+// @route   DELETE /api/admin/staff/:id
+exports.deleteStaff = async (req, res, next) => {
+  try {
+    const staff = await User.findById(req.params.id);
+    if (!staff) {
+      return res.status(404).json({ success: false, message: 'Staff member not found.' });
+    }
+
+    if (staff.role === 'superadmin' || staff.email === 'admin@auramarket.com') {
+      return res.status(400).json({
+        success: false,
+        message: 'Security Violation: Primary Super Administrator account cannot be deleted.',
+      });
+    }
+
+    await User.findByIdAndDelete(req.params.id);
+
+    res.status(200).json({
+      success: true,
+      message: `Staff member ${staff.name} deleted successfully.`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 

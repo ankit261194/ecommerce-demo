@@ -28,12 +28,25 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['superadmin', 'vendor', 'customer', 'delivery'],
+      enum: ['superadmin', 'subadmin', 'vendor', 'customer', 'delivery'],
       default: 'customer',
     },
     isActive: {
       type: Boolean,
       default: true,
+    },
+    // Point #49: Sub-Admin Staff Roles & Permissions
+    staffRoleTitle: {
+      type: String,
+      default: '',
+    },
+    department: {
+      type: String,
+      default: 'Operations',
+    },
+    permissions: {
+      type: [String],
+      default: [],
     },
     // Point #43: Customer CRM Directory & Verification
     status: {

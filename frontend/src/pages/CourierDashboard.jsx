@@ -22,6 +22,7 @@ import {
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { CourierNavigationModal } from '../components/CourierNavigationModal';
 import { CourierContactModal } from '../components/CourierContactModal';
+import CourierOtpVerificationModal from '../components/CourierOtpVerificationModal';
 import api from '../api/client';
 
 export const CourierDashboard = () => {
@@ -198,66 +199,17 @@ export const CourierDashboard = () => {
     }
   };
 
-  // Verify 4-Digit Customer OTP
-  const handleVerifyOtp = async () => {
-    if (!enteredOtp || enteredOtp.length !== 4) {
-      setErrorMessage('Please enter a valid 4-digit numeric OTP.');
-      return;
-    }
-
-    if (selectedTaskForOtp?.rawId) {
-      try {
-        const res = await api.post(`/delivery/tasks/${selectedTaskForOtp.rawId}/verify-otp`, {
-          otp: enteredOtp,
-          amountCollected: selectedTaskForOtp.amountToCollect,
-        });
-
-        if (res.data?.success) {
-          setTasks(prev =>
-            prev.map(t => (t.id === selectedTaskForOtp.id ? { ...t, status: 'DELIVERED' } : t))
-          );
-
-          if (selectedTaskForOtp.isCod) {
-            setRiderStats(prev => ({
-              ...prev,
-              codCollectedToday: prev.codCollectedToday + selectedTaskForOtp.amountToCollect,
-            }));
-          }
-
-          setRiderStats(prev => ({
-            ...prev,
-            deliveredToday: prev.deliveredToday + 1,
-            assignedTasks: Math.max(0, prev.assignedTasks - 1),
-          }));
-
-          setSuccessMessage(`✅ Delivery Complete! Sub-order #${selectedTaskForOtp.subOrderId} verified via OTP.`);
-          setSelectedTaskForOtp(null);
-          setEnteredOtp('');
-          setErrorMessage('');
-          fetchTasks();
-          return;
-        }
-      } catch (err) {
-        setErrorMessage(err.response?.data?.message || '❌ Invalid OTP! Ask customer for code.');
-        return;
-      }
-    }
-
-    // Fallback simulation check
-    if (enteredOtp !== selectedTaskForOtp.expectedOtp) {
-      setErrorMessage('❌ Invalid OTP! Ask the customer for the 4-digit code shown on their order screen.');
-      return;
-    }
-
-    // Success OTP simulation
+  // Verify 4-Digit Customer OTP Callback (Point #66)
+  const handleVerifyOtpSuccess = (taskId, amountCollected) => {
+    const target = tasks.find(t => t.id === taskId);
     setTasks(prev =>
-      prev.map(t => (t.id === selectedTaskForOtp.id ? { ...t, status: 'DELIVERED' } : t))
+      prev.map(t => (t.id === taskId ? { ...t, status: 'DELIVERED', otpVerified: true } : t))
     );
 
-    if (selectedTaskForOtp.isCod) {
+    if (target?.isCod) {
       setRiderStats(prev => ({
         ...prev,
-        codCollectedToday: prev.codCollectedToday + selectedTaskForOtp.amountToCollect,
+        codCollectedToday: prev.codCollectedToday + (amountCollected || target.amountToCollect || 0),
       }));
     }
 
@@ -267,10 +219,10 @@ export const CourierDashboard = () => {
       assignedTasks: Math.max(0, prev.assignedTasks - 1),
     }));
 
-    setSuccessMessage(`✅ Delivery Complete! Sub-order #${selectedTaskForOtp.subOrderId} marked as DELIVERED.`);
+    setSuccessMessage(`✅ Delivery Complete! Sub-order #${target?.subOrderId || taskId} verified via 4-Digit OTP.`);
     setSelectedTaskForOtp(null);
-    setEnteredOtp('');
     setErrorMessage('');
+    fetchTasks();
   };
 
   // Filter tasks based on status tab and search query
@@ -730,61 +682,13 @@ export const CourierDashboard = () => {
         )}
       </div>
 
-      {/* 4-Digit OTP Verification Modal */}
+      {/* Point #66: 4-Digit Secret Delivery OTP Verification Modal */}
       {selectedTaskForOtp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full border border-slate-200 shadow-2xl space-y-5 animate-scale-up">
-            <div className="text-center space-y-1">
-              <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 mx-auto flex items-center justify-center">
-                <KeyRound className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-black text-slate-900">Enter Customer Delivery OTP</h3>
-              <p className="text-xs text-slate-500 font-medium">
-                Ask <strong className="text-slate-900">{selectedTaskForOtp.customer.name}</strong> for the 4-digit code shown on their order screen.
-              </p>
-            </div>
-
-            {selectedTaskForOtp.isCod && (
-              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold text-center">
-                💵 Collect Cash: <strong className="text-base text-slate-900 font-black">₹{selectedTaskForOtp.amountToCollect.toLocaleString('en-IN')}</strong>
-              </div>
-            )}
-
-            <div>
-              <input
-                type="text"
-                maxLength="4"
-                placeholder="4-digit OTP (e.g. 4821)"
-                value={enteredOtp}
-                onChange={e => {
-                  setEnteredOtp(e.target.value);
-                  setErrorMessage('');
-                }}
-                className="w-full text-center tracking-widest text-2xl font-black py-3 rounded-xl bg-slate-50 border-2 border-slate-300 text-slate-900 focus:outline-none focus:border-amber-500"
-              />
-              {errorMessage && (
-                <p className="text-xs text-rose-600 font-bold mt-2 text-center flex items-center justify-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5" /> {errorMessage}
-                </p>
-              )}
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => setSelectedTaskForOtp(null)}
-                className="w-1/2 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleVerifyOtp}
-                className="w-1/2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md"
-              >
-                Verify & Handover
-              </button>
-            </div>
-          </div>
-        </div>
+        <CourierOtpVerificationModal
+          task={selectedTaskForOtp}
+          onClose={() => setSelectedTaskForOtp(null)}
+          onSuccess={handleVerifyOtpSuccess}
+        />
       )}
       {/* Point #64: 1-Click GPS Navigation Hub Modal */}
       {selectedTaskForNav && (

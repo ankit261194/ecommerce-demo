@@ -1,6 +1,8 @@
 const DeliveryTask = require('../models/DeliveryTask');
 const SubOrder = require('../models/SubOrder');
 const Order = require('../models/Order');
+const smsService = require('../services/smsService');
+const mailService = require('../services/mailService');
 
 // @desc    Get All Tasks assigned to Logged-in Courier Rider (or all tasks for Super Admin)
 // @route   GET /api/delivery/tasks
@@ -162,9 +164,15 @@ exports.verifyOtpAndCompleteDelivery = async (req, res, next) => {
 
     // Verify OTP
     if (subOrder.deliveryOtp !== otp.toString().trim()) {
+      task.otpVerificationLog = task.otpVerificationLog || { attempts: 0 };
+      task.otpVerificationLog.attempts = (task.otpVerificationLog.attempts || 0) + 1;
+      task.otpVerificationLog.lastAttemptAt = new Date();
+      await task.save();
+
       return res.status(400).json({
         success: false,
         message: 'Invalid OTP! Please ask the customer for the correct 4-digit delivery code shown on their app.',
+        attempts: task.otpVerificationLog.attempts,
       });
     }
 
@@ -172,6 +180,9 @@ exports.verifyOtpAndCompleteDelivery = async (req, res, next) => {
     task.status = 'DELIVERED';
     task.otpVerified = true;
     task.deliveredAt = new Date();
+    task.otpVerificationLog = task.otpVerificationLog || { attempts: 0 };
+    task.otpVerificationLog.attempts = (task.otpVerificationLog.attempts || 0) + 1;
+    task.otpVerificationLog.verifiedAt = new Date();
     if (task.isCod) {
       task.amountCollected = amountCollected !== undefined ? Number(amountCollected) : task.amountToCollect;
     }
@@ -379,6 +390,70 @@ exports.logContactAttempt = async (req, res, next) => {
       success: true,
       message: 'Contact attempt logged successfully',
       contactLogs: task.contactLogs,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Resend Customer 4-Digit Delivery OTP via SMS & Email (Point #66)
+// @route   POST /api/delivery/tasks/:id/resend-otp
+exports.resendDeliveryOtp = async (req, res, next) => {
+  try {
+    const taskQuery = req.user.role === 'superadmin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, deliveryPartner: req.user._id };
+
+    const task = await DeliveryTask.findOne(taskQuery);
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Delivery task not found' });
+    }
+
+    if (task.status === 'DELIVERED') {
+      return res.status(400).json({ success: false, message: 'Task is already delivered.' });
+    }
+
+    const subOrder = await SubOrder.findById(task.subOrder);
+    if (!subOrder) {
+      return res.status(404).json({ success: false, message: 'Associated sub-order not found' });
+    }
+
+    const otp = subOrder.deliveryOtp || '4821';
+    const customerPhone = task.dropLocation?.phone || '9876543210';
+    const subOrderNumber = subOrder.subOrderNumber || `SUB-${subOrder._id.toString().slice(-4)}`;
+
+    // Dispatch SMS via SMSService
+    const smsResult = await smsService.sendDeliveryOtpSMS({
+      phone: customerPhone,
+      otp,
+      orderNumber: subOrderNumber,
+    });
+
+    // Also trigger email notification via mailService
+    await mailService.sendMail({
+      to: 'customer@auramarket.com',
+      subject: `Your AuraMarket Delivery OTP: ${otp}`,
+      text: `Hello, your secret delivery verification OTP for #${subOrderNumber} is: ${otp}. Please share this code only with the courier partner upon receiving your package.`,
+    });
+
+    // Log the contact/resend action
+    task.contactLogs.push({
+      channel: 'WHATSAPP',
+      templateId: 'RESEND_OTP',
+      messageSnippet: `Resent 4-digit Delivery OTP (${otp}) to customer phone ${customerPhone}`,
+      timestamp: new Date(),
+      riderName: req.user.name || 'Courier Partner',
+    });
+    await task.save();
+
+    res.status(200).json({
+      success: true,
+      message: `OTP resent to customer (${customerPhone}) successfully via SMS & Email.`,
+      data: {
+        phone: customerPhone,
+        maskedOtp: `**${otp.slice(-2)}`,
+        simulated: smsResult.simulated || false,
+      },
     });
   } catch (error) {
     next(error);

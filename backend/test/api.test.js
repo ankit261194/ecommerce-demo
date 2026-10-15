@@ -4666,26 +4666,51 @@ const runTests = async () => {
       assert.strictEqual(resCustomerForbidden.status, 403);
     });
 
-    await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
-      const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
+    // =========================================================================
+    // Point 66: 4-Digit Secret Delivery OTP Verification (Strict security)
+    // =========================================================================
+    await test('Point 66: 4-Digit Secret Delivery OTP Verification (Resend OTP Trigger, Attempt Tracking & Strict Handover)', async () => {
+      // 1. Resend OTP to customer via SMS & Email
+      const resResend = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/resend-otp`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resResend.status, 200);
+      const dataResend = await resResend.json();
+      assert.strictEqual(dataResend.success, true);
+      assert.ok(dataResend.message.includes('OTP resent'));
+      assert.ok(dataResend.data.maskedOtp, 'Masked OTP should be returned for reference');
+
+      // 2. Reject missing OTP
+      const resMissing = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${riderToken}`,
         },
-        body: JSON.stringify({ otp: '0000' }), // Invalid OTP
+        body: JSON.stringify({}),
       });
-      assert.strictEqual(res.status, 400);
-      const data = await res.json();
-      assert.strictEqual(data.success, false);
-      assert.ok(data.message.includes('Invalid OTP'));
-    });
+      assert.strictEqual(resMissing.status, 400);
 
-    await test('POST /delivery/tasks/:id/verify-otp completes delivery when customer OTP is correct', async () => {
+      // 3. Reject invalid OTP & verify attempt tracking
+      const resInvalid = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ otp: '0000' }),
+      });
+      assert.strictEqual(resInvalid.status, 400);
+      const dataInvalid = await resInvalid.json();
+      assert.strictEqual(dataInvalid.success, false);
+      assert.strictEqual(dataInvalid.attempts, 1, 'First invalid attempt must be logged');
+
+      // 4. Verify valid customer OTP completes handover
       const targetSubOrder = await SubOrder.findById(riderTask.subOrder);
       const correctOtp = targetSubOrder.deliveryOtp;
 
-      const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
+      const resVerify = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -4696,13 +4721,19 @@ const runTests = async () => {
           amountCollected: riderTask.amountToCollect,
         }),
       });
+      assert.strictEqual(resVerify.status, 200);
+      const dataVerify = await resVerify.json();
+      assert.strictEqual(dataVerify.success, true);
+      assert.strictEqual(dataVerify.data.task.status, 'DELIVERED');
+      assert.strictEqual(dataVerify.data.task.otpVerified, true);
+      assert.strictEqual(dataVerify.data.subOrder.status, 'delivered');
 
-      assert.strictEqual(res.status, 200);
-      const data = await res.json();
-      assert.strictEqual(data.success, true);
-      assert.strictEqual(data.data.task.status, 'DELIVERED');
-      assert.strictEqual(data.data.task.otpVerified, true);
-      assert.strictEqual(data.data.subOrder.status, 'delivered');
+      // 5. Subsequent Resend OTP on already delivered task rejected with 400
+      const resResendDelivered = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/resend-otp`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resResendDelivered.status, 400);
     });
 
     // 9b. Edge Case & Security Validations

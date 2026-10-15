@@ -54,6 +54,12 @@ const deliveryTaskSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    otpVerificationLog: {
+      attempts: { type: Number, default: 0 },
+      lastAttemptAt: Date,
+      verifiedAt: Date,
+      method: { type: String, default: 'PINPAD' },
+    },
     deliveredAt: {
       type: Date,
       default: null,

@@ -7,6 +7,7 @@ const {
   getTaskNavigationDetails,
   getTaskContactTemplates,
   logContactAttempt,
+  resendDeliveryOtp,
 } = require('../controllers/deliveryController');
 const { protect, authorize } = require('../middlewares/auth');
 
@@ -17,6 +18,7 @@ router.get('/tasks', getMyDeliveries);
 router.get('/tasks/:id/navigation', getTaskNavigationDetails);
 router.get('/tasks/:id/contact-templates', getTaskContactTemplates);
 router.post('/tasks/:id/contact-log', logContactAttempt);
+router.post('/tasks/:id/resend-otp', resendDeliveryOtp);
 router.put('/tasks/:id/status', updateDeliveryStatus);
 router.post('/tasks/:id/verify-otp', verifyOtpAndCompleteDelivery);
 

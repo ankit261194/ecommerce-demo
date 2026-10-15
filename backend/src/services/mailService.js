@@ -62,6 +62,13 @@ class MailService {
   }
 
   /**
+   * Alias for sendMail
+   */
+  async sendEmail(params) {
+    return this.sendMail(params);
+  }
+
+  /**
    * Built-in Mock Simulator (Zero SMTP credentials required)
    */
   sendViaMock({ to, subject, text }) {

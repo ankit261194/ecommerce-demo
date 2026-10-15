@@ -61,8 +61,21 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
         localStorage.setItem('auramarket_wallet_preview', JSON.stringify(e.detail));
       }
     };
+    const handleStorageUpdate = (e) => {
+      if (e.key === 'auramarket_wallet_sync' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setWalletPreview(parsed);
+          localStorage.setItem('auramarket_wallet_preview', JSON.stringify(parsed));
+        } catch (_) {}
+      }
+    };
     window.addEventListener('auramarket_wallet_update', handleWalletUpdate);
-    return () => window.removeEventListener('auramarket_wallet_update', handleWalletUpdate);
+    window.addEventListener('storage', handleStorageUpdate);
+    return () => {
+      window.removeEventListener('auramarket_wallet_update', handleWalletUpdate);
+      window.removeEventListener('storage', handleStorageUpdate);
+    };
   }, []);
 
   const handleSaveLocation = (loc) => {

@@ -65,4 +65,7 @@ const scratchCardRewardSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+scratchCardRewardSchema.index({ order: 1 }, { unique: true });
+scratchCardRewardSchema.index({ user: 1, createdAt: -1 });
+
 module.exports = mongoose.model('ScratchCardReward', scratchCardRewardSchema);

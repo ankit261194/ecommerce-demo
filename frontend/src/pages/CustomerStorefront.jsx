@@ -199,10 +199,24 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     };
     window.addEventListener('auramarket_wallet_update', handleWalletUpdate);
 
+    const handleStorageUpdate = (e) => {
+      if (e.key === 'auramarket_wallet_sync' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setCustomerWallet((prev) => ({
+            coins: parsed.coins ?? parsed.walletCoins ?? prev.coins,
+            balance: parsed.balance ?? parsed.walletBalance ?? prev.balance,
+          }));
+        } catch (_) {}
+      }
+    };
+    window.addEventListener('storage', handleStorageUpdate);
+
     const handleOpenWallet = () => setIsWalletOpen(true);
     window.addEventListener('auramarket_open_wallet', handleOpenWallet);
     return () => {
       window.removeEventListener('auramarket_wallet_update', handleWalletUpdate);
+      window.removeEventListener('storage', handleStorageUpdate);
       window.removeEventListener('auramarket_open_wallet', handleOpenWallet);
     };
   }, []);

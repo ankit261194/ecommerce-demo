@@ -279,8 +279,28 @@ exports.generateScratchCard = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Order not found for scratch card reward.' });
     }
 
+    // Point #72 Security & Authorization: Order must belong to the requesting customer (unless admin)
+    if (
+      order.customer &&
+      order.customer.toString() !== userId.toString() &&
+      req.user.role !== 'admin'
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to unlock rewards for this order.',
+      });
+    }
+
+    // Point #72 Status Validation: Cancelled or failed orders cannot earn post-purchase rewards
+    if (order.status === 'CANCELLED' || order.paymentStatus === 'FAILED') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot generate scratch card for cancelled or failed orders.',
+      });
+    }
+
     // Check if card already exists for this order
-    let existingCard = await ScratchCardReward.findOne({ order: order._id, user: userId });
+    let existingCard = await ScratchCardReward.findOne({ order: order._id });
     if (existingCard) {
       return res.status(200).json({
         success: true,
@@ -327,19 +347,34 @@ exports.generateScratchCard = async (req, res, next) => {
       chosen = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
     }
 
-    const card = await ScratchCardReward.create({
-      user: userId,
-      order: order._id,
-      orderNumber: order.orderNumber,
-      rewardType: chosen.rewardType,
-      amount: chosen.amount,
-      couponCode: chosen.couponCode || null,
-      badgeText: chosen.badgeText || '',
-      title: chosen.title,
-      description: chosen.description,
-      isScratched: false,
-      isClaimed: false,
-    });
+    let card;
+    try {
+      card = await ScratchCardReward.create({
+        user: userId,
+        order: order._id,
+        orderNumber: order.orderNumber,
+        rewardType: chosen.rewardType,
+        amount: chosen.amount,
+        couponCode: chosen.couponCode || null,
+        badgeText: chosen.badgeText || '',
+        title: chosen.title,
+        description: chosen.description,
+        isScratched: false,
+        isClaimed: false,
+      });
+    } catch (createErr) {
+      if (createErr.code === 11000) {
+        existingCard = await ScratchCardReward.findOne({ order: order._id });
+        if (existingCard) {
+          return res.status(200).json({
+            success: true,
+            message: 'Existing scratch card retrieved for order.',
+            card: existingCard,
+          });
+        }
+      }
+      throw createErr;
+    }
 
     res.status(201).json({
       success: true,
@@ -389,6 +424,22 @@ exports.claimScratchCard = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Scratch card reward has already been claimed.' });
     }
 
+    // Expiry verification: Disallow claims after expiration date
+    if (card.expiresAt && new Date(card.expiresAt) < new Date()) {
+      return res.status(400).json({ success: false, message: 'This scratch card reward has expired.' });
+    }
+
+    // Atomic claim lock: Prevents concurrent race conditions and double claiming
+    const updatedCard = await ScratchCardReward.findOneAndUpdate(
+      { _id: card._id, user: req.user._id, isClaimed: false },
+      { $set: { isClaimed: true, isScratched: true, claimedAt: new Date() } },
+      { new: true }
+    );
+
+    if (!updatedCard) {
+      return res.status(400).json({ success: false, message: 'Scratch card reward has already been claimed.' });
+    }
+
     const user = await User.findById(req.user._id);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found.' });
@@ -396,71 +447,104 @@ exports.claimScratchCard = async (req, res, next) => {
 
     let txn = null;
 
-    if (card.rewardType === 'WALLET_COINS') {
-      user.walletCoins = (user.walletCoins || 0) + card.amount;
-      await user.save();
+    if (updatedCard.rewardType === 'WALLET_COINS') {
+      const updatedUser = await User.findByIdAndUpdate(
+        user._id,
+        { $inc: { walletCoins: updatedCard.amount } },
+        { new: true }
+      );
 
       txn = await WalletTransaction.create({
-        user: user._id,
+        user: updatedUser._id,
         type: 'CREDIT',
         currency: 'COINS',
-        amount: card.amount,
+        amount: updatedCard.amount,
         category: 'SCRATCH_CARD',
-        title: card.title || '🎁 Post-Purchase Mystery Scratch Card',
-        description: `Won +${card.amount} Coins from Order #${card.orderNumber}`,
-        order: card.order,
-        orderNumber: card.orderNumber,
-        balanceAfter: user.walletBalance || 0,
-        coinsAfter: user.walletCoins,
+        title: updatedCard.title || '🎁 Post-Purchase Mystery Scratch Card',
+        description: `Won +${updatedCard.amount} Coins from Order #${updatedCard.orderNumber}`,
+        order: updatedCard.order,
+        orderNumber: updatedCard.orderNumber,
+        balanceAfter: updatedUser.walletBalance || 0,
+        coinsAfter: updatedUser.walletCoins,
       });
-    } else if (card.rewardType === 'WALLET_CASH') {
-      user.walletBalance = (user.walletBalance || 0) + card.amount;
-      await user.save();
+
+      return res.status(200).json({
+        success: true,
+        message: `🎉 Reward claimed successfully!`,
+        data: {
+          card: updatedCard,
+          walletBalance: updatedUser.walletBalance,
+          walletCoins: updatedUser.walletCoins,
+          transaction: txn,
+        },
+      });
+    } else if (updatedCard.rewardType === 'WALLET_CASH') {
+      const updatedUser = await User.findByIdAndUpdate(
+        user._id,
+        { $inc: { walletBalance: updatedCard.amount } },
+        { new: true }
+      );
 
       txn = await WalletTransaction.create({
-        user: user._id,
+        user: updatedUser._id,
         type: 'CREDIT',
         currency: 'INR',
-        amount: card.amount,
+        amount: updatedCard.amount,
         category: 'SCRATCH_CARD',
-        title: card.title || '🎁 Post-Purchase Cash Drop',
-        description: `Won ₹${card.amount} Wallet Cash from Order #${card.orderNumber}`,
-        order: card.order,
-        orderNumber: card.orderNumber,
-        balanceAfter: user.walletBalance,
-        coinsAfter: user.walletCoins || 0,
+        title: updatedCard.title || '🎁 Post-Purchase Cash Drop',
+        description: `Won ₹${updatedCard.amount} Wallet Cash from Order #${updatedCard.orderNumber}`,
+        order: updatedCard.order,
+        orderNumber: updatedCard.orderNumber,
+        balanceAfter: updatedUser.walletBalance,
+        coinsAfter: updatedUser.walletCoins || 0,
       });
-    } else if (card.rewardType === 'COUPON_DISCOUNT') {
+
+      return res.status(200).json({
+        success: true,
+        message: `🎉 Reward claimed successfully!`,
+        data: {
+          card: updatedCard,
+          walletBalance: updatedUser.walletBalance,
+          walletCoins: updatedUser.walletCoins,
+          transaction: txn,
+        },
+      });
+    } else if (updatedCard.rewardType === 'COUPON_DISCOUNT') {
       // Ensure active Coupon exists
-      let coupon = await Coupon.findOne({ code: card.couponCode });
+      let coupon = await Coupon.findOne({ code: updatedCard.couponCode });
       if (!coupon) {
         coupon = await Coupon.create({
-          code: card.couponCode,
-          title: card.title,
-          description: card.description,
+          code: updatedCard.couponCode,
+          title: updatedCard.title,
+          description: updatedCard.description,
           discountType: 'PERCENTAGE',
-          discountValue: card.amount,
+          discountValue: updatedCard.amount,
           maxDiscountAmount: 1000,
           minOrderAmount: 499,
           isActive: true,
-          expiryDate: card.expiresAt,
+          expiryDate: updatedCard.expiresAt,
         });
       }
-    }
 
-    card.isScratched = true;
-    card.isClaimed = true;
-    card.claimedAt = new Date();
-    await card.save();
+      return res.status(200).json({
+        success: true,
+        message: `🎉 Reward claimed successfully!`,
+        data: {
+          card: updatedCard,
+          walletBalance: user.walletBalance || 0,
+          walletCoins: user.walletCoins || 0,
+          coupon,
+        },
+      });
+    }
 
     res.status(200).json({
       success: true,
       message: `🎉 Reward claimed successfully!`,
       data: {
-        card,
+        card: updatedCard,
         walletBalance: user.walletBalance,
         walletCoins: user.walletCoins,
-        transaction: txn,
       },
     });
   } catch (error) {

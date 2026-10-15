@@ -5384,7 +5384,30 @@ const runTests = async () => {
       assert.strictEqual(resUnauth.status, 401);
 
       // 4. Generate scratch card for an actual Order
-      const testOrder = await Order.findOne().sort({ createdAt: -1 });
+      const testCustomer = await User.findOne({ email: 'customer@auramarket.com' });
+      let testOrder = await Order.findOne({
+        customer: testCustomer._id,
+        status: { $nin: ['CANCELLED'] },
+        paymentStatus: { $ne: 'FAILED' },
+      }).sort({ createdAt: -1 });
+
+      if (!testOrder) {
+        testOrder = await Order.create({
+          orderNumber: `AURA-TEST-${Date.now()}`,
+          customer: testCustomer._id,
+          totalAmount: 2500,
+          paymentStatus: 'PAID',
+          status: 'CONFIRMED',
+          shippingAddress: {
+            recipientName: 'Customer Test',
+            phone: '9876543210',
+            street: 'Test St',
+            city: 'Mumbai',
+            state: 'Maharashtra',
+            pincode: '400001',
+          },
+        });
+      }
       assert.ok(testOrder, 'An order must exist for scratch card testing');
 
       // Clean up any existing scratch card for this order to start fresh
@@ -5540,6 +5563,169 @@ const runTests = async () => {
       // Clean up temporary cash order & cards
       await Order.deleteOne({ _id: cashOrder._id });
       await ScratchCardReward.deleteOne({ _id: dataCashGen.card._id });
+
+      // 11. Security & IDOR: Other user's order returns 403 Forbidden
+      const foreignOrder = await Order.create({
+        orderNumber: `FOREIGN-ORD-${Date.now()}`,
+        customer: new mongoose.Types.ObjectId(), // Belongs to someone else
+        totalAmount: 2000,
+        paymentStatus: 'PAID',
+        paymentMethod: 'UPI',
+        shippingAddress: {
+          recipientName: 'Foreign Customer',
+          phone: '9998887776',
+          street: 'Foreign Road',
+          city: 'Delhi',
+          state: 'Delhi',
+          pincode: '110001',
+        },
+      });
+
+      const resForeign = await fetch(`${baseUrl}/wallet/scratch-card/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ orderId: foreignOrder._id }),
+      });
+      assert.strictEqual(resForeign.status, 403, 'Must reject generating scratch card for order belonging to another customer');
+      await Order.deleteOne({ _id: foreignOrder._id });
+
+      // 12. Cancelled Order: Rejects generating scratch card with 400 Bad Request
+      const cancelledOrder = await Order.create({
+        orderNumber: `CANCELLED-ORD-${Date.now()}`,
+        customer: customerFinal._id,
+        status: 'CANCELLED',
+        totalAmount: 1200,
+        paymentStatus: 'PAID',
+        paymentMethod: 'UPI',
+        shippingAddress: {
+          recipientName: 'Customer Test',
+          phone: '9876543210',
+          street: 'Test St',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          pincode: '400001',
+        },
+      });
+
+      const resCancelled = await fetch(`${baseUrl}/wallet/scratch-card/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ orderId: cancelledOrder._id }),
+      });
+      assert.strictEqual(resCancelled.status, 400, 'Must reject generating scratch card for cancelled order');
+      await Order.deleteOne({ _id: cancelledOrder._id });
+
+      // 13. Expiry Check: Rejects claiming expired scratch card with 400 Bad Request
+      const expiredOrder = await Order.create({
+        orderNumber: `EXPIRED-ORD-${Date.now()}`,
+        customer: customerFinal._id,
+        totalAmount: 1800,
+        paymentStatus: 'PAID',
+        paymentMethod: 'UPI',
+        shippingAddress: {
+          recipientName: 'Customer Test',
+          phone: '9876543210',
+          street: 'Test St',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          pincode: '400001',
+        },
+      });
+
+      const resExpiredGen = await fetch(`${baseUrl}/wallet/scratch-card/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ orderId: expiredOrder._id, rewardType: 'WALLET_COINS' }),
+      });
+      assert.strictEqual(resExpiredGen.status, 201);
+      const dataExpiredGen = await resExpiredGen.json();
+      const expiredCardId = dataExpiredGen.card._id;
+
+      // Force card expiry to the past
+      await ScratchCardReward.updateOne(
+        { _id: expiredCardId },
+        { $set: { expiresAt: new Date(Date.now() - 3600000) } }
+      );
+
+      const resExpiredClaim = await fetch(`${baseUrl}/wallet/scratch-card/${expiredCardId}/claim`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${customerToken}`,
+        },
+      });
+      assert.strictEqual(resExpiredClaim.status, 400, 'Must reject claiming expired scratch card');
+      const dataExpiredClaim = await resExpiredClaim.json();
+      assert.ok(dataExpiredClaim.message.toLowerCase().includes('expired'));
+
+      await Order.deleteOne({ _id: expiredOrder._id });
+      await ScratchCardReward.deleteOne({ _id: expiredCardId });
+
+      // 14. Race Condition & Concurrency Defense: Rapid concurrent claims resolve atomically
+      const raceOrder = await Order.create({
+        orderNumber: `RACE-ORD-${Date.now()}`,
+        customer: customerFinal._id,
+        totalAmount: 2200,
+        paymentStatus: 'PAID',
+        paymentMethod: 'UPI',
+        shippingAddress: {
+          recipientName: 'Customer Test',
+          phone: '9876543210',
+          street: 'Test St',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          pincode: '400001',
+        },
+      });
+
+      const resRaceGen = await fetch(`${baseUrl}/wallet/scratch-card/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ orderId: raceOrder._id, rewardType: 'WALLET_COINS' }),
+      });
+      assert.strictEqual(resRaceGen.status, 201);
+      const dataRaceGen = await resRaceGen.json();
+      const raceCardId = dataRaceGen.card._id;
+      const raceRewardAmount = dataRaceGen.card.amount;
+
+      const userBeforeRace = await User.findById(customerFinal._id);
+      const coinsBeforeRace = userBeforeRace.walletCoins || 0;
+
+      // Dispatch 2 concurrent claim requests simultaneously
+      const [resClaim1, resClaim2] = await Promise.all([
+        fetch(`${baseUrl}/wallet/scratch-card/${raceCardId}/claim`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${customerToken}` },
+        }),
+        fetch(`${baseUrl}/wallet/scratch-card/${raceCardId}/claim`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${customerToken}` },
+        }),
+      ]);
+
+      const statuses = [resClaim1.status, resClaim2.status].sort();
+      assert.deepStrictEqual(statuses, [200, 400], 'Exactly one concurrent claim must succeed (200) and one must be rejected (400)');
+
+      const userAfterRace = await User.findById(customerFinal._id);
+      assert.strictEqual(
+        userAfterRace.walletCoins,
+        coinsBeforeRace + raceRewardAmount,
+        'Wallet coins must increase by exactly one card amount without double-credit'
+      );
+
+      await Order.deleteOne({ _id: raceOrder._id });
+      await ScratchCardReward.deleteOne({ _id: raceCardId });
     });
 
     // 9b. Edge Case & Security Validations

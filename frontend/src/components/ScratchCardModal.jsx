@@ -146,8 +146,11 @@ export const ScratchCardModal = ({
 
     const ctx = canvas.getContext('2d');
     const rect = canvas.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+    if (!rect.width || !rect.height) return;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
 
     ctx.globalCompositeOperation = 'destination-out';
     ctx.beginPath();
@@ -200,17 +203,23 @@ export const ScratchCardModal = ({
         setIsClaimed(true);
         setClaimSuccessMessage(res.data.message || '🎉 Reward claimed and credited to your wallet!');
         if (res.data.data) {
+          const payload = {
+            walletBalance: res.data.data.walletBalance,
+            walletCoins: res.data.data.walletCoins,
+            balance: res.data.data.walletBalance,
+            coins: res.data.data.walletCoins,
+            timestamp: Date.now(),
+          };
           // Broadcast live wallet update to Navbar and CustomerStorefront
           window.dispatchEvent(
             new CustomEvent('auramarket_wallet_update', {
-              detail: {
-                walletBalance: res.data.data.walletBalance,
-                walletCoins: res.data.data.walletCoins,
-                balance: res.data.data.walletBalance,
-                coins: res.data.data.walletCoins,
-              },
+              detail: payload,
             })
           );
+          // Broadcast cross-tab sync via storage event
+          try {
+            localStorage.setItem('auramarket_wallet_sync', JSON.stringify(payload));
+          } catch (_) {}
         }
       }
     } catch (err) {
@@ -339,13 +348,21 @@ export const ScratchCardModal = ({
                 ref={canvasRef}
                 width={288}
                 height={176}
-                onMouseDown={() => setIsDrawing(true)}
+                onMouseDown={(e) => {
+                  setIsDrawing(true);
+                  scratch(e.clientX, e.clientY);
+                }}
                 onMouseUp={() => setIsDrawing(false)}
                 onMouseLeave={() => setIsDrawing(false)}
                 onMouseMove={(e) => {
                   if (isDrawing) scratch(e.clientX, e.clientY);
                 }}
-                onTouchStart={() => setIsDrawing(true)}
+                onTouchStart={(e) => {
+                  setIsDrawing(true);
+                  if (e.touches && e.touches[0]) {
+                    scratch(e.touches[0].clientX, e.touches[0].clientY);
+                  }
+                }}
                 onTouchEnd={() => setIsDrawing(false)}
                 onTouchMove={(e) => {
                   if (e.touches && e.touches[0]) {

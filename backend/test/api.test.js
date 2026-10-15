@@ -7770,6 +7770,202 @@ const runTests = async () => {
       assert.strictEqual(data.data.categoryKey, 'men-blazers');
     });
 
+    // =========================================================================
+    // Point 5: 1-Click Product Exchange Workflow Suite
+    // =========================================================================
+
+    // 1. Prepare delivered order for customer to test exchange
+    const custUser = await User.findOne({ email: 'customer@auramarket.com' });
+    const vendorProfile = await VendorProfile.findOne();
+    const anyProduct = await Product.findOne();
+
+    const deliveredOrder = await Order.create({
+      orderNumber: `ORD-EXCH-${Date.now()}`,
+      customer: custUser._id,
+      items: [
+        {
+          product: anyProduct._id,
+          title: anyProduct.title,
+          image: anyProduct.image || '',
+          price: anyProduct.sellingPrice || 999,
+          quantity: 1,
+          vendor: vendorProfile._id,
+          variantSku: 'SKU-SHIRT-M',
+          totalPrice: anyProduct.sellingPrice || 999,
+        },
+      ],
+      totalAmount: anyProduct.sellingPrice || 999,
+      totalCommission: 50,
+      status: 'DELIVERED',
+      shippingAddress: {
+        recipientName: 'Rahul Sharma',
+        phone: '9876543214',
+        street: 'Flat 402, Lotus Towers',
+        city: 'New Delhi',
+        state: 'Delhi',
+        pincode: '110001',
+      },
+      paymentMethod: 'RAZORPAY',
+      paymentStatus: 'PAID',
+    });
+
+    const deliveredSubOrder = await SubOrder.create({
+      parentOrder: deliveredOrder._id,
+      vendor: vendorProfile._id,
+      customer: custUser._id,
+      items: [
+        {
+          product: anyProduct._id,
+          title: anyProduct.title,
+          image: anyProduct.image || '',
+          price: anyProduct.sellingPrice || 999,
+          quantity: 1,
+          totalPrice: anyProduct.sellingPrice || 999,
+          variantSku: 'SKU-SHIRT-M',
+        },
+      ],
+      subTotal: anyProduct.sellingPrice || 999,
+      platformCommissionRate: 10,
+      platformCommissionAmount: 100,
+      vendorEarning: 899,
+      status: 'delivered',
+    });
+
+    deliveredOrder.subOrders = [deliveredSubOrder._id];
+    await deliveredOrder.save();
+
+    let createdExchangeId = null;
+    let createdExchangeOtp = null;
+
+    await test('Point 5: POST /api/returns/exchange creates 1-click product exchange and auto-provisions reverse pickup task', async () => {
+      const res = await fetch(`${baseUrl}/returns/exchange`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          orderId: deliveredOrder._id.toString(),
+          subOrderId: deliveredSubOrder._id.toString(),
+          requestedSize: 'XL',
+          requestedColor: 'Navy Blue',
+          exchangeReason: 'Size is too small (Need larger size)',
+          detailedDescription: 'Medium is too tight around chest, need XL replacement.',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.requestType, 'EXCHANGE');
+      assert.strictEqual(data.data.status, 'EXCHANGE_REQUESTED');
+      assert.strictEqual(data.data.reversePickupStatus, 'SCHEDULED');
+      assert.strictEqual(data.data.exchangeDetails.requestedSize, 'XL');
+      assert.strictEqual(data.data.exchangeDetails.requestedColor, 'Navy Blue');
+      assert.ok(data.reversePickupOtp, 'Must return 4-digit reverse pickup OTP');
+      assert.strictEqual(data.reversePickupOtp.length, 4);
+      assert.ok(data.reversePickupTask, 'Must return auto-provisioned reverse pickup task');
+
+      createdExchangeId = data.data._id;
+      createdExchangeOtp = data.reversePickupOtp;
+
+      // Verify reverse pickup task in DeliveryTask collection
+      const reverseTask = await DeliveryTask.findById(data.reversePickupTask._id || data.reversePickupTask);
+      assert.ok(reverseTask);
+      assert.strictEqual(reverseTask.taskType, 'REVERSE_PICKUP');
+      assert.strictEqual(reverseTask.status, 'ASSIGNED');
+      assert.strictEqual(reverseTask.reversePickupDetails.pickupOtp, createdExchangeOtp);
+      assert.strictEqual(reverseTask.reversePickupDetails.requestedSize, 'XL');
+    });
+
+    await test('Point 5: POST /api/returns/exchange rejects missing replacement attributes with 400', async () => {
+      const res = await fetch(`${baseUrl}/returns/exchange`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          orderId: deliveredOrder._id.toString(),
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 5: POST /api/returns/exchange prevents duplicate request on same order with 400', async () => {
+      const res = await fetch(`${baseUrl}/returns/exchange`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          orderId: deliveredOrder._id.toString(),
+          requestedSize: 'L',
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('already exists'));
+    });
+
+    await test('Point 5: GET /api/returns/my lists customer exchange with reverse pickup details', async () => {
+      const res = await fetch(`${baseUrl}/returns/my`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      const exch = data.data.find(r => r._id.toString() === createdExchangeId.toString());
+      assert.ok(exch, 'Created exchange must be returned in list');
+      assert.strictEqual(exch.requestType, 'EXCHANGE');
+      assert.strictEqual(exch.reversePickupOtp, createdExchangeOtp);
+      assert.ok(exch.reversePickupTask);
+    });
+
+    await test('Point 5: PUT /api/returns/:id/reverse-pickup validates OTP and updates pickup status', async () => {
+      // 1. Wrong OTP should fail with 400
+      const wrongRes = await fetch(`${baseUrl}/returns/${createdExchangeId}/reverse-pickup`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          status: 'PICKED_UP',
+          otp: '0000',
+        }),
+      });
+      assert.strictEqual(wrongRes.status, 400);
+      const wrongData = await wrongRes.json();
+      assert.strictEqual(wrongData.success, false);
+
+      // 2. Correct OTP verifies doorstep handover
+      const correctRes = await fetch(`${baseUrl}/returns/${createdExchangeId}/reverse-pickup`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          status: 'PICKED_UP',
+          otp: createdExchangeOtp,
+          notes: 'Customer handed over undamaged parcel with original tags attached.',
+        }),
+      });
+      assert.strictEqual(correctRes.status, 200);
+      const correctData = await correctRes.json();
+      assert.strictEqual(correctData.success, true);
+      assert.strictEqual(correctData.data.reversePickupStatus, 'PICKED_UP');
+      assert.strictEqual(correctData.data.status, 'REVERSE_PICKUP_COMPLETED');
+    });
+
   } finally {
     if (server) {
       server.close();

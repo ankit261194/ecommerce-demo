@@ -5,8 +5,24 @@ const deliveryTaskSchema = new mongoose.Schema(
     subOrder: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'SubOrder',
-      required: true,
-      unique: true,
+      required: false,
+      sparse: true,
+    },
+    taskType: {
+      type: String,
+      enum: ['FORWARD_DELIVERY', 'REVERSE_PICKUP'],
+      default: 'FORWARD_DELIVERY',
+    },
+    returnRequest: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ReturnRequest',
+    },
+    reversePickupDetails: {
+      pickupOtp: { type: String, default: '' },
+      requestedSize: { type: String, default: '' },
+      requestedColor: { type: String, default: '' },
+      itemTitle: { type: String, default: '' },
+      customerNotes: { type: String, default: '' },
     },
     deliveryPartner: {
       type: mongoose.Schema.Types.ObjectId,

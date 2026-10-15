@@ -6,12 +6,19 @@ const variantSchema = new mongoose.Schema({
   attributes: {
     size: String,
     color: String,
+    colorCode: String,
     ram: String,
     storage: String,
   },
+  colorCode: { type: String, default: '#000000' },
+  image: { type: String, default: '' },
   additionalPrice: { type: Number, default: 0 },
-  stock: { type: Number, required: true, default: 10 },
+  mrp: { type: Number, default: 0 },
+  sellingPrice: { type: Number, default: 0 },
+  stock: { type: Number, required: true, default: 10, min: 0 },
+  lowStockThreshold: { type: Number, default: 5 },
 });
+
 
 const productSchema = new mongoose.Schema(
   {
@@ -120,7 +127,16 @@ const productSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Point #51: Auto-calculate total product stock from variants when present
+productSchema.pre('save', function (next) {
+  if (this.hasVariants && Array.isArray(this.variants) && this.variants.length > 0) {
+    this.stock = this.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+  }
+  next();
+});
+
 // Search text index
 productSchema.index({ title: 'text', description: 'text', brand: 'text', tags: 'text' });
 
 module.exports = mongoose.model('Product', productSchema);
+

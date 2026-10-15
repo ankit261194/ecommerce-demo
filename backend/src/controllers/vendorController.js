@@ -83,6 +83,11 @@ exports.createProduct = async (req, res, next) => {
 
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString().slice(-4);
 
+    let calculatedStock = Number(stock) || 0;
+    if (hasVariants && Array.isArray(variants) && variants.length > 0) {
+      calculatedStock = variants.reduce((acc, v) => acc + (Number(v.stock) || 0), 0);
+    }
+
     const product = await Product.create({
       vendor: vendor._id,
       title,
@@ -93,7 +98,7 @@ exports.createProduct = async (req, res, next) => {
       images: images && images.length ? images : ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'],
       mrp,
       sellingPrice,
-      stock,
+      stock: calculatedStock,
       sku: sku || 'SKU-' + Date.now(),
       hasVariants: !!hasVariants,
       variants: variants || [],
@@ -119,6 +124,10 @@ exports.updateProduct = async (req, res, next) => {
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found or not owned by your store' });
+    }
+
+    if (req.body.hasVariants && Array.isArray(req.body.variants) && req.body.variants.length > 0) {
+      req.body.stock = req.body.variants.reduce((acc, v) => acc + (Number(v.stock) || 0), 0);
     }
 
     product = await Product.findByIdAndUpdate(req.params.id, req.body, {

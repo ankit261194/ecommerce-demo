@@ -10,9 +10,11 @@ import {
   Clock,
   ArrowUpRight,
   Boxes,
+  Palette,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
+import MultiVariantProductModal from '../components/MultiVariantProductModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -78,6 +80,7 @@ export const VendorPortal = () => {
   ]);
 
   const [isAddProductDrawerOpen, setIsAddProductDrawerOpen] = useState(false);
+  const [isMultiVariantModalOpen, setIsMultiVariantModalOpen] = useState(false);
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
@@ -212,6 +215,47 @@ export const VendorPortal = () => {
     setProducts(prev => [created, ...prev]);
     setIsAddProductDrawerOpen(false);
     setNotification(`Product '${created.title}' added to store inventory successfully!`);
+  };
+
+  // Point #51: Handle Multi-Variant Product Publishing
+  const handleMultiVariantCreated = async (payload) => {
+    try {
+      const catRes = await api.get('/products/categories');
+      const firstCatId = catRes.data?.data?.[0]?._id;
+
+      await api.post('/vendor/products', {
+        ...payload,
+        category: firstCatId || '66a123456789012345678901',
+      });
+      await fetchVendorData();
+    } catch (_) {}
+
+    const colorSwatches = Array.from(
+      new Set(payload.variants.map((v) => v.colorCode).filter(Boolean))
+    );
+    const sizeMatrix = Array.from(
+      new Set(payload.variants.map((v) => v.attributes?.size).filter(Boolean))
+    );
+
+    const created = {
+      id: 'p_' + Date.now(),
+      title: payload.title,
+      sku: payload.sku || 'SKU-' + Date.now().toString().slice(-4),
+      mrp: payload.mrp,
+      sellingPrice: payload.sellingPrice,
+      stock: payload.stock,
+      category: payload.category,
+      image: payload.images?.[0] || 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=500',
+      variantsCount: payload.variants.length,
+      hasVariants: true,
+      colorSwatches,
+      sizeMatrix,
+    };
+
+    setProducts((prev) => [created, ...prev]);
+    setNotification(
+      `Multi-variant product '${created.title}' published with ${payload.variants.length} SKUs and ${payload.stock} total stock!`
+    );
   };
 
   // Handle Payout Withdrawal
@@ -409,10 +453,33 @@ export const VendorPortal = () => {
 
       {/* Inventory & Products Catalog */}
       <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
-        <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-          <Boxes className="w-5 h-5 text-amber-500" />
-          Store Product Catalog ({products.length} Items)
-        </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <Boxes className="w-5 h-5 text-amber-500" />
+              Store Product Catalog ({products.length} Items)
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Manage variants, color swatches, stock inventories, and selling prices.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsMultiVariantModalOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-600/20 transition-all hover:scale-105"
+            >
+              <Palette className="w-4 h-4" />
+              <span>+ Multi-Variant Creator (Point #51)</span>
+            </button>
+            <button
+              onClick={() => setIsAddProductDrawerOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
+            >
+              <PlusCircle className="w-4 h-4 text-amber-400" />
+              <span>+ Quick Item</span>
+            </button>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {products.map(p => (
@@ -422,6 +489,37 @@ export const VendorPortal = () => {
                 <h3 className="font-bold text-slate-900 text-sm line-clamp-1">{p.title}</h3>
                 <p className="text-xs text-slate-400 font-medium">SKU: {p.sku}</p>
               </div>
+
+              {/* Point #51: Multi-Variant Color Swatches & Size Matrix Badges */}
+              {(p.colorSwatches?.length > 0 || p.variantsCount > 0) && (
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 text-[11px]">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-slate-400 font-semibold">Swatches:</span>
+                    <div className="flex items-center -space-x-1">
+                      {(p.colorSwatches || ['#0F172A', '#2563EB', '#DC2626']).slice(0, 4).map((hex, i) => (
+                        <span
+                          key={i}
+                          className="w-3.5 h-3.5 rounded-full border border-white dark:border-slate-800 shadow-sm"
+                          style={{ backgroundColor: hex }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  {p.sizeMatrix?.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      {p.sizeMatrix.slice(0, 3).map((sz) => (
+                        <span key={sz} className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-600">
+                          {sz}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                    {p.variantsCount || 2} Variants
+                  </span>
+                </div>
+              )}
+
               <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
                 <div>
                   <span className="text-slate-400 line-through mr-1.5 font-medium">₹{p.mrp}</span>
@@ -573,6 +671,14 @@ export const VendorPortal = () => {
           </div>
         </div>
       )}
+
+      {/* Point #51: Multi-Variant Product Creator Modal */}
+      <MultiVariantProductModal
+        isOpen={isMultiVariantModalOpen}
+        onClose={() => setIsMultiVariantModalOpen(false)}
+        onProductCreated={handleMultiVariantCreated}
+      />
     </div>
   );
 };
+

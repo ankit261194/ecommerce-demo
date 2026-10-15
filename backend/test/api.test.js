@@ -3354,6 +3354,108 @@ const runTests = async () => {
       assert.ok(dataAuditVerify.data.logs.some(l => l.action === 'DATABASE_BACKUP_EXPORTED'));
     });
 
+    // Point 51: Multi-Variant Product Creator (Color swatches, size matrix, variant SKU & stock)
+    await test('Point 51: Multi-Variant Product Creator (Color swatches, size matrix, variant SKU & auto-computed stock)', async () => {
+      // 1. Vendor creates product with multi-attribute variants
+      const resCat = await fetch(`${baseUrl}/products/categories`);
+      const dataCat = await resCat.json();
+      const targetCatId = dataCat.data?.[0]?._id || '66a123456789012345678901';
+
+      const resCreateVariant = await fetch(`${baseUrl}/vendor/products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Aura Stealth Performance Hoodie',
+          description: 'Ultra-breathable premium moisture-wicking fleece hoodie with ribbed cuffs.',
+          category: targetCatId,
+          brand: 'Apex Apparel',
+          mrp: 3499,
+          sellingPrice: 1999,
+          hasVariants: true,
+          variants: [
+            {
+              sku: 'APX-HD-BLK-M',
+              name: 'Medium / Obsidian Black',
+              attributes: { size: 'M', color: 'Obsidian Black', colorCode: '#111827' },
+              colorCode: '#111827',
+              additionalPrice: 0,
+              stock: 14,
+              lowStockThreshold: 4,
+            },
+            {
+              sku: 'APX-HD-BLU-L',
+              name: 'Large / Royal Cobalt',
+              attributes: { size: 'L', color: 'Royal Cobalt', colorCode: '#2563EB' },
+              colorCode: '#2563EB',
+              additionalPrice: 200,
+              stock: 11,
+              lowStockThreshold: 3,
+            },
+            {
+              sku: 'APX-HD-RED-XL',
+              name: 'X-Large / Crimson Fire',
+              attributes: { size: 'XL', color: 'Crimson Fire', colorCode: '#DC2626' },
+              colorCode: '#DC2626',
+              additionalPrice: 350,
+              stock: 5,
+              lowStockThreshold: 2,
+            },
+          ],
+        }),
+      });
+
+      assert.strictEqual(resCreateVariant.status, 201);
+      const dataVariantProd = await resCreateVariant.json();
+      assert.strictEqual(dataVariantProd.success, true);
+      assert.strictEqual(dataVariantProd.data.hasVariants, true);
+      assert.strictEqual(dataVariantProd.data.variants.length, 3);
+      // Auto-calculated total stock: 14 + 11 + 5 = 30!
+      assert.strictEqual(dataVariantProd.data.stock, 30, 'Total stock must equal sum of variant stocks (14 + 11 + 5 = 30)');
+      assert.strictEqual(dataVariantProd.data.variants[0].colorCode, '#111827');
+      assert.strictEqual(dataVariantProd.data.variants[1].colorCode, '#2563EB');
+      assert.strictEqual(dataVariantProd.data.variants[2].attributes.size, 'XL');
+
+      const variantProdId = dataVariantProd.data._id;
+
+      // 2. Update variant stock & verify auto-calculated stock update
+      const resUpdateVariant = await fetch(`${baseUrl}/vendor/products/${variantProdId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({
+          hasVariants: true,
+          variants: [
+            {
+              sku: 'APX-HD-BLK-M',
+              name: 'Medium / Obsidian Black',
+              attributes: { size: 'M', color: 'Obsidian Black', colorCode: '#111827' },
+              colorCode: '#111827',
+              additionalPrice: 0,
+              stock: 20, // increased from 14 to 20
+            },
+            {
+              sku: 'APX-HD-BLU-L',
+              name: 'Large / Royal Cobalt',
+              attributes: { size: 'L', color: 'Royal Cobalt', colorCode: '#2563EB' },
+              colorCode: '#2563EB',
+              additionalPrice: 200,
+              stock: 10,
+            },
+          ],
+        }),
+      });
+
+      assert.strictEqual(resUpdateVariant.status, 200);
+      const dataUpdate = await resUpdateVariant.json();
+      assert.strictEqual(dataUpdate.success, true);
+      assert.strictEqual(dataUpdate.data.stock, 30, 'Total stock must update to 20 + 10 = 30');
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

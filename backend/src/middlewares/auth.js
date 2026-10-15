@@ -34,7 +34,12 @@ const protect = async (req, res, next) => {
       const user = await User.findOne(query);
       if (user && user.isActive) {
         req.user = user;
-        if (user.role === 'vendor') {
+        if (user.role === 'vendor' || user.role === 'vendor_staff' || user.isVendorStaff) {
+      const vendorProfile = await VendorProfile.findOne({
+        $or: [{ user: user._id }, { _id: user.vendorProfile }],
+      });
+      req.vendorProfile = vendorProfile;
+    } else if (false) {
           req.vendorProfile = await VendorProfile.findOne({ user: user._id });
         }
         return next();
@@ -158,5 +163,47 @@ const requirePermission = (permission) => {
   };
 };
 
-module.exports = { protect, authorize, requirePermission, optionalAuth };
+
+// Point #13: Granular Vendor Sub-Staff Permission Verification
+const requireVendorPermission = (permission) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required.',
+      });
+    }
+
+    // Super Admin has unrestricted access to all endpoints
+    if (req.user.role === 'superadmin') {
+      return next();
+    }
+
+    // Main vendor store owner has full unrestricted access
+    if (req.user.role === 'vendor' && !req.user.isVendorStaff) {
+      return next();
+    }
+
+    // Vendor Sub-Staff with restricted permissions
+    if (req.user.role === 'vendor_staff' || (req.user.role === 'vendor' && req.user.isVendorStaff)) {
+      const userPerms = req.user.permissions || [];
+      if (userPerms.includes('ALL') || userPerms.includes(permission)) {
+        return next();
+      }
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: Sub-staff member '${req.user.name}' lacks required '${permission}' permission for this vendor action.`,
+        requiredPermission: permission,
+        grantedPermissions: userPerms,
+      });
+    }
+
+    return res.status(403).json({
+      success: false,
+      message: `Forbidden: User role '${req.user.role}' is not authorized for vendor resources.`,
+    });
+  };
+};
+
+module.exports = { protect, authorize, requirePermission, requireVendorPermission, optionalAuth };
 

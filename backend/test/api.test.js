@@ -8973,6 +8973,214 @@ const runTests = async () => {
       assert.strictEqual(res.status, 403);
     });
 
+
+    // =========================================================================
+    // =========================================================================
+    // POINT 13: VENDOR SUB-STAFF ROLES & GRANULAR PORTAL PERMISSIONS
+    // =========================================================================
+
+    let liveVendorToken = null;
+    let createdVendorStaffId = null;
+    let subStaffAuthToken = null;
+
+    await test('Point 13: Setup: Obtain fresh vendor authentication token post-wipe', async () => {
+      const res = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'apex@auramarket.com', password: 'vendor123456' }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token, 'Vendor token must be returned');
+      liveVendorToken = data.token;
+    });
+
+    await test('Point 13: GET /api/vendor/staff/permissions returns vendor permissions catalog and role presets', async () => {
+      const res = await fetch(`${baseUrl}/vendor/staff/permissions`, {
+        headers: { Authorization: `Bearer ${liveVendorToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.permissions.length >= 6);
+      assert.ok(data.presets.length >= 4);
+      assert.ok(data.permissions.some(p => p.key === 'WALLET_FINANCE'));
+      assert.ok(data.permissions.some(p => p.key === 'ORDERS_MANAGE'));
+    });
+
+    await test('Point 13: GET /api/vendor/staff lists vendor sub-staff associates', async () => {
+      const res = await fetch(`${baseUrl}/vendor/staff`, {
+        headers: { Authorization: `Bearer ${liveVendorToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.count >= 1);
+      assert.strictEqual(data.data[0].isVendorStaff, true);
+    });
+
+    await test('Point 13: POST /api/vendor/staff creates new sub-staff member with assigned permissions', async () => {
+      const res = await fetch(`${baseUrl}/vendor/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${liveVendorToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Pooja Sharma',
+          email: 'pooja.dispatch@auramarket.com',
+          phone: '9876543299',
+          password: 'password123',
+          staffRoleTitle: 'Order Dispatcher',
+          permissions: ['ORDERS_MANAGE'],
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.staffRoleTitle, 'Order Dispatcher');
+      assert.strictEqual(data.data.isVendorStaff, true);
+      assert.deepStrictEqual(data.data.permissions, ['ORDERS_MANAGE']);
+      createdVendorStaffId = data.data._id;
+    });
+
+    await test('Point 13: POST /api/vendor/staff validates missing required fields with 400', async () => {
+      const res = await fetch(`${baseUrl}/vendor/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${liveVendorToken}`,
+        },
+        body: JSON.stringify({
+          name: '',
+          email: '',
+          password: '123',
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 13: POST /api/vendor/staff prevents duplicate email registration with 400', async () => {
+      const res = await fetch(`${baseUrl}/vendor/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${liveVendorToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Pooja Clone',
+          email: 'pooja.dispatch@auramarket.com',
+          password: 'password123',
+          staffRoleTitle: 'Duplicate Dispatcher',
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 13: PUT /api/vendor/staff/:id updates sub-staff role title and permissions', async () => {
+      assert.ok(createdVendorStaffId, 'Created staff ID must exist');
+      const res = await fetch(`${baseUrl}/vendor/staff/${createdVendorStaffId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${liveVendorToken}`,
+        },
+        body: JSON.stringify({
+          staffRoleTitle: 'Senior Logistics Lead',
+          permissions: ['ORDERS_MANAGE', 'PRODUCTS_MANAGE'],
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.staffRoleTitle, 'Senior Logistics Lead');
+      assert.ok(data.data.permissions.includes('PRODUCTS_MANAGE'));
+    });
+
+    await test('Point 13: Vendor Sub-Staff Security: Staff without WALLET_FINANCE is blocked from payout with 403', async () => {
+      // 1. Log in as created sub-staff
+      const loginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'pooja.dispatch@auramarket.com',
+          password: 'password123',
+        }),
+      });
+
+      assert.strictEqual(loginRes.status, 200);
+      const loginData = await loginRes.json();
+      subStaffAuthToken = loginData.token;
+      assert.ok(subStaffAuthToken, 'Sub-staff JWT token must be returned');
+
+      // 2. Attempt payout withdrawal without WALLET_FINANCE permission
+      const payoutRes = await fetch(`${baseUrl}/vendor/payout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${subStaffAuthToken}`,
+        },
+        body: JSON.stringify({
+          amount: 5000,
+        }),
+      });
+
+      assert.strictEqual(payoutRes.status, 403);
+      const payoutData = await payoutRes.json();
+      assert.strictEqual(payoutData.requiredPermission, 'WALLET_FINANCE');
+    });
+
+    await test('Point 13: Vendor Sub-Staff Security: Staff without STORE_SETTINGS is blocked from modifying store with 403', async () => {
+      assert.ok(subStaffAuthToken, 'Sub-staff token must exist');
+      const profileRes = await fetch(`${baseUrl}/vendor/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${subStaffAuthToken}`,
+        },
+        body: JSON.stringify({
+          storeName: 'Hacked Store Name',
+        }),
+      });
+
+      assert.strictEqual(profileRes.status, 403);
+      const profileData = await profileRes.json();
+      assert.strictEqual(profileData.requiredPermission, 'STORE_SETTINGS');
+    });
+
+    await test('Point 13: DELETE /api/vendor/staff/:id revokes sub-staff store access', async () => {
+      assert.ok(createdVendorStaffId, 'Created staff ID must exist');
+      const res = await fetch(`${baseUrl}/vendor/staff/${createdVendorStaffId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${liveVendorToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+    });
+
+    await test('Point 13: Role Security: Customer token is rejected with 403 on vendor staff endpoints', async () => {
+      const res = await fetch(`${baseUrl}/vendor/staff`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+
+      assert.strictEqual(res.status, 403);
+    });
+
+
   } finally {
     if (server) {
       server.close();

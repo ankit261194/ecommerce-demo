@@ -21,6 +21,7 @@ import {
   Store,
   Palmtree,
   QrCode,
+  Users,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -37,6 +38,7 @@ import VacationModeModal from '../components/VacationModeModal';
 import VendorReviewsModal from '../components/VendorReviewsModal';
 import VendorWalletLedgerModal from '../components/VendorWalletLedgerModal';
 import VendorPayoutModal from '../components/VendorPayoutModal';
+import VendorStaffManagerModal from '../components/VendorStaffManagerModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -164,6 +166,7 @@ export const VendorPortal = () => {
   const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false); // Point #60: Customer Reviews Management
   const [isWalletLedgerModalOpen, setIsWalletLedgerModalOpen] = useState(false); // Point #61: Financial Wallet & Ledger
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
+  const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
 
@@ -529,6 +532,19 @@ export const VendorPortal = () => {
             <span>Store Branding & Profile</span>
             <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
               #58
+            </span>
+          </button>
+
+                    <button
+            type="button"
+            onClick={() => setIsStaffModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all"
+            title="Manage Sub-Staff Roles & Granular Portal Permissions"
+          >
+            <Users className="w-4 h-4 text-amber-400" />
+            <span>Staff & Roles</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
+              #13
             </span>
           </button>
 
@@ -1675,6 +1691,13 @@ export const VendorPortal = () => {
         onClose={() => setIsWalletLedgerModalOpen(false)}
         onOpenWithdrawal={() => setIsPayoutModalOpen(true)}
         onRefreshData={fetchVendorData}
+      />
+
+      {/* Point 13: Vendor Sub-Staff Roles & Permissions Modal */}
+      <VendorStaffManagerModal
+        isOpen={isStaffModalOpen}
+        onClose={() => setIsStaffModalOpen(false)}
+        onStaffUpdated={fetchVendorData}
       />
     </div>
   );

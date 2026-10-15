@@ -48,7 +48,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['superadmin', 'subadmin', 'vendor', 'customer', 'delivery'],
+      enum: ['superadmin', 'subadmin', 'vendor', 'vendor_staff', 'customer', 'delivery'],
       default: 'customer',
     },
     isActive: {
@@ -73,6 +73,15 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ['ACTIVE', 'BLOCKED', 'SUSPENDED'],
       default: 'ACTIVE',
+    },
+    vendorProfile: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'VendorProfile',
+      default: null,
+    },
+    isVendorStaff: {
+      type: Boolean,
+      default: false,
     },
     isVerified: {
       type: Boolean,

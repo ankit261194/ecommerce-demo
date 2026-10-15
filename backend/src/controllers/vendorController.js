@@ -1,3 +1,4 @@
+const User = require('../models/User');
 const VendorProfile = require('../models/VendorProfile');
 const Product = require('../models/Product');
 const SubOrder = require('../models/SubOrder');
@@ -1756,3 +1757,273 @@ exports.generateSeoMeta = async (req, res, next) => {
 };
 
 
+
+
+// =========================================================================
+// POINT 13: VENDOR SUB-STAFF ROLES & GRANULAR PERMISSIONS
+// =========================================================================
+
+const VENDOR_PERMISSIONS_CATALOG = [
+  {
+    key: 'PRODUCTS_MANAGE',
+    label: 'Product Catalog & Inventory',
+    description: 'Add new items, update pricing, upload images, and edit stock counts.',
+    category: 'Inventory',
+  },
+  {
+    key: 'ORDERS_MANAGE',
+    label: 'Orders, Manifests & Packing',
+    description: 'View orders, update dispatch status, print shipping labels and handover manifests.',
+    category: 'Fulfillment',
+  },
+  {
+    key: 'REVIEWS_MANAGE',
+    label: 'Customer Inquiries & Reviews',
+    description: 'Respond to customer product reviews and answer store inquiries.',
+    category: 'Support',
+  },
+  {
+    key: 'WALLET_FINANCE',
+    label: 'Wallet, Earnings & Payout Requests',
+    description: 'View vendor ledger balance, download CSV statements, and request payout withdrawals.',
+    category: 'Finance (High Security)',
+  },
+  {
+    key: 'STORE_SETTINGS',
+    label: 'Store Branding & Vacation Mode',
+    description: 'Modify store banner, logo, return policy, and enable vacation mode.',
+    category: 'Settings',
+  },
+  {
+    key: 'STAFF_MANAGE',
+    label: 'Manage Sub-Staff & Team Access',
+    description: 'Invite new team associates, assign permission roles, and revoke staff access.',
+    category: 'Admin',
+  },
+];
+
+const VENDOR_ROLE_PRESETS = [
+  {
+    roleTitle: 'Order & Dispatch Specialist',
+    description: 'Handles order packing, label printing, and courier manifests.',
+    permissions: ['ORDERS_MANAGE'],
+  },
+  {
+    roleTitle: 'Catalog & Inventory Lead',
+    description: 'Maintains product catalog, SKU stock levels, and media.',
+    permissions: ['PRODUCTS_MANAGE', 'ORDERS_MANAGE'],
+  },
+  {
+    roleTitle: 'Customer Care & Review Rep',
+    description: 'Monitors customer reviews and buyer inquiries.',
+    permissions: ['ORDERS_MANAGE', 'REVIEWS_MANAGE'],
+  },
+  {
+    roleTitle: 'Assistant Store Manager',
+    description: 'Comprehensive daily store operations excluding payout withdrawals.',
+    permissions: ['PRODUCTS_MANAGE', 'ORDERS_MANAGE', 'REVIEWS_MANAGE', 'STORE_SETTINGS'],
+  },
+];
+
+// @desc Get permission catalog and role presets for vendor sub-staff
+// @route GET /api/vendor/staff/permissions
+// @access Private (Vendor / Vendor Staff)
+exports.getVendorStaffPermissions = async (req, res, next) => {
+  try {
+    res.status(200).json({
+      success: true,
+      permissions: VENDOR_PERMISSIONS_CATALOG,
+      presets: VENDOR_ROLE_PRESETS,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Get all sub-staff members for current vendor store
+// @route GET /api/vendor/staff
+// @access Private (Vendor / Vendor Staff)
+exports.getVendorStaff = async (req, res, next) => {
+  try {
+    if (!req.vendorProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vendor profile not found for this user account',
+      });
+    }
+
+    let staff = await User.find({
+      vendorProfile: req.vendorProfile._id,
+      isVendorStaff: true,
+    }).select('-password').sort({ createdAt: -1 });
+
+    // Seed realistic default sub-staff for demo vendor if none exist
+    if (staff.length === 0) {
+      const defaultStaff = await User.create({
+        name: 'Arjun Mehta',
+        email: `dispatch.${req.vendorProfile.storeSlug || 'store'}@auramarket.com`,
+        phone: '9822334455',
+        password: 'password123',
+        role: 'vendor_staff',
+        vendorProfile: req.vendorProfile._id,
+        isVendorStaff: true,
+        staffRoleTitle: 'Order & Dispatch Specialist',
+        permissions: ['ORDERS_MANAGE'],
+        isActive: true,
+      });
+      staff = [defaultStaff];
+    }
+
+    res.status(200).json({
+      success: true,
+      count: staff.length,
+      data: staff,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Invite / Create a new vendor sub-staff member
+// @route POST /api/vendor/staff
+// @access Private (Vendor Owner / Staff Manager)
+exports.createVendorStaff = async (req, res, next) => {
+  try {
+    if (!req.vendorProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vendor profile not found for this user account',
+      });
+    }
+
+    const { name, email, phone, password, staffRoleTitle, permissions } = req.body;
+
+    if (!name || !email || !password || !staffRoleTitle) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide name, email, password, and staff role title',
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long',
+      });
+    }
+
+    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: `User with email '${email}' is already registered on AuraMarket`,
+      });
+    }
+
+    const newStaff = await User.create({
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      phone: phone?.trim() || '9876543210',
+      password,
+      role: 'vendor_staff',
+      vendorProfile: req.vendorProfile._id,
+      isVendorStaff: true,
+      staffRoleTitle: staffRoleTitle.trim(),
+      permissions: Array.isArray(permissions) && permissions.length > 0 ? permissions : ['ORDERS_MANAGE'],
+      isActive: true,
+    });
+
+    const staffResponse = newStaff.toObject();
+    delete staffResponse.password;
+
+    res.status(201).json({
+      success: true,
+      message: `Sub-staff member '${newStaff.name}' invited as '${newStaff.staffRoleTitle}' successfully!`,
+      data: staffResponse,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Update sub-staff permissions and status
+// @route PUT /api/vendor/staff/:id
+// @access Private (Vendor Owner / Staff Manager)
+exports.updateVendorStaff = async (req, res, next) => {
+  try {
+    if (!req.vendorProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vendor profile not found',
+      });
+    }
+
+    const staff = await User.findOne({
+      _id: req.params.id,
+      vendorProfile: req.vendorProfile._id,
+      isVendorStaff: true,
+    });
+
+    if (!staff) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vendor sub-staff member not found',
+      });
+    }
+
+    const { staffRoleTitle, permissions, isActive, phone, password } = req.body;
+
+    if (staffRoleTitle) staff.staffRoleTitle = staffRoleTitle.trim();
+    if (Array.isArray(permissions)) staff.permissions = permissions;
+    if (isActive !== undefined) staff.isActive = Boolean(isActive);
+    if (phone) staff.phone = phone.trim();
+    if (password && password.length >= 6) staff.password = password;
+
+    await staff.save();
+
+    const staffResponse = staff.toObject();
+    delete staffResponse.password;
+
+    res.status(200).json({
+      success: true,
+      message: `Staff member '${staff.name}' updated successfully!`,
+      data: staffResponse,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Remove / Deactivate a vendor sub-staff member
+// @route DELETE /api/vendor/staff/:id
+// @access Private (Vendor Owner / Staff Manager)
+exports.deleteVendorStaff = async (req, res, next) => {
+  try {
+    if (!req.vendorProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vendor profile not found',
+      });
+    }
+
+    const staff = await User.findOneAndDelete({
+      _id: req.params.id,
+      vendorProfile: req.vendorProfile._id,
+      isVendorStaff: true,
+    });
+
+    if (!staff) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vendor sub-staff member not found',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Staff member '${staff.name}' access revoked successfully.`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

@@ -25,23 +25,28 @@ const {
   exportVendorLedgerCSV,
   generateProductCopy,
   generateSeoMeta,
+  getVendorStaffPermissions,
+  getVendorStaff,
+  createVendorStaff,
+  updateVendorStaff,
+  deleteVendorStaff,
 } = require('../controllers/vendorController');
 const { getSplitPackingSlips, getThermalReceipt } = require('../controllers/orderController');
-const { protect, authorize } = require('../middlewares/auth');
+const { protect, authorize, requireVendorPermission } = require('../middlewares/auth');
 
 // Point 58: Public Storefront Vendor Showcase (Accessible by any customer/visitor)
 router.get('/store/:slugOrId', getPublicVendorStore);
 
 // All subsequent vendor routes require Vendor authentication & role
 router.use(protect);
-router.use(authorize('vendor'));
+router.use(authorize('vendor', 'vendor_staff'));
 
 // Point 58: Vendor Profile & Branding Customization
 router.get('/profile', getVendorProfile);
-router.put('/profile', updateVendorProfile);
+router.put('/profile', requireVendorPermission('STORE_SETTINGS'), updateVendorProfile);
 
 // Point 59: Vacation Mode Toggle (Pause orders without deleting items)
-router.put('/vacation-mode', updateVacationMode);
+router.put('/vacation-mode', requireVendorPermission('STORE_SETTINGS'), updateVacationMode);
 
 // Point 60: Customer Reviews Management (View reviews & post vendor responses)
 router.get('/reviews', getVendorReviews);
@@ -68,6 +73,14 @@ router.get('/orders/:id/shipping-label', getShippingLabelData);
 router.get('/orders/:id/split-packing-slip', getSplitPackingSlips);
 router.get('/orders/:id/thermal-receipt', getThermalReceipt);
 router.put('/orders/:id/status', updateSubOrderStatus);
-router.post('/payout', requestPayout);
+router.post('/payout', requireVendorPermission('WALLET_FINANCE'), requestPayout);
+
+
+// Point #13: Vendor Sub-Staff Roles & Granular Permissions
+router.get('/staff/permissions', getVendorStaffPermissions);
+router.get('/staff', requireVendorPermission('STAFF_MANAGE'), getVendorStaff);
+router.post('/staff', requireVendorPermission('STAFF_MANAGE'), createVendorStaff);
+router.put('/staff/:id', requireVendorPermission('STAFF_MANAGE'), updateVendorStaff);
+router.delete('/staff/:id', requireVendorPermission('STAFF_MANAGE'), deleteVendorStaff);
 
 module.exports = router;

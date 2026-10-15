@@ -20,6 +20,8 @@ import {
   MessageSquare,
   Palmtree,
   Ruler,
+  Bell,
+  TrendingDown,
 } from 'lucide-react';
 import StockUrgencyBadge from './StockUrgencyBadge';
 import RecentPurchaseCounter from './RecentPurchaseCounter';
@@ -29,6 +31,7 @@ import FrequentlyBoughtTogether from './FrequentlyBoughtTogether';
 import { ProductRecommendationSlider } from './ProductRecommendationSlider';
 import PincodeChecker from './PincodeChecker';
 import SizeGuideModal from './SizeGuideModal';
+import PriceDropAlertModal from './PriceDropAlertModal';
 import { useLocalization } from '../context/LocalizationContext';
 
 export const ProductDetailModal = ({
@@ -67,6 +70,9 @@ export const ProductDetailModal = ({
 
   // Size Guide Modal state (Point #4)
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
+
+  // Price Drop Alert Modal state (Point #6)
+  const [isPriceDropModalOpen, setIsPriceDropModalOpen] = useState(false);
 
   // Hover zoom coordinates
   const [zoomStyle, setZoomStyle] = useState({ display: 'none' });
@@ -449,9 +455,20 @@ export const ProductDetailModal = ({
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] font-medium text-slate-500">
-                  Inclusive of all taxes • Free express shipping on this order
-                </p>
+                <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
+                  <p className="text-[11px] font-medium text-slate-500">
+                    Inclusive of all taxes • Free express shipping on this order
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsPriceDropModalOpen(true)}
+                    className="flex items-center gap-1.5 text-xs font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100/80 border border-amber-200/80 px-2.5 py-1 rounded-xl transition-all shadow-xs active:scale-95"
+                    title="Get instant WhatsApp / Email alert when price drops"
+                  >
+                    <Bell className="w-3.5 h-3.5 fill-current text-amber-600" />
+                    <span>Price Drop Alert</span>
+                  </button>
+                </div>
               </div>
 
               {/* Real-time Stock Urgency Status (Point #12) */}
@@ -938,6 +955,13 @@ export const ProductDetailModal = ({
         onSelectSize={(sz) => {
           handleSelectSize(sz);
         }}
+      />
+
+      {/* Point 6: Smart Price Drop Alert Subscription Modal */}
+      <PriceDropAlertModal
+        isOpen={isPriceDropModalOpen}
+        onClose={() => setIsPriceDropModalOpen(false)}
+        product={product}
       />
     </div>
   );

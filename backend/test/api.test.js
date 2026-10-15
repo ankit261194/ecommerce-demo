@@ -7966,6 +7966,115 @@ const runTests = async () => {
       assert.strictEqual(correctData.data.status, 'REVERSE_PICKUP_COMPLETED');
     });
 
+    // =========================================================================
+    // Point 6: Smart "Price Drop Alert" Subscription Suite
+    // =========================================================================
+
+    let testAlertId = null;
+
+    await test('Point 6: POST /api/price-drop-alerts subscribes customer to price drop notifications', async () => {
+      const currentPrice = anyProduct.sellingPrice || 999;
+      const targetAlertPrice = Math.round(currentPrice * 0.85); // 15% drop
+
+      const res = await fetch(`${baseUrl}/price-drop-alerts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          productId: anyProduct._id.toString(),
+          targetPrice: targetAlertPrice,
+          email: 'rohan.subscriber@example.com',
+          phone: '9876543218',
+          name: 'Rohan Alert Subscriber',
+          channel: 'BOTH',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'ACTIVE');
+      assert.strictEqual(data.data.targetPrice, targetAlertPrice);
+      assert.strictEqual(data.data.customerEmail, 'rohan.subscriber@example.com');
+      assert.strictEqual(data.data.customerPhone, '9876543218');
+      testAlertId = data.data._id;
+    });
+
+    await test('Point 6: POST /api/price-drop-alerts validates invalid input with 400', async () => {
+      const res = await fetch(`${baseUrl}/price-drop-alerts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          productId: anyProduct._id.toString(),
+          targetPrice: -100,
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 6: GET /api/price-drop-alerts/my retrieves active alerts for customer', async () => {
+      const res = await fetch(`${baseUrl}/price-drop-alerts/my?email=rohan.subscriber@example.com`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.count >= 1);
+      const alert = data.data.find(a => a._id.toString() === testAlertId.toString());
+      assert.ok(alert, 'Subscribed alert must be present');
+      assert.strictEqual(alert.status, 'ACTIVE');
+    });
+
+    await test('Point 6: POST /api/price-drop-alerts/simulate triggers email & WhatsApp alerts when price drops below target', async () => {
+      const targetDroppedPrice = Math.round((anyProduct.sellingPrice || 999) * 0.80); // Dropped by 20%, below target 15%
+
+      const res = await fetch(`${baseUrl}/price-drop-alerts/simulate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          productId: anyProduct._id.toString(),
+          oldPrice: anyProduct.sellingPrice || 999,
+          newPrice: targetDroppedPrice,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.triggeredCount >= 1, 'Should trigger at least 1 subscriber alert');
+
+      // Verify the alert doc status is updated to ALERTED in database
+      const PriceDropAlert = require('../src/models/PriceDropAlert');
+      const updatedAlert = await PriceDropAlert.findById(testAlertId);
+      assert.strictEqual(updatedAlert.status, 'ALERTED');
+      assert.strictEqual(updatedAlert.alertedPrice, targetDroppedPrice);
+      assert.ok(updatedAlert.alertedAt);
+    });
+
+    await test('Point 6: DELETE /api/price-drop-alerts/:id cancels active alert subscription', async () => {
+      const res = await fetch(`${baseUrl}/price-drop-alerts/${testAlertId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'CANCELLED');
+    });
+
   } finally {
     if (server) {
       server.close();

@@ -196,10 +196,18 @@ exports.updateProduct = async (req, res, next) => {
       req.body.discountPercentage = updatedMrp > 0 ? Math.round((savings / updatedMrp) * 100) : 0;
     }
 
+    const oldSelling = product.sellingPrice || product.price || 0;
+
     product = await Product.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,
     });
+
+    // Point 6: Automatically trigger Price Drop Alerts if price dropped
+    if (req.body.sellingPrice !== undefined && Number(req.body.sellingPrice) < oldSelling) {
+      const { checkAndTriggerPriceDropAlerts } = require('./priceDropAlertController');
+      checkAndTriggerPriceDropAlerts(product._id, oldSelling, Number(req.body.sellingPrice)).catch(console.error);
+    }
 
     res.status(200).json({ success: true, message: 'Product updated successfully', data: product });
   } catch (error) {

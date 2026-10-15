@@ -30,6 +30,7 @@ const localizationRoutes = require('./routes/localizationRoutes');
 const pincodeRoutes = require('./routes/pincodeRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const sizeChartRoutes = require('./routes/sizeChartRoutes');
+const priceDropAlertRoutes = require('./routes/priceDropAlertRoutes');
 
 const app = express();
 
@@ -121,6 +122,7 @@ app.use('/api/admin/localization', localizationRoutes);
 app.use('/api/pincodes', pincodeRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/size-charts', sizeChartRoutes);
+app.use('/api/price-drop-alerts', priceDropAlertRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

@@ -23,6 +23,7 @@ import {
   QrCode,
   Users,
   MessageSquare,
+  Barcode,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -42,6 +43,7 @@ import VendorPayoutModal from '../components/VendorPayoutModal';
 import VendorStaffManagerModal from '../components/VendorStaffManagerModal';
 import VendorChatInboxModal from '../components/VendorChatInboxModal';
 import VendorTaxReportModal from '../components/VendorTaxReportModal';
+import PosCounterScreen from '../components/PosCounterScreen';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -173,6 +175,7 @@ export const VendorPortal = () => {
   const [isChatInboxOpen, setIsChatInboxOpen] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [isTaxReportModalOpen, setIsTaxReportModalOpen] = useState(false); // Point #15: Vendor GST/VAT & HSN Tax Filing Report
+  const [isPosModalOpen, setIsPosModalOpen] = useState(false); // Point #18: Offline POS Counter Billing Screen
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
 
@@ -626,6 +629,19 @@ export const VendorPortal = () => {
             <span>Tax & GSTR-1</span>
             <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
               #15
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsPosModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 text-xs font-black shadow-lg shadow-amber-500/20 transition-all"
+            title="Point 18: Offline Point of Sale (POS) Counter Billing Screen with Barcode Scanning & 80mm/58mm Thermal Slips"
+          >
+            <Barcode className="w-4 h-4 text-slate-950" />
+            <span>POS Billing</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-amber-400">
+              #18
             </span>
           </button>
 
@@ -1767,6 +1783,16 @@ export const VendorPortal = () => {
       <VendorTaxReportModal
         isOpen={isTaxReportModalOpen}
         onClose={() => setIsTaxReportModalOpen(false)}
+        storeName={vendorData.storeName}
+      />
+
+      {/* Point 18: Offline Point of Sale (POS) Counter Billing Screen */}
+      <PosCounterScreen
+        isOpen={isPosModalOpen}
+        onClose={() => {
+          setIsPosModalOpen(false);
+          fetchVendorData();
+        }}
         storeName={vendorData.storeName}
       />
     </div>

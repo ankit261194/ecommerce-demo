@@ -105,6 +105,12 @@ const productSchema = new mongoose.Schema(
       unique: true,
       trim: true,
     },
+    barcode: {
+      type: String,
+      default: '',
+      trim: true,
+      index: true,
+    },
     hsnCode: {
       type: String,
       default: '85183000',

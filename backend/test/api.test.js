@@ -9739,6 +9739,223 @@ const runTests = async () => {
       assert.strictEqual(res.status, 403);
     });
 
+    // ==========================================
+    // POINT 18: Offline Point of Sale (POS) Counter Billing Screen
+    // ==========================================
+    let posVendorToken = null;
+    let posTestProduct = null;
+    let createdPosOrderId = null;
+    let parkedCartId = null;
+
+    await test('Point 18: Setup: Obtain fresh vendor authentication token for POS terminal', async () => {
+      const res = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'apex@auramarket.com', password: 'vendor123456' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token, 'Vendor token must be returned');
+      posVendorToken = data.token;
+
+      // Ensure a test product has barcode, stock, published status, and is owned by Apex Tech Hub
+      const apexProfile = await VendorProfile.findOne({ storeName: 'Apex Tech Hub' });
+      posTestProduct = await Product.findOne(apexProfile ? { vendor: apexProfile._id } : {});
+      if (!posTestProduct) {
+        posTestProduct = await Product.findOne();
+      }
+      if (apexProfile) {
+        posTestProduct.vendor = apexProfile._id;
+      }
+      posTestProduct.hasVariants = false;
+      posTestProduct.variants = [];
+      posTestProduct.barcode = '8901234567890';
+      posTestProduct.stock = 50;
+      posTestProduct.isPublished = true;
+      await posTestProduct.save();
+    });
+
+    await test('Point 18: GET /api/pos/products returns fast POS catalog with barcodes & stock', async () => {
+      const res = await fetch(`${baseUrl}/pos/products`, {
+        headers: { Authorization: `Bearer ${posVendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.data.length > 0);
+      assert.ok(data.data[0].barcode !== undefined);
+      assert.ok(typeof data.data[0].stock === 'number');
+      assert.ok(typeof data.data[0].price === 'number');
+    });
+
+    await test('Point 18: GET /api/pos/products?q= searches by product barcode or title', async () => {
+      const res = await fetch(`${baseUrl}/pos/products?q=${posTestProduct.barcode}`, {
+        headers: { Authorization: `Bearer ${posVendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.some(p => p._id.toString() === posTestProduct._id.toString()));
+    });
+
+    await test('Point 18: POST /api/pos/orders creates completed bill, calculates change, and decrements stock', async () => {
+      const initialStock = posTestProduct.stock;
+      const testPrice = posTestProduct.sellingPrice || posTestProduct.price || 999;
+      const res = await fetch(`${baseUrl}/pos/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posVendorToken}`,
+        },
+        body: JSON.stringify({
+          items: [
+            {
+              productId: posTestProduct._id.toString(),
+              quantity: 2,
+              price: testPrice,
+            },
+          ],
+          customer: {
+            name: 'Rahul Sharma',
+            phone: '9876543210',
+          },
+          paymentMethod: 'CASH',
+          paymentDetails: {
+            cashTendered: (testPrice * 2) + 100,
+          },
+          discountAmount: 50,
+          paperSize: '80mm',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data._id);
+      createdPosOrderId = data.data._id;
+      assert.ok(data.data.posInvoiceNumber.startsWith('POS-'));
+      assert.strictEqual(data.data.customer.name, 'Rahul Sharma');
+      assert.strictEqual(data.data.paymentMethod, 'CASH');
+      assert.strictEqual(data.data.paymentDetails.cashChangeDue, 150); // 100 excess + 50 discount
+
+      // Verify stock was decremented
+      const updatedProduct = await Product.findById(posTestProduct._id);
+      assert.strictEqual(updatedProduct.stock, initialStock - 2, 'Inventory must be decremented by quantity');
+    });
+
+    await test('Point 18: POST /api/pos/orders validates empty cart with 400', async () => {
+      const res = await fetch(`${baseUrl}/pos/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posVendorToken}`,
+        },
+        body: JSON.stringify({ items: [] }),
+      });
+      assert.strictEqual(res.status, 400);
+    });
+
+    await test('Point 18: GET /api/pos/orders returns counter history and daily cashier metrics', async () => {
+      const res = await fetch(`${baseUrl}/pos/orders`, {
+        headers: { Authorization: `Bearer ${posVendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.metrics);
+      assert.ok(data.metrics.totalOrders >= 1);
+      assert.ok(data.metrics.totalSales > 0);
+      assert.ok(data.metrics.cashCollected > 0);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.data.some(o => o._id.toString() === createdPosOrderId.toString()));
+    });
+
+    await test('Point 18: GET /api/pos/orders/:id/receipt returns formatted thermal receipt payload', async () => {
+      const res = await fetch(`${baseUrl}/pos/orders/${createdPosOrderId}/receipt`, {
+        headers: { Authorization: `Bearer ${posVendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.receipt);
+      assert.strictEqual(data.receipt.paperSize, '80mm');
+      assert.ok(data.receipt.store.name);
+      assert.ok(data.receipt.store.gstin);
+      assert.ok(data.receipt.upiUri);
+      assert.ok(data.receipt.items.length >= 1);
+      assert.strictEqual(data.receipt.payment.method, 'CASH');
+    });
+
+    await test('Point 18: POST /api/pos/park holds customer cart for multi-queue billing', async () => {
+      const testPrice = posTestProduct.sellingPrice || posTestProduct.price || 999;
+      const res = await fetch(`${baseUrl}/pos/park`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posVendorToken}`,
+        },
+        body: JSON.stringify({
+          items: [
+            {
+              productId: posTestProduct._id.toString(),
+              title: posTestProduct.title,
+              price: testPrice,
+              quantity: 1,
+            },
+          ],
+          customer: { name: 'Priya Verma' },
+          parkedNotes: 'Priya Verma (1 items)',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'PARKED');
+      parkedCartId = data.data._id;
+    });
+
+    await test('Point 18: GET /api/pos/parked lists parked queue carts', async () => {
+      const res = await fetch(`${baseUrl}/pos/parked`, {
+        headers: { Authorization: `Bearer ${posVendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.some(p => p._id.toString() === parkedCartId.toString()));
+    });
+
+    await test('Point 18: DELETE /api/pos/parked/:id resumes and dequeues parked cart', async () => {
+      const res = await fetch(`${baseUrl}/pos/parked/${parkedCartId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${posVendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+
+      // Verify no longer in parked list
+      const checkRes = await fetch(`${baseUrl}/pos/parked`, {
+        headers: { Authorization: `Bearer ${posVendorToken}` },
+      });
+      const checkData = await checkRes.json();
+      assert.strictEqual(checkData.data.some(p => p._id.toString() === parkedCartId.toString()), false);
+    });
+
+    await test('Point 18: Role Security: Customer token is rejected with 403 on POS endpoints', async () => {
+      const res = await fetch(`${baseUrl}/pos/orders`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 403);
+    });
+
+    await test('Point 18: Auth Security: Unauthenticated request to /api/pos/products is rejected with 401', async () => {
+      const res = await fetch(`${baseUrl}/pos/products`);
+      assert.strictEqual(res.status, 401);
+    });
+
   } finally {
     if (server) {
       server.close();

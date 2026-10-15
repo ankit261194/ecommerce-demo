@@ -6439,6 +6439,156 @@ const runTests = async () => {
       await Coupon.deleteOne({ code: customCouponCode });
     });
 
+    // =========================================================================
+    // Point 78: Real-Time Multi-Currency & Multi-Language Switcher
+    // =========================================================================
+    await test('Point 78: Real-Time Multi-Currency (₹, $, €, AED) & Multi-Language Switcher (Hindi / English with live currency conversion rates & locale translations)', async () => {
+      // 1. Public Currencies & Live Exchange Rates API
+      const resCurrencies = await fetch(`${baseUrl}/localization/currencies`);
+      assert.strictEqual(resCurrencies.status, 200);
+      const currData = await resCurrencies.json();
+      assert.strictEqual(currData.success, true);
+      assert.strictEqual(currData.baseCurrency, 'INR');
+      assert.ok(Array.isArray(currData.currencies));
+
+      const inr = currData.currencies.find((c) => c.code === 'INR');
+      const usd = currData.currencies.find((c) => c.code === 'USD');
+      const eur = currData.currencies.find((c) => c.code === 'EUR');
+      const aed = currData.currencies.find((c) => c.code === 'AED');
+
+      assert.ok(inr, 'INR currency must be supported');
+      assert.strictEqual(inr.symbol, '₹');
+      assert.strictEqual(inr.rate, 1.0);
+
+      assert.ok(usd, 'USD currency must be supported');
+      assert.strictEqual(usd.symbol, '$');
+      assert.ok(usd.rate > 0);
+
+      assert.ok(eur, 'EUR currency must be supported');
+      assert.strictEqual(eur.symbol, '€');
+      assert.ok(eur.rate > 0);
+
+      assert.ok(aed, 'AED currency must be supported');
+      assert.strictEqual(aed.symbol.trim(), 'AED');
+      assert.ok(aed.rate > 0);
+
+      // 2. Real-Time Currency Conversion Utility
+      const resConvert = await fetch(`${baseUrl}/localization/convert?amount=1000&from=INR&to=USD`);
+      assert.strictEqual(resConvert.status, 200);
+      const convData = await resConvert.json();
+      assert.strictEqual(convData.success, true);
+      assert.strictEqual(convData.originalAmount, 1000);
+      assert.strictEqual(convData.fromCurrency, 'INR');
+      assert.strictEqual(convData.targetCurrency, 'USD');
+      assert.strictEqual(convData.symbol, '$');
+      assert.ok(convData.targetAmount > 0);
+      assert.ok(convData.formatted.startsWith('$'));
+
+      // Inverted conversion test: USD to INR
+      const resConvertRev = await fetch(`${baseUrl}/localization/convert?amount=12&from=USD&to=INR`);
+      assert.strictEqual(resConvertRev.status, 200);
+      const convRevData = await resConvertRev.json();
+      assert.strictEqual(convRevData.success, true);
+      assert.strictEqual(convRevData.targetCurrency, 'INR');
+      assert.strictEqual(convRevData.symbol, '₹');
+      assert.ok(convRevData.targetAmount >= 900);
+
+      // Conversion error handling
+      const resConvErr = await fetch(`${baseUrl}/localization/convert?amount=invalid`);
+      assert.strictEqual(resConvErr.status, 400);
+
+      const resConvUnsupp = await fetch(`${baseUrl}/localization/convert?amount=100&from=XYZ&to=INR`);
+      assert.strictEqual(resConvUnsupp.status, 400);
+
+      // 3. Multi-Language & Locale Translations API
+      const resLanguages = await fetch(`${baseUrl}/localization/languages`);
+      assert.strictEqual(resLanguages.status, 200);
+      const langData = await resLanguages.json();
+      assert.strictEqual(langData.success, true);
+      assert.strictEqual(langData.defaultLanguage, 'en');
+      assert.ok(Array.isArray(langData.languages));
+
+      const enLang = langData.languages.find((l) => l.code === 'en');
+      const hiLang = langData.languages.find((l) => l.code === 'hi');
+      assert.ok(enLang, 'English language must be present');
+      assert.ok(hiLang, 'Hindi language must be present');
+      assert.strictEqual(hiLang.nativeName, 'हिन्दी');
+
+      // Test Hindi Translations endpoint
+      const resHi = await fetch(`${baseUrl}/localization/translations/hi`);
+      assert.strictEqual(resHi.status, 200);
+      const hiData = await resHi.json();
+      assert.strictEqual(hiData.success, true);
+      assert.strictEqual(hiData.language, 'hi');
+      assert.strictEqual(hiData.translations.brandName, 'ऑरा मार्केट');
+      assert.strictEqual(hiData.translations.cart, 'कार्ट');
+      assert.strictEqual(hiData.translations.placeOrder, 'ऑर्डर बुक करें');
+      assert.ok(hiData.translations.secretDeliveryOtp.includes('गोपनीय'));
+
+      // Test English Translations endpoint
+      const resEn = await fetch(`${baseUrl}/localization/translations/en`);
+      assert.strictEqual(resEn.status, 200);
+      const enData = await resEn.json();
+      assert.strictEqual(enData.success, true);
+      assert.strictEqual(enData.language, 'en');
+      assert.strictEqual(enData.translations.brandName, 'AuraMarket');
+      assert.strictEqual(enData.translations.cart, 'Cart');
+      assert.strictEqual(enData.translations.placeOrder, 'Place Order & Book Delivery');
+
+      // 4. Super Admin Exchange Rates Management & Security
+      const resUnauthRates = await fetch(`${baseUrl}/localization/admin/rates`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rates: { USD: 0.0125 } }),
+      });
+      assert.strictEqual(resUnauthRates.status, 401, 'Unauthenticated update of rates must return 401');
+
+      const resCustomerRates = await fetch(`${baseUrl}/localization/admin/rates`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ rates: { USD: 0.0125 } }),
+      });
+      assert.strictEqual(resCustomerRates.status, 403, 'Customer token must be forbidden from updating rates');
+
+      // Admin successfully updates rates
+      const resAdminRates = await fetch(`${baseUrl}/localization/admin/rates`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          rates: {
+            USD: 0.0125,
+            EUR: 0.0115,
+            AED: 0.045,
+          },
+        }),
+      });
+      assert.strictEqual(resAdminRates.status, 200);
+      const adminRatesData = await resAdminRates.json();
+      assert.strictEqual(adminRatesData.success, true);
+
+      // Verify updated rate persisted in GET /localization/currencies
+      const resVerifyRates = await fetch(`${baseUrl}/localization/currencies`);
+      const verifyData = await resVerifyRates.json();
+      const updatedUsd = verifyData.currencies.find((c) => c.code === 'USD');
+      assert.strictEqual(updatedUsd.rate, 0.0125, 'Persisted USD rate must reflect updated rate');
+
+      // Restore default USD rate to 0.012
+      await fetch(`${baseUrl}/localization/admin/rates`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ rates: { USD: 0.012, EUR: 0.011, AED: 0.044 } }),
+      });
+    });
+
     // 9b. Edge Case & Security Validations
     await test('POST /delivery/tasks/:id/verify-otp rejects re-delivery on already DELIVERED task with 400', async () => {
       const targetSubOrder = await SubOrder.findById(riderTask.subOrder);

@@ -26,6 +26,7 @@ const bannerRoutes = require('./routes/bannerRoutes');
 const flashDealRoutes = require('./routes/flashDealRoutes');
 const abandonedCartRoutes = require('./routes/abandonedCartRoutes');
 const whatsappRoutes = require('./routes/whatsappRoutes');
+const localizationRoutes = require('./routes/localizationRoutes');
 
 const app = express();
 
@@ -112,6 +113,8 @@ app.use('/api/banners', bannerRoutes);
 app.use('/api/flash-deals', flashDealRoutes);
 app.use('/api/abandoned-carts', abandonedCartRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/localization', localizationRoutes);
+app.use('/api/admin/localization', localizationRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

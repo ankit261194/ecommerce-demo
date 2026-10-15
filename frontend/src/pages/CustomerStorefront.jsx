@@ -61,11 +61,13 @@ import WhatsAppOrderBotModal from '../components/WhatsAppOrderBotModal';
 import RtoRiskOtpModal from '../components/RtoRiskOtpModal';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
+import { useLocalization } from '../context/LocalizationContext';
 import api from '../api/client';
 
 export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter }) => {
   const { cartItems, isCartOpen, setIsCartOpen, addToCart, updateQuantity, removeFromCart, clearCart, cartTotal, vendorBreakdown } = useCart();
   const { user } = useAuth();
+  const { formatPrice, t, currency, language, activeCurrencyConfig } = useLocalization();
 
   const [selectedCategory, setSelectedCategory] = useState(activeCategoryFilter || 'all');
   const [selectedSubCategory, setSelectedSubCategory] = useState(null);
@@ -1944,13 +1946,13 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                     <div className="pt-2 border-t border-slate-100 space-y-2 sm:space-y-3">
                       <div className="flex items-baseline gap-1.5 sm:gap-2 flex-wrap">
                         <span className="text-base sm:text-xl font-black text-slate-950">
-                          ₹{product.sellingPrice.toLocaleString('en-IN')}
+                          {formatPrice(product.sellingPrice)}
                         </span>
                         <span className="text-[10px] sm:text-xs text-slate-400 line-through font-semibold">
-                          ₹{product.mrp.toLocaleString('en-IN')}
+                          {formatPrice(product.mrp)}
                         </span>
                         <span className="text-[10px] sm:text-xs font-black text-emerald-600 ml-auto hidden xs:inline">
-                          Save ₹{(product.mrp - product.sellingPrice).toLocaleString('en-IN')}
+                          {t('save', 'Save')} {formatPrice(product.mrp - product.sellingPrice)}
                         </span>
                       </div>
 
@@ -1969,7 +1971,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                           disabled
                           className="w-full py-2 sm:py-2.5 rounded-xl bg-slate-200 text-slate-500 text-[11px] sm:text-xs font-bold cursor-not-allowed flex items-center justify-center gap-1.5"
                         >
-                          <span>Out of Stock</span>
+                          <span>{t('outOfStock', 'Out of Stock')}</span>
                         </button>
                       ) : product.hasVariants ? (
                         <button
@@ -1979,7 +1981,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                           }}
                           className="w-full py-2 sm:py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-[11px] sm:text-xs font-bold transition-all shadow"
                         >
-                          Select Options
+                          {t('selectOptions', 'Select Options')}
                         </button>
                       ) : (
                         <button
@@ -1987,7 +1989,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                           className="w-full py-2 sm:py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] sm:text-xs font-black shadow flex items-center justify-center gap-1.5 transition-all transform active:scale-95"
                         >
                           <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                          <span>Add to Cart</span>
+                          <span>{t('addToCart', 'Add to Cart')}</span>
                         </button>
                       )}
                     </div>
@@ -2124,7 +2126,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                     <div key={vId} className="space-y-3 p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
                       <div className="flex items-center justify-between text-xs border-b border-slate-100 pb-2">
                         <span className="font-extrabold text-slate-900">Package from: {group.vendorName}</span>
-                        <span className="font-black text-amber-600">Subtotal: ₹{group.subTotal.toLocaleString('en-IN')}</span>
+                        <span className="font-black text-amber-600">Subtotal: {formatPrice(group.subTotal)}</span>
                       </div>
 
                       {group.items.map(item => (
@@ -2133,7 +2135,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                           <div className="flex-1">
                             <h4 className="font-bold text-slate-900 line-clamp-1">{item.title}</h4>
                             <p className="text-slate-500 text-[10px]">{item.variantName}</p>
-                            <span className="text-slate-950 font-black">₹{item.price.toLocaleString('en-IN')}</span>
+                            <span className="text-slate-950 font-black">{formatPrice(item.price)}</span>
                           </div>
 
                           <div className="flex items-center gap-2 bg-slate-100 px-2 py-1 rounded-lg border border-slate-200 font-bold">
@@ -2394,8 +2396,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   return (
                     <div className="pt-4 border-t border-slate-200 space-y-2.5">
                       <div className="flex items-center justify-between text-xs text-slate-600 font-bold">
-                        <span>Items Subtotal:</span>
-                        <span className="font-black text-slate-900">₹{cartTotal.toLocaleString('en-IN')}</span>
+                        <span>{t('subtotal', 'Items Subtotal')}:</span>
+                        <span className="font-black text-slate-900">{formatPrice(cartTotal)}</span>
                       </div>
 
                       {appliedCoupon && (
@@ -2404,9 +2406,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                             <span className="font-black tracking-wider uppercase text-[10px] bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded">
                               {appliedCoupon.code}
                             </span>
-                            <span>Promo Discount:</span>
+                            <span>{t('discount', 'Promo Discount')}:</span>
                           </span>
-                          <span className="font-black">-₹{couponDiscount.toLocaleString('en-IN')}</span>
+                          <span className="font-black">-{formatPrice(couponDiscount)}</span>
                         </div>
                       )}
 
@@ -2416,39 +2418,39 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                             <Coins className="w-3.5 h-3.5 text-amber-600" />
                             <span>Reward Coins Discount:</span>
                           </span>
-                          <span className="font-black">-₹{redeemedCoins.toLocaleString('en-IN')}</span>
+                          <span className="font-black">-{formatPrice(coinDiscount)}</span>
                         </div>
                       )}
 
                       <div className="flex items-center justify-between text-xs font-bold">
-                        <span className="text-slate-600">Doorstep Express Delivery:</span>
+                        <span className="text-slate-600">{t('shippingFee', 'Doorstep Express Delivery')}:</span>
                         {isFree ? (
                           <span className="text-emerald-700 font-black flex items-center gap-1.5">
-                            <span className="line-through text-slate-400 font-normal">₹{defaultShipFee}</span>
-                            <span>FREE 🎉</span>
+                            <span className="line-through text-slate-400 font-normal">{formatPrice(defaultShipFee)}</span>
+                            <span>{t('free', 'FREE')} 🎉</span>
                           </span>
                         ) : (
-                          <span className="text-slate-900 font-black">₹{defaultShipFee}</span>
+                          <span className="text-slate-900 font-black">{formatPrice(defaultShipFee)}</span>
                         )}
                       </div>
 
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-sm">
                         <div>
-                          <span className="font-black text-slate-900 block leading-tight">Grand Total Payable:</span>
+                          <span className="font-black text-slate-900 block leading-tight">{t('totalPayable', 'Grand Total Payable')}:</span>
                           {(couponDiscount > 0 || redeemedCoins > 0) && (
                             <span className="text-[10px] text-emerald-600 font-bold">
-                              You save ₹{(couponDiscount + redeemedCoins).toLocaleString('en-IN')} on this order!
+                              {t('save', 'You save')} {formatPrice(couponDiscount + coinDiscount)}!
                             </span>
                           )}
                         </div>
-                        <span className="text-2xl font-black text-slate-950">₹{grandTotalPayable.toLocaleString('en-IN')}</span>
+                        <span className="text-2xl font-black text-slate-950">{formatPrice(grandTotalPayable)}</span>
                       </div>
 
                       <button
                         onClick={handlePlaceOrder}
                         className="w-full py-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm shadow-xl transition-all"
                       >
-                        Confirm & Place Split Order
+                        {t('placeOrder', 'Confirm & Place Split Order')}
                       </button>
                     </div>
                   );

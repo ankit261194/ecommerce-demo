@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider, useCart } from './context/CartContext';
+import { LocalizationProvider } from './context/LocalizationContext';
 import { Navbar } from './components/Navbar';
 import { DemoToolbar } from './components/DemoToolbar';
 import { DemoHub } from './components/DemoHub';
@@ -668,7 +669,9 @@ export default function App() {
   return (
     <AuthProvider>
       <CartProvider>
-        <MainLayout />
+        <LocalizationProvider>
+          <MainLayout />
+        </LocalizationProvider>
       </CartProvider>
     </AuthProvider>
   );

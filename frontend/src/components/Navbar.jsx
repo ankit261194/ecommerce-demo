@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { ShoppingBag, Search, MapPin, Sparkles, ChevronDown, Heart, X, Check, Truck, Wallet, Coins } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useLocalization } from '../context/LocalizationContext';
 import LiveSearchAutocomplete from './LiveSearchAutocomplete';
 import TopAnnouncementBar from './TopAnnouncementBar';
+import LocalizationSelector from './LocalizationSelector';
 
 export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect, isMobileMode = false }) => {
   const { user } = useAuth();
   const { cartCount, setIsCartOpen } = useCart();
+  const { t } = useLocalization();
 
   // Location selector state
   const [deliveryLocation, setDeliveryLocation] = useState(() => {
@@ -183,6 +186,9 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
                 <Wallet className="w-4 h-4" />
               </button>
 
+              {/* Point #78: Mobile Currency & Language Switcher */}
+              <LocalizationSelector variant="compact" />
+
               <button
                 onClick={() => setIsCartOpen(true)}
                 className="relative flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow transition-all active:scale-95"
@@ -272,6 +278,9 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
                 <p className="font-black text-white leading-tight">Account & Lists</p>
               </div>
             </div>
+
+            {/* Point #78: Real-Time Multi-Currency & Multi-Language Switcher */}
+            <LocalizationSelector />
 
             {/* Cart Button */}
             <button

@@ -81,6 +81,7 @@ import StaffRoleManager from '../components/StaffRoleManager';
 import SystemAuditBackupManager from '../components/SystemAuditBackupManager';
 import RtoGuardManager from '../components/RtoGuardManager';
 import ThermalReceiptPrinterModal from '../components/ThermalReceiptPrinterModal';
+import LocalizationManager from '../components/LocalizationManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1485,6 +1486,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
               Point #74
             </span>
           </button>
+
+          <button
+            onClick={() => setActiveDashboardTab('localization')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'localization'
+                ? 'bg-indigo-600 text-white shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Globe className="w-4 h-4 text-indigo-300" />
+            <span>Currency & Language</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 ml-1">
+              Point #78
+            </span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -2302,6 +2318,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'rto-guard' && (
         <RtoGuardManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 17: REAL-TIME MULTI-CURRENCY & MULTI-LANGUAGE SWITCHER (Point #78) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'localization' && (
+        <LocalizationManager />
       )}
 
       {/* ========================================================================= */}

@@ -19,6 +19,9 @@ const Faq = require('../models/Faq');
 const { seedDefaultFaqs } = require('../controllers/faqController');
 const CommissionRule = require('../models/CommissionRule');
 const { seedDefaultCommissionRules } = require('../controllers/commissionController');
+const CronJob = require('../models/CronJob');
+const SystemBackup = require('../models/SystemBackup');
+const { seedDefaultCronJobs } = require('../controllers/telemetryController');
 
 const seedDemoData = async () => {
   console.log('[DemoManager] Seeding demo multi-vendor data...');
@@ -919,6 +922,7 @@ const seedDemoData = async () => {
   await seedDefaultCmsPages();
   await seedDefaultFaqs();
   await seedDefaultCommissionRules();
+  await seedDefaultCronJobs();
 
   console.log('[DemoManager] Seeding completed successfully!');
   return { success: true, message: 'Demo data seeded successfully' };
@@ -942,6 +946,8 @@ const wipeDemoData = async () => {
   await CmsPage.deleteMany({});
   await Faq.deleteMany({});
   await CommissionRule.deleteMany({});
+  await CronJob.deleteMany({});
+  await SystemBackup.deleteMany({});
 
   // 2. Remove non-admin demo users if desired, or keep superadmin safe
   await User.deleteMany({ role: { $ne: 'superadmin' } });

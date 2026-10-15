@@ -8633,6 +8633,174 @@ const runTests = async () => {
       const listRes = await fetch(`${baseUrl}/pincodes?zone=METRO`, {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
+
+    // =========================================================================
+    // POINT 11: LIVE SERVER HEALTH, CRON JOBS & DATABASE TELEMETRY DASHBOARD
+    // =========================================================================
+
+    let sampleCronJobId = null;
+    let sampleBackupId = null;
+
+    await test('Point 11: GET /api/telemetry/server-health returns OS specs, CPU metrics, and RAM usage', async () => {
+      const res = await fetch(`${baseUrl}/telemetry/server-health`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(['HEALTHY', 'WARNING', 'CRITICAL'].includes(data.data.status));
+      assert.ok(data.data.memory.totalBytes > 0);
+      assert.ok(data.data.memory.usagePercent >= 0 && data.data.memory.usagePercent <= 100);
+      assert.ok(data.data.cpu.coreCount >= 1);
+      assert.ok(data.data.node.version.startsWith('v'));
+      assert.ok(data.data.disk.usagePercent >= 0);
+    });
+
+    await test('Point 11: GET /api/telemetry/database returns MongoDB collection counts and ping latency', async () => {
+      const res = await fetch(`${baseUrl}/telemetry/database`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(['CONNECTED', 'DISCONNECTED'].includes(data.data.connection.state));
+      assert.ok(data.data.connection.pingLatencyMs >= 1);
+      assert.ok(data.data.collections.length >= 10);
+      assert.ok(data.data.summary.totalRecords >= 1);
+    });
+
+    await test('Point 11: GET /api/telemetry/cron-jobs returns registered scheduled tasks', async () => {
+      const res = await fetch(`${baseUrl}/telemetry/cron-jobs`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.summary.totalJobs >= 6);
+      assert.ok(data.data.some(j => j.key === 'abandoned_cart_scanner'));
+      sampleCronJobId = data.data.find(j => j.key === 'abandoned_cart_scanner')._id;
+    });
+
+    await test('Point 11: POST /api/telemetry/cron-jobs/:id/run executes 1-click cron task and increments runCount', async () => {
+      const initialRes = await fetch(`${baseUrl}/telemetry/cron-jobs`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const initialData = await initialRes.json();
+      const targetJob = initialData.data.find(j => j.key === 'abandoned_cart_scanner');
+      const initialRunCount = targetJob.runCount || 0;
+
+      const runRes = await fetch(`${baseUrl}/telemetry/cron-jobs/${targetJob._id}/run`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(runRes.status, 200);
+      const runData = await runRes.json();
+      assert.strictEqual(runData.success, true);
+      assert.strictEqual(runData.data.lastRunStatus, 'SUCCESS');
+      assert.strictEqual(runData.data.runCount, initialRunCount + 1);
+    });
+
+    await test('Point 11: PATCH /api/telemetry/cron-jobs/:id/toggle toggles cron task active status', async () => {
+      const listRes = await fetch(`${baseUrl}/telemetry/cron-jobs`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const listData = await listRes.json();
+      const targetJob = listData.data.find(j => j.key === 'session_cleanup');
+      const initialActive = targetJob.isActive;
+
+      const toggleRes = await fetch(`${baseUrl}/telemetry/cron-jobs/${targetJob._id}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(toggleRes.status, 200);
+      const toggleData = await toggleRes.json();
+      assert.strictEqual(toggleData.success, true);
+      assert.strictEqual(toggleData.data.isActive, !initialActive);
+
+      // Revert back
+      await fetch(`${baseUrl}/telemetry/cron-jobs/${targetJob._id}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+    });
+
+    await test('Point 11: GET /api/telemetry/backups returns backup history and snapshots', async () => {
+      const res = await fetch(`${baseUrl}/telemetry/backups`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.count >= 1);
+      assert.ok(data.data[0].checksum.length > 0);
+    });
+
+    await test('Point 11: POST /api/telemetry/backups/trigger creates automated snapshot with SHA-256 integrity hash', async () => {
+      const res = await fetch(`${baseUrl}/telemetry/backups/trigger`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ type: 'MANUAL' }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.checksum.length, 64);
+      assert.ok(data.data.totalRecords >= 1);
+      sampleBackupId = data.data._id;
+    });
+
+    await test('Point 11: PUT /api/telemetry/backups/schedule updates automated backup frequency and retention', async () => {
+      const res = await fetch(`${baseUrl}/telemetry/backups/schedule`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          frequency: 'WEEKLY',
+          retentionDays: 30,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.frequency, 'WEEKLY');
+      assert.strictEqual(data.data.retentionDays, 30);
+    });
+
+    await test('Point 11: POST /api/telemetry/backups/:id/restore-simulation performs dry-run validation without data loss', async () => {
+      assert.ok(sampleBackupId, 'Sample backup ID must exist');
+      const res = await fetch(`${baseUrl}/telemetry/backups/${sampleBackupId}/restore-simulation`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.simulation.integrityStatus, 'PASSED');
+      assert.strictEqual(data.simulation.checksumVerified, true);
+      assert.ok(data.simulation.totalCollectionsVerified >= 10);
+    });
+
+    await test('Point 11: Role Security: Customer token is rejected with 403 on telemetry endpoints', async () => {
+      const res = await fetch(`${baseUrl}/telemetry/server-health`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+
+      assert.strictEqual(res.status, 403);
+    });
       const listData = await listRes.json();
       const targetPinId = listData.data[0]._id;
       const initialDeliv = listData.data[0].isDeliverable;

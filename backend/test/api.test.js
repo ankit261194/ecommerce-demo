@@ -8327,6 +8327,10 @@ const runTests = async () => {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${adminToken}` },
       });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+    });
 
     // =========================================================================
     // POINT 9: CATEGORY-WISE & DYNAMIC COMMISSION RULES (MASTER ENTERPRISE)
@@ -8527,9 +8531,127 @@ const runTests = async () => {
     });
 
 
+    // =========================================================================
+    // POINT 10: PINCODE & DELIVERY ZONE LOGISTICS MANAGER
+    // =========================================================================
+    let sampleMetroPincodeId = null;
+
+    await test('Point 10: GET /api/pincodes/zones/summary returns complete zone breakdown', async () => {
+      const res = await fetch(`${baseUrl}/pincodes/zones/summary`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
       assert.strictEqual(res.status, 200);
       const data = await res.json();
       assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.strictEqual(data.data.length, 5);
+
+      const metro = data.data.find(z => z.zone === 'METRO');
+      assert.ok(metro, 'Must contain METRO zone summary');
+      assert.ok(metro.total >= 1, 'METRO zone must have seeded pincodes');
+    });
+
+    await test('Point 10: PUT /api/pincodes/zones/REMOTE/config bulk updates remote zone logistics', async () => {
+      const res = await fetch(`${baseUrl}/pincodes/zones/REMOTE/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          isCodAvailable: false,
+          standardShippingFee: 150,
+          expressShippingFee: 280,
+          estimatedDays: 7,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.appliedConfig.standardShippingFee, 150);
+      assert.strictEqual(data.appliedConfig.isCodAvailable, false);
+    });
+
+    await test('Point 10: PUT /api/pincodes/zones/INVALID_ZONE/config rejects invalid zone name with 400', async () => {
+      const res = await fetch(`${baseUrl}/pincodes/zones/INVALID_ZONE/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          standardShippingFee: 50,
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+    });
+
+    await test('Point 10: PUT /api/pincodes/zones/:zone/config rejects unauthorized customer with 403', async () => {
+      const res = await fetch(`${baseUrl}/pincodes/zones/METRO/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          standardShippingFee: 0,
+        }),
+      });
+
+      assert.strictEqual(res.status, 403);
+    });
+
+    await test('Point 10: PATCH /api/pincodes/:id/toggle-cod toggles COD availability for pincode', async () => {
+      const listRes = await fetch(`${baseUrl}/pincodes?zone=METRO`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const listData = await listRes.json();
+      assert.ok(listData.data?.length > 0, 'Should find at least one METRO pincode');
+      sampleMetroPincodeId = listData.data[0]._id;
+      const initialCod = listData.data[0].isCodAvailable;
+
+      const toggleRes = await fetch(`${baseUrl}/pincodes/${sampleMetroPincodeId}/toggle-cod`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(toggleRes.status, 200);
+      const toggleData = await toggleRes.json();
+      assert.strictEqual(toggleData.success, true);
+      assert.strictEqual(toggleData.data.isCodAvailable, !initialCod);
+
+      // Revert back so state remains clean
+      await fetch(`${baseUrl}/pincodes/${sampleMetroPincodeId}/toggle-cod`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+    });
+
+    await test('Point 10: PATCH /api/pincodes/:id/toggle-delivery toggles deliverability for pincode', async () => {
+      const listRes = await fetch(`${baseUrl}/pincodes?zone=METRO`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const listData = await listRes.json();
+      const targetPinId = listData.data[0]._id;
+      const initialDeliv = listData.data[0].isDeliverable;
+
+      const toggleRes = await fetch(`${baseUrl}/pincodes/${targetPinId}/toggle-delivery`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(toggleRes.status, 200);
+      const toggleData = await toggleRes.json();
+      assert.strictEqual(toggleData.success, true);
+      assert.strictEqual(toggleData.data.isDeliverable, !initialDeliv);
+
+      // Revert back
+      await fetch(`${baseUrl}/pincodes/${targetPinId}/toggle-delivery`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
     });
 
   } finally {

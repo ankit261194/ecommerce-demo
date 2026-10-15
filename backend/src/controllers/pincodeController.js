@@ -617,3 +617,124 @@ exports.seedDefaultPincodes = async (req, res) => {
     });
   }
 };
+
+
+// =========================================================================
+// POINT 10: PINCODE & DELIVERY ZONE LOGISTICS MANAGER
+// =========================================================================
+
+exports.getZoneLogisticsSummary = async (req, res) => {
+  try {
+    const zones = ['METRO', 'TIER_1', 'TIER_2', 'REMOTE', 'SPECIAL'];
+    const summary = [];
+
+    for (const z of zones) {
+      const allInZone = await PincodeZone.find({ zone: z });
+      const total = allInZone.length;
+      const deliverable = allInZone.filter(p => p.isDeliverable).length;
+      const codAvailable = allInZone.filter(p => p.isCodAvailable).length;
+      const avgFee = total > 0 ? Math.round(allInZone.reduce((acc, p) => acc + (p.standardShippingFee || 0), 0) / total) : 0;
+      const expressFee = total > 0 ? Math.round(allInZone.reduce((acc, p) => acc + (p.expressShippingFee || 0), 0) / total) : 0;
+      const sampleCities = [...new Set(allInZone.map(p => p.city))].slice(0, 4);
+
+      summary.push({
+        zone: z,
+        total,
+        deliverable,
+        codAvailable,
+        avgStandardFee: avgFee,
+        avgExpressFee: expressFee,
+        sampleCities,
+        isCodEnabledGlobally: total > 0 && codAvailable === total,
+        isDeliverableGlobally: total > 0 && deliverable === total,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: summary,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.updateZoneLogisticsConfig = async (req, res) => {
+  try {
+    const zoneKey = req.params.zone?.toUpperCase();
+    const validZones = ['METRO', 'TIER_1', 'TIER_2', 'REMOTE', 'SPECIAL'];
+
+    if (!validZones.includes(zoneKey)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid zone '${req.params.zone}'. Must be one of: ${validZones.join(', ')}`,
+      });
+    }
+
+    const {
+      isDeliverable,
+      isCodAvailable,
+      standardShippingFee,
+      expressShippingFee,
+      expressAvailable,
+      minOrderForFreeShipping,
+      estimatedDays,
+    } = req.body;
+
+    const updates = {};
+    if (isDeliverable !== undefined) updates.isDeliverable = Boolean(isDeliverable);
+    if (isCodAvailable !== undefined) updates.isCodAvailable = Boolean(isCodAvailable);
+    if (standardShippingFee !== undefined) updates.standardShippingFee = Number(standardShippingFee);
+    if (expressShippingFee !== undefined) updates.expressShippingFee = Number(expressShippingFee);
+    if (expressAvailable !== undefined) updates.expressAvailable = Boolean(expressAvailable);
+    if (minOrderForFreeShipping !== undefined) updates.minOrderForFreeShipping = Number(minOrderForFreeShipping);
+    if (estimatedDays !== undefined) updates.estimatedDays = Number(estimatedDays);
+
+    const result = await PincodeZone.updateMany({ zone: zoneKey }, { $set: updates });
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully updated logistics settings for zone ${zoneKey}! Modified ${result.modifiedCount} pincodes.`,
+      modifiedCount: result.modifiedCount,
+      appliedConfig: updates,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.togglePincodeCod = async (req, res) => {
+  try {
+    const item = await PincodeZone.findById(req.params.id);
+    if (!item) {
+      return res.status(404).json({ success: false, message: 'Pincode rule not found' });
+    }
+    item.isCodAvailable = !item.isCodAvailable;
+    await item.save();
+    return res.status(200).json({
+      success: true,
+      message: `COD for pincode ${item.pincode} is now ${item.isCodAvailable ? 'ENABLED' : 'DISABLED'}`,
+      data: item,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.togglePincodeDelivery = async (req, res) => {
+  try {
+    const item = await PincodeZone.findById(req.params.id);
+    if (!item) {
+      return res.status(404).json({ success: false, message: 'Pincode rule not found' });
+    }
+    item.isDeliverable = !item.isDeliverable;
+    await item.save();
+    return res.status(200).json({
+      success: true,
+      message: `Delivery for pincode ${item.pincode} is now ${item.isDeliverable ? 'ENABLED' : 'DISABLED'}`,
+      data: item,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};

@@ -20,9 +20,11 @@ import {
   Check,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
+import { CourierNavigationModal } from '../components/CourierNavigationModal';
 import api from '../api/client';
 
 export const CourierDashboard = () => {
+  const [selectedTaskForNav, setSelectedTaskForNav] = useState(null);
   const [riderStats, setRiderStats] = useState({
     name: 'Vikram Singh',
     assignedTasks: 2,
@@ -574,17 +576,15 @@ export const CourierDashboard = () => {
                         </div>
                       </div>
 
-                      {/* 1-Click Map Navigation */}
-                      <a
-                        href={task.mapUrl}
-                        target="_blank"
-                        rel="noreferrer"
+                      {/* Point #64: 1-Click GPS Navigation Modal Trigger */}
+                      <button
+                        onClick={() => setSelectedTaskForNav(task)}
                         className="px-3 py-2 rounded-xl bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 font-black shadow-xs flex items-center gap-1.5 flex-shrink-0 transition-all text-xs"
-                        title="Open in Google Maps / Navigation"
+                        title="1-Click GPS Navigation (Google Maps / Apple Maps / Waze)"
                       >
                         <Navigation className="w-3.5 h-3.5 text-emerald-600" />
                         <span className="hidden sm:inline">Navigate</span>
-                      </a>
+                      </button>
                     </div>
 
                     {/* Point #63: PROMINENT Customer Phone Contact Badge & Quick Triggers */}
@@ -646,15 +646,13 @@ export const CourierDashboard = () => {
                         </a>
                       </div>
                     </div>
-                    <a
-                      href={`https://maps.google.com/?q=${encodeURIComponent(task.vendor.address)}`}
-                      target="_blank"
-                      rel="noreferrer"
+                    <button
+                      onClick={() => setSelectedTaskForNav(task)}
                       className="p-2 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-sm flex-shrink-0"
-                      title="Open Merchant Pickup on Maps"
+                      title="Open Navigation Hub"
                     >
                       <Navigation className="w-3.5 h-3.5" />
-                    </a>
+                    </button>
                   </div>
 
                   {/* COD Cash to Collect Banner */}
@@ -788,6 +786,13 @@ export const CourierDashboard = () => {
             </div>
           </div>
         </div>
+      )}
+      {/* Point #64: 1-Click GPS Navigation Hub Modal */}
+      {selectedTaskForNav && (
+        <CourierNavigationModal
+          task={selectedTaskForNav}
+          onClose={() => setSelectedTaskForNav(null)}
+        />
       )}
     </div>
   );

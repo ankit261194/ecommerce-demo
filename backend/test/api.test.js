@@ -11,6 +11,7 @@ const SubOrder = require('../src/models/SubOrder');
 const DeliveryTask = require('../src/models/DeliveryTask');
 const VendorProfile = require('../src/models/VendorProfile');
 const Ledger = require('../src/models/Ledger');
+const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
 let server;
@@ -4538,6 +4539,51 @@ const runTests = async () => {
       assert.strictEqual(dataSearch.success, true);
       assert.ok(dataSearch.data.length >= 1);
       assert.strictEqual(dataSearch.data[0].dropLocation.phone, recipientPhone);
+    });
+
+    // =========================================================================
+    // Point 64: 1-Click "Open in Google Maps / Apple Maps" Navigation
+    // =========================================================================
+    await test('Point 64: 1-Click "Open in Google Maps / Apple Maps" Navigation (Turn-by-Turn GPS, Apple Maps & Multi-Platform Routing)', async () => {
+      // 1. Rider requests navigation details for an assigned delivery task
+      const resNav = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/navigation`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resNav.status, 200);
+      const dataNav = await resNav.json();
+      assert.strictEqual(dataNav.success, true);
+      assert.strictEqual(dataNav.taskId.toString(), riderTask._id.toString());
+      assert.ok(dataNav.navigation, 'Navigation payload must be provided');
+
+      // 2. Validate Customer Doorstep navigation links
+      const { customerDrop, merchantPickup } = dataNav.navigation;
+      assert.ok(customerDrop, 'Customer drop destination must be provided');
+      assert.ok(customerDrop.googleMapsUrl.includes('google.com/maps/dir'), 'Google Maps driving link required');
+      assert.ok(customerDrop.googleMapsUrl.includes('destination='), 'Must specify destination parameter');
+      assert.ok(customerDrop.googleMapsUrl.includes('travelmode=driving'), 'Must activate driving turn-by-turn mode');
+      assert.ok(customerDrop.appleMapsUrl.includes('maps.apple.com'), 'Apple Maps link required for iOS devices');
+      assert.ok(customerDrop.appleMapsUrl.includes('daddr='), 'Must specify Apple Maps destination address');
+      assert.ok(customerDrop.wazeUrl.includes('waze.com/ul'), 'Waze real-time navigation link required');
+      assert.ok(customerDrop.formattedAddress, 'Clean formatted doorstep address required');
+
+      // 3. Validate Merchant Warehouse pickup navigation links
+      assert.ok(merchantPickup, 'Merchant pickup details must be provided');
+      assert.ok(merchantPickup.storeName, 'Merchant store name required');
+      assert.ok(merchantPickup.googleMapsUrl.includes('google.com/maps/dir'), 'Google Maps pickup link required');
+      assert.ok(merchantPickup.appleMapsUrl.includes('maps.apple.com'), 'Apple Maps pickup link required');
+
+      // 4. Security & Error Handling: Customer cannot access rider navigation (403 Forbidden)
+      const resCustomerForbidden = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/navigation`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustomerForbidden.status, 403);
+
+      // 5. Non-existent Task ID returns 404
+      const fakeTaskId = new mongoose.Types.ObjectId();
+      const res404 = await fetch(`${baseUrl}/delivery/tasks/${fakeTaskId}/navigation`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(res404.status, 404);
     });
 
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {

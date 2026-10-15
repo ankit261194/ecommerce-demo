@@ -208,3 +208,71 @@ exports.verifyOtpAndCompleteDelivery = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Get 1-Click Navigation URLs & Destination Geo Coordinates (Point #64)
+// @route   GET /api/delivery/tasks/:id/navigation
+exports.getTaskNavigationDetails = async (req, res, next) => {
+  try {
+    const taskQuery = req.user.role === 'superadmin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, deliveryPartner: req.user._id };
+
+    const task = await DeliveryTask.findOne(taskQuery).populate({
+      path: 'subOrder',
+      populate: { path: 'vendor', select: 'storeName pickupAddress phone' },
+    });
+
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Delivery task not found' });
+    }
+
+    const drop = task.dropLocation || {};
+    const pickup = task.pickupLocation || {};
+
+    const cleanDropAddress = `${drop.address || ''}, ${drop.city || ''} ${drop.pincode || ''}`.trim().replace(/^,\s*/, '');
+    const cleanPickupAddress = `${pickup.address || ''}, ${pickup.city || ''} ${pickup.pincode || ''}`.trim().replace(/^,\s*/, '');
+
+    const hasDropCoords = drop.coordinates && drop.coordinates.lat && drop.coordinates.lng;
+    const dropDestinationQuery = hasDropCoords
+      ? `${drop.coordinates.lat},${drop.coordinates.lng}`
+      : encodeURIComponent(cleanDropAddress);
+
+    const hasPickupCoords = pickup.coordinates && pickup.coordinates.lat && pickup.coordinates.lng;
+    const pickupDestinationQuery = hasPickupCoords
+      ? `${pickup.coordinates.lat},${pickup.coordinates.lng}`
+      : encodeURIComponent(cleanPickupAddress);
+
+    const navigation = {
+      customerDrop: {
+        recipientName: drop.recipientName || 'Customer',
+        phone: drop.phone || '',
+        formattedAddress: cleanDropAddress,
+        landmark: drop.landmark || '',
+        coordinates: drop.coordinates || null,
+        googleMapsUrl: `https://www.google.com/maps/dir/?api=1&destination=${dropDestinationQuery}&travelmode=driving`,
+        appleMapsUrl: `https://maps.apple.com/?daddr=${dropDestinationQuery}&dirflg=d`,
+        wazeUrl: hasDropCoords
+          ? `https://waze.com/ul?ll=${drop.coordinates.lat},${drop.coordinates.lng}&navigate=yes`
+          : `https://waze.com/ul?q=${encodeURIComponent(cleanDropAddress)}`,
+      },
+      merchantPickup: {
+        storeName: pickup.storeName || task.subOrder?.vendor?.storeName || 'Merchant Warehouse',
+        phone: pickup.phone || task.subOrder?.vendor?.phone || '',
+        formattedAddress: cleanPickupAddress,
+        coordinates: pickup.coordinates || null,
+        googleMapsUrl: `https://www.google.com/maps/dir/?api=1&destination=${pickupDestinationQuery}&travelmode=driving`,
+        appleMapsUrl: `https://maps.apple.com/?daddr=${pickupDestinationQuery}&dirflg=d`,
+      },
+    };
+
+    res.status(200).json({
+      success: true,
+      taskId: task._id,
+      status: task.status,
+      navigation,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

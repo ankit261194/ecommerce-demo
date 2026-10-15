@@ -21,10 +21,12 @@ import {
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { CourierNavigationModal } from '../components/CourierNavigationModal';
+import { CourierContactModal } from '../components/CourierContactModal';
 import api from '../api/client';
 
 export const CourierDashboard = () => {
   const [selectedTaskForNav, setSelectedTaskForNav] = useState(null);
+  const [selectedTaskForContact, setSelectedTaskForContact] = useState(null);
   const [riderStats, setRiderStats] = useState({
     name: 'Vikram Singh',
     assignedTasks: 2,
@@ -609,17 +611,14 @@ export const CourierDashboard = () => {
                           <span>Call</span>
                         </a>
 
-                        <a
-                          href={`https://wa.me/91${task.customer.phone}?text=${encodeURIComponent(
-                            `Hi ${task.customer.name}, your AuraMarket order #${task.subOrderId} is arriving shortly!`
-                          )}`}
-                          target="_blank"
-                          rel="noreferrer"
+                        <button
+                          onClick={() => setSelectedTaskForContact(task)}
                           className="px-2.5 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-[11px] flex items-center gap-1 border border-emerald-300 shadow-xs transition-all"
+                          title="Instant WhatsApp Quick Templates Hub"
                         >
                           <MessageSquare className="w-3 h-3 text-emerald-700" />
                           <span>WhatsApp</span>
-                        </a>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -792,6 +791,13 @@ export const CourierDashboard = () => {
         <CourierNavigationModal
           task={selectedTaskForNav}
           onClose={() => setSelectedTaskForNav(null)}
+        />
+      )}
+      {/* Point #65: Instant WhatsApp & Direct Call Modal */}
+      {selectedTaskForContact && (
+        <CourierContactModal
+          task={selectedTaskForContact}
+          onClose={() => setSelectedTaskForContact(null)}
         />
       )}
     </div>

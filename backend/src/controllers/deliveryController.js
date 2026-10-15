@@ -276,3 +276,113 @@ exports.getTaskNavigationDetails = async (req, res, next) => {
   }
 };
 
+// @desc    Get Instant WhatsApp & Direct Call Templates (Point #65)
+// @route   GET /api/delivery/tasks/:id/contact-templates
+exports.getTaskContactTemplates = async (req, res, next) => {
+  try {
+    const taskQuery = req.user.role === 'superadmin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, deliveryPartner: req.user._id };
+
+    const task = await DeliveryTask.findOne(taskQuery).populate('subOrder');
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Delivery task not found' });
+    }
+
+    const customerName = task.dropLocation?.recipientName || 'Valued Customer';
+    const customerPhone = (task.dropLocation?.phone || '').replace(/\D/g, '');
+    const cleanPhone = customerPhone.length === 10 ? `91${customerPhone}` : customerPhone;
+    const subOrderId = task.subOrder?._id ? task.subOrder._id.toString().slice(-4) : 'PARCEL';
+    const riderName = req.user.name || 'Your AuraMarket Rider';
+    const codAmount = task.amountToCollect || 0;
+
+    const templates = [
+      {
+        id: 'ARRIVING_5_MIN',
+        title: 'Arriving in 5 Minutes (Keep OTP Ready)',
+        icon: '🚀',
+        message: `Hi ${customerName}, this is ${riderName} from AuraMarket Logistics. I am arriving at your address in approx 5 minutes with your order #${subOrderId}. Kindly keep your 4-digit Delivery OTP ready!`,
+      },
+      {
+        id: 'AT_DOORSTEP',
+        title: 'At Your Doorstep / Gate',
+        icon: '🚪',
+        message: `Hi ${customerName}, I have arrived at your doorstep/building gate with your AuraMarket package #${subOrderId}. Please meet me or share your 4-digit Delivery OTP to collect your parcel.`,
+      },
+      {
+        id: 'COD_CASH_REMINDER',
+        title: 'COD Cash Payment Reminder',
+        icon: '💵',
+        message: `Hi ${customerName}, your Cash on Delivery parcel #${subOrderId} is out for delivery. The payable amount is ₹${codAmount.toLocaleString('en-IN')}. Please keep exact cash ready.`,
+      },
+      {
+        id: 'LANDMARK_HELP',
+        title: 'Need Landmark / Gate Directions',
+        icon: '📍',
+        message: `Hi ${customerName}, I am near your delivery location for order #${subOrderId}. Could you please guide me with the exact flat/house number or landmark?`,
+      },
+    ];
+
+    const templatesWithUrls = templates.map(tmpl => ({
+      ...tmpl,
+      whatsappUrl: `https://wa.me/${cleanPhone}?text=${encodeURIComponent(tmpl.message)}`,
+    }));
+
+    res.status(200).json({
+      success: true,
+      taskId: task._id,
+      customer: {
+        name: customerName,
+        phone: task.dropLocation?.phone,
+        callUrl: `tel:${task.dropLocation?.phone}`,
+        cleanPhone,
+      },
+      isCod: task.isCod,
+      amountToCollect: task.amountToCollect,
+      templates: templatesWithUrls,
+      contactLogs: task.contactLogs || [],
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Log Direct Call or WhatsApp Communication Attempt (Point #65)
+// @route   POST /api/delivery/tasks/:id/contact-log
+exports.logContactAttempt = async (req, res, next) => {
+  try {
+    const { channel, templateId, messageSnippet } = req.body;
+    if (!channel || !['CALL', 'WHATSAPP'].includes(channel)) {
+      return res.status(400).json({ success: false, message: 'Invalid channel. Must be CALL or WHATSAPP.' });
+    }
+
+    const taskQuery = req.user.role === 'superadmin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, deliveryPartner: req.user._id };
+
+    const task = await DeliveryTask.findOne(taskQuery);
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Delivery task not found' });
+    }
+
+    task.contactLogs.push({
+      channel,
+      templateId: templateId || 'DIRECT',
+      messageSnippet: messageSnippet || (channel === 'CALL' ? 'Direct phone call placed' : 'Direct WhatsApp message opened'),
+      timestamp: new Date(),
+      riderName: req.user.name || 'Courier Rider',
+    });
+
+    await task.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Contact attempt logged successfully',
+      contactLogs: task.contactLogs,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+

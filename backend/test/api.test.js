@@ -4586,6 +4586,86 @@ const runTests = async () => {
       assert.strictEqual(res404.status, 404);
     });
 
+    // =========================================================================
+    // Point 65: Instant WhatsApp / Direct Call to Customer Button
+    // =========================================================================
+    await test('Point 65: Instant WhatsApp & Direct Call Communication Suite (Quick Message Templates, Call Dialer & Contact Audit Logs)', async () => {
+      // 1. Fetch contact templates & customer contact details
+      const resTemplates = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/contact-templates`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resTemplates.status, 200);
+      const dataTemplates = await resTemplates.json();
+      assert.strictEqual(dataTemplates.success, true);
+      assert.ok(dataTemplates.customer, 'Customer contact object must be present');
+      assert.ok(dataTemplates.customer.phone, 'Customer phone must be present');
+      assert.ok(dataTemplates.customer.callUrl.startsWith('tel:'), 'Call URL must use native tel: protocol');
+      assert.ok(Array.isArray(dataTemplates.templates), 'Must provide array of WhatsApp quick templates');
+      assert.ok(dataTemplates.templates.length >= 3, 'Must provide multiple pre-engineered message templates');
+
+      const arrivingTmpl = dataTemplates.templates.find(t => t.id === 'ARRIVING_5_MIN');
+      assert.ok(arrivingTmpl, 'Arriving in 5 minutes template must exist');
+      assert.ok(arrivingTmpl.whatsappUrl.includes('https://wa.me/'), 'Must generate valid WhatsApp direct link');
+      assert.ok(arrivingTmpl.whatsappUrl.includes('OTP'), 'Must prompt customer for secret OTP');
+
+      // 2. Rider logs a WhatsApp communication attempt
+      const resLogWa = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/contact-log`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          channel: 'WHATSAPP',
+          templateId: 'ARRIVING_5_MIN',
+          messageSnippet: 'Arriving in 5 mins. Please keep OTP ready.',
+        }),
+      });
+      assert.strictEqual(resLogWa.status, 200);
+      const dataLogWa = await resLogWa.json();
+      assert.strictEqual(dataLogWa.success, true);
+      assert.ok(dataLogWa.contactLogs.length >= 1);
+      const lastWaLog = dataLogWa.contactLogs[dataLogWa.contactLogs.length - 1];
+      assert.strictEqual(lastWaLog.channel, 'WHATSAPP');
+      assert.strictEqual(lastWaLog.templateId, 'ARRIVING_5_MIN');
+
+      // 3. Rider logs a Direct Phone Call attempt
+      const resLogCall = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/contact-log`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          channel: 'CALL',
+          templateId: 'DIRECT_DIAL',
+          messageSnippet: 'Rider called customer to verify flat number',
+        }),
+      });
+      assert.strictEqual(resLogCall.status, 200);
+      const dataLogCall = await resLogCall.json();
+      assert.strictEqual(dataLogCall.success, true);
+      const lastCallLog = dataLogCall.contactLogs[dataLogCall.contactLogs.length - 1];
+      assert.strictEqual(lastCallLog.channel, 'CALL');
+
+      // 4. Validation: Invalid channel returns 400
+      const resInvalid = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/contact-log`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ channel: 'TELEGRAM' }),
+      });
+      assert.strictEqual(resInvalid.status, 400);
+
+      // 5. Security: Customer cannot fetch rider contact templates (403 Forbidden)
+      const resCustomerForbidden = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/contact-templates`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustomerForbidden.status, 403);
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

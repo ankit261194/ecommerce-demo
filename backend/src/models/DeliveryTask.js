@@ -94,6 +94,23 @@ const deliveryTaskSchema = new mongoose.Schema(
       reportedAt: Date,
       notes: String,
     },
+    // Point #65: Instant WhatsApp / Direct Call to Customer contact attempts audit
+    contactLogs: [
+      {
+        channel: {
+          type: String,
+          enum: ['CALL', 'WHATSAPP'],
+          required: true,
+        },
+        templateId: String,
+        messageSnippet: String,
+        timestamp: {
+          type: Date,
+          default: Date.now,
+        },
+        riderName: String,
+      },
+    ],
   },
   { timestamps: true }
 );

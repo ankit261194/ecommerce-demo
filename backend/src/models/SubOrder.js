@@ -62,9 +62,26 @@ const subOrderSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['placed', 'confirmed', 'packed', 'dispatched', 'out_for_delivery', 'delivered', 'cancelled'],
+      enum: [
+        'placed',
+        'pending',
+        'confirmed',
+        'packaging',
+        'packed',
+        'ready_for_pickup',
+        'dispatched',
+        'handed_to_courier',
+        'out_for_delivery',
+        'delivered',
+        'cancelled',
+      ],
       default: 'placed',
     },
+    // Point #56: Lifecycle Transition Timestamps
+    acceptedAt: { type: Date, default: null },
+    packagingStartedAt: { type: Date, default: null },
+    readyForPickupAt: { type: Date, default: null },
+    dispatchedAt: { type: Date, default: null },
     shippingAddress: {
       recipientName: String,
       phone: String,

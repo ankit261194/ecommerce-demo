@@ -3785,6 +3785,115 @@ const runTests = async () => {
       assert.strictEqual(dataBad.success, false);
     });
 
+    await test('Point 56: Vendor Sub-Orders Lifecycle (Pending -> Packaging -> Ready for Pickup -> Handed to Courier & OTP Protection)', async () => {
+      // 1. Fetch vendor sub-orders with stats
+      const resOrdersInit = await fetch(`${baseUrl}/vendor/orders`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resOrdersInit.status, 200);
+      const dataOrdersInit = await resOrdersInit.json();
+      assert.strictEqual(dataOrdersInit.success, true);
+      assert.ok(dataOrdersInit.stats);
+      assert.ok(typeof dataOrdersInit.stats.total === 'number');
+      assert.ok(Array.isArray(dataOrdersInit.data));
+
+      // Create a fresh test sub-order for Apex vendor to test the 4-stage lifecycle
+      const testCustomer = await User.findOne({ role: 'customer' });
+      const testParentOrder = await Order.findOne({});
+      const testSubOrder = await SubOrder.create({
+        parentOrder: testParentOrder._id,
+        vendor: headphonesProduct.vendor._id,
+        customer: testCustomer._id,
+        items: [{
+          product: headphonesProduct._id,
+          title: headphonesProduct.title,
+          quantity: 1,
+          price: 8999,
+          totalPrice: 8999,
+        }],
+        subTotal: 8999,
+        platformCommissionRate: 8,
+        platformCommissionAmount: 719.92,
+        vendorEarning: 8279.08,
+        status: 'placed',
+        deliveryOtp: '5656',
+        shippingAddress: {
+          recipientName: 'Vikas Sharma',
+          phone: '9876543210',
+          street: '123 Tech Park',
+          city: 'Noida',
+          state: 'UP',
+          pincode: '201301',
+        },
+      });
+
+      // Stage 1 -> Stage 2: Vendor moves from placed/pending to 'packaging'
+      const resPackaging = await fetch(`${baseUrl}/vendor/orders/${testSubOrder._id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({ status: 'packaging', note: 'Items gathered, bubble wrapping started.' }),
+      });
+      assert.strictEqual(resPackaging.status, 200);
+      const dataPackaging = await resPackaging.json();
+      assert.strictEqual(dataPackaging.success, true);
+      assert.strictEqual(dataPackaging.data.status, 'packaging');
+      assert.ok(dataPackaging.data.acceptedAt, 'Must set acceptedAt timestamp');
+      assert.ok(dataPackaging.data.packagingStartedAt, 'Must set packagingStartedAt timestamp');
+
+      // Stage 2 -> Stage 3: Vendor marks 'ready_for_pickup'
+      const resReady = await fetch(`${baseUrl}/vendor/orders/${testSubOrder._id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({ status: 'ready_for_pickup', note: 'Box sealed and shipping label affixed.' }),
+      });
+      assert.strictEqual(resReady.status, 200);
+      const dataReady = await resReady.json();
+      assert.strictEqual(dataReady.data.status, 'ready_for_pickup');
+      assert.ok(dataReady.data.readyForPickupAt, 'Must set readyForPickupAt timestamp');
+
+      // Stage 3 -> Stage 4: Vendor marks 'handed_to_courier' (dispatched)
+      const resHanded = await fetch(`${baseUrl}/vendor/orders/${testSubOrder._id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({ status: 'handed_to_courier', note: 'Handed over to express rider.' }),
+      });
+      assert.strictEqual(resHanded.status, 200);
+      const dataHanded = await resHanded.json();
+      assert.strictEqual(dataHanded.data.status, 'handed_to_courier');
+      assert.ok(dataHanded.data.dispatchedAt, 'Must set dispatchedAt timestamp');
+
+      // Test Security Guard: Vendor MUST NOT be allowed to bypass delivery OTP and mark status 'delivered'
+      const resDeliveredAttempt = await fetch(`${baseUrl}/vendor/orders/${testSubOrder._id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({ status: 'delivered' }),
+      });
+      assert.strictEqual(resDeliveredAttempt.status, 400);
+      const dataDeliveredAttempt = await resDeliveredAttempt.json();
+      assert.strictEqual(dataDeliveredAttempt.success, false);
+      assert.ok(dataDeliveredAttempt.message.includes('Delivery completion requires customer OTP verification'));
+
+      // Test status filter tabs: GET /vendor/orders?status=dispatched
+      const resDispatchedFilter = await fetch(`${baseUrl}/vendor/orders?status=dispatched`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resDispatchedFilter.status, 200);
+      const dataDispatchedFilter = await resDispatchedFilter.json();
+      assert.ok(dataDispatchedFilter.data.some(o => o._id === testSubOrder._id.toString()));
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   RotateCw,
   FileSpreadsheet,
+  ShieldCheck,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -126,6 +127,7 @@ export const VendorPortal = () => {
   const [mediaDraft, setMediaDraft] = useState({ thumbnail: '', gallery: [] });
   const [stockFilter, setStockFilter] = useState('all'); // Point #54: all | in_stock | low_stock | out_of_stock
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false); // Point #55: Bulk Excel / CSV Suite
+  const [orderFilter, setOrderFilter] = useState('all'); // Point #56: all | pending | packaging | ready_for_pickup | dispatched | delivered
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
@@ -512,92 +514,287 @@ export const VendorPortal = () => {
         />
       </BentoGrid>
 
-      {/* Order Fulfillment Workflow (Multi-Vendor Split Tracking) */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
-        <div>
-          <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <Truck className="w-5 h-5 text-amber-500" />
-            Orders Assigned to Your Store (Package Dispatch)
-          </h2>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Customer orders split into store-specific packing slips. Update status for courier pickup.
-          </p>
+      {/* Order Fulfillment Workflow (Point #56: Vendor Sub-Orders Lifecycle) */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <Truck className="w-5 h-5 text-amber-500" />
+              <span>Orders Assigned to Your Store (Package Dispatch Lifecycle)</span>
+              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                Point #56
+              </span>
+            </h2>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Strict 4-stage lifecycle: Pending → Packaging → Ready for Pickup → Handed to Courier (OTP Protected).
+            </p>
+          </div>
+
+          {/* Quick Lifecycle Filter Tabs */}
+          <div className="flex items-center gap-1.5 flex-wrap text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setOrderFilter('all')}
+              className={`px-3 py-1.5 rounded-xl transition-all ${
+                orderFilter === 'all'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              All ({subOrders.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrderFilter('pending')}
+              className={`px-3 py-1.5 rounded-xl transition-all ${
+                orderFilter === 'pending'
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+              }`}
+            >
+              ⚡ Pending ({subOrders.filter(o => ['placed', 'pending'].includes(o.status)).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrderFilter('packaging')}
+              className={`px-3 py-1.5 rounded-xl transition-all ${
+                orderFilter === 'packaging'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+              }`}
+            >
+              📦 Packaging ({subOrders.filter(o => ['confirmed', 'packaging'].includes(o.status)).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrderFilter('ready_for_pickup')}
+              className={`px-3 py-1.5 rounded-xl transition-all ${
+                orderFilter === 'ready_for_pickup'
+                  ? 'bg-teal-600 text-white shadow-sm'
+                  : 'bg-teal-50 text-teal-800 hover:bg-teal-100'
+              }`}
+            >
+              ✅ Ready ({subOrders.filter(o => ['packed', 'ready_for_pickup'].includes(o.status)).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrderFilter('dispatched')}
+              className={`px-3 py-1.5 rounded-xl transition-all ${
+                orderFilter === 'dispatched'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-blue-50 text-blue-800 hover:bg-blue-100'
+              }`}
+            >
+              🚚 Dispatched ({subOrders.filter(o => ['dispatched', 'handed_to_courier', 'out_for_delivery'].includes(o.status)).length})
+            </button>
+          </div>
         </div>
 
+        {/* Filtered Sub-Orders Grid */}
         <div className="space-y-4">
-          {subOrders.map(order => (
-            <div
-              key={order.id}
-              className="bg-slate-50 rounded-xl p-5 border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:border-slate-300 transition-all"
-            >
-              <div className="space-y-1">
-                <div className="flex items-center gap-3">
-                  <span className="font-black text-slate-900 text-base">{order.id}</span>
-                  <span className="text-xs text-slate-400 font-medium">{order.date}</span>
-                  <span
-                    className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
-                      order.status === 'dispatched'
-                        ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                        : order.status === 'packed'
-                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                    }`}
-                  >
-                    {order.status}
-                  </span>
+          {subOrders
+            .filter(order => {
+              if (orderFilter === 'pending') return ['placed', 'pending'].includes(order.status);
+              if (orderFilter === 'packaging') return ['confirmed', 'packaging'].includes(order.status);
+              if (orderFilter === 'ready_for_pickup') return ['packed', 'ready_for_pickup'].includes(order.status);
+              if (orderFilter === 'dispatched') return ['dispatched', 'handed_to_courier', 'out_for_delivery'].includes(order.status);
+              if (orderFilter === 'delivered') return order.status === 'delivered';
+              return true;
+            })
+            .map(order => {
+              const isPending = ['placed', 'pending'].includes(order.status);
+              const isPackaging = ['confirmed', 'packaging'].includes(order.status);
+              const isReady = ['packed', 'ready_for_pickup'].includes(order.status);
+              const isDispatched = ['dispatched', 'handed_to_courier', 'out_for_delivery'].includes(order.status);
+              const isDelivered = order.status === 'delivered';
+
+              return (
+                <div
+                  key={order.id}
+                  className="bg-slate-50 rounded-2xl p-5 border border-slate-200 hover:border-slate-300 hover:shadow-md transition-all space-y-4"
+                >
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-3">
+                        <span className="font-black text-slate-900 text-base">{order.id}</span>
+                        <span className="text-xs text-slate-400 font-medium">{order.date}</span>
+                        <span
+                          className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                            isDelivered
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : isDispatched
+                              ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                              : isReady
+                              ? 'bg-teal-100 text-teal-800 border border-teal-200'
+                              : isPackaging
+                              ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                              : 'bg-amber-100 text-amber-800 border border-amber-200'
+                          }`}
+                        >
+                          {order.status.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600">
+                        Customer: <span className="font-bold text-slate-900">{order.customerName}</span> | Items:{' '}
+                        {order.items.map(i => `${i.title} (${i.qty}x)`).join(', ')}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-4 text-xs font-bold bg-white px-3.5 py-2 rounded-xl border border-slate-200">
+                      <span className="text-slate-600">Total: ₹{order.subTotal.toLocaleString('en-IN')}</span>
+                      <span className="text-slate-400">Commission: -₹{order.commissionCut.toFixed(2)}</span>
+                      <span className="text-emerald-700 font-black">
+                        Net Payout: ₹{order.vendorEarning.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 4-Stage Lifecycle Stepper */}
+                  <div className="grid grid-cols-4 gap-2 pt-2 border-t border-slate-200/80">
+                    {/* Step 1: Placed */}
+                    <div className={`p-2 rounded-xl border text-center transition-all ${
+                      isPending
+                        ? 'bg-amber-500/10 border-amber-500 text-amber-900 font-black ring-1 ring-amber-400'
+                        : isPackaging || isReady || isDispatched || isDelivered
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-semibold'
+                        : 'bg-white border-slate-200 text-slate-400'
+                    }`}>
+                      <p className="text-[10px] uppercase tracking-wider">1. Placed</p>
+                      <p className="text-[11px] mt-0.5 flex items-center justify-center gap-1">
+                        {isPackaging || isReady || isDispatched || isDelivered ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <Clock className="w-3.5 h-3.5 text-amber-600 animate-spin" />
+                        )}
+                        <span>{isPending ? 'Action Required' : 'Accepted'}</span>
+                      </p>
+                    </div>
+
+                    {/* Step 2: Packaging */}
+                    <div className={`p-2 rounded-xl border text-center transition-all ${
+                      isPackaging
+                        ? 'bg-indigo-500/10 border-indigo-500 text-indigo-900 font-black ring-1 ring-indigo-400'
+                        : isReady || isDispatched || isDelivered
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-semibold'
+                        : 'bg-white border-slate-200 text-slate-400'
+                    }`}>
+                      <p className="text-[10px] uppercase tracking-wider">2. Packaging</p>
+                      <p className="text-[11px] mt-0.5 flex items-center justify-center gap-1">
+                        {isReady || isDispatched || isDelivered ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : isPackaging ? (
+                          <Package className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
+                        ) : (
+                          <span className="text-slate-300">○</span>
+                        )}
+                        <span>{isPackaging ? 'Packing Now' : isReady || isDispatched || isDelivered ? 'Packed' : 'Pending'}</span>
+                      </p>
+                    </div>
+
+                    {/* Step 3: Ready for Pickup */}
+                    <div className={`p-2 rounded-xl border text-center transition-all ${
+                      isReady
+                        ? 'bg-teal-500/10 border-teal-500 text-teal-900 font-black ring-1 ring-teal-400'
+                        : isDispatched || isDelivered
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-semibold'
+                        : 'bg-white border-slate-200 text-slate-400'
+                    }`}>
+                      <p className="text-[10px] uppercase tracking-wider">3. Ready for Pickup</p>
+                      <p className="text-[11px] mt-0.5 flex items-center justify-center gap-1">
+                        {isDispatched || isDelivered ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : isReady ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                        ) : (
+                          <span className="text-slate-300">○</span>
+                        )}
+                        <span>{isReady ? 'Sealed & Labeled' : isDispatched || isDelivered ? 'Handed Over' : 'Waiting'}</span>
+                      </p>
+                    </div>
+
+                    {/* Step 4: Handed to Courier */}
+                    <div className={`p-2 rounded-xl border text-center transition-all ${
+                      isDispatched
+                        ? 'bg-blue-500/10 border-blue-500 text-blue-900 font-black ring-1 ring-blue-400'
+                        : isDelivered
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-semibold'
+                        : 'bg-white border-slate-200 text-slate-400'
+                    }`}>
+                      <p className="text-[10px] uppercase tracking-wider">4. Handed to Courier</p>
+                      <p className="text-[11px] mt-0.5 flex items-center justify-center gap-1">
+                        {isDelivered ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : isDispatched ? (
+                          <Truck className="w-3.5 h-3.5 text-blue-600 animate-bounce" />
+                        ) : (
+                          <span className="text-slate-300">○</span>
+                        )}
+                        <span>{isDelivered ? 'Delivered' : isDispatched ? 'With Rider' : 'Unassigned'}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Actions & OTP Protection Bar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs">
+                    <div className="flex items-center gap-2 text-[11px] text-slate-600">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>
+                        <strong>OTP Protection:</strong> Delivery rider verifies customer 4-digit secret OTP on doorstep to release funds.
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isPending && (
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateOrderStatus(order.id, 'packaging')}
+                          className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-md transition-all hover:scale-105 flex items-center gap-1.5"
+                        >
+                          <Package className="w-3.5 h-3.5" />
+                          <span>Accept & Start Packaging</span>
+                        </button>
+                      )}
+
+                      {isPackaging && (
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateOrderStatus(order.id, 'ready_for_pickup')}
+                          className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black shadow-md transition-all hover:scale-105 flex items-center gap-1.5"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Mark Ready for Pickup</span>
+                        </button>
+                      )}
+
+                      {isReady && (
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateOrderStatus(order.id, 'dispatched')}
+                          className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black shadow-md transition-all hover:scale-105 flex items-center gap-1.5"
+                        >
+                          <Truck className="w-3.5 h-3.5" />
+                          <span>Handover to Courier Rider</span>
+                        </button>
+                      )}
+
+                      {isDispatched && (
+                        <span className="px-3.5 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold flex items-center gap-1.5">
+                          <Truck className="w-4 h-4 text-blue-600" />
+                          <span>In Transit with Courier</span>
+                        </span>
+                      )}
+
+                      {isDelivered && (
+                        <span className="px-3.5 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          <span>Delivered (OTP Verified)</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-
-                <p className="text-xs text-slate-600">
-                  Customer: <span className="font-bold text-slate-900">{order.customerName}</span> | Items:{' '}
-                  {order.items.map(i => `${i.title} (${i.qty}x)`).join(', ')}
-                </p>
-
-                <div className="flex items-center gap-4 text-xs font-bold pt-1">
-                  <span className="text-slate-900">Subtotal: ₹{order.subTotal.toLocaleString('en-IN')}</span>
-                  <span className="text-slate-500">Fee (8%): -₹{order.commissionCut.toFixed(2)}</span>
-                  <span className="text-emerald-700 font-black">
-                    Net Payout: ₹{order.vendorEarning.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Status Stepper Actions */}
-              <div className="flex items-center gap-2">
-                {order.status === 'placed' && (
-                  <button
-                    onClick={() => handleUpdateOrderStatus(order.id, 'confirmed')}
-                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm"
-                  >
-                    Accept Order
-                  </button>
-                )}
-
-                {order.status === 'confirmed' && (
-                  <button
-                    onClick={() => handleUpdateOrderStatus(order.id, 'packed')}
-                    className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-sm"
-                  >
-                    Mark as Packed
-                  </button>
-                )}
-
-                {order.status === 'packed' && (
-                  <button
-                    onClick={() => handleUpdateOrderStatus(order.id, 'dispatched')}
-                    className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm"
-                  >
-                    Handover to Courier
-                  </button>
-                )}
-
-                {order.status === 'dispatched' && (
-                  <span className="text-xs font-bold text-blue-700 flex items-center gap-1">
-                    <CheckCircle2 className="w-4 h-4" /> Dispatched
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
+              );
+            })}
         </div>
       </div>
 

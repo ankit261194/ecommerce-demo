@@ -265,6 +265,7 @@ exports.deleteProduct = async (req, res, next) => {
 };
 
 // @desc    Get Sub-Orders for Vendor
+// @desc    Get Sub-Orders for Vendor (Point #56 Lifecycle Management)
 // @route   GET /api/vendor/orders
 exports.getVendorOrders = async (req, res, next) => {
   try {
@@ -275,20 +276,47 @@ exports.getVendorOrders = async (req, res, next) => {
 
     const { status } = req.query;
     const filter = { vendor: vendor._id };
-    if (status) filter.status = status;
+
+    if (status === 'pending') {
+      filter.status = { $in: ['placed', 'pending'] };
+    } else if (status === 'packaging') {
+      filter.status = { $in: ['confirmed', 'packaging'] };
+    } else if (status === 'ready_for_pickup') {
+      filter.status = { $in: ['packed', 'ready_for_pickup'] };
+    } else if (status === 'dispatched') {
+      filter.status = { $in: ['dispatched', 'handed_to_courier', 'out_for_delivery'] };
+    } else if (status && status !== 'all') {
+      filter.status = status;
+    }
+
+    const allVendorOrders = await SubOrder.find({ vendor: vendor._id });
+    const stats = {
+      total: allVendorOrders.length,
+      pending: allVendorOrders.filter(o => ['placed', 'pending'].includes(o.status)).length,
+      packaging: allVendorOrders.filter(o => ['confirmed', 'packaging'].includes(o.status)).length,
+      readyForPickup: allVendorOrders.filter(o => ['packed', 'ready_for_pickup'].includes(o.status)).length,
+      dispatched: allVendorOrders.filter(o => ['dispatched', 'handed_to_courier', 'out_for_delivery'].includes(o.status)).length,
+      delivered: allVendorOrders.filter(o => o.status === 'delivered').length,
+      cancelled: allVendorOrders.filter(o => o.status === 'cancelled').length,
+    };
 
     const orders = await SubOrder.find(filter)
       .populate('customer', 'name email phone')
       .populate('deliveryPartner', 'name phone')
       .sort({ createdAt: -1 });
 
-    res.status(200).json({ success: true, count: orders.length, data: orders });
+    res.status(200).json({
+      success: true,
+      count: orders.length,
+      stats,
+      data: orders,
+    });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Update Sub-Order Status (e.g., packed, dispatched, cancelled)
+// @desc    Update Sub-Order Status (Point #56: Pending -> Packaging -> Ready for Pickup -> Handed to Courier)
 // @route   PUT /api/vendor/orders/:id/status
 exports.updateSubOrderStatus = async (req, res, next) => {
   try {
@@ -304,11 +332,20 @@ exports.updateSubOrderStatus = async (req, res, next) => {
     }
 
     // Allowed status transitions for vendor
-    const allowedVendorStatuses = ['confirmed', 'packed', 'dispatched', 'cancelled'];
+    const allowedVendorStatuses = [
+      'confirmed',
+      'packaging',
+      'packed',
+      'ready_for_pickup',
+      'dispatched',
+      'handed_to_courier',
+      'cancelled',
+    ];
+
     if (!allowedVendorStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: `Invalid status transition '${status}'. Vendors can only update status to: ${allowedVendorStatuses.join(', ')}. Delivery completion requires customer OTP verification.`,
+        message: `Invalid status transition '${status}'. Vendors can only transition orders through: ${allowedVendorStatuses.join(', ')}. Delivery completion requires customer OTP verification by the rider.`,
       });
     }
 
@@ -352,8 +389,16 @@ exports.updateSubOrderStatus = async (req, res, next) => {
       );
     }
 
-    // If dispatched, sync DeliveryTask
-    if (status === 'dispatched') {
+    // Lifecycle timestamps
+    const now = new Date();
+    if (['packaging', 'confirmed'].includes(status)) {
+      if (!subOrder.acceptedAt) subOrder.acceptedAt = now;
+      if (!subOrder.packagingStartedAt) subOrder.packagingStartedAt = now;
+    } else if (['ready_for_pickup', 'packed'].includes(status)) {
+      if (!subOrder.readyForPickupAt) subOrder.readyForPickupAt = now;
+    } else if (['dispatched', 'handed_to_courier'].includes(status)) {
+      if (!subOrder.dispatchedAt) subOrder.dispatchedAt = now;
+      // Sync DeliveryTask
       await DeliveryTask.findOneAndUpdate(
         { subOrder: subOrder._id, status: 'ASSIGNED' },
         { status: 'PICKED_UP' }
@@ -363,13 +408,17 @@ exports.updateSubOrderStatus = async (req, res, next) => {
     subOrder.status = status;
     subOrder.trackingHistory.push({
       status,
-      timestamp: new Date(),
-      note: note || `Vendor updated status to ${status}`,
+      timestamp: now,
+      note: note || `Vendor updated lifecycle status to ${status}`,
     });
 
     await subOrder.save();
 
-    res.status(200).json({ success: true, message: `Order updated to ${status}`, data: subOrder });
+    res.status(200).json({
+      success: true,
+      message: `Sub-order lifecycle updated to '${status}' successfully`,
+      data: subOrder,
+    });
   } catch (error) {
     next(error);
   }

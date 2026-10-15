@@ -146,6 +146,43 @@ const orderSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // Point #74: Fake / Spam Order Prevention (RTO Guard for high-risk COD)
+    rtoRiskScore: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    rtoRiskLevel: {
+      type: String,
+      enum: ['LOW', 'MEDIUM', 'HIGH'],
+      default: 'LOW',
+    },
+    rtoRiskReasons: {
+      type: [String],
+      default: [],
+    },
+    rtoVerificationRequired: {
+      type: Boolean,
+      default: false,
+    },
+    rtoVerificationStatus: {
+      type: String,
+      enum: ['NONE', 'PENDING', 'VERIFIED', 'OVERRIDDEN_BY_ADMIN', 'REJECTED'],
+      default: 'NONE',
+    },
+    rtoVerificationOtp: {
+      type: String,
+      default: null,
+    },
+    rtoVerificationOtpExpires: {
+      type: Date,
+      default: null,
+    },
+    flaggedForRtoRisk: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );

@@ -35,6 +35,7 @@ import {
   Wallet,
   Coins,
   MessageSquare,
+  ShieldAlert,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
@@ -57,6 +58,7 @@ import TaxInvoiceModal from '../components/TaxInvoiceModal';
 import WalletDrawer from '../components/WalletDrawer';
 import VendorPublicStoreModal from '../components/VendorPublicStoreModal';
 import WhatsAppOrderBotModal from '../components/WhatsAppOrderBotModal';
+import RtoRiskOtpModal from '../components/RtoRiskOtpModal';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -92,6 +94,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [selectedVendorForModal, setSelectedVendorForModal] = useState(null); // Point #58: Public Storefront Showcase
   const [isWhatsAppBotOpen, setIsWhatsAppBotOpen] = useState(false); // Point #71: WhatsApp Order Bot
   const [whatsAppBotOrder, setWhatsAppBotOrder] = useState(null);
+  const [rtoVerificationOrder, setRtoVerificationOrder] = useState(null); // Point #74: RTO Guard High-Risk Verification
 
   // Point #31: In-App Wallet & Reward Coins State
   const [isWalletOpen, setIsWalletOpen] = useState(false);
@@ -1043,7 +1046,17 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           paymentDetails: order.paymentDetails || paymentDetails,
           paymentStatus: order.paymentStatus || (paymentMethod === 'COD' ? 'PENDING' : 'PAID'),
           deliveryInstructions: order.deliveryInstructions || deliveryInstructions,
+          rtoVerificationRequired: order.rtoVerificationRequired,
+          rtoVerificationStatus: order.rtoVerificationStatus,
+          rtoRiskScore: order.rtoRiskScore,
+          rtoRiskReasons: order.rtoRiskReasons,
+          rawOrder: order,
         });
+
+        if (order.rtoVerificationRequired && order.rtoVerificationStatus === 'PENDING') {
+          setRtoVerificationOrder(order);
+        }
+
         clearCart();
         setAppliedCoupon(null);
         setRedeemedCoins(0);
@@ -2565,6 +2578,26 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               Download GST Tax Invoice (PDF)
             </button>
 
+            {/* Point #74: Fake / Spam Order Prevention (RTO Guard Alert) */}
+            {activeOrderConfirmation.rtoVerificationRequired && activeOrderConfirmation.rtoVerificationStatus === 'PENDING' && (
+              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-300 space-y-2 text-left">
+                <div className="flex items-center gap-2 text-rose-800 font-black text-xs uppercase tracking-wider">
+                  <ShieldAlert className="w-4 h-4 text-rose-600" />
+                  <span>High-Risk COD Verification Required</span>
+                </div>
+                <p className="text-xs text-rose-700">
+                  This order was flagged by AuraMarket RTO Guard (Risk Score: {activeOrderConfirmation.rtoRiskScore || 75}/100). Please enter the 6-digit SMS code to confirm dispatch.
+                </p>
+                <button
+                  onClick={() => setRtoVerificationOrder(activeOrderConfirmation.rawOrder || activeOrderConfirmation)}
+                  className="w-full py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Enter Security Verification OTP</span>
+                </button>
+              </div>
+            )}
+
             {/* Point #71: 1-Click WhatsApp Order Confirmation & AI Tracking Bot */}
             <button
               onClick={() => {
@@ -2793,6 +2826,23 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           isOpen={isWhatsAppBotOpen}
           onClose={() => setIsWhatsAppBotOpen(false)}
           order={whatsAppBotOrder}
+        />
+      )}
+
+      {/* Point #74: RTO Guard High-Risk COD Security Verification Modal */}
+      {rtoVerificationOrder && (
+        <RtoRiskOtpModal
+          isOpen={!!rtoVerificationOrder}
+          order={rtoVerificationOrder}
+          onClose={() => setRtoVerificationOrder(null)}
+          onVerified={(updOrder) => {
+            setActiveOrderConfirmation((prev) =>
+              prev ? { ...prev, rtoVerificationRequired: false, rtoVerificationStatus: 'VERIFIED' } : null
+            );
+            setRtoVerificationOrder(null);
+            setToastMessage('✅ Order security verified! Confirmed for merchant dispatch.');
+            setTimeout(() => setToastMessage(null), 3000);
+          }}
         />
       )}
     </div>

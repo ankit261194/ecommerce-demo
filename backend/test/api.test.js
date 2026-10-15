@@ -5923,6 +5923,199 @@ const runTests = async () => {
       await Order.deleteOne({ _id: testOrder._id });
     });
 
+    // =========================================================================
+    // Point 74: Fake / Spam Order Prevention (RTO Guard for high-risk COD)
+    // =========================================================================
+    await test('Point 74: Fake / Spam Order Prevention (RTO Guard: Risk scoring, OTP verification, Admin risk dashboard & manual override)', async () => {
+      // 1. Calculate low-risk assessment directly
+      const { calculateRtoRisk } = require('../src/utils/rtoRiskScorer');
+      const lowRiskAssessment = calculateRtoRisk({
+        shippingAddress: {
+          recipientName: 'Vikram Malhotra',
+          street: '124 Lotus Boulevard Sector 100',
+          city: 'Noida',
+          pincode: '201304',
+          phone: '9811223344',
+        },
+        totalAmount: 1499,
+        paymentMethod: 'UPI',
+        pastOrders: [],
+      });
+      assert.strictEqual(lowRiskAssessment.level, 'LOW');
+      assert.strictEqual(lowRiskAssessment.verificationRequired, false);
+
+      // 2. Calculate high-risk assessment
+      const highRiskAssessment = calculateRtoRisk({
+        shippingAddress: {
+          recipientName: 'dummy test spammer',
+          street: 'xyz sample fake dummy nowhere',
+          city: 'unknown',
+          pincode: '000000',
+          phone: '9999999999',
+        },
+        totalAmount: 24999,
+        paymentMethod: 'COD',
+        pastOrders: [{ status: 'RTO' }, { status: 'FAILED' }],
+      });
+      assert.strictEqual(highRiskAssessment.level, 'HIGH');
+      assert.strictEqual(highRiskAssessment.verificationRequired, true);
+      assert.ok(highRiskAssessment.score >= 70, 'Risk score should be >= 70 for dummy high COD order');
+      assert.ok(highRiskAssessment.reasons.length >= 3, 'Multiple fraud risk reasons must be captured');
+
+      // 3. Create high-risk order in database
+      const customer = await User.findOne({ email: 'customer@auramarket.com' });
+      const vendor = await VendorProfile.findOne();
+
+      const highRiskOrder = await Order.create({
+        orderNumber: `RTO-TEST-${Date.now()}`,
+        customer: customer._id,
+        items: [
+          {
+            product: new mongoose.Types.ObjectId(),
+            vendor: vendor._id,
+            title: 'High-Value Smartphone',
+            variantSku: 'HVAL-PHN-01',
+            quantity: 1,
+            price: 22000,
+            totalPrice: 22000,
+          },
+        ],
+        subtotal: 22000,
+        totalAmount: 22000,
+        paymentMethod: 'COD',
+        paymentStatus: 'PENDING',
+        status: 'PLACED',
+        shippingAddress: {
+          recipientName: 'Fake Tester',
+          phone: '9999999999',
+          street: 'xyz demo fake street',
+          city: 'unknown',
+          state: 'Delhi',
+          pincode: '110001',
+        },
+        rtoRiskScore: 85,
+        rtoRiskLevel: 'HIGH',
+        rtoRiskReasons: ['Dummy phone detected', 'Suspicious address keyword', 'COD value exceeds 20k'],
+        rtoVerificationRequired: true,
+        rtoVerificationStatus: 'PENDING',
+        rtoVerificationOtp: '654321',
+        rtoVerificationOtpExpires: new Date(Date.now() + 30 * 60 * 1000),
+        flaggedForRtoRisk: true,
+      });
+
+      // 4. Customer verifies with wrong OTP -> fails with 400
+      const resWrongOtp = await fetch(`${baseUrl}/orders/${highRiskOrder._id}/verify-rto-risk`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ otp: '000000' }),
+      });
+      assert.strictEqual(resWrongOtp.status, 400);
+      const dataWrong = await resWrongOtp.json();
+      assert.strictEqual(dataWrong.success, false);
+      assert.ok(dataWrong.message.includes('Invalid'));
+
+      // 5. Customer requests resend OTP via POST /orders/:id/resend-rto-otp
+      const resResend = await fetch(`${baseUrl}/orders/${highRiskOrder._id}/resend-rto-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+      });
+      assert.strictEqual(resResend.status, 200);
+      const dataResend = await resResend.json();
+      assert.strictEqual(dataResend.success, true);
+
+      // Fetch freshly assigned OTP from database
+      const refreshedOrder = await Order.findById(highRiskOrder._id);
+      assert.ok(refreshedOrder.rtoVerificationOtp);
+      assert.notStrictEqual(refreshedOrder.rtoVerificationOtp, '654321');
+
+      // 6. Customer verifies with correct new OTP
+      const resCorrectOtp = await fetch(`${baseUrl}/orders/${highRiskOrder._id}/verify-rto-risk`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ otp: refreshedOrder.rtoVerificationOtp }),
+      });
+      assert.strictEqual(resCorrectOtp.status, 200);
+      const dataCorrect = await resCorrectOtp.json();
+      assert.strictEqual(dataCorrect.success, true);
+      assert.strictEqual(dataCorrect.data.rtoVerificationStatus, 'VERIFIED');
+      assert.strictEqual(dataCorrect.data.rtoVerificationRequired, false);
+
+      // 7. Super Admin checks RTO Guard overview dashboard
+      const resOverview = await fetch(`${baseUrl}/admin/rto-guard/overview`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resOverview.status, 200);
+      const dataOverview = await resOverview.json();
+      assert.strictEqual(dataOverview.success, true);
+      assert.ok(dataOverview.stats.totalEvaluated >= 1);
+      assert.ok(dataOverview.stats.verifiedCount >= 1);
+      assert.ok(Array.isArray(dataOverview.data));
+
+      // 8. Create another flagged order for admin override testing
+      const overrideOrder = await Order.create({
+        orderNumber: `RTO-OVR-${Date.now()}`,
+        customer: customer._id,
+        items: highRiskOrder.items,
+        totalAmount: 18000,
+        paymentMethod: 'COD',
+        shippingAddress: highRiskOrder.shippingAddress,
+        rtoRiskScore: 90,
+        rtoRiskLevel: 'HIGH',
+        rtoVerificationRequired: true,
+        rtoVerificationStatus: 'PENDING',
+        flaggedForRtoRisk: true,
+      });
+
+      // Super Admin approves flagged order
+      const resApprove = await fetch(`${baseUrl}/admin/rto-guard/override`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          orderId: overrideOrder._id,
+          action: 'APPROVE',
+          notes: 'Customer verified via phone call by Super Admin',
+        }),
+      });
+      assert.strictEqual(resApprove.status, 200);
+      const dataApprove = await resApprove.json();
+      assert.strictEqual(dataApprove.success, true);
+      assert.strictEqual(dataApprove.data.rtoVerificationStatus, 'OVERRIDDEN_BY_ADMIN');
+
+      // Super Admin rejects a flagged order
+      const resReject = await fetch(`${baseUrl}/admin/rto-guard/override`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          orderId: overrideOrder._id,
+          action: 'REJECT',
+          notes: 'Confirmed fraudulent address with unreachable phone',
+        }),
+      });
+      assert.strictEqual(resReject.status, 200);
+      const dataReject = await resReject.json();
+      assert.strictEqual(dataReject.success, true);
+      assert.strictEqual(dataReject.data.rtoVerificationStatus, 'REJECTED');
+      assert.strictEqual(dataReject.data.status, 'CANCELLED');
+
+      // Clean up test records
+      await Order.deleteMany({ _id: { $in: [highRiskOrder._id, overrideOrder._id] } });
+    });
+
     // 9b. Edge Case & Security Validations
     await test('POST /delivery/tasks/:id/verify-otp rejects re-delivery on already DELIVERED task with 400', async () => {
       const targetSubOrder = await SubOrder.findById(riderTask.subOrder);

@@ -322,6 +322,30 @@ exports.createOrder = async (req, res, next) => {
       paymentDetails?.upiUtr ||
       (isPrepaid ? `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}` : null);
 
+    // Point #74: Fake / Spam Order Prevention (RTO Guard for high-risk COD)
+    const { calculateRtoRisk } = require('../utils/rtoRiskScorer');
+    let pastCustomerOrders = [];
+    try {
+      pastCustomerOrders = await Order.find({ customer: req.user._id }).select('status deliveryAttempts').lean();
+    } catch (_) {}
+
+    const rtoAssessment = calculateRtoRisk({
+      customer: req.user,
+      shippingAddress,
+      totalAmount: finalTotalAmount,
+      paymentMethod: activePaymentMethod,
+      pastOrders: pastCustomerOrders,
+    });
+
+    let rtoOtp = null;
+    let rtoOtpExpires = null;
+    let rtoStatus = 'NONE';
+    if (rtoAssessment.verificationRequired) {
+      rtoOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      rtoOtpExpires = new Date(Date.now() + 30 * 60 * 1000);
+      rtoStatus = 'PENDING';
+    }
+
     const masterOrder = await Order.create({
       customer: req.user._id,
       items: validatedItems,
@@ -347,7 +371,24 @@ exports.createOrder = async (req, res, next) => {
         cardLast4: paymentDetails?.cardLast4 || null,
         paidAt: isPrepaid ? new Date() : null,
       },
+      rtoRiskScore: rtoAssessment.score,
+      rtoRiskLevel: rtoAssessment.level,
+      rtoRiskReasons: rtoAssessment.reasons,
+      rtoVerificationRequired: rtoAssessment.verificationRequired,
+      rtoVerificationStatus: rtoStatus,
+      rtoVerificationOtp: rtoOtp,
+      rtoVerificationOtpExpires: rtoOtpExpires,
+      flaggedForRtoRisk: rtoAssessment.isHighRisk,
     });
+
+    if (rtoAssessment.verificationRequired && shippingAddress?.phone) {
+      smsService
+        .sendSMS({
+          to: shippingAddress.phone,
+          message: `AuraMarket RTO Guard: High-risk COD security verification code is ${rtoOtp}. Verify your order at checkout to confirm shipment.`,
+        })
+        .catch(() => {});
+    }
 
     // Step 3: Create Sub-Orders per Vendor (Order Splitting)
     const createdSubOrders = [];
@@ -1368,6 +1409,216 @@ exports.getSplitPackingSlips = async (req, res, next) => {
     next(error);
   }
 };
+
+// ============================================================================
+// Point 74: Fake / Spam Order Prevention (RTO Guard for high-risk COD)
+// ============================================================================
+
+// @desc    Verify High-Risk COD Order via OTP
+// @route   POST /api/orders/:id/verify-rto-risk
+// @access  Private (Customer / Admin)
+exports.verifyRtoRisk = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { otp } = req.body;
+
+    const isMongoId = mongoose.Types.ObjectId.isValid(id);
+    const query = isMongoId ? { _id: id } : { orderNumber: id };
+
+    const order = await Order.findOne(query).populate('customer', 'name email phone');
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found for RTO verification' });
+    }
+
+    // Role verification
+    if (req.user?.role === 'customer' && !order.customer._id.equals(req.user._id)) {
+      return res.status(403).json({ success: false, message: 'Unauthorized to verify this order' });
+    }
+
+    if (order.rtoVerificationStatus === 'VERIFIED') {
+      return res.status(200).json({
+        success: true,
+        message: 'Order is already verified',
+        data: order,
+      });
+    }
+
+    if (!order.rtoVerificationRequired && order.rtoVerificationStatus !== 'PENDING') {
+      return res.status(200).json({
+        success: true,
+        message: 'No RTO verification required for this order',
+        data: order,
+      });
+    }
+
+    if (!otp || String(otp).trim() !== (order.rtoVerificationOtp || '').trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid RTO verification security code',
+      });
+    }
+
+    if (order.rtoVerificationOtpExpires && new Date() > new Date(order.rtoVerificationOtpExpires)) {
+      return res.status(400).json({
+        success: false,
+        message: 'RTO verification code has expired. Please request a new code.',
+      });
+    }
+
+    order.rtoVerificationStatus = 'VERIFIED';
+    order.rtoVerificationRequired = false;
+    order.flaggedForRtoRisk = false;
+    await order.save();
+
+    // Dispatch verified SMS
+    if (order.shippingAddress?.phone) {
+      smsService
+        .sendSMS({
+          to: order.shippingAddress.phone,
+          message: `AuraMarket: Order #${order.orderNumber} security verification completed. Merchant will now pack your order.`,
+        })
+        .catch(() => {});
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Order security verification completed successfully! Confirmed for merchant dispatch.',
+      data: order,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Resend High-Risk COD Security Verification OTP
+// @route   POST /api/orders/:id/resend-rto-otp
+// @access  Private (Customer / Admin)
+exports.resendRtoOtp = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const isMongoId = mongoose.Types.ObjectId.isValid(id);
+    const query = isMongoId ? { _id: id } : { orderNumber: id };
+
+    const order = await Order.findOne(query);
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    order.rtoVerificationOtp = newOtp;
+    order.rtoVerificationOtpExpires = new Date(Date.now() + 30 * 60 * 1000);
+    order.rtoVerificationStatus = 'PENDING';
+    await order.save();
+
+    const phone = order.shippingAddress?.phone || req.user?.phone;
+    if (phone) {
+      await smsService.sendSMS({
+        to: phone,
+        message: `AuraMarket RTO Guard: Your new security verification code is ${newOtp}. Valid for 30 minutes.`,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'New security verification OTP sent to your registered phone number.',
+      expiresAt: order.rtoVerificationOtpExpires,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Super Admin RTO Guard Overview & Risk Dashboard
+// @route   GET /api/admin/rto-guard/overview
+// @access  Private (Super Admin)
+exports.getRtoGuardOverview = async (req, res, next) => {
+  try {
+    const totalEvaluated = await Order.countDocuments();
+    const totalFlagged = await Order.countDocuments({
+      $or: [{ flaggedForRtoRisk: true }, { rtoRiskLevel: 'HIGH' }],
+    });
+    const highRiskCount = await Order.countDocuments({ rtoRiskLevel: 'HIGH' });
+    const mediumRiskCount = await Order.countDocuments({ rtoRiskLevel: 'MEDIUM' });
+    const pendingVerification = await Order.countDocuments({ rtoVerificationStatus: 'PENDING' });
+    const verifiedCount = await Order.countDocuments({ rtoVerificationStatus: 'VERIFIED' });
+    const overriddenCount = await Order.countDocuments({ rtoVerificationStatus: 'OVERRIDDEN_BY_ADMIN' });
+    const rejectedCount = await Order.countDocuments({ rtoVerificationStatus: 'REJECTED' });
+
+    const flaggedOrders = await Order.find({
+      $or: [
+        { flaggedForRtoRisk: true },
+        { rtoRiskLevel: 'HIGH' },
+        { rtoVerificationStatus: { $in: ['PENDING', 'OVERRIDDEN_BY_ADMIN', 'REJECTED'] } },
+      ],
+    })
+      .populate('customer', 'name email phone')
+      .sort({ createdAt: -1 })
+      .limit(50);
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        totalEvaluated,
+        totalFlagged,
+        highRiskCount,
+        mediumRiskCount,
+        pendingVerification,
+        verifiedCount,
+        overriddenCount,
+        rejectedCount,
+      },
+      data: flaggedOrders,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Super Admin Override for High-Risk COD Orders
+// @route   POST /api/admin/rto-guard/override
+// @access  Private (Super Admin)
+exports.overrideRtoGuard = async (req, res, next) => {
+  try {
+    const { orderId, action, notes } = req.body;
+
+    if (!orderId || !['APPROVE', 'REJECT'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: "orderId and valid action ('APPROVE' or 'REJECT') are required",
+      });
+    }
+
+    const isMongoId = mongoose.Types.ObjectId.isValid(orderId);
+    const query = isMongoId ? { _id: orderId } : { orderNumber: orderId };
+
+    const order = await Order.findOne(query);
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found for RTO override' });
+    }
+
+    if (action === 'APPROVE') {
+      order.rtoVerificationStatus = 'OVERRIDDEN_BY_ADMIN';
+      order.rtoVerificationRequired = false;
+      order.flaggedForRtoRisk = false;
+    } else {
+      order.rtoVerificationStatus = 'REJECTED';
+      order.status = 'CANCELLED';
+      order.cancellationReason = notes || 'Blocked by Super Admin via RTO Guard Anti-Fraud Suite';
+      order.cancelledAt = new Date();
+    }
+
+    await order.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Order #${order.orderNumber} successfully ${action === 'APPROVE' ? 'approved & cleared for dispatch' : 'rejected & cancelled'}`,
+      data: order,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 
 

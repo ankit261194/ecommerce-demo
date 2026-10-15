@@ -60,6 +60,7 @@ import {
   Building2,
   Database,
   QrCode,
+  ShieldAlert,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -78,6 +79,7 @@ import VendorPayoutManager from '../components/VendorPayoutManager';
 import TaxShippingManager from '../components/TaxShippingManager';
 import StaffRoleManager from '../components/StaffRoleManager';
 import SystemAuditBackupManager from '../components/SystemAuditBackupManager';
+import RtoGuardManager from '../components/RtoGuardManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1466,6 +1468,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
               Point #50
             </span>
           </button>
+
+          <button
+            onClick={() => setActiveDashboardTab('rto-guard')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'rto-guard'
+                ? 'bg-rose-600 text-white shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4 text-rose-300" />
+            <span>RTO Guard Anti-Fraud</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-rose-500/30 text-rose-200 ml-1">
+              Point #74
+            </span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -2269,6 +2286,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'audit-backup' && (
         <SystemAuditBackupManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 16: RTO GUARD ANTI-FRAUD & HIGH-RISK COD SUITE (Point #74) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'rto-guard' && (
+        <RtoGuardManager />
       )}
 
       {/* ========================================================================= */}

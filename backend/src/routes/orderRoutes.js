@@ -9,6 +9,8 @@ const {
   simulateOrderStep,
   getTaxInvoice,
   getSplitPackingSlips,
+  verifyRtoRisk,
+  resendRtoOtp,
 } = require('../controllers/orderController');
 const { protect } = require('../middlewares/auth');
 
@@ -24,5 +26,7 @@ router.get('/my', getMyOrders);
 router.get('/:id', getOrderById);
 router.post('/:id/cancel', cancelOrder);
 router.post('/:id/advance-step', simulateOrderStep);
+router.post('/:id/verify-rto-risk', verifyRtoRisk);
+router.post('/:id/resend-rto-otp', resendRtoOtp);
 
 module.exports = router;

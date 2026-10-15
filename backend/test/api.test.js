@@ -7652,6 +7652,124 @@ const runTests = async () => {
       assert.strictEqual(data.success, false);
     });
 
+    // =========================================================================
+    // Point 4: Interactive Apparel Size Guide & Measurements Suite
+    // =========================================================================
+
+    await test('Point 4: GET /api/size-charts returns complete size guides catalog', async () => {
+      const res = await fetch(`${baseUrl}/size-charts`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.count >= 5, 'Should return at least 5 standard categories');
+      const menShirts = data.data.find(c => c.categoryKey === 'men-shirts');
+      assert.ok(menShirts, 'men-shirts chart must exist');
+      assert.ok(menShirts.measurements.length >= 4);
+    });
+
+    await test('Point 4: GET /api/size-charts/:categoryKey returns category size chart', async () => {
+      const res = await fetch(`${baseUrl}/size-charts/shoes`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.categoryKey, 'shoes');
+      assert.strictEqual(data.data.type, 'footwear');
+      assert.ok(data.data.measurements.some(m => m.uk_size === '8'));
+    });
+
+    await test('Point 4: GET /api/size-charts/:categoryKey returns 404 for non-existent category', async () => {
+      const res = await fetch(`${baseUrl}/size-charts/non-existent-xyz`);
+      assert.strictEqual(res.status, 404);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 4: POST /api/size-charts/recommend calculates best apparel size based on chest measurement', async () => {
+      const res = await fetch(`${baseUrl}/size-charts/recommend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryKey: 'men-shirts',
+          unit: 'in',
+          chest: 40,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(['M', 'L'].includes(data.recommendedSize));
+      assert.ok(data.confidenceScore >= 80);
+      assert.ok(data.advice.includes(data.recommendedSize));
+    });
+
+    await test('Point 4: POST /api/size-charts/recommend calculates footwear size based on foot length in cm', async () => {
+      const res = await fetch(`${baseUrl}/size-charts/recommend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryKey: 'shoes',
+          unit: 'cm',
+          footLength: 26.5,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.recommendedSize, 'UK 8');
+      assert.ok(data.confidenceScore >= 85);
+    });
+
+    await test('Point 4: POST /api/size-charts/recommend validates required inputs with 400', async () => {
+      const res = await fetch(`${baseUrl}/size-charts/recommend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unit: 'in' }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 4: Super Admin can upsert custom size chart via POST /api/size-charts', async () => {
+      const customChart = {
+        categoryKey: 'men-blazers',
+        title: "Men's Italian Blazers",
+        gender: 'men',
+        type: 'apparel-top',
+        measurements: [
+          { size: '38R', chest_in: '38', waist_in: '32', length_in: '29.5' },
+          { size: '40R', chest_in: '40', waist_in: '34', length_in: '30' },
+          { size: '42R', chest_in: '42', waist_in: '36', length_in: '30.5' },
+        ],
+        howToMeasure: [{ part: 'Chest', tip: 'Measure across chest' }],
+      };
+
+      // Customer is forbidden
+      const resCust = await fetch(`${baseUrl}/size-charts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify(customChart),
+      });
+      assert.strictEqual(resCust.status, 403);
+
+      // Super Admin succeeds
+      const resAdmin = await fetch(`${baseUrl}/size-charts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify(customChart),
+      });
+      assert.strictEqual(resAdmin.status, 200);
+      const data = await resAdmin.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.categoryKey, 'men-blazers');
+    });
+
   } finally {
     if (server) {
       server.close();

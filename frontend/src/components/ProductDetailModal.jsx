@@ -19,6 +19,7 @@ import {
   ThumbsUp,
   MessageSquare,
   Palmtree,
+  Ruler,
 } from 'lucide-react';
 import StockUrgencyBadge from './StockUrgencyBadge';
 import RecentPurchaseCounter from './RecentPurchaseCounter';
@@ -27,6 +28,7 @@ import ProductQnASection from './ProductQnASection';
 import FrequentlyBoughtTogether from './FrequentlyBoughtTogether';
 import { ProductRecommendationSlider } from './ProductRecommendationSlider';
 import PincodeChecker from './PincodeChecker';
+import SizeGuideModal from './SizeGuideModal';
 import { useLocalization } from '../context/LocalizationContext';
 
 export const ProductDetailModal = ({
@@ -62,6 +64,9 @@ export const ProductDetailModal = ({
 
   // Copy share feedback
   const [copiedShare, setCopiedShare] = useState(false);
+
+  // Size Guide Modal state (Point #4)
+  const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
 
   // Hover zoom coordinates
   const [zoomStyle, setZoomStyle] = useState({ display: 'none' });
@@ -500,12 +505,23 @@ export const ProductDetailModal = ({
                   {availableSizes.length > 0 && (
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="font-black uppercase tracking-wider text-slate-700">
-                          Size / Option:
-                        </span>
-                        <span className="text-amber-600 font-extrabold">
-                          {selectedVariant?.attributes?.size || 'Standard Fit'}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-black uppercase tracking-wider text-slate-700">
+                            Size / Option:
+                          </span>
+                          <span className="text-amber-600 font-extrabold">
+                            {selectedVariant?.attributes?.size || 'Standard Fit'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsSizeGuideOpen(true)}
+                          className="flex items-center gap-1.5 text-xs font-black text-amber-600 hover:text-amber-700 py-0.5 px-2 rounded-lg hover:bg-amber-50 border border-amber-200/60 shadow-xs transition-all active:scale-95"
+                          title="Open Interactive Apparel & Footwear Size Guide"
+                        >
+                          <Ruler className="w-3.5 h-3.5" />
+                          <span>Size Guide</span>
+                        </button>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
                         {availableSizes.map(sz => {
@@ -912,6 +928,17 @@ export const ProductDetailModal = ({
         </div>
 
       </div>
+
+      {/* Point 4: Interactive Apparel Size Guide & Measurements Modal */}
+      <SizeGuideModal
+        isOpen={isSizeGuideOpen}
+        onClose={() => setIsSizeGuideOpen(false)}
+        productTitle={product.title}
+        currentSelectedSize={selectedVariant?.attributes?.size || ''}
+        onSelectSize={(sz) => {
+          handleSelectSize(sz);
+        }}
+      />
     </div>
   );
 };

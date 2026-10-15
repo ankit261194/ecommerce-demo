@@ -29,6 +29,7 @@ const whatsappRoutes = require('./routes/whatsappRoutes');
 const localizationRoutes = require('./routes/localizationRoutes');
 const pincodeRoutes = require('./routes/pincodeRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const sizeChartRoutes = require('./routes/sizeChartRoutes');
 
 const app = express();
 
@@ -119,6 +120,7 @@ app.use('/api/localization', localizationRoutes);
 app.use('/api/admin/localization', localizationRoutes);
 app.use('/api/pincodes', pincodeRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/size-charts', sizeChartRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

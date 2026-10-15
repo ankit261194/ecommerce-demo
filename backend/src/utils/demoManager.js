@@ -11,6 +11,8 @@ const Coupon = require('../models/Coupon');
 const Banner = require('../models/Banner');
 const AuditLog = require('../models/AuditLog');
 const PincodeZone = require('../models/PincodeZone');
+const SizeChart = require('../models/SizeChart');
+const defaultSizeCharts = require('./defaultSizeCharts');
 
 const seedDemoData = async () => {
   console.log('[DemoManager] Seeding demo multi-vendor data...');
@@ -904,6 +906,10 @@ const seedDemoData = async () => {
     await PincodeZone.findOneAndUpdate({ pincode: hub.pincode }, hub, { upsert: true, new: true });
   }
 
+  for (const chart of defaultSizeCharts) {
+    await SizeChart.findOneAndUpdate({ categoryKey: chart.categoryKey }, chart, { upsert: true, new: true });
+  }
+
   console.log('[DemoManager] Seeding completed successfully!');
   return { success: true, message: 'Demo data seeded successfully' };
 };
@@ -911,7 +917,7 @@ const seedDemoData = async () => {
 const wipeDemoData = async () => {
   console.log('[DemoManager] Wiping demo products, orders, tasks, ledgers, coupons, and banners...');
 
-  // 1. Delete all products, categories, orders, suborders, delivery tasks, ledger entries, coupons, banners, audit logs, pincode zones
+  // 1. Delete all products, categories, orders, suborders, delivery tasks, ledger entries, coupons, banners, audit logs, pincode zones, size charts
   await Product.deleteMany({});
   await Order.deleteMany({});
   await SubOrder.deleteMany({});
@@ -922,6 +928,7 @@ const wipeDemoData = async () => {
   await Banner.deleteMany({});
   await AuditLog.deleteMany({});
   await PincodeZone.deleteMany({});
+  await SizeChart.deleteMany({});
 
   // 2. Remove non-admin demo users if desired, or keep superadmin safe
   await User.deleteMany({ role: { $ne: 'superadmin' } });

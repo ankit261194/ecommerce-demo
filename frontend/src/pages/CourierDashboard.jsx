@@ -33,6 +33,7 @@ import CourierProofPhotoModal from '../components/CourierProofPhotoModal';
 import CourierCodReconciliationModal from '../components/CourierCodReconciliationModal';
 import CourierDeliveryFailureModal from '../components/CourierDeliveryFailureModal';
 import RiderRouteOptimizerModal from '../components/RiderRouteOptimizerModal';
+import CameraBarcodeScannerModal from '../components/CameraBarcodeScannerModal';
 import api from '../api/client';
 
 export const CourierDashboard = () => {
@@ -43,6 +44,7 @@ export const CourierDashboard = () => {
   const [selectedTaskForFailure, setSelectedTaskForFailure] = useState(null);
   const [isCodReconModalOpen, setIsCodReconModalOpen] = useState(false);
   const [isRouteOptimizerModalOpen, setIsRouteOptimizerModalOpen] = useState(false); // Point #17: Multi-Stop Route Optimizer
+  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false); // Point #19: In-Browser Camera Barcode Scanner
   const [riderStats, setRiderStats] = useState({
     name: 'Vikram Singh',
     assignedTasks: 2,
@@ -397,6 +399,17 @@ export const CourierDashboard = () => {
             <span>Route Optimizer</span>
             <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
               #17
+            </span>
+          </button>
+          <button
+            onClick={() => setIsCameraScannerOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-sm transition-all flex items-center gap-1.5 text-xs font-black"
+            title="Point 19: In-Browser Camera Barcode Scanner for Packages & Labels"
+          >
+            <Camera className="w-4 h-4 text-slate-950" />
+            <span>Scan Package</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-amber-400">
+              #19
             </span>
           </button>
           <button
@@ -969,6 +982,17 @@ export const CourierDashboard = () => {
           onClose={() => setIsRouteOptimizerModalOpen(false)}
         />
       )}
+      {/* Point #19: In-Browser Camera Barcode & QR Scanner Modal */}
+      <CameraBarcodeScannerModal
+        isOpen={isCameraScannerOpen}
+        onClose={() => setIsCameraScannerOpen(false)}
+        onDetected={(code, result) => {
+          setSearchQuery(code);
+          setSuccessMessage(`📦 Scanned Code: ${code} ${result?.message ? `(${result.message})` : ''}`);
+        }}
+        title="Rider Parcel & Label Scanner"
+        subtitle="Point camera at package barcode, AWB label, or dispatch manifest"
+      />
     </div>
   );
 };

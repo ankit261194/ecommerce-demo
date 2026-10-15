@@ -9956,6 +9956,142 @@ const runTests = async () => {
       assert.strictEqual(res.status, 401);
     });
 
+    // ==========================================
+    // POINT 19: In-Browser Camera Barcode & QR Scanner
+    // ==========================================
+    await test('Point 19: GET /api/scanner/supported-formats returns 1D/2D barcode standards', async () => {
+      const res = await fetch(`${baseUrl}/scanner/supported-formats`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.supportedFormats));
+      assert.ok(data.supportedFormats.some(f => f.format === 'ean_13'));
+      assert.ok(data.supportedFormats.some(f => f.format === 'qr_code'));
+      assert.ok(data.browserSupport.hasGetUserMedia);
+    });
+
+    await test('Point 19: POST /api/scanner/lookup resolves Product barcode into product metadata', async () => {
+      const res = await fetch(`${baseUrl}/scanner/lookup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posVendorToken}`,
+        },
+        body: JSON.stringify({ code: posTestProduct.barcode }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.type, 'PRODUCT');
+      assert.strictEqual(data.data._id.toString(), posTestProduct._id.toString());
+      assert.strictEqual(data.data.title, posTestProduct.title);
+      assert.ok(typeof data.data.price === 'number');
+      assert.ok(typeof data.data.stock === 'number');
+    });
+
+    await test('Point 19: POST /api/scanner/lookup resolves Product SKU code into product metadata', async () => {
+      const res = await fetch(`${baseUrl}/scanner/lookup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posVendorToken}`,
+        },
+        body: JSON.stringify({ code: posTestProduct.sku }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.type, 'PRODUCT');
+      assert.strictEqual(data.data._id.toString(), posTestProduct._id.toString());
+    });
+
+    await test('Point 19: POST /api/scanner/lookup resolves SubOrder tracking barcode', async () => {
+      const testSubOrder = await SubOrder.findOne();
+      if (testSubOrder) {
+        const barcodeToTest = testSubOrder.trackingNumber || testSubOrder.subOrderId || testSubOrder._id.toString();
+        const res = await fetch(`${baseUrl}/scanner/lookup`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${posVendorToken}`,
+          },
+          body: JSON.stringify({ code: barcodeToTest }),
+        });
+        assert.strictEqual(res.status, 200);
+        const data = await res.json();
+        assert.strictEqual(data.success, true);
+        assert.strictEqual(data.type, 'SUB_ORDER');
+        assert.strictEqual(data.data._id.toString(), testSubOrder._id.toString());
+      }
+    });
+
+    await test('Point 19: POST /api/scanner/lookup parses UPI payment QR Code payload', async () => {
+      const res = await fetch(`${baseUrl}/scanner/lookup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posVendorToken}`,
+        },
+        body: JSON.stringify({ code: 'upi://pay?pa=store@okaxis&am=1250' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.type, 'UPI_PAYMENT');
+      assert.ok(data.data.upiUri.includes('store@okaxis'));
+    });
+
+    await test('Point 19: POST /api/scanner/lookup parses Web URL QR Code', async () => {
+      const res = await fetch(`${baseUrl}/scanner/lookup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posVendorToken}`,
+        },
+        body: JSON.stringify({ code: 'https://shribalajikripadham.online/ecommerce-demo/' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.type, 'WEB_URL');
+      assert.ok(data.data.url.includes('ecommerce-demo'));
+    });
+
+    await test('Point 19: POST /api/scanner/lookup validates empty code with 400', async () => {
+      const res = await fetch(`${baseUrl}/scanner/lookup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posVendorToken}`,
+        },
+        body: JSON.stringify({ code: '   ' }),
+      });
+      assert.strictEqual(res.status, 400);
+    });
+
+    await test('Point 19: POST /api/scanner/lookup returns 404 for unknown non-existent barcode', async () => {
+      const res = await fetch(`${baseUrl}/scanner/lookup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posVendorToken}`,
+        },
+        body: JSON.stringify({ code: 'NON_EXISTENT_BARCODE_99999' }),
+      });
+      assert.strictEqual(res.status, 404);
+      const data = await res.json();
+      assert.strictEqual(data.type, 'NOT_FOUND');
+    });
+
+    await test('Point 19: Auth Security: Unauthenticated request to /api/scanner/lookup is rejected with 401', async () => {
+      const res = await fetch(`${baseUrl}/scanner/lookup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: '8901234567890' }),
+      });
+      assert.strictEqual(res.status, 401);
+    });
+
   } finally {
     if (server) {
       server.close();

@@ -23,10 +23,13 @@ import {
   Receipt,
   Layers,
   Percent,
+  Camera,
 } from 'lucide-react';
 import api from '../api/client';
+import CameraBarcodeScannerModal from './CameraBarcodeScannerModal';
 
 const PosCounterScreen = ({ isOpen, onClose, storeName = 'AuraMarket Store' }) => {
+  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [products, setProducts] = useState([]);
@@ -533,6 +536,16 @@ const PosCounterScreen = ({ isOpen, onClose, storeName = 'AuraMarket Store' }) =
               >
                 <RefreshCw className="w-4 h-4" />
               </button>
+
+              <button
+                type="button"
+                onClick={() => setIsCameraScannerOpen(true)}
+                className="flex items-center gap-2 px-3.5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition-all shadow-md shrink-0"
+                title="Point 19: Scan Barcode / QR Code with Laptop or Phone Camera"
+              >
+                <Camera className="w-4 h-4" />
+                <span className="hidden sm:inline">Camera Scan</span>
+              </button>
             </div>
 
             {/* Category Quick Pills */}
@@ -1026,6 +1039,21 @@ const PosCounterScreen = ({ isOpen, onClose, storeName = 'AuraMarket Store' }) =
             </div>
           </div>
         )}
+
+        {/* Point 19: In-Browser Camera Barcode & QR Scanner Modal */}
+        <CameraBarcodeScannerModal
+          isOpen={isCameraScannerOpen}
+          onClose={() => setIsCameraScannerOpen(false)}
+          onDetected={(code, result) => {
+            if (result?.type === 'PRODUCT' && result.data) {
+              addToCart(result.data);
+            } else {
+              setSearchTerm(code);
+            }
+          }}
+          title="POS Camera Barcode Scanner"
+          subtitle="Point camera at product packaging barcode to add directly to cart"
+        />
 
       </div>
     </div>

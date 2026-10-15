@@ -424,6 +424,260 @@ exports.updateSubOrderStatus = async (req, res, next) => {
   }
 };
 
+// Helper for generating printable Shipping Label & Packing Slip HTML (Point #57)
+function generatePrintableHtml(d, type) {
+  if (type === 'thermal') {
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Shipping Label - ${d.subOrderNumber}</title>
+  <style>
+    @page { size: 100mm 150mm; margin: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 4mm; color: #000; font-size: 11px; line-height: 1.3; }
+    .box { border: 2px solid #000; padding: 6px; margin-bottom: 4px; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 4px; }
+    .logo { font-size: 16px; font-weight: 900; letter-spacing: -0.5px; }
+    .barcode { text-align: center; margin: 6px 0; font-family: monospace; letter-spacing: 4px; font-weight: bold; font-size: 16px; }
+    .barcode-lines { height: 38px; background: repeating-linear-gradient(90deg, #000, #000 2px, #fff 2px, #fff 4px, #000 4px, #000 7px, #fff 7px, #fff 9px); margin-bottom: 2px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+    .bold { font-weight: bold; }
+    .badge { display: inline-block; padding: 2px 6px; background: #000; color: #fff; font-weight: bold; font-size: 10px; border-radius: 2px; }
+    .cod-badge { background: #000; color: #fff; padding: 4px; font-size: 13px; font-weight: 900; text-align: center; margin: 4px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 9px; }
+    th, td { border: 1px solid #000; padding: 3px; text-align: left; }
+    @media print { body { margin: 2mm; } .no-print { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="header">
+      <div class="logo">AuraMarket Express</div>
+      <div class="badge">${d.courierPartner}</div>
+    </div>
+    <div class="barcode">
+      <div class="barcode-lines"></div>
+      ${d.subOrderNumber}
+    </div>
+    <div class="grid" style="border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 0;">
+      <div><strong>Routing:</strong> ${d.routingCode}</div>
+      <div><strong>Weight:</strong> ${d.totalWeightKg} KG</div>
+    </div>
+    ${d.isCOD ? `<div class="cod-badge">CASH ON DELIVERY (COD): ₹${d.amountToCollect}</div>` : `<div style="border: 1px dashed #000; text-align:center; padding:3px; font-weight:bold; margin:4px 0;">PREPAID - DO NOT COLLECT CASH</div>`}
+    <div style="margin-top: 4px;">
+      <div class="bold" style="font-size: 10px; text-transform: uppercase;">Ship To:</div>
+      <div class="bold" style="font-size: 13px;">${d.customer.name}</div>
+      <div>${d.customer.address}</div>
+      <div><strong>Phone:</strong> ${d.customer.phone}</div>
+    </div>
+    <div style="margin-top: 4px; border-top: 1px dashed #000; padding-top: 4px;">
+      <div class="bold" style="font-size: 9px; text-transform: uppercase;">Return Address (Seller):</div>
+      <div class="bold">${d.seller.storeName} (GST: ${d.seller.gstin})</div>
+      <div style="font-size: 9px;">${d.seller.address}</div>
+    </div>
+    <table>
+      <thead><tr><th>SKU</th><th>Item</th><th>Qty</th></tr></thead>
+      <tbody>
+        ${d.items.map(i => `<tr><td>${i.sku}</td><td>${i.title}</td><td>${i.quantity}</td></tr>`).join('')}
+      </tbody>
+    </table>
+    <div style="font-size: 8px; text-align: center; margin-top: 4px;">
+      ${d.deliveryOtpNotice}
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+  // A4 Full Packing Slip / Tax Invoice
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Tax Invoice / Packing Slip - ${d.invoiceNumber}</title>
+  <style>
+    @page { size: A4; margin: 15mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #111; font-size: 12px; line-height: 1.4; margin: 0; }
+    .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+    .title { font-size: 22px; font-weight: 900; color: #0f172a; }
+    .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 16px; }
+    .meta-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; background: #f8fafc; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th { background: #0f172a; color: #fff; padding: 8px; text-align: left; font-size: 11px; text-transform: uppercase; }
+    td { padding: 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; }
+    .total-box { margin-left: auto; width: 280px; margin-top: 16px; border-top: 2px solid #0f172a; padding-top: 8px; }
+    .total-row { display: flex; justify-content: space-between; padding: 3px 0; }
+    .grand-total { font-size: 15px; font-weight: 900; border-top: 1px solid #cbd5e1; padding-top: 6px; margin-top: 4px; }
+    .footer { margin-top: 40px; display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid #e2e8f0; padding-top: 16px; }
+    .sign-box { border-top: 1px solid #000; width: 160px; text-align: center; padding-top: 4px; font-size: 10px; font-weight: bold; }
+    @media print { .no-print { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="title">AuraMarket — Multi-Vendor Commerce</div>
+      <div style="font-size: 12px; color: #64748b; font-weight: bold;">OFFICIAL TAX INVOICE & PACKING SLIP</div>
+    </div>
+    <div style="text-align: right;">
+      <div style="font-size: 14px; font-weight: bold;">${d.invoiceNumber}</div>
+      <div style="color: #64748b;">Order: ${d.orderNumber}</div>
+      <div style="color: #64748b;">Date: ${new Date(d.invoiceDate).toLocaleDateString('en-IN')}</div>
+    </div>
+  </div>
+
+  <div class="meta-grid">
+    <div class="meta-card">
+      <strong style="color: #0f172a; text-transform: uppercase; font-size: 11px;">Sold By (Merchant):</strong>
+      <div style="font-weight: bold; font-size: 13px; margin-top: 2px;">${d.seller.storeName}</div>
+      <div>${d.seller.address}</div>
+      <div><strong>GSTIN:</strong> ${d.seller.gstin}</div>
+      <div><strong>Email:</strong> ${d.seller.email} | <strong>Phone:</strong> ${d.seller.phone}</div>
+    </div>
+    <div class="meta-card">
+      <strong style="color: #0f172a; text-transform: uppercase; font-size: 11px;">Billing & Shipping To:</strong>
+      <div style="font-weight: bold; font-size: 13px; margin-top: 2px;">${d.customer.name}</div>
+      <div>${d.customer.address}</div>
+      <div><strong>Phone:</strong> ${d.customer.phone}</div>
+      <div style="margin-top: 2px; color: #475569;"><strong>Courier Routing:</strong> ${d.routingCode} (${d.courierPartner})</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Product Description</th>
+        <th>SKU</th>
+        <th>Qty</th>
+        <th>Price</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${d.items.map((item, idx) => `
+        <tr>
+          <td>${idx + 1}</td>
+          <td><strong>${item.title}</strong></td>
+          <td><code>${item.sku}</code></td>
+          <td>${item.quantity}</td>
+          <td>₹${item.price.toLocaleString('en-IN')}</td>
+          <td>₹${item.totalPrice.toLocaleString('en-IN')}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <div class="total-box">
+    <div class="total-row"><span>Sub Total:</span><span>₹${d.pricing.subTotal.toLocaleString('en-IN')}</span></div>
+    <div class="total-row"><span>GST / Tax (Included 18%):</span><span>₹${d.pricing.tax.toLocaleString('en-IN')}</span></div>
+    <div class="total-row"><span>Shipping Charges:</span><span>FREE</span></div>
+    <div class="total-row grand-total"><span>Grand Total:</span><span>₹${d.pricing.totalAmount.toLocaleString('en-IN')}</span></div>
+    <div style="text-align: right; font-size: 10px; color: #64748b; margin-top: 4px;">Payment Method: <strong>${d.paymentMethod}</strong> (${d.paymentStatus})</div>
+  </div>
+
+  <div class="footer">
+    <div style="font-size: 10px; color: #64748b; max-width: 380px;">
+      This is a computer-generated invoice and packing slip issued on behalf of ${d.seller.storeName} via AuraMarket Multi-Vendor Platform. All goods are packed with high-grade security seals.
+    </div>
+    <div class="sign-box">
+      Authorized Signatory<br>
+      <span style="font-size: 9px; color: #64748b;">${d.seller.storeName}</span>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+// @desc    Get Shipping Label & Packing Slip Data (Point #57)
+// @route   GET /api/vendor/orders/:id/shipping-label
+exports.getShippingLabelData = async (req, res, next) => {
+  try {
+    const vendor = await VendorProfile.findOne({ user: req.user._id });
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor profile not found' });
+    }
+
+    const subOrder = await SubOrder.findOne({ _id: req.params.id, vendor: vendor._id })
+      .populate('customer', 'name email phone')
+      .populate('deliveryPartner', 'name phone')
+      .populate('parentOrder', 'orderNumber paymentMethod paymentStatus totalAmount');
+
+    if (!subOrder) {
+      return res.status(404).json({ success: false, message: 'Sub-order not found or not owned by your store' });
+    }
+
+    const orderRef = subOrder.parentOrder?.orderNumber || `ORD-${subOrder._id.toString().slice(-8).toUpperCase()}`;
+    const subOrderRef = `SUB-${subOrder._id.toString().slice(-6).toUpperCase()}`;
+    const routingCode = `EXP-${(subOrder.shippingAddress?.pincode || '110001').slice(0, 3)}-${subOrder._id.toString().slice(-4).toUpperCase()}`;
+    const barcodeValue = `*${subOrderRef}*`;
+    const trackingUrl = `https://shribalajikripadham.online/ecommerce-demo/#track/${orderRef}`;
+
+    const totalWeightKg = (subOrder.items.reduce((acc, i) => acc + (i.quantity * 0.45), 0)).toFixed(2);
+    const invoiceNumber = `INV-${new Date().getFullYear()}-${subOrder._id.toString().slice(-6).toUpperCase()}`;
+
+    const labelData = {
+      orderId: subOrder.parentOrder?._id || subOrder.parentOrder,
+      orderNumber: orderRef,
+      subOrderId: subOrder._id,
+      subOrderNumber: subOrderRef,
+      invoiceNumber,
+      invoiceDate: subOrder.createdAt || new Date(),
+      routingCode,
+      barcodeValue,
+      qrValue: trackingUrl,
+      courierPartner: subOrder.deliveryPartner?.name || 'AuraMarket Express Courier',
+      paymentMethod: subOrder.parentOrder?.paymentMethod || 'PREPAID',
+      paymentStatus: subOrder.parentOrder?.paymentStatus || 'PAID',
+      isCOD: (subOrder.parentOrder?.paymentMethod || '').toUpperCase() === 'COD',
+      amountToCollect: (subOrder.parentOrder?.paymentMethod || '').toUpperCase() === 'COD' ? subOrder.subTotal : 0,
+      totalWeightKg,
+      dimensions: '22 x 16 x 8 cm',
+      seller: {
+        storeName: vendor.storeName || 'Apex Tech Hub',
+        storeSlug: vendor.storeSlug || 'apex-tech',
+        email: vendor.supportEmail || 'seller@auramarket.com',
+        phone: vendor.phone || '+91 98765 43210',
+        address: vendor.address || 'Plot 42, Tech Hub Logistics Center, Sector 62, Noida, UP, 201301',
+        gstin: vendor.gstin || '07AAAAA0000A1Z5',
+      },
+      customer: {
+        name: subOrder.shippingAddress?.recipientName || subOrder.customer?.name || 'Valued Customer',
+        phone: subOrder.shippingAddress?.phone || subOrder.customer?.phone || '9876543210',
+        address: `${subOrder.shippingAddress?.street || 'Flat 402, Green Valley Apartments'}, ${subOrder.shippingAddress?.city || 'New Delhi'}, ${subOrder.shippingAddress?.state || 'Delhi'} - ${subOrder.shippingAddress?.pincode || '110001'}`,
+        deliveryInstructions: subOrder.deliveryInstructions || 'Leave at reception / doorstep',
+      },
+      items: subOrder.items.map(item => ({
+        title: item.title,
+        sku: item.variantSku || 'SKU-STD',
+        quantity: item.quantity,
+        price: item.price,
+        totalPrice: item.totalPrice,
+      })),
+      pricing: {
+        subTotal: subOrder.subTotal,
+        shippingFee: 0,
+        tax: Math.round(subOrder.subTotal * 0.18),
+        totalAmount: subOrder.subTotal,
+      },
+      deliveryOtpNotice: 'Customer 4-digit secret OTP required at doorstep verification.',
+    };
+
+    if (req.query.format === 'html') {
+      const html = generatePrintableHtml(labelData, req.query.type || 'thermal');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: labelData,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Request Wallet Payout
 // @route   POST /api/vendor/payout
 exports.requestPayout = async (req, res, next) => {

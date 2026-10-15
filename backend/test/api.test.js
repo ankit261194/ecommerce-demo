@@ -44,6 +44,9 @@ const runTests = async () => {
     } catch (err) {
       console.error(`  ❌ FAIL: ${name}`);
       console.error(`     Error: ${err.message}`);
+      if (err.cause) {
+        console.error(`     Cause:`, err.cause);
+      }
       if (err.stack) {
         console.error(`     ${err.stack.split('\n')[1]}`);
       }
@@ -3892,6 +3895,61 @@ const runTests = async () => {
       assert.strictEqual(resDispatchedFilter.status, 200);
       const dataDispatchedFilter = await resDispatchedFilter.json();
       assert.ok(dataDispatchedFilter.data.some(o => o._id === testSubOrder._id.toString()));
+    });
+
+    await test('Point 57: Thermal & A4 Shipping Label / Packing Slip Printer with barcodes (Dual 4x6 Thermal & A4 Tax Invoice formatting)', async () => {
+      // Find a sub-order belonging to the vendor
+      const vendorSub = await SubOrder.findOne({ vendor: headphonesProduct.vendor._id });
+      assert.ok(vendorSub, 'Vendor sub-order must exist');
+
+      // 1. Fetch JSON Shipping Label Data
+      const resJson = await fetch(`${baseUrl}/vendor/orders/${vendorSub._id}/shipping-label`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resJson.status, 200);
+      const dataJson = await resJson.json();
+      assert.strictEqual(dataJson.success, true);
+      assert.ok(dataJson.data);
+      assert.ok(dataJson.data.subOrderNumber.startsWith('SUB-'));
+      assert.ok(dataJson.data.invoiceNumber.startsWith('INV-'));
+      assert.ok(dataJson.data.routingCode.startsWith('EXP-'));
+      assert.ok(dataJson.data.barcodeValue.includes(dataJson.data.subOrderNumber));
+      assert.ok(dataJson.data.qrValue.includes('/#track/'));
+      assert.ok(dataJson.data.seller.storeName.includes('Apex Tech'));
+      assert.ok(dataJson.data.customer.name);
+      assert.ok(Array.isArray(dataJson.data.items));
+      assert.ok(dataJson.data.items.length >= 1);
+      assert.strictEqual(typeof dataJson.data.pricing.totalAmount, 'number');
+
+      // 2. Fetch 4x6 Thermal Label HTML (?format=html&type=thermal)
+      const resThermal = await fetch(`${baseUrl}/vendor/orders/${vendorSub._id}/shipping-label?format=html&type=thermal`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resThermal.status, 200);
+      assert.ok(resThermal.headers.get('content-type').includes('text/html'));
+      const thermalHtml = await resThermal.text();
+      assert.ok(thermalHtml.includes('AuraMarket Express'));
+      assert.ok(thermalHtml.includes('100mm 150mm'), 'Must configure 4x6 thermal dimensions');
+      assert.ok(thermalHtml.includes('barcode-lines'), 'Must render barcode lines');
+
+      // 3. Fetch A4 Full Packing Slip / Tax Invoice HTML (?format=html&type=a4)
+      const resA4 = await fetch(`${baseUrl}/vendor/orders/${vendorSub._id}/shipping-label?format=html&type=a4`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resA4.status, 200);
+      assert.ok(resA4.headers.get('content-type').includes('text/html'));
+      const a4Html = await resA4.text();
+      assert.ok(a4Html.includes('OFFICIAL TAX INVOICE & PACKING SLIP'));
+      assert.ok(a4Html.includes('size: A4'), 'Must configure A4 dimensions');
+      assert.ok(a4Html.includes('Authorized Signatory'));
+
+      // 4. Test 404 for invalid sub-order ID
+      const resNotFound = await fetch(`${baseUrl}/vendor/orders/66a123456789012345678999/shipping-label`, {
+        headers: { Authorization: `Bearer ${vendorToken}` },
+      });
+      assert.strictEqual(resNotFound.status, 404);
+      const dataNotFound = await resNotFound.json();
+      assert.strictEqual(dataNotFound.success, false);
     });
 
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {

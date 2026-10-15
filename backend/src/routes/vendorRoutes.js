@@ -12,6 +12,7 @@ const {
   deleteProduct,
   getVendorOrders,
   updateSubOrderStatus,
+  getShippingLabelData,
   requestPayout,
 } = require('../controllers/vendorController');
 const { protect, authorize } = require('../middlewares/auth');
@@ -30,6 +31,7 @@ router.put('/products/:id/media', updateProductMedia);
 router.patch('/products/:id/stock', updateProductStock);
 router.delete('/products/:id', deleteProduct);
 router.get('/orders', getVendorOrders);
+router.get('/orders/:id/shipping-label', getShippingLabelData);
 router.put('/orders/:id/status', updateSubOrderStatus);
 router.post('/payout', requestPayout);
 

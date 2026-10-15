@@ -17,12 +17,14 @@ import {
   RotateCw,
   FileSpreadsheet,
   ShieldCheck,
+  Printer,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import MultiVariantProductModal from '../components/MultiVariantProductModal';
 import ProductGalleryUploader from '../components/ProductGalleryUploader';
 import BulkProductExcelModal from '../components/BulkProductExcelModal';
+import ShippingLabelPrinterModal from '../components/ShippingLabelPrinterModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -128,6 +130,8 @@ export const VendorPortal = () => {
   const [stockFilter, setStockFilter] = useState('all'); // Point #54: all | in_stock | low_stock | out_of_stock
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false); // Point #55: Bulk Excel / CSV Suite
   const [orderFilter, setOrderFilter] = useState('all'); // Point #56: all | pending | packaging | ready_for_pickup | dispatched | delivered
+  const [isLabelModalOpen, setIsLabelModalOpen] = useState(false); // Point #57: Thermal & A4 Shipping Label Printer
+  const [selectedOrderForLabel, setSelectedOrderForLabel] = useState(null);
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
@@ -744,6 +748,19 @@ export const VendorPortal = () => {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedOrderForLabel(order);
+                          setIsLabelModalOpen(true);
+                        }}
+                        className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                        title="Print 4x6 Thermal Shipping Label or A4 Tax Invoice / Packing Slip"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Print Label / Slip</span>
+                      </button>
+
                       {isPending && (
                         <button
                           type="button"
@@ -1356,6 +1373,14 @@ export const VendorPortal = () => {
             message: `Successfully synchronized ${importedList.length} products to store catalog.`,
           });
         }}
+      />
+
+      {/* Point 57: Shipping Label & Packing Slip Printer Modal */}
+      <ShippingLabelPrinterModal
+        isOpen={isLabelModalOpen}
+        onClose={() => setIsLabelModalOpen(false)}
+        order={selectedOrderForLabel}
+        vendorData={vendorData}
       />
     </div>
   );

@@ -3658,8 +3658,8 @@ const runTests = async () => {
       assert.strictEqual(partialData.data.payments.razorpay.keySecret, 'rzp_preserved_secret_99', 'Existing keySecret must be preserved');
     });
 
-    // 14. E-Commerce SEO Engine & Webmaster System Tests
-    await test('GET /sitemap.xml generates valid XML with homepage, categories, products and priority/changefreq', async () => {
+    // Point 47: SEO & Webmaster Suite (Meta tags, Open Graph, GA4, Pixel, sitemap.xml, robots.txt)
+    await test('Point 47: GET /sitemap.xml generates valid XML with homepage, categories, products and priority/changefreq', async () => {
       const serverRoot = `http://127.0.0.1:${PORT}`;
       const res = await fetch(`${serverRoot}/sitemap.xml`);
       assert.strictEqual(res.status, 200);

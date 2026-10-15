@@ -641,10 +641,24 @@ export const VendorPortal = () => {
 
               <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
                 <div>
-                  <span className="text-slate-400 line-through mr-1.5 font-medium">₹{p.mrp}</span>
-                  <span className="font-black text-slate-900 text-sm">₹{p.sellingPrice}</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-black text-slate-900 text-sm">₹{p.sellingPrice}</span>
+                    {p.mrp > p.sellingPrice && (
+                      <span className="text-slate-400 line-through text-xs font-medium">₹{p.mrp}</span>
+                    )}
+                    {p.mrp > p.sellingPrice && (
+                      <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded-md">
+                        {Math.round(((p.mrp - p.sellingPrice) / p.mrp) * 100)}% OFF
+                      </span>
+                    )}
+                  </div>
+                  {p.mrp > p.sellingPrice && (
+                    <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+                      Customer saves ₹{(p.mrp - p.sellingPrice).toLocaleString('en-IN')}
+                    </p>
+                  )}
                 </div>
-                <span className="font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                <span className="font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full shrink-0">
                   Stock: {p.stock}
                 </span>
               </div>
@@ -696,6 +710,21 @@ export const VendorPortal = () => {
               />
             </div>
           </div>
+
+          {/* Point #53: Live Discount Preview Calculator Badge */}
+          {newProduct.sellingPrice && newProduct.mrp && Number(newProduct.mrp) > Number(newProduct.sellingPrice) && (
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center justify-between animate-fadeIn">
+              <span className="font-bold flex items-center gap-1.5">
+                <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white font-black text-[11px]">
+                  {Math.round(((Number(newProduct.mrp) - Number(newProduct.sellingPrice)) / Number(newProduct.mrp)) * 100)}% OFF
+                </span>
+                <span>Point #53 Automatic Discount</span>
+              </span>
+              <span className="font-semibold text-emerald-700">
+                Buyer Saves ₹{(Number(newProduct.mrp) - Number(newProduct.sellingPrice)).toLocaleString('en-IN')}
+              </span>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

@@ -93,6 +93,15 @@ exports.createProduct = async (req, res, next) => {
     let cleanGallery = Array.isArray(gallery) ? gallery.filter(img => img && img !== primaryThumbnail) : (images && images.length > 1 ? images.slice(1) : []);
     let combinedImages = [primaryThumbnail, ...cleanGallery];
 
+    // Point #53: Original MRP vs Selling Discount Calculation
+    const sellPrice = Number(sellingPrice) || 0;
+    let originalMrp = Number(mrp) || Math.round(sellPrice * 1.25);
+    if (originalMrp < sellPrice) {
+      originalMrp = sellPrice;
+    }
+    const savings = Math.max(0, originalMrp - sellPrice);
+    const discPct = originalMrp > 0 ? Math.round((savings / originalMrp) * 100) : 0;
+
     const product = await Product.create({
       vendor: vendor._id,
       title,
@@ -103,8 +112,10 @@ exports.createProduct = async (req, res, next) => {
       thumbnail: primaryThumbnail,
       gallery: cleanGallery,
       images: combinedImages,
-      mrp,
-      sellingPrice,
+      mrp: originalMrp,
+      sellingPrice: sellPrice,
+      discountPercentage: discPct,
+      savingsAmount: savings,
       stock: calculatedStock,
       sku: sku || 'SKU-' + Date.now(),
       hasVariants: !!hasVariants,
@@ -145,6 +156,20 @@ exports.updateProduct = async (req, res, next) => {
       req.body.thumbnail = primaryThumb;
       req.body.gallery = cleanGal;
       req.body.images = [primaryThumb, ...cleanGal];
+    }
+
+    // Point #53: MRP vs Selling Discount Calculation on Update
+    if (req.body.sellingPrice !== undefined || req.body.mrp !== undefined) {
+      const updatedSelling = req.body.sellingPrice !== undefined ? Number(req.body.sellingPrice) : product.sellingPrice;
+      let updatedMrp = req.body.mrp !== undefined ? Number(req.body.mrp) : product.mrp;
+      if (updatedMrp < updatedSelling) {
+        updatedMrp = updatedSelling;
+      }
+      const savings = Math.max(0, updatedMrp - updatedSelling);
+      req.body.sellingPrice = updatedSelling;
+      req.body.mrp = updatedMrp;
+      req.body.savingsAmount = savings;
+      req.body.discountPercentage = updatedMrp > 0 ? Math.round((savings / updatedMrp) * 100) : 0;
     }
 
     product = await Product.findByIdAndUpdate(req.params.id, req.body, {

@@ -306,6 +306,21 @@ export default function MultiVariantProductModal({
                 </select>
               </div>
             </div>
+
+            {/* Point #53: Live Discount Preview Calculator */}
+            {baseMrp > baseSellingPrice && (
+              <div className="mt-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+                <span className="font-bold flex items-center gap-1.5">
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white font-black text-[11px]">
+                    {Math.round(((baseMrp - baseSellingPrice) / baseMrp) * 100)}% OFF
+                  </span>
+                  <span>Point #53 Automatic Discount Badge</span>
+                </span>
+                <span className="font-semibold text-xs">
+                  Customer Saves ₹{(baseMrp - baseSellingPrice).toLocaleString('en-IN')}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Section 2: Variant Options Configurator */}

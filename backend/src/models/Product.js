@@ -77,6 +77,17 @@ const productSchema = new mongoose.Schema(
       type: Number,
       required: [true, 'Selling Price is required'],
     },
+    discountPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    savingsAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     stock: {
       type: Number,
       required: [true, 'Total product stock is required'],
@@ -132,11 +143,27 @@ const productSchema = new mongoose.Schema(
     },
     tags: [String],
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
+
+// Point #53: Virtuals for dynamic discount calculations
+productSchema.virtual('calculatedDiscountPercentage').get(function () {
+  if (!this.mrp || this.mrp <= this.sellingPrice) return 0;
+  return Math.round(((this.mrp - this.sellingPrice) / this.mrp) * 100);
+});
+
+productSchema.virtual('calculatedSavings').get(function () {
+  if (!this.mrp || this.mrp <= this.sellingPrice) return 0;
+  return Math.max(0, this.mrp - this.sellingPrice);
+});
 
 // Point #51: Auto-calculate total product stock from variants when present
 // Point #52: Synchronize primary thumbnail & gallery photos
+// Point #53: Auto-calculate discount percentage & customer savings
 productSchema.pre('save', function (next) {
   if (this.hasVariants && Array.isArray(this.variants) && this.variants.length > 0) {
     this.stock = this.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
@@ -158,6 +185,16 @@ productSchema.pre('save', function (next) {
     this.thumbnail = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500';
     this.gallery = [];
     this.images = [this.thumbnail];
+  }
+
+  // Point #53: MRP vs Selling Discount Calculation
+  if (typeof this.sellingPrice === 'number') {
+    if (!this.mrp || this.mrp < this.sellingPrice) {
+      this.mrp = this.sellingPrice;
+    }
+    const savings = Math.max(0, this.mrp - this.sellingPrice);
+    this.savingsAmount = savings;
+    this.discountPercentage = this.mrp > 0 ? Math.round((savings / this.mrp) * 100) : 0;
   }
 
   next();

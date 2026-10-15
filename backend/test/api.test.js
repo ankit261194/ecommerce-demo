@@ -3527,6 +3527,89 @@ const runTests = async () => {
       assert.strictEqual(dataPublic.data.images.length, 4);
     });
 
+    await test('Point 53: Original MRP vs Selling Discount Price with automatic % OFF badge & customer savings', async () => {
+      // 1. Fetch category id
+      const resCat = await fetch(`${baseUrl}/products/categories`);
+      const dataCat = await resCat.json();
+      const catId = dataCat.data[0]._id;
+
+      // 2. Vendor creates product with MRP = 10000 and Selling Price = 6999 (30% OFF)
+      const resCreate = await fetch(`${baseUrl}/vendor/products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Titanium Chrono Sports Edition',
+          description: 'High-end smartwatch with automatic discount badge computation.',
+          category: catId,
+          brand: 'Apex Tech',
+          mrp: 10000,
+          sellingPrice: 6999,
+          stock: 25,
+          sku: 'APX-CHRONO-53-' + Date.now(),
+        }),
+      });
+
+      assert.strictEqual(resCreate.status, 201);
+      const dataCreated = await resCreate.json();
+      assert.strictEqual(dataCreated.success, true);
+      assert.strictEqual(dataCreated.data.mrp, 10000);
+      assert.strictEqual(dataCreated.data.sellingPrice, 6999);
+      assert.strictEqual(dataCreated.data.savingsAmount, 3001, 'Customer savings must be 10000 - 6999 = 3001');
+      assert.strictEqual(dataCreated.data.discountPercentage, 30, 'Discount must be Math.round((3001 / 10000) * 100) = 30% OFF');
+
+      const prodId = dataCreated.data._id;
+
+      // 3. Update to 50% OFF (Selling Price = 5000, MRP = 10000)
+      const resUpdate = await fetch(`${baseUrl}/vendor/products/${prodId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({
+          sellingPrice: 5000,
+          mrp: 10000,
+        }),
+      });
+
+      assert.strictEqual(resUpdate.status, 200);
+      const dataUpdated = await resUpdate.json();
+      assert.strictEqual(dataUpdated.success, true);
+      assert.strictEqual(dataUpdated.data.sellingPrice, 5000);
+      assert.strictEqual(dataUpdated.data.savingsAmount, 5000);
+      assert.strictEqual(dataUpdated.data.discountPercentage, 50, 'Discount must be exactly 50% OFF');
+
+      // 4. Edge Case: Vendor attempts to set MRP lower than Selling Price (mrp: 3000, sellingPrice: 4000)
+      const resEdge = await fetch(`${baseUrl}/vendor/products/${prodId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({
+          sellingPrice: 4000,
+          mrp: 3000,
+        }),
+      });
+
+      assert.strictEqual(resEdge.status, 200);
+      const dataEdge = await resEdge.json();
+      assert.strictEqual(dataEdge.data.sellingPrice, 4000);
+      assert.strictEqual(dataEdge.data.mrp, 4000, 'MRP must be normalized to at least equal selling price');
+      assert.strictEqual(dataEdge.data.savingsAmount, 0);
+      assert.strictEqual(dataEdge.data.discountPercentage, 0);
+
+      // 5. Verify public storefront fetch has discount calculations
+      const resPublic = await fetch(`${baseUrl}/products/${prodId}`);
+      assert.strictEqual(resPublic.status, 200);
+      const dataPublic = await resPublic.json();
+      assert.strictEqual(dataPublic.data.sellingPrice, 4000);
+      assert.strictEqual(dataPublic.data.mrp, 4000);
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

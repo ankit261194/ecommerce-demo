@@ -30,6 +30,7 @@ import BulkProductExcelModal from '../components/BulkProductExcelModal';
 import ShippingLabelPrinterModal from '../components/ShippingLabelPrinterModal';
 import SmartSplitPackingSlipModal from '../components/SmartSplitPackingSlipModal';
 import ThermalReceiptPrinterModal from '../components/ThermalReceiptPrinterModal';
+import AiProductCopyModal from '../components/AiProductCopyModal';
 import VendorStoreProfileModal from '../components/VendorStoreProfileModal';
 import VendorPublicStoreModal from '../components/VendorPublicStoreModal';
 import VacationModeModal from '../components/VacationModeModal';
@@ -156,6 +157,7 @@ export const VendorPortal = () => {
   const [selectedOrderForSplitSlip, setSelectedOrderForSplitSlip] = useState(null);
   const [isThermalModalOpen, setIsThermalModalOpen] = useState(false); // Point #75: Thermal Receipt Printer Modal
   const [selectedOrderForThermal, setSelectedOrderForThermal] = useState(null);
+  const [isAiCopyModalOpen, setIsAiCopyModalOpen] = useState(false); // Point #76: AI Product Description & SEO Meta Generator
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // Point #58: Store Profile Customization
   const [isPublicStorePreviewOpen, setIsPublicStorePreviewOpen] = useState(false); // Point #58: Public Storefront Preview
   const [isVacationModalOpen, setIsVacationModalOpen] = useState(false); // Point #59: Vacation Mode Toggle
@@ -177,6 +179,12 @@ export const VendorPortal = () => {
     sizeVariant: '',
     thumbnail: '',
     gallery: [],
+    description: '',
+    bullets: [],
+    searchTags: [],
+    metaTitle: '',
+    metaDescription: '',
+    hsnCode: '85183000',
   });
 
   const fetchVendorData = async () => {
@@ -287,7 +295,12 @@ export const VendorPortal = () => {
         stock: Number(newProduct.stock),
         sku: newProduct.sku || 'SKU-' + Date.now().toString().slice(-4),
         category: firstCatId || '66a123456789012345678901',
-        description: `${newProduct.title} - Official authentic stock.`,
+        description: newProduct.description || `${newProduct.title} - Official authentic stock.`,
+        bullets: newProduct.bullets || [],
+        searchTags: newProduct.searchTags || [],
+        metaTitle: newProduct.metaTitle || newProduct.title,
+        metaDescription: newProduct.metaDescription || '',
+        hsnCode: newProduct.hsnCode || '85183000',
         thumbnail: primaryImg,
         gallery: prodGallery,
         images: allImgs,
@@ -1268,6 +1281,16 @@ export const VendorPortal = () => {
         width="max-w-lg"
       >
         <form onSubmit={handleAddProduct} className="space-y-4 text-slate-800">
+          {/* Point #76: AI Product Description & SEO Meta Assistant */}
+          <button
+            type="button"
+            onClick={() => setIsAiCopyModalOpen(true)}
+            className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-amber-500 hover:from-purple-700 hover:to-amber-600 text-white font-black text-xs flex items-center justify-center gap-2 shadow-sm transition active:scale-95"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+            <span>✨ AI Copywriter: Auto-Generate Titles, Bullets & SEO (Point #76)</span>
+          </button>
+
           <div>
             <label className="text-xs font-bold uppercase text-slate-600">Product Title</label>
             <input
@@ -1373,6 +1396,31 @@ export const VendorPortal = () => {
               }
             />
           </div>
+
+          {/* AI Copy Preview Details */}
+          {newProduct.description && (
+            <div className="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200 space-y-2 text-xs">
+              <div className="flex items-center justify-between font-black text-purple-900">
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                  AI Generated Description & Bullets
+                </span>
+                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-purple-200 text-purple-800">
+                  HSN: {newProduct.hsnCode}
+                </span>
+              </div>
+              <p className="text-slate-700 text-[11px] line-clamp-3 leading-relaxed">
+                {newProduct.description}
+              </p>
+              {newProduct.bullets?.length > 0 && (
+                <div className="text-[11px] text-slate-600 font-semibold space-y-0.5">
+                  {newProduct.bullets.slice(0, 2).map((b, i) => (
+                    <div key={i} className="truncate">• {b.replace(/\*\*/g, '')}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <button
             type="submit"
@@ -1532,6 +1580,27 @@ export const VendorPortal = () => {
         }}
         orderId={selectedOrderForThermal}
         role="vendor"
+      />
+
+      {/* Point 76: AI Product Description & SEO Meta Generator Modal */}
+      <AiProductCopyModal
+        isOpen={isAiCopyModalOpen}
+        onClose={() => setIsAiCopyModalOpen(false)}
+        initialTitle={newProduct.title}
+        initialCategory={newProduct.category}
+        onApply={(aiData) => {
+          setNewProduct((prev) => ({
+            ...prev,
+            title: aiData.title || prev.title,
+            description: aiData.description || prev.description,
+            bullets: aiData.bullets || prev.bullets,
+            metaTitle: aiData.metaTitle || prev.metaTitle,
+            metaDescription: aiData.metaDescription || prev.metaDescription,
+            searchTags: aiData.searchTags || prev.searchTags,
+            hsnCode: aiData.hsnCode || prev.hsnCode,
+          }));
+          setNotification(`✨ AI Copy & SEO meta successfully applied to product form!`);
+        }}
       />
 
       {/* Point 58: Vendor Store Profile Customization Modal */}

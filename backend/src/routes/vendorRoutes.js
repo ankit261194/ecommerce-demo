@@ -23,6 +23,8 @@ const {
   deleteVendorReviewReply,
   getVendorWallet,
   exportVendorLedgerCSV,
+  generateProductCopy,
+  generateSeoMeta,
 } = require('../controllers/vendorController');
 const { getSplitPackingSlips, getThermalReceipt } = require('../controllers/orderController');
 const { protect, authorize } = require('../middlewares/auth');
@@ -55,6 +57,8 @@ router.get('/products', getVendorProducts);
 router.post('/products', createProduct);
 router.post('/products/bulk-upload', bulkUploadProducts);
 router.get('/products/export-csv', exportProductsCSV);
+router.post('/ai-generator/product-copy', generateProductCopy);
+router.post('/ai-generator/seo-meta', generateSeoMeta);
 router.put('/products/:id', updateProduct);
 router.put('/products/:id/media', updateProductMedia);
 router.patch('/products/:id/stock', updateProductStock);

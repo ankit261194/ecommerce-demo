@@ -1697,3 +1697,54 @@ exports.exportVendorLedgerCSV = async (req, res, next) => {
   }
 };
 
+// @desc    AI Product Description & SEO Meta Generator for Vendors (Point #76)
+// @route   POST /api/vendor/ai-generator/product-copy
+// @access  Private (Vendor)
+exports.generateProductCopy = async (req, res, next) => {
+  try {
+    const { prompt, title, category, tone, targetAudience } = req.body;
+    const { generateProductCopy: buildCopy } = require('../utils/aiProductGenerator');
+
+    const result = buildCopy({
+      prompt,
+      title,
+      category,
+      tone,
+      targetAudience,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'AI product copy generated successfully!',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    AI SEO Meta Generator for Vendors (Point #76)
+// @route   POST /api/vendor/ai-generator/seo-meta
+// @access  Private (Vendor)
+exports.generateSeoMeta = async (req, res, next) => {
+  try {
+    const { title, description, category } = req.body;
+    const { generateSeoMeta: buildSeo } = require('../utils/aiProductGenerator');
+
+    const result = buildSeo({
+      title,
+      description,
+      category,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'AI SEO meta data generated successfully!',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+

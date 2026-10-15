@@ -6234,6 +6234,79 @@ const runTests = async () => {
       await Order.deleteOne({ _id: testOrder._id });
     });
 
+    // =========================================================================
+    // Point 76: AI Product Description & SEO Meta Generator for Vendors
+    // =========================================================================
+    await test('Point 76: AI Product Description & SEO Meta Generator for Vendors (Titles, Bullets, Description, SERP SEO Meta, HSN recommendation)', async () => {
+      // 1. Unauthenticated request rejected with 401
+      const resUnauth = await fetch(`${baseUrl}/vendor/ai-generator/product-copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Noise cancelling over-ear headphones' }),
+      });
+      assert.strictEqual(resUnauth.status, 401);
+
+      // 2. Customer token rejected with 403 (Vendor only)
+      const resCustomer = await fetch(`${baseUrl}/vendor/ai-generator/product-copy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ prompt: 'Noise cancelling over-ear headphones' }),
+      });
+      assert.strictEqual(resCustomer.status, 403);
+
+      // 3. Vendor generates full product copy
+      const resCopy = await fetch(`${baseUrl}/vendor/ai-generator/product-copy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({
+          prompt: 'Noise cancelling over-ear wireless headphones with bass boost',
+          category: 'Electronics',
+          tone: 'luxury',
+          targetAudience: 'Audiophiles & Professionals',
+        }),
+      });
+      assert.strictEqual(resCopy.status, 200);
+      const dataCopy = await resCopy.json();
+      assert.strictEqual(dataCopy.success, true);
+      assert.ok(Array.isArray(dataCopy.data.titles));
+      assert.strictEqual(dataCopy.data.titles.length, 3, 'Must return 3 A/B title variations');
+      assert.ok(dataCopy.data.description.includes('Audiophiles & Professionals'));
+      assert.ok(Array.isArray(dataCopy.data.bullets));
+      assert.ok(dataCopy.data.bullets.length >= 5, 'Must return at least 5 selling bullets');
+      assert.strictEqual(dataCopy.data.suggestedHsnCode, '85183000', 'Electronics headphones should resolve to HSN 85183000');
+      assert.strictEqual(dataCopy.data.suggestedGstRate, 18);
+      assert.ok(dataCopy.data.seoMeta.metaTitle);
+      assert.ok(dataCopy.data.seoMeta.metaDescription);
+      assert.ok(Array.isArray(dataCopy.data.seoMeta.searchTags));
+
+      // 4. Vendor generates standalone SEO Meta
+      const resSeo = await fetch(`${baseUrl}/vendor/ai-generator/seo-meta`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Urban Heavyweight Cotton Hoodie',
+          description: '100% combed cotton premium streetwear hoodie',
+          category: 'Fashion',
+        }),
+      });
+      assert.strictEqual(resSeo.status, 200);
+      const dataSeo = await resSeo.json();
+      assert.strictEqual(dataSeo.success, true);
+      assert.ok(dataSeo.data.metaTitle.includes('Urban Heavyweight Cotton Hoodie'));
+      assert.ok(dataSeo.data.metaTitle.length <= 60, 'SEO Meta Title should adhere to Google 60-char limit');
+      assert.ok(dataSeo.data.metaDescription.length <= 160, 'SEO Meta Description should adhere to Google 160-char limit');
+      assert.ok(dataSeo.data.searchTags.includes('hoodie') || dataSeo.data.searchTags.includes('fashion'));
+    });
+
     // 9b. Edge Case & Security Validations
     await test('POST /delivery/tasks/:id/verify-otp rejects re-delivery on already DELIVERED task with 400', async () => {
       const targetSubOrder = await SubOrder.findById(riderTask.subOrder);

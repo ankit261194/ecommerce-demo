@@ -9,6 +9,7 @@ const Ledger = require('../models/Ledger');
 const UIConfig = require('../models/UIConfig');
 const Coupon = require('../models/Coupon');
 const Banner = require('../models/Banner');
+const AuditLog = require('../models/AuditLog');
 
 const seedDemoData = async () => {
   console.log('[DemoManager] Seeding demo multi-vendor data...');
@@ -719,6 +720,58 @@ const seedDemoData = async () => {
     ]);
   }
 
+  // Ensure initial audit logs exist (Point #50)
+  const existingAuditLogs = await AuditLog.countDocuments();
+  if (existingAuditLogs === 0) {
+    await AuditLog.create([
+      {
+        action: 'SYSTEM_INITIALIZATION',
+        module: 'SYSTEM',
+        performedBy: admin._id,
+        userName: 'Super Admin',
+        userEmail: 'admin@auramarket.com',
+        userRole: 'superadmin',
+        description: 'AuraMarket Enterprise Multi-Vendor Platform initialized successfully.',
+        details: { version: '3.2.0', environment: 'production-ready' },
+        status: 'SUCCESS',
+      },
+      {
+        action: 'STAFF_ROLE_ASSIGNED',
+        module: 'STAFF',
+        performedBy: admin._id,
+        userName: 'Super Admin',
+        userEmail: 'admin@auramarket.com',
+        userRole: 'superadmin',
+        targetId: 'operations.lead@auramarket.com',
+        targetType: 'User',
+        description: 'Assigned "Logistics & Dispatch Supervisor" role to Rohan Deshmukh with granular orders & CRM rights.',
+        status: 'SUCCESS',
+      },
+      {
+        action: 'VENDOR_KYC_APPROVED',
+        module: 'VENDORS',
+        performedBy: admin._id,
+        userName: 'Super Admin',
+        userEmail: 'admin@auramarket.com',
+        userRole: 'superadmin',
+        targetId: 'apex-tech-hub',
+        targetType: 'VendorProfile',
+        description: 'Verified GSTIN and bank details for vendor Apex Tech Hub (8% platform commission).',
+        status: 'SUCCESS',
+      },
+      {
+        action: 'SETTINGS_UPDATED',
+        module: 'SETTINGS',
+        performedBy: admin._id,
+        userName: 'Super Admin',
+        userEmail: 'admin@auramarket.com',
+        userRole: 'superadmin',
+        description: 'Configured GST tax engine (18% default) & dynamic shipping rules (₹999 free shipping threshold).',
+        status: 'SUCCESS',
+      },
+    ]);
+  }
+
   console.log('[DemoManager] Seeding completed successfully!');
   return { success: true, message: 'Demo data seeded successfully' };
 };
@@ -726,7 +779,7 @@ const seedDemoData = async () => {
 const wipeDemoData = async () => {
   console.log('[DemoManager] Wiping demo products, orders, tasks, ledgers, coupons, and banners...');
 
-  // 1. Delete all products, categories, orders, suborders, delivery tasks, ledger entries, coupons, banners
+  // 1. Delete all products, categories, orders, suborders, delivery tasks, ledger entries, coupons, banners, audit logs
   await Product.deleteMany({});
   await Order.deleteMany({});
   await SubOrder.deleteMany({});
@@ -735,6 +788,7 @@ const wipeDemoData = async () => {
   await Category.deleteMany({});
   await Coupon.deleteMany({});
   await Banner.deleteMany({});
+  await AuditLog.deleteMany({});
 
   // 2. Remove non-admin demo users if desired, or keep superadmin safe
   await User.deleteMany({ role: { $ne: 'superadmin' } });

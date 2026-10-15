@@ -5,6 +5,13 @@ const Order = require('../models/Order');
 const SubOrder = require('../models/SubOrder');
 const Ledger = require('../models/Ledger');
 const UIConfig = require('../models/UIConfig');
+const Category = require('../models/Category');
+const Brand = require('../models/Brand');
+const Coupon = require('../models/Coupon');
+const Banner = require('../models/Banner');
+const DeliveryTask = require('../models/DeliveryTask');
+const AuditLog = require('../models/AuditLog');
+const { recordAuditLog } = require('../utils/auditLogger');
 const smsService = require('../services/smsService');
 const mailService = require('../services/mailService');
 const { wipeDemoData, seedDemoData } = require('../utils/demoManager');
@@ -1619,5 +1626,234 @@ exports.deleteStaff = async (req, res, next) => {
     next(error);
   }
 };
+
+// ==========================================
+// Point #50: System Audit Activity Log & 1-Click Database Backup
+// ==========================================
+
+// @desc    Get activity audit logs with filters and summary stats
+// @route   GET /api/admin/audit-logs
+exports.getAuditLogs = async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 25;
+    const skip = (page - 1) * limit;
+
+    const { module, status, search, action } = req.query;
+    let query = {};
+
+    if (module && module !== 'ALL') {
+      query.module = module;
+    }
+    if (status && status !== 'ALL') {
+      query.status = status;
+    }
+    if (action) {
+      query.action = action;
+    }
+    if (search) {
+      query.$or = [
+        { description: { $regex: search, $options: 'i' } },
+        { userName: { $regex: search, $options: 'i' } },
+        { userEmail: { $regex: search, $options: 'i' } },
+        { action: { $regex: search, $options: 'i' } },
+        { targetId: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const [logs, total, totalAllEvents, warningEvents] = await Promise.all([
+      AuditLog.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      AuditLog.countDocuments(query),
+      AuditLog.countDocuments(),
+      AuditLog.countDocuments({ status: { $in: ['WARNING', 'FAILED'] } }),
+    ]);
+
+    // Calculate today's events count
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const todayEvents = await AuditLog.countDocuments({ createdAt: { $gte: startOfToday } });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        logs,
+        pagination: {
+          total,
+          page,
+          pages: Math.ceil(total / limit) || 1,
+          limit,
+        },
+        metrics: {
+          totalAllEvents,
+          todayEvents,
+          warningEvents,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Database Collection counts and health status
+// @route   GET /api/admin/backup/stats
+exports.getDatabaseBackupStats = async (req, res, next) => {
+  try {
+    const [
+      users,
+      vendors,
+      products,
+      orders,
+      subOrders,
+      categories,
+      brands,
+      coupons,
+      banners,
+      ledgers,
+      deliveryTasks,
+      auditLogs,
+    ] = await Promise.all([
+      User.countDocuments(),
+      VendorProfile.countDocuments(),
+      Product.countDocuments(),
+      Order.countDocuments(),
+      SubOrder.countDocuments(),
+      Category.countDocuments(),
+      Brand.countDocuments(),
+      Coupon.countDocuments(),
+      Banner.countDocuments(),
+      Ledger.countDocuments(),
+      DeliveryTask.countDocuments(),
+      AuditLog.countDocuments(),
+    ]);
+
+    const collections = [
+      { name: 'Users & Staff', key: 'users', count: users, icon: 'Users' },
+      { name: 'Vendor Stores', key: 'vendors', count: vendors, icon: 'Store' },
+      { name: 'Catalog Products', key: 'products', count: products, icon: 'Package' },
+      { name: 'Master Orders', key: 'orders', count: orders, icon: 'ShoppingCart' },
+      { name: 'Vendor Sub-Orders', key: 'subOrders', count: subOrders, icon: 'Split' },
+      { name: 'Categories & Subcategories', key: 'categories', count: categories, icon: 'FolderTree' },
+      { name: 'Manufacturer Brands', key: 'brands', count: brands, icon: 'Award' },
+      { name: 'Coupons & Vouchers', key: 'coupons', count: coupons, icon: 'Ticket' },
+      { name: 'Hero Banners & Sliders', key: 'banners', count: banners, icon: 'Image' },
+      { name: 'Double-Entry Ledgers', key: 'ledgers', count: ledgers, icon: 'BookOpen' },
+      { name: 'Rider Delivery Tasks', key: 'deliveryTasks', count: deliveryTasks, icon: 'Truck' },
+      { name: 'System Audit Logs', key: 'auditLogs', count: auditLogs, icon: 'ShieldCheck' },
+    ];
+
+    const totalRecords = collections.reduce((acc, curr) => acc + curr.count, 0);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalRecords,
+        totalCollections: collections.length,
+        collections,
+        databaseStatus: 'OPTIMAL_CONNECTED',
+        lastCheckedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Export full database snapshot as downloadable JSON file
+// @route   GET /api/admin/backup/export
+exports.exportDatabaseBackup = async (req, res, next) => {
+  try {
+    const [
+      users,
+      vendorProfiles,
+      products,
+      orders,
+      subOrders,
+      categories,
+      brands,
+      coupons,
+      banners,
+      ledgers,
+      deliveryTasks,
+      uiConfig,
+      recentAuditLogs,
+    ] = await Promise.all([
+      User.find().select('-password'),
+      VendorProfile.find(),
+      Product.find(),
+      Order.find(),
+      SubOrder.find(),
+      Category.find(),
+      Brand.find(),
+      Coupon.find(),
+      Banner.find(),
+      Ledger.find(),
+      DeliveryTask.find(),
+      UIConfig.findOne(),
+      AuditLog.find().sort({ createdAt: -1 }).limit(100),
+    ]);
+
+    const totalRecords =
+      users.length +
+      vendorProfiles.length +
+      products.length +
+      orders.length +
+      subOrders.length +
+      categories.length +
+      brands.length +
+      coupons.length +
+      banners.length +
+      ledgers.length +
+      deliveryTasks.length +
+      recentAuditLogs.length;
+
+    const backupSnapshot = {
+      platform: 'AuraMarket Enterprise Multi-Vendor Platform',
+      version: '3.2.0',
+      exportedAt: new Date().toISOString(),
+      exportedBy: req.user?.email || 'admin@auramarket.com',
+      totalCollections: 13,
+      totalRecords,
+      collections: {
+        users,
+        vendorProfiles,
+        products,
+        orders,
+        subOrders,
+        categories,
+        brands,
+        coupons,
+        banners,
+        ledgers,
+        deliveryTasks,
+        uiConfig,
+        auditLogs: recentAuditLogs,
+      },
+    };
+
+    // Log the backup generation event in audit logs
+    await recordAuditLog({
+      action: 'DATABASE_BACKUP_EXPORTED',
+      module: 'SYSTEM',
+      req,
+      description: `1-Click full database backup exported with ${totalRecords} records across 13 collections`,
+      details: {
+        totalRecords,
+        collectionsCount: 13,
+      },
+    });
+
+    const timestampStr = new Date().toISOString().replace(/[:.]/g, '-');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="auramarket-backup-${timestampStr}.json"`
+    );
+    res.status(200).send(JSON.stringify(backupSnapshot, null, 2));
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 

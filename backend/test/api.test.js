@@ -3302,6 +3302,58 @@ const runTests = async () => {
       assert.strictEqual(dataDeleteStaff.success, true);
     });
 
+    // Point 50: System Audit Activity Log & 1-Click Database Backup download
+    await test('Point 50: System Audit Activity Log & 1-Click Database Backup download (Audit trail, DB stats, & full JSON snapshot export)', async () => {
+      // 1. Fetch system audit logs
+      const resAudit = await fetch(`${baseUrl}/admin/audit-logs`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resAudit.status, 200);
+      const dataAudit = await resAudit.json();
+      assert.strictEqual(dataAudit.success, true);
+      assert.ok(Array.isArray(dataAudit.data.logs), 'Must return logs array');
+      assert.ok(dataAudit.data.pagination.total >= 0);
+      assert.ok(typeof dataAudit.data.metrics.totalAllEvents === 'number');
+
+      // 2. Fetch database backup stats
+      const resStats = await fetch(`${baseUrl}/admin/backup/stats`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resStats.status, 200);
+      const dataStats = await resStats.json();
+      assert.strictEqual(dataStats.success, true);
+      assert.strictEqual(dataStats.data.databaseStatus, 'OPTIMAL_CONNECTED');
+      assert.ok(dataStats.data.totalRecords > 0, 'Database must have records');
+      assert.strictEqual(dataStats.data.totalCollections, 12);
+      assert.ok(Array.isArray(dataStats.data.collections));
+
+      // 3. 1-Click Database Backup Export (JSON snapshot attachment)
+      const resBackup = await fetch(`${baseUrl}/admin/backup/export`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resBackup.status, 200);
+      assert.ok(resBackup.headers.get('content-type').includes('application/json'));
+      assert.ok(resBackup.headers.get('content-disposition').includes('attachment; filename="auramarket-backup-'));
+
+      const backupData = await resBackup.json();
+      assert.strictEqual(backupData.platform, 'AuraMarket Enterprise Multi-Vendor Platform');
+      assert.strictEqual(backupData.version, '3.2.0');
+      assert.ok(backupData.totalRecords > 0);
+      assert.ok(backupData.collections.users.length > 0, 'Must include users in snapshot');
+      assert.ok(backupData.collections.products.length > 0, 'Must include products in snapshot');
+      assert.ok(backupData.collections.orders !== undefined, 'Must include orders in snapshot');
+      assert.ok(backupData.collections.vendorProfiles.length > 0, 'Must include vendors in snapshot');
+
+      // 4. Verify that DATABASE_BACKUP_EXPORTED was recorded in audit log
+      const resAuditVerify = await fetch(`${baseUrl}/admin/audit-logs?action=DATABASE_BACKUP_EXPORTED`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resAuditVerify.status, 200);
+      const dataAuditVerify = await resAuditVerify.json();
+      assert.strictEqual(dataAuditVerify.success, true);
+      assert.ok(dataAuditVerify.data.logs.some(l => l.action === 'DATABASE_BACKUP_EXPORTED'));
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

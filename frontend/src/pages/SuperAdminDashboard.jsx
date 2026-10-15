@@ -58,6 +58,7 @@ import {
   Flame,
   ShoppingCart,
   Building2,
+  Database,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -74,6 +75,7 @@ import VendorKYCManager from '../components/VendorKYCManager';
 import VendorPayoutManager from '../components/VendorPayoutManager';
 import TaxShippingManager from '../components/TaxShippingManager';
 import StaffRoleManager from '../components/StaffRoleManager';
+import SystemAuditBackupManager from '../components/SystemAuditBackupManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1446,6 +1448,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
               Point #49
             </span>
           </button>
+
+          <button
+            onClick={() => setActiveDashboardTab('audit-backup')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'audit-backup'
+                ? 'bg-emerald-600 text-white shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Database className="w-4 h-4 text-emerald-300" />
+            <span>Audit Trail & DB Backup</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-200 ml-1">
+              Point #50
+            </span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -2235,6 +2252,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'staff-roles' && (
         <StaffRoleManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 15: SYSTEM AUDIT ACTIVITY LOG & 1-CLICK DB BACKUP (Point #50) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'audit-backup' && (
+        <SystemAuditBackupManager />
       )}
 
       {/* ========================================================================= */}

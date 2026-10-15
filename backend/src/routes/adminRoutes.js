@@ -35,6 +35,9 @@ const {
   createStaff,
   updateStaff,
   deleteStaff,
+  getAuditLogs,
+  getDatabaseBackupStats,
+  exportDatabaseBackup,
 } = require('../controllers/adminController');
 const { getTaxInvoice } = require('../controllers/orderController');
 const { protect, authorize, requirePermission } = require('../middlewares/auth');
@@ -143,6 +146,11 @@ router.post('/staff', createStaff);
 router.put('/staff/:id', updateStaff);
 router.patch('/staff/:id', updateStaff);
 router.delete('/staff/:id', deleteStaff);
+
+// System Audit Activity Log & 1-Click Database Backup (Point #50)
+router.get('/audit-logs', getAuditLogs);
+router.get('/backup/stats', getDatabaseBackupStats);
+router.get('/backup/export', exportDatabaseBackup);
 
 // 1-Click Operations
 router.post('/wipe-demo', triggerWipeDemo);

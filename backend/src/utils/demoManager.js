@@ -21,6 +21,7 @@ const CommissionRule = require('../models/CommissionRule');
 const { seedDefaultCommissionRules } = require('../controllers/commissionController');
 const CronJob = require('../models/CronJob');
 const SystemBackup = require('../models/SystemBackup');
+const ShippingManifest = require('../models/ShippingManifest');
 const { seedDefaultCronJobs } = require('../controllers/telemetryController');
 
 const seedDemoData = async () => {
@@ -948,6 +949,7 @@ const wipeDemoData = async () => {
   await CommissionRule.deleteMany({});
   await CronJob.deleteMany({});
   await SystemBackup.deleteMany({});
+  await ShippingManifest.deleteMany({});
 
   // 2. Remove non-admin demo users if desired, or keep superadmin safe
   await User.deleteMany({ role: { $ne: 'superadmin' } });

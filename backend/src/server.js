@@ -35,6 +35,7 @@ const cmsRoutes = require('./routes/cmsRoutes');
 const faqRoutes = require('./routes/faqRoutes');
 const commissionRoutes = require('./routes/commissionRoutes');
 const telemetryRoutes = require('./routes/telemetryRoutes');
+const manifestRoutes = require('./routes/manifestRoutes');
 
 const app = express();
 
@@ -131,6 +132,7 @@ app.use('/api/cms', cmsRoutes);
 app.use('/api/faqs', faqRoutes);
 app.use('/api/commission', commissionRoutes);
 app.use('/api/telemetry', telemetryRoutes);
+app.use('/api/manifests', manifestRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

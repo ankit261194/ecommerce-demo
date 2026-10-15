@@ -8822,6 +8822,157 @@ const runTests = async () => {
       });
     });
 
+
+    // =========================================================================
+    // POINT 12: DAILY COURIER SHIPPING MANIFEST (BULK PARCEL HANDOVER SHEET)
+    // =========================================================================
+
+    let sampleManifestId = null;
+    let candidateParcels = [];
+
+    await test('Point 12: GET /api/manifests/eligible-parcels returns ready-to-ship parcels for specified courier', async () => {
+      const res = await fetch(`${baseUrl}/manifests/eligible-parcels?courier=AuraExpress%20Prime`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.courierPartner, 'AuraExpress Prime');
+      assert.ok(data.count >= 1, 'Should find at least 1 ready-to-ship parcel');
+      assert.ok(data.data[0].trackingNumber, 'Parcel must have tracking number');
+      assert.ok(data.data[0].destinationPincode, 'Parcel must have destination pincode');
+      candidateParcels = data.data;
+    });
+
+    await test('Point 12: POST /api/manifests/generate generates official manifest and updates suborder lifecycle', async () => {
+      const res = await fetch(`${baseUrl}/manifests/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          courierPartner: 'AuraExpress Prime',
+          parcels: candidateParcels,
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.manifestNumber.startsWith('MAN-'), 'Manifest number must start with MAN-');
+      assert.strictEqual(data.data.totalParcels, candidateParcels.length);
+      assert.ok(data.data.totalWeightKg > 0, 'Total weight must be positive');
+      assert.ok(data.data.parcels[0].barcode.startsWith('*TRK-'), 'Barcode must match code39/128 format');
+      sampleManifestId = data.data._id;
+    });
+
+    await test('Point 12: POST /api/manifests/generate validates empty parcels array with 400', async () => {
+      const res = await fetch(`${baseUrl}/manifests/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          courierPartner: 'AuraExpress Prime',
+          parcels: [],
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 12: POST /api/manifests/generate validates missing courier partner with 400', async () => {
+      const res = await fetch(`${baseUrl}/manifests/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          courierPartner: '',
+          parcels: [{ orderNumber: 'ORD-101' }],
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 12: GET /api/manifests lists all created shipping manifests', async () => {
+      const res = await fetch(`${baseUrl}/manifests`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.count >= 1);
+      assert.ok(data.data.some(m => m._id.toString() === sampleManifestId.toString()));
+    });
+
+    await test('Point 12: GET /api/manifests/:id returns complete manifest details and parcel items', async () => {
+      const res = await fetch(`${baseUrl}/manifests/${sampleManifestId}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data._id.toString(), sampleManifestId.toString());
+      assert.strictEqual(data.data.totalParcels, candidateParcels.length);
+    });
+
+    await test('Point 12: PATCH /api/manifests/:id/handover records courier driver details and physical sign-off', async () => {
+      const res = await fetch(`${baseUrl}/manifests/${sampleManifestId}/handover`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          courierDriverName: 'Sanjay Kumar',
+          courierDriverPhone: '9812345678',
+          courierVehicleNumber: 'DL 01 AA 9999',
+          courierSignatureNote: 'All parcels verified and loaded safely into courier van.',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'HANDED_OVER');
+      assert.strictEqual(data.data.courierDriverName, 'Sanjay Kumar');
+      assert.strictEqual(data.data.courierVehicleNumber, 'DL 01 AA 9999');
+      assert.ok(data.data.handedOverAt, 'Handed over timestamp must be recorded');
+    });
+
+    await test('Point 12: GET /api/manifests/:id/print returns printable HTML layout with barcodes and signature lines', async () => {
+      const res = await fetch(`${baseUrl}/manifests/${sampleManifestId}/print`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      assert.ok(res.headers.get('content-type').includes('text/html'));
+      const html = await res.text();
+      assert.ok(html.includes('DAILY COURIER SHIPPING HANDOVER MANIFEST'), 'HTML must have title');
+      assert.ok(html.includes('Physical Courier Driver Signature & Date'), 'HTML must have driver signature box');
+      assert.ok(html.includes('Warehouse Dispatch Manager Signature'), 'HTML must have supervisor signature box');
+    });
+
+    await test('Point 12: Role Security: Customer token is rejected with 403 on manifest routes', async () => {
+      const res = await fetch(`${baseUrl}/manifests`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+
+      assert.strictEqual(res.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

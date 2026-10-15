@@ -89,6 +89,7 @@ import FaqManager from '../components/FaqManager';
 import CommissionRuleManager from '../components/CommissionRuleManager';
 import PincodeZoneManager from '../components/PincodeZoneManager';
 import ServerTelemetryManager from '../components/ServerTelemetryManager';
+import ShippingManifestManager from '../components/ShippingManifestManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1584,6 +1585,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
               Point #11
             </span>
           </button>
+
+          <button
+            onClick={() => setActiveDashboardTab('shipping-manifest')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'shipping-manifest'
+                ? 'bg-amber-600 text-white shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <FileText className="w-4 h-4 text-amber-300" />
+            <span>Courier Manifests</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-200 ml-1">
+              Point #12
+            </span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -2443,6 +2459,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'telemetry-health' && (
         <ServerTelemetryManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 23: DAILY COURIER SHIPPING MANIFEST (Point #12) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'shipping-manifest' && (
+        <ShippingManifestManager />
       )}
 
       {/* ========================================================================= */}

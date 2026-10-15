@@ -1070,4 +1070,273 @@ exports.updateCustomerNotes = async (req, res, next) => {
   }
 };
 
+// ============================================================================
+// POINT #45: VENDOR WITHDRAWAL / PAYOUT APPROVAL HUB
+// ============================================================================
+
+// @desc    Get All Vendor Withdrawal / Payout Requests with Status & Analytics
+// @route   GET /api/admin/payouts
+// @access  Private (Super Admin)
+exports.getAllPayouts = async (req, res, next) => {
+  try {
+    const { status, search, dateRange } = req.query;
+    const query = { type: 'PAYOUT_WITHDRAWAL' };
+
+    if (status && status !== 'ALL') {
+      query.status = status.toUpperCase();
+    }
+
+    if (dateRange && dateRange !== 'ALL') {
+      const now = new Date();
+      if (dateRange === 'today') {
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        query.createdAt = { $gte: startOfDay };
+      } else if (dateRange === 'this_week') {
+        const startOfWeek = new Date(now.setDate(now.getDate() - 7));
+        query.createdAt = { $gte: startOfWeek };
+      } else if (dateRange === 'this_month') {
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        query.createdAt = { $gte: startOfMonth };
+      }
+    }
+
+    let payouts = await Ledger.find(query)
+      .populate({
+        path: 'vendor',
+        select: 'storeName storeSlug storeLogo walletBalance bankDetails gstNumber panNumber',
+        populate: {
+          path: 'user',
+          select: 'name email phone',
+        },
+      })
+      .sort({ createdAt: -1 });
+
+    if (search && search.trim()) {
+      const term = search.trim().toLowerCase();
+      payouts = payouts.filter((p) => {
+        const txn = (p.transactionId || '').toLowerCase();
+        const utr = (p.payoutDetails?.utrNumber || '').toLowerCase();
+        const store = (p.vendor?.storeName || '').toLowerCase();
+        const merchant = (p.vendor?.user?.name || '').toLowerCase();
+        const bank = (p.payoutDetails?.bankName || p.vendor?.bankDetails?.bankName || '').toLowerCase();
+        return (
+          txn.includes(term) ||
+          utr.includes(term) ||
+          store.includes(term) ||
+          merchant.includes(term) ||
+          bank.includes(term)
+        );
+      });
+    }
+
+    const allPayouts = await Ledger.find({ type: 'PAYOUT_WITHDRAWAL' });
+    const pendingList = allPayouts.filter((p) => p.status === 'PENDING');
+    const completedList = allPayouts.filter((p) => p.status === 'COMPLETED');
+    const rejectedList = allPayouts.filter((p) => p.status === 'REJECTED');
+
+    const stats = {
+      totalRequests: allPayouts.length,
+      pendingCount: pendingList.length,
+      pendingAmount: pendingList.reduce((sum, p) => sum + p.amount, 0),
+      completedCount: completedList.length,
+      completedAmount: completedList.reduce((sum, p) => sum + p.amount, 0),
+      rejectedCount: rejectedList.length,
+      rejectedAmount: rejectedList.reduce((sum, p) => sum + p.amount, 0),
+    };
+
+    res.status(200).json({
+      success: true,
+      count: payouts.length,
+      stats,
+      data: payouts,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Single Payout Request Details
+// @route   GET /api/admin/payouts/:id
+// @access  Private (Super Admin)
+exports.getPayoutDetails = async (req, res, next) => {
+  try {
+    const payout = await Ledger.findById(req.params.id).populate({
+      path: 'vendor',
+      select: 'storeName storeSlug storeLogo walletBalance bankDetails gstNumber panNumber',
+      populate: {
+        path: 'user',
+        select: 'name email phone',
+      },
+    });
+
+    if (!payout || payout.type !== 'PAYOUT_WITHDRAWAL') {
+      return res.status(404).json({
+        success: false,
+        message: 'Payout request not found',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: payout,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Approve Vendor Payout with Banking UTR Number
+// @route   PUT /api/admin/payouts/:id/approve
+// @access  Private (Super Admin)
+exports.approvePayout = async (req, res, next) => {
+  try {
+    const { utrNumber, paymentMode, adminNotes } = req.body;
+    const payout = await Ledger.findById(req.params.id).populate('vendor');
+
+    if (!payout || payout.type !== 'PAYOUT_WITHDRAWAL') {
+      return res.status(404).json({
+        success: false,
+        message: 'Payout request not found',
+      });
+    }
+
+    if (payout.status === 'COMPLETED') {
+      return res.status(400).json({
+        success: false,
+        message: 'Payout request is already marked as completed',
+      });
+    }
+
+    const finalUtr =
+      utrNumber && utrNumber.trim()
+        ? utrNumber.trim()
+        : `UTR-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    payout.status = 'COMPLETED';
+    if (!payout.payoutDetails) payout.payoutDetails = {};
+
+    payout.payoutDetails.utrNumber = finalUtr;
+    payout.payoutDetails.paymentMode = paymentMode || payout.payoutDetails.paymentMode || 'IMPS';
+    payout.payoutDetails.processedAt = new Date();
+    if (adminNotes !== undefined) payout.payoutDetails.adminNotes = adminNotes;
+    if (req.user) payout.payoutDetails.processedBy = req.user._id;
+
+    await payout.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Payout approved successfully with UTR ${finalUtr}`,
+      data: payout,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Reject Vendor Payout and Refund Amount to Vendor Wallet
+// @route   PUT /api/admin/payouts/:id/reject
+// @access  Private (Super Admin)
+exports.rejectPayout = async (req, res, next) => {
+  try {
+    const { rejectionReason, adminNotes } = req.body;
+    const payout = await Ledger.findById(req.params.id);
+
+    if (!payout || payout.type !== 'PAYOUT_WITHDRAWAL') {
+      return res.status(404).json({
+        success: false,
+        message: 'Payout request not found',
+      });
+    }
+
+    if (payout.status === 'REJECTED') {
+      return res.status(400).json({
+        success: false,
+        message: 'Payout request is already rejected and refunded',
+      });
+    }
+
+    // Refund funds back to vendor's wallet
+    const vendor = await VendorProfile.findById(payout.vendor);
+    if (vendor) {
+      vendor.walletBalance += payout.amount;
+      await vendor.save();
+    }
+
+    payout.status = 'REJECTED';
+    if (!payout.payoutDetails) payout.payoutDetails = {};
+    payout.payoutDetails.rejectionReason =
+      rejectionReason || 'Bank account details could not be verified.';
+    payout.payoutDetails.processedAt = new Date();
+    if (adminNotes !== undefined) payout.payoutDetails.adminNotes = adminNotes;
+    if (vendor) payout.balanceAfter = vendor.walletBalance;
+
+    await payout.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Payout rejected and ₹${payout.amount} refunded back to vendor wallet`,
+      data: payout,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Export Payout Records as RFC-4180 CSV
+// @route   GET /api/admin/payouts/export-csv
+// @access  Private (Super Admin)
+exports.exportPayoutsCSV = async (req, res, next) => {
+  try {
+    const payouts = await Ledger.find({ type: 'PAYOUT_WITHDRAWAL' })
+      .populate('vendor')
+      .sort({ createdAt: -1 });
+
+    const headers = [
+      'Transaction ID',
+      'Store Name',
+      'Amount (INR)',
+      'Status',
+      'Payment Mode',
+      'UTR Number',
+      'Bank Name',
+      'Account Number',
+      'IFSC Code',
+      'Requested At',
+      'Processed At',
+      'Admin Notes',
+      'Rejection Reason',
+    ];
+
+    const escapeCSV = (field) => {
+      if (field === null || field === undefined) return '""';
+      const str = String(field).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const rows = payouts.map((p) => [
+      escapeCSV(p.transactionId),
+      escapeCSV(p.vendor?.storeName || 'N/A'),
+      escapeCSV(p.amount),
+      escapeCSV(p.status),
+      escapeCSV(p.payoutDetails?.paymentMode || 'IMPS'),
+      escapeCSV(p.payoutDetails?.utrNumber || 'N/A'),
+      escapeCSV(p.payoutDetails?.bankName || p.vendor?.bankDetails?.bankName || 'N/A'),
+      escapeCSV(p.payoutDetails?.accountNumber || p.vendor?.bankDetails?.accountNumber || 'N/A'),
+      escapeCSV(p.payoutDetails?.ifscCode || p.vendor?.bankDetails?.ifscCode || 'N/A'),
+      escapeCSV(p.createdAt ? new Date(p.createdAt).toISOString() : ''),
+      escapeCSV(p.payoutDetails?.processedAt ? new Date(p.payoutDetails.processedAt).toISOString() : ''),
+      escapeCSV(p.payoutDetails?.adminNotes || ''),
+      escapeCSV(p.payoutDetails?.rejectionReason || ''),
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="vendor-payouts-ledger.csv"');
+    res.status(200).send(csvContent);
+  } catch (error) {
+    next(error);
+  }
+};
+
 

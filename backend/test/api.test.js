@@ -3001,6 +3001,123 @@ const runTests = async () => {
       });
     });
 
+    await test('Point 45: Vendor Withdrawal / Payout Approval Hub (Review requests, approve with transaction ID, reject with refund & CSV export)', async () => {
+      // 1. Ensure vendor has wallet balance for payout test
+      let vendorProfileBefore = await VendorProfile.findOne({});
+      if (!vendorProfileBefore) {
+        const u = await User.findOne({ role: 'vendor' });
+        vendorProfileBefore = await VendorProfile.create({
+          user: u._id,
+          storeName: 'Test Store Payout',
+          walletBalance: 5000,
+        });
+      } else {
+        vendorProfileBefore.walletBalance = 5000;
+        await vendorProfileBefore.save();
+      }
+
+      // 2. Vendor submits a payout withdrawal request of ₹500
+      const resPayoutReq = await fetch(`${baseUrl}/vendor/payout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({ amount: 500 }),
+      });
+      assert.strictEqual(resPayoutReq.status, 200);
+      const dataPayoutReq = await resPayoutReq.json();
+      assert.strictEqual(dataPayoutReq.success, true);
+      const payoutId = dataPayoutReq.data._id;
+      assert.ok(payoutId);
+      assert.strictEqual(dataPayoutReq.data.status, 'PENDING');
+
+      // 3. Super Admin fetches all payouts with stats
+      const resPayouts = await fetch(`${baseUrl}/admin/payouts`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resPayouts.status, 200);
+      const dataPayouts = await resPayouts.json();
+      assert.strictEqual(dataPayouts.success, true);
+      assert.ok(dataPayouts.stats);
+      assert.ok(dataPayouts.stats.pendingCount >= 1);
+      assert.ok(Array.isArray(dataPayouts.data));
+
+      // 4. Super Admin fetches single payout request details
+      const resDetail = await fetch(`${baseUrl}/admin/payouts/${payoutId}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resDetail.status, 200);
+      const dataDetail = await resDetail.json();
+      assert.strictEqual(dataDetail.success, true);
+      assert.strictEqual(dataDetail.data._id.toString(), payoutId.toString());
+
+      // 5. Super Admin approves payout with banking UTR number
+      const resApprove = await fetch(`${baseUrl}/admin/payouts/${payoutId}/approve`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          utrNumber: 'UTR-HDFC-9988776655',
+          paymentMode: 'IMPS',
+          adminNotes: 'Transferred via HDFC Corporate NetBanking',
+        }),
+      });
+      assert.strictEqual(resApprove.status, 200);
+      const dataApprove = await resApprove.json();
+      assert.strictEqual(dataApprove.success, true);
+      assert.strictEqual(dataApprove.data.status, 'COMPLETED');
+      assert.strictEqual(dataApprove.data.payoutDetails.utrNumber, 'UTR-HDFC-9988776655');
+
+      // 6. Vendor requests another payout of ₹200 to test rejection with wallet refund
+      const vendorBeforeReject = await VendorProfile.findById(vendorProfileBefore._id);
+      const balanceBeforeSecond = vendorBeforeReject.walletBalance;
+
+      const resPayoutReq2 = await fetch(`${baseUrl}/vendor/payout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${vendorToken}`,
+        },
+        body: JSON.stringify({ amount: 200 }),
+      });
+      assert.strictEqual(resPayoutReq2.status, 200);
+      const dataPayoutReq2 = await resPayoutReq2.json();
+      const payoutId2 = dataPayoutReq2.data._id;
+
+      // Super Admin rejects with reason
+      const resReject = await fetch(`${baseUrl}/admin/payouts/${payoutId2}/reject`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          rejectionReason: 'Invalid beneficiary IFSC code provided.',
+        }),
+      });
+      assert.strictEqual(resReject.status, 200);
+      const dataReject = await resReject.json();
+      assert.strictEqual(dataReject.success, true);
+      assert.strictEqual(dataReject.data.status, 'REJECTED');
+
+      // Verify the ₹200 was refunded back to vendor wallet
+      const vendorAfterRefund = await VendorProfile.findById(vendorProfileBefore._id);
+      assert.strictEqual(vendorAfterRefund.walletBalance, balanceBeforeSecond);
+
+      // 7. Super Admin exports payouts CSV
+      const resCsv = await fetch(`${baseUrl}/admin/payouts/export-csv`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resCsv.status, 200);
+      assert.ok(resCsv.headers.get('content-type').includes('text/csv'));
+      const csvText = await resCsv.text();
+      assert.ok(csvText.includes('Transaction ID'));
+      assert.ok(csvText.includes('UTR-HDFC-9988776655'));
+    });
+
     await test('POST /delivery/tasks/:id/verify-otp rejects invalid OTP with 400', async () => {
       const res = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/verify-otp`, {
         method: 'POST',

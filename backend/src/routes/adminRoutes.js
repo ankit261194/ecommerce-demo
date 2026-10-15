@@ -25,6 +25,11 @@ const {
   toggleCustomerStatus,
   toggleCustomerVerification,
   updateCustomerNotes,
+  getAllPayouts,
+  getPayoutDetails,
+  approvePayout,
+  rejectPayout,
+  exportPayoutsCSV,
 } = require('../controllers/adminController');
 const { getTaxInvoice } = require('../controllers/orderController');
 const { protect, authorize } = require('../middlewares/auth');
@@ -44,6 +49,16 @@ router.put('/vendors/:id/kyc', updateVendorKYC);
 router.patch('/vendors/:id/kyc', updateVendorKYC);
 router.put('/vendors/:id/commission', updateVendorCommission);
 router.patch('/vendors/:id/commission', updateVendorCommission);
+
+// Vendor Withdrawal / Payout Approval Hub (Point #45)
+router.get('/payouts', getAllPayouts);
+router.get('/payouts/export-csv', exportPayoutsCSV);
+router.get('/payouts/:id', getPayoutDetails);
+router.put('/payouts/:id/approve', approvePayout);
+router.patch('/payouts/:id/approve', approvePayout);
+router.put('/payouts/:id/reject', rejectPayout);
+router.patch('/payouts/:id/reject', rejectPayout);
+
 router.get('/orders', getAllOrders);
 router.post('/orders/bulk-status', bulkUpdateOrderStatus);
 router.put('/orders/bulk-status', bulkUpdateOrderStatus);

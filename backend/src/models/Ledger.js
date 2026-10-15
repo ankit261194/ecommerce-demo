@@ -40,6 +40,21 @@ const ledgerSchema = new mongoose.Schema(
       enum: ['COMPLETED', 'PENDING', 'REJECTED'],
       default: 'COMPLETED',
     },
+    payoutDetails: {
+      utrNumber: { type: String, default: '' },
+      paymentMode: {
+        type: String,
+        enum: ['IMPS', 'NEFT', 'RTGS', 'UPI', 'MANUAL_BANK_TRANSFER'],
+        default: 'IMPS',
+      },
+      accountHolder: { type: String, default: '' },
+      accountNumber: { type: String, default: '' },
+      ifscCode: { type: String, default: '' },
+      bankName: { type: String, default: '' },
+      adminNotes: { type: String, default: '' },
+      rejectionReason: { type: String, default: '' },
+      processedAt: { type: Date },
+    },
   },
   { timestamps: true }
 );

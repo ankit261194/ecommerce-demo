@@ -292,6 +292,12 @@ exports.requestPayout = async (req, res, next) => {
       description: `Vendor payout request for ₹${numAmount} to bank ${vendor.bankDetails?.bankName || 'Default'}`,
       balanceAfter: vendor.walletBalance,
       status: 'PENDING',
+      payoutDetails: {
+        accountHolder: vendor.bankDetails?.accountHolder || '',
+        accountNumber: vendor.bankDetails?.accountNumber || '',
+        ifscCode: vendor.bankDetails?.ifscCode || '',
+        bankName: vendor.bankDetails?.bankName || '',
+      },
     });
 
     res.status(200).json({

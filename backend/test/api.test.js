@@ -3505,8 +3505,8 @@ const runTests = async () => {
       }
     });
 
-    // 13. Master Integrations Hub Tests (Non-Developer Plug-and-Play Architecture)
-    await test('GET /admin/integrations returns external services configuration for Super Admin', async () => {
+    // Point 46: Integrations Hub (SMS, Payment, SMTP, Storage settings with live test dispatch & key sanitation)
+    await test('Point 46: GET /admin/integrations returns external services configuration for Super Admin', async () => {
       const res = await fetch(`${baseUrl}/admin/integrations`, {
         headers: { Authorization: `Bearer ${adminToken}` },
       });

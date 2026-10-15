@@ -1396,7 +1396,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
             <Plug className="w-4 h-4" />
             <span>Integrations & API Hub</span>
             <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-300 ml-1">
-              Zero-Code
+              Point #46
             </span>
           </button>
 
@@ -1411,7 +1411,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
             <Search className="w-4 h-4" />
             <span>SEO & Webmaster Hub</span>
             <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-300 ml-1">
-              Google Ready
+              Point #47
             </span>
           </button>
         </div>

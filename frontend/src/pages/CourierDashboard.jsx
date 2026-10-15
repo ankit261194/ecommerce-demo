@@ -21,6 +21,7 @@ import {
   PenTool,
   FileCheck,
   Camera,
+  Calculator,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { CourierNavigationModal } from '../components/CourierNavigationModal';
@@ -28,6 +29,7 @@ import { CourierContactModal } from '../components/CourierContactModal';
 import CourierOtpVerificationModal from '../components/CourierOtpVerificationModal';
 import CourierSignatureModal from '../components/CourierSignatureModal';
 import CourierProofPhotoModal from '../components/CourierProofPhotoModal';
+import CourierCodReconciliationModal from '../components/CourierCodReconciliationModal';
 import api from '../api/client';
 
 export const CourierDashboard = () => {
@@ -35,6 +37,7 @@ export const CourierDashboard = () => {
   const [selectedTaskForContact, setSelectedTaskForContact] = useState(null);
   const [selectedTaskForSignature, setSelectedTaskForSignature] = useState(null);
   const [selectedTaskForPhoto, setSelectedTaskForPhoto] = useState(null);
+  const [isCodReconModalOpen, setIsCodReconModalOpen] = useState(false);
   const [riderStats, setRiderStats] = useState({
     name: 'Vikram Singh',
     assignedTasks: 2,
@@ -333,6 +336,14 @@ export const CourierDashboard = () => {
             <span>Rider Active & On Duty</span>
           </div>
           <button
+            onClick={() => setIsCodReconModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-all flex items-center gap-1.5 text-xs font-bold"
+            title="Reconcile Cash on Delivery (Denomination Counter)"
+          >
+            <Calculator className="w-4 h-4" />
+            <span>Reconcile COD Cash</span>
+          </button>
+          <button
             onClick={fetchTasks}
             disabled={isRefreshing}
             className="p-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 shadow-sm transition-all flex items-center gap-1.5 text-xs font-bold disabled:opacity-50"
@@ -366,15 +377,21 @@ export const CourierDashboard = () => {
           accentColor="text-emerald-600"
         />
 
-        <BentoCard
-          title="Cash on Delivery (COD)"
-          value={`₹${riderStats.codCollectedToday.toLocaleString('en-IN')}`}
-          subtitle="Total physical cash in hand to reconcile"
-          icon={DollarSign}
-          badge="Cash In Hand"
-          badgeColor="text-amber-800 bg-amber-50 border-amber-200"
-          accentColor="text-amber-600"
-        />
+        <div
+          onClick={() => setIsCodReconModalOpen(true)}
+          className="cursor-pointer transition-transform hover:scale-[1.01]"
+          title="Click to open COD Cash Collection & Denomination Reconciliation"
+        >
+          <BentoCard
+            title="Cash on Delivery (COD)"
+            value={`₹${riderStats.codCollectedToday.toLocaleString('en-IN')}`}
+            subtitle="Click to count notes & submit deposit slip"
+            icon={DollarSign}
+            badge="Reconcile Cash"
+            badgeColor="text-amber-800 bg-amber-50 border-amber-200"
+            accentColor="text-amber-600"
+          />
+        </div>
 
         <BentoCard
           title="Delivery Partner"
@@ -805,6 +822,17 @@ export const CourierDashboard = () => {
         <CourierContactModal
           task={selectedTaskForContact}
           onClose={() => setSelectedTaskForContact(null)}
+        />
+      )}
+      {/* Point #69: COD Cash Collection Reconciliation Modal */}
+      {isCodReconModalOpen && (
+        <CourierCodReconciliationModal
+          expectedCodTotal={riderStats.codCollectedToday}
+          deliveredCodTasks={tasks.filter(t => t.isCod && t.status === 'DELIVERED')}
+          onClose={() => setIsCodReconModalOpen(false)}
+          onSuccess={() => {
+            fetchTasks();
+          }}
         />
       )}
     </div>

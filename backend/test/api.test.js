@@ -11,6 +11,7 @@ const SubOrder = require('../src/models/SubOrder');
 const DeliveryTask = require('../src/models/DeliveryTask');
 const VendorProfile = require('../src/models/VendorProfile');
 const Ledger = require('../src/models/Ledger');
+const CodReconciliation = require('../src/models/CodReconciliation');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -4898,6 +4899,118 @@ const runTests = async () => {
       const fakeId = new mongoose.Types.ObjectId();
       const res404 = await fetch(`${baseUrl}/delivery/tasks/${fakeId}/proof-photo`, {
         headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(res404.status, 404);
+    });
+
+    // =========================================================================
+    // Point 69: Cash on Delivery (COD) Cash Collection Reconciliation
+    // =========================================================================
+    await test('Point 69: COD Cash Collection Reconciliation (Denomination Counter, Discrepancy Tracking & Admin Verification)', async () => {
+      // 1. GET /delivery/cod/summary returns shift COD metrics
+      const resSummary = await fetch(`${baseUrl}/delivery/cod/summary`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resSummary.status, 200);
+      const dataSummary = await resSummary.json();
+      assert.strictEqual(dataSummary.success, true);
+      assert.ok(dataSummary.data.summary);
+      assert.strictEqual(typeof dataSummary.data.summary.totalCashPending, 'number');
+
+      // 2. Reject unauthorized customer role from accessing COD reconciliation (403)
+      const resForbidden = await fetch(`${baseUrl}/delivery/cod/reconcile`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(resForbidden.status, 403);
+
+      // 3. Submit COD Reconciliation with Denomination breakdown
+      // Denomination breakdown: 1x2000 + 4x500 + 2x200 + 1x100 = 4500
+      const denoms = {
+        d2000: 1,
+        d500: 4,
+        d200: 2,
+        d100: 1,
+        d50: 0,
+        d20: 0,
+        d10: 0,
+      };
+      const resReconcile = await fetch(`${baseUrl}/delivery/cod/reconcile`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          denominations: denoms,
+          depositMethod: 'HUB_CASH_DESK',
+          depositSlipNumber: 'DEP-SLIP-7721',
+          notes: 'Handover to Hub Head Vikram with verified cash pouch',
+          taskIds: [riderTask._id],
+        }),
+      });
+      assert.strictEqual(resReconcile.status, 201);
+      const dataReconcile = await resReconcile.json();
+      assert.strictEqual(dataReconcile.success, true);
+      assert.ok(dataReconcile.data.reconciliationId.startsWith('COD-REC-'));
+      assert.strictEqual(dataReconcile.data.totalCounted, 4500);
+      assert.strictEqual(dataReconcile.data.status, 'SUBMITTED');
+      assert.strictEqual(dataReconcile.data.depositSlipNumber, 'DEP-SLIP-7721');
+
+      const reconciliationId = dataReconcile.data._id;
+
+      // 4. Verify linked task has codReconciliation.status = 'SUBMITTED'
+      const taskAfterSubmit = await DeliveryTask.findById(riderTask._id);
+      assert.strictEqual(taskAfterSubmit.codReconciliation.status, 'SUBMITTED');
+      assert.strictEqual(taskAfterSubmit.codReconciliation.referenceCode, dataReconcile.data.reconciliationId);
+
+      // 5. GET /delivery/cod/reconciliations lists submissions
+      const resList = await fetch(`${baseUrl}/delivery/cod/reconciliations`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resList.status, 200);
+      const dataList = await resList.json();
+      assert.strictEqual(dataList.success, true);
+      assert.ok(dataList.data.length >= 1);
+      const found = dataList.data.find(r => r._id.toString() === reconciliationId.toString());
+      assert.ok(found, 'Submitted reconciliation must be listed');
+
+      // 6. Super Admin verifies COD reconciliation deposit slip
+      const resVerify = await fetch(`${baseUrl}/delivery/cod/reconciliations/${reconciliationId}/verify`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          status: 'VERIFIED',
+          adminRemarks: 'Cash verified and deposited into platform merchant vault.',
+        }),
+      });
+      assert.strictEqual(resVerify.status, 200);
+      const dataVerify = await resVerify.json();
+      assert.strictEqual(dataVerify.success, true);
+      assert.strictEqual(dataVerify.data.status, 'VERIFIED');
+      assert.ok(dataVerify.data.verifiedAt);
+
+      // 7. Verify linked task has codReconciliation.status = 'VERIFIED'
+      const taskAfterVerify = await DeliveryTask.findById(riderTask._id);
+      assert.strictEqual(taskAfterVerify.codReconciliation.status, 'VERIFIED');
+      assert.ok(taskAfterVerify.codReconciliation.reconciledAt);
+
+      // 8. Non-existent reconciliation verify returns 404
+      const fakeRecId = new mongoose.Types.ObjectId();
+      const res404 = await fetch(`${baseUrl}/delivery/cod/reconciliations/${fakeRecId}/verify`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ status: 'VERIFIED' }),
       });
       assert.strictEqual(res404.status, 404);
     });

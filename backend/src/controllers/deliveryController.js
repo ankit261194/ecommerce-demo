@@ -1,6 +1,7 @@
 const DeliveryTask = require('../models/DeliveryTask');
 const SubOrder = require('../models/SubOrder');
 const Order = require('../models/Order');
+const CodReconciliation = require('../models/CodReconciliation');
 const smsService = require('../services/smsService');
 const mailService = require('../services/mailService');
 
@@ -682,6 +683,224 @@ exports.getTaskProofPhoto = async (req, res, next) => {
         proofPhotoDetails: task.proofPhotoDetails,
         deliveredAt: task.deliveredAt,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Shift COD Collection Summary & Pending Tasks (Point #69)
+// @route   GET /api/delivery/cod/summary
+exports.getCodReconciliationSummary = async (req, res, next) => {
+  try {
+    const riderFilter = req.user.role === 'superadmin' ? {} : { deliveryPartner: req.user._id };
+
+    // Find all delivered COD tasks that are either PENDING or SUBMITTED
+    const tasks = await DeliveryTask.find({
+      ...riderFilter,
+      isCod: true,
+      status: 'DELIVERED',
+    })
+      .populate({
+        path: 'subOrder',
+        populate: [
+          { path: 'vendor', select: 'storeName phone' },
+          { path: 'customer', select: 'name phone' },
+        ],
+      })
+      .sort({ deliveredAt: -1 });
+
+    const pendingTasks = tasks.filter(t => !t.codReconciliation || t.codReconciliation.status === 'PENDING');
+    const submittedTasks = tasks.filter(t => t.codReconciliation?.status === 'SUBMITTED');
+    const verifiedTasks = tasks.filter(t => t.codReconciliation?.status === 'VERIFIED');
+
+    const totalCashPending = pendingTasks.reduce((sum, t) => sum + (t.amountCollected || t.amountToCollect || 0), 0);
+    const totalCashSubmitted = submittedTasks.reduce((sum, t) => sum + (t.amountCollected || t.amountToCollect || 0), 0);
+    const totalCashVerified = verifiedTasks.reduce((sum, t) => sum + (t.amountCollected || t.amountToCollect || 0), 0);
+
+    const reconciliations = await CodReconciliation.find(riderFilter)
+      .populate('deliveryPartner', 'name phone email')
+      .sort({ createdAt: -1 })
+      .limit(10);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        summary: {
+          totalCashPending,
+          totalCashSubmitted,
+          totalCashVerified,
+          pendingTasksCount: pendingTasks.length,
+          submittedTasksCount: submittedTasks.length,
+          verifiedTasksCount: verifiedTasks.length,
+        },
+        pendingTasks,
+        recentReconciliations: reconciliations,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Submit Shift COD Cash Reconciliation Deposit Slip (Point #69)
+// @route   POST /api/delivery/cod/reconcile
+exports.submitCodReconciliation = async (req, res, next) => {
+  try {
+    const {
+      denominations = {},
+      depositMethod = 'HUB_CASH_DESK',
+      depositSlipNumber = '',
+      depositSlipImage = null,
+      notes = '',
+      taskIds,
+    } = req.body;
+
+    const d2000 = Math.max(0, parseInt(denominations.d2000 || 0, 10));
+    const d500 = Math.max(0, parseInt(denominations.d500 || 0, 10));
+    const d200 = Math.max(0, parseInt(denominations.d200 || 0, 10));
+    const d100 = Math.max(0, parseInt(denominations.d100 || 0, 10));
+    const d50 = Math.max(0, parseInt(denominations.d50 || 0, 10));
+    const d20 = Math.max(0, parseInt(denominations.d20 || 0, 10));
+    const d10 = Math.max(0, parseInt(denominations.d10 || 0, 10));
+
+    const totalCounted =
+      d2000 * 2000 +
+      d500 * 500 +
+      d200 * 200 +
+      d100 * 100 +
+      d50 * 50 +
+      d20 * 20 +
+      d10 * 10;
+
+    // Find matching tasks to reconcile
+    const taskQuery = {
+      isCod: true,
+      status: 'DELIVERED',
+    };
+    if (req.user.role !== 'superadmin') {
+      taskQuery.deliveryPartner = req.user._id;
+    }
+
+    if (Array.isArray(taskIds) && taskIds.length > 0) {
+      taskQuery._id = { $in: taskIds };
+    } else {
+      taskQuery.$or = [
+        { 'codReconciliation.status': 'PENDING' },
+        { codReconciliation: { $exists: false } },
+        { 'codReconciliation.status': { $exists: false } },
+      ];
+    }
+
+    const tasksToReconcile = await DeliveryTask.find(taskQuery);
+
+    const totalExpected = tasksToReconcile.reduce(
+      (sum, t) => sum + (t.amountCollected || t.amountToCollect || 0),
+      0
+    );
+
+    const discrepancy = totalCounted - totalExpected;
+
+    const reconciliationId = `COD-REC-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const reconciliation = await CodReconciliation.create({
+      reconciliationId,
+      deliveryPartner: req.user._id,
+      tasks: tasksToReconcile.map(t => t._id),
+      denominations: { d2000, d500, d200, d100, d50, d20, d10 },
+      totalExpected,
+      totalCounted,
+      discrepancy,
+      depositMethod,
+      depositSlipNumber: depositSlipNumber.trim(),
+      depositSlipImage,
+      notes: notes.trim(),
+      status: 'SUBMITTED',
+    });
+
+    // Update tasks reconciliation status
+    if (tasksToReconcile.length > 0) {
+      await DeliveryTask.updateMany(
+        { _id: { $in: tasksToReconcile.map(t => t._id) } },
+        {
+          $set: {
+            'codReconciliation.status': 'SUBMITTED',
+            'codReconciliation.submittedAt': new Date(),
+            'codReconciliation.referenceCode': reconciliationId,
+            'codReconciliation.notes': notes.trim(),
+          },
+        }
+      );
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Shift COD cash collection reconciliation submitted successfully to Super Admin!',
+      data: reconciliation,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    List All COD Reconciliations (Point #69)
+// @route   GET /api/delivery/cod/reconciliations
+exports.getCodReconciliations = async (req, res, next) => {
+  try {
+    const filter = req.user.role === 'superadmin' ? {} : { deliveryPartner: req.user._id };
+
+    const reconciliations = await CodReconciliation.find(filter)
+      .populate('deliveryPartner', 'name phone email')
+      .populate({
+        path: 'tasks',
+        select: 'amountToCollect amountCollected dropLocation status subOrder',
+      })
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: reconciliations.length,
+      data: reconciliations,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Super Admin Verify COD Reconciliation (Point #69)
+// @route   PUT /api/delivery/cod/reconciliations/:id/verify
+exports.verifyCodReconciliation = async (req, res, next) => {
+  try {
+    const { status = 'VERIFIED', adminRemarks = '' } = req.body;
+
+    const reconciliation = await CodReconciliation.findById(req.params.id);
+    if (!reconciliation) {
+      return res.status(404).json({ success: false, message: 'COD Reconciliation record not found' });
+    }
+
+    reconciliation.status = status;
+    reconciliation.adminRemarks = adminRemarks;
+    reconciliation.verifiedBy = req.user._id;
+    reconciliation.verifiedAt = new Date();
+    await reconciliation.save();
+
+    // If verified, mark tasks as VERIFIED
+    if (status === 'VERIFIED' && reconciliation.tasks && reconciliation.tasks.length > 0) {
+      await DeliveryTask.updateMany(
+        { _id: { $in: reconciliation.tasks } },
+        {
+          $set: {
+            'codReconciliation.status': 'VERIFIED',
+            'codReconciliation.reconciledAt': new Date(),
+          },
+        }
+      );
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `COD Reconciliation status updated to ${status}!`,
+      data: reconciliation,
     });
   } catch (error) {
     next(error);

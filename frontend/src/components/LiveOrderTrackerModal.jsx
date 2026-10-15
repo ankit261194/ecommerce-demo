@@ -23,9 +23,11 @@ import {
   AlertTriangle,
   RotateCcw,
   Printer,
+  MessageSquare,
 } from 'lucide-react';
 import ReturnRefundModal from './ReturnRefundModal';
 import TaxInvoiceModal from './TaxInvoiceModal';
+import WhatsAppOrderBotModal from './WhatsAppOrderBotModal';
 
 export default function LiveOrderTrackerModal({
   isOpen,
@@ -54,6 +56,9 @@ export default function LiveOrderTrackerModal({
 
   // Point #30: 1-Click Tax Invoice State
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+
+  // Point #71: 1-Click WhatsApp Order Bot State
+  const [showWhatsAppBot, setShowWhatsAppBot] = useState(false);
 
   const cancellationReasons = [
     'Ordered by mistake',
@@ -348,6 +353,16 @@ export default function LiveOrderTrackerModal({
                   >
                     <Printer className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                     Tax Invoice
+                  </button>
+
+                  {/* Point #71: 1-Click WhatsApp Order Bot Assistant */}
+                  <button
+                    onClick={() => setShowWhatsAppBot(true)}
+                    className="px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-300 dark:border-emerald-700 flex items-center gap-1.5 transition shadow-sm active:scale-95"
+                    title="1-Click WhatsApp Confirmation & AI Tracking Assistant"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 fill-current" />
+                    <span>WhatsApp Bot & Updates</span>
                   </button>
 
                   {/* Point #28: 1-Click Self-Cancel Action Button */}
@@ -905,6 +920,23 @@ export default function LiveOrderTrackerModal({
         orderId={orderData?.orderId || orderData?.rawOrderId}
         apiUrl={apiUrl}
       />
+
+      {/* Point #71: 1-Click WhatsApp Order Confirmation & Bot Modal */}
+      {showWhatsAppBot && orderData && (
+        <WhatsAppOrderBotModal
+          isOpen={showWhatsAppBot}
+          onClose={() => setShowWhatsAppBot(false)}
+          order={{
+            _id: orderData._id || orderData.rawOrderId || orderData.orderId,
+            orderNumber: orderData.orderNumber || orderData.orderId,
+            totalAmount: orderData.totalAmount || orderData.pricing?.totalAmount || 1299,
+            deliveryOtp: orderData.deliveryOtp || currentPackage?.deliveryOtp || '4821',
+            shippingAddress: orderData.shippingAddress || { phone: '9876543210' },
+            customer: orderData.customer,
+            items: orderData.items || [],
+          }}
+        />
+      )}
     </div>
   );
 }

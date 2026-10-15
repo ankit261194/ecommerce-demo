@@ -5244,6 +5244,109 @@ const runTests = async () => {
       assert.strictEqual(refusedSubOrderCheck.status, 'cancelled');
     });
 
+    // =========================================================================
+    // Point 71: 1-Click WhatsApp Order Confirmation & Tracking Bot Engine
+    // =========================================================================
+    await test('Point 71: 1-Click WhatsApp Order Confirmation & Tracking Bot Engine (Direct wa.me URL, Bot Query Intent Engine & Template Store)', async () => {
+      // 1. Fetch templates
+      const resTemplates = await fetch(`${baseUrl}/whatsapp/templates`);
+      assert.strictEqual(resTemplates.status, 200);
+      const dataTemplates = await resTemplates.json();
+      assert.strictEqual(dataTemplates.success, true);
+      assert.ok(Array.isArray(dataTemplates.templates));
+      assert.ok(dataTemplates.templates.some(t => t.id === 'ORDER_CONFIRMATION'));
+      assert.ok(dataTemplates.templates.some(t => t.id === 'OUT_FOR_DELIVERY'));
+
+      // 2. Reject missing orderId for confirmation
+      const resMissing = await fetch(`${baseUrl}/whatsapp/order-confirmation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(resMissing.status, 400);
+
+      // 3. Reject non-existent order with 404
+      const res404 = await fetch(`${baseUrl}/whatsapp/order-confirmation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: new mongoose.Types.ObjectId() }),
+      });
+      assert.strictEqual(res404.status, 404);
+
+      // 4. Generate 1-Click WhatsApp Order Confirmation for existing order
+      const anyOrder = await Order.findOne().sort({ createdAt: -1 });
+      assert.ok(anyOrder, 'Order must exist in database');
+
+      const resConfirm = await fetch(`${baseUrl}/whatsapp/order-confirmation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: anyOrder._id, phone: '9876543210' }),
+      });
+      assert.strictEqual(resConfirm.status, 200);
+      const dataConfirm = await resConfirm.json();
+      assert.strictEqual(dataConfirm.success, true);
+      assert.strictEqual(dataConfirm.data.orderNumber, anyOrder.orderNumber);
+      assert.ok(dataConfirm.data.whatsappUrl.startsWith('https://wa.me/919876543210?text='));
+      assert.ok(dataConfirm.data.formattedMessage.includes(anyOrder.orderNumber));
+      assert.ok(dataConfirm.data.formattedMessage.includes('Secret Handover OTP'));
+      assert.ok(dataConfirm.data.trackingUrl.includes('#order-track'));
+
+      // 5. Bot Query: TRACK Intent
+      const resTrack = await fetch(`${baseUrl}/whatsapp/bot-query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `TRACK #${anyOrder.orderNumber}` }),
+      });
+      assert.strictEqual(resTrack.status, 200);
+      const dataTrack = await resTrack.json();
+      assert.strictEqual(dataTrack.success, true);
+      assert.strictEqual(dataTrack.data.intent, 'TRACKING');
+      assert.ok(dataTrack.data.reply.includes(anyOrder.orderNumber));
+
+      // 6. Bot Query: OTP Intent
+      const resOtp = await fetch(`${baseUrl}/whatsapp/bot-query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `OTP #${anyOrder.orderNumber}` }),
+      });
+      assert.strictEqual(resOtp.status, 200);
+      const dataOtp = await resOtp.json();
+      assert.strictEqual(dataOtp.success, true);
+      assert.strictEqual(dataOtp.data.intent, 'OTP_INQUIRY');
+      assert.ok(dataOtp.data.reply.includes(anyOrder.deliveryOtp || '4821'));
+
+      // 7. Bot Query: CANCEL Intent
+      const resCancel = await fetch(`${baseUrl}/whatsapp/bot-query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `CANCEL #${anyOrder.orderNumber}` }),
+      });
+      assert.strictEqual(resCancel.status, 200);
+      const dataCancel = await resCancel.json();
+      assert.strictEqual(dataCancel.success, true);
+      assert.strictEqual(dataCancel.data.intent, 'CANCELLATION');
+
+      // 8. Bot Query: SUPPORT / HELP Intent
+      const resSupport = await fetch(`${baseUrl}/whatsapp/bot-query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: 'Need human support agent' }),
+      });
+      assert.strictEqual(resSupport.status, 200);
+      const dataSupport = await resSupport.json();
+      assert.strictEqual(dataSupport.success, true);
+      assert.strictEqual(dataSupport.data.intent, 'CUSTOMER_SUPPORT');
+      assert.ok(dataSupport.data.reply.includes('8533955333'));
+
+      // 9. Bot Query: Empty query validation (400)
+      const resEmptyQuery = await fetch(`${baseUrl}/whatsapp/bot-query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: '' }),
+      });
+      assert.strictEqual(resEmptyQuery.status, 400);
+    });
+
     // 9b. Edge Case & Security Validations
     await test('POST /delivery/tasks/:id/verify-otp rejects re-delivery on already DELIVERED task with 400', async () => {
       const targetSubOrder = await SubOrder.findById(riderTask.subOrder);

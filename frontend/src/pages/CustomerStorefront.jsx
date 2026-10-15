@@ -34,6 +34,7 @@ import {
   Printer,
   Wallet,
   Coins,
+  MessageSquare,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
@@ -55,6 +56,7 @@ import LiveOrderTrackerModal from '../components/LiveOrderTrackerModal';
 import TaxInvoiceModal from '../components/TaxInvoiceModal';
 import WalletDrawer from '../components/WalletDrawer';
 import VendorPublicStoreModal from '../components/VendorPublicStoreModal';
+import WhatsAppOrderBotModal from '../components/WhatsAppOrderBotModal';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -87,6 +89,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [invoiceOrderId, setInvoiceOrderId] = useState(null);
   const [selectedVendorForModal, setSelectedVendorForModal] = useState(null); // Point #58: Public Storefront Showcase
+  const [isWhatsAppBotOpen, setIsWhatsAppBotOpen] = useState(false); // Point #71: WhatsApp Order Bot
+  const [whatsAppBotOrder, setWhatsAppBotOrder] = useState(null);
 
   // Point #31: In-App Wallet & Reward Coins State
   const [isWalletOpen, setIsWalletOpen] = useState(false);
@@ -2506,6 +2510,26 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               Download GST Tax Invoice (PDF)
             </button>
 
+            {/* Point #71: 1-Click WhatsApp Order Confirmation & AI Tracking Bot */}
+            <button
+              onClick={() => {
+                setWhatsAppBotOrder({
+                  _id: activeOrderConfirmation.orderId,
+                  orderNumber: activeOrderConfirmation.orderId,
+                  totalAmount: activeOrderConfirmation.totalAmount,
+                  deliveryOtp: activeOrderConfirmation.subOrders?.[0]?.otp || '4821',
+                  shippingAddress: activeOrderConfirmation.address,
+                  customer: activeOrderConfirmation.address,
+                });
+                setIsWhatsAppBotOpen(true);
+              }}
+              className="w-full py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-[#00a884] font-black text-xs border border-emerald-500/30 flex items-center justify-center gap-1.5 transition active:scale-95 shadow-sm"
+              title="1-Click WhatsApp Order Confirmation & Interactive Bot Assistant"
+            >
+              <MessageSquare className="w-4 h-4 fill-current" />
+              <span>1-Click WhatsApp Confirmation & Bot</span>
+            </button>
+
             <div className="flex gap-2.5">
               <button
                 onClick={() => {
@@ -2702,6 +2726,15 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           setSelectedProduct(prod);
         }}
       />
+
+      {/* Point #71: WhatsApp Order Confirmation & Bot Modal */}
+      {isWhatsAppBotOpen && whatsAppBotOrder && (
+        <WhatsAppOrderBotModal
+          isOpen={isWhatsAppBotOpen}
+          onClose={() => setIsWhatsAppBotOpen(false)}
+          order={whatsAppBotOrder}
+        />
+      )}
     </div>
   );
 };

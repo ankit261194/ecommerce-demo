@@ -4736,6 +4736,88 @@ const runTests = async () => {
       assert.strictEqual(resResendDelivered.status, 400);
     });
 
+    // =========================================================================
+    // Point 67: Digital Customer Signature Pad on screen (Canvas Capture & POD)
+    // =========================================================================
+    await test('Point 67: Digital Customer Signature Pad (Base64 Capture, Signer Attribution, SubOrder Tracking & Verifiable POD)', async () => {
+      const mockBase64Signature = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAACWAQMAAABp6x6nAAAABlBMVEUAAAD///+l2Z/dAAAAAnRSTlMA/1uRIrUAAAAnSURBVHgB7cExAQAAAMKg9U9tCF8gAAAAAAAAAAAAAAAAAAAAAAAA4DY0kQAB4H5zNQAAAABJRU5ErkJggg==';
+
+      // 1. Reject missing or empty signature
+      const resEmpty = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/signature`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ signature: '' }),
+      });
+      assert.strictEqual(resEmpty.status, 400);
+      const dataEmpty = await resEmpty.json();
+      assert.strictEqual(dataEmpty.success, false);
+      assert.ok(dataEmpty.message.includes('signature data (base64) is required'));
+
+      // 2. Reject non-courier role (customer) from saving signature (403)
+      const resForbidden = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/signature`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ signature: mockBase64Signature, signerName: 'Sneaky Customer' }),
+      });
+      assert.strictEqual(resForbidden.status, 403);
+
+      // 3. Save valid signature with signer attribution
+      const resSave = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/signature`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          signature: mockBase64Signature,
+          signerName: 'Rahul Sharma',
+          signerRelation: 'Family Member',
+        }),
+      });
+      assert.strictEqual(resSave.status, 200);
+      const dataSave = await resSave.json();
+      assert.strictEqual(dataSave.success, true);
+      assert.strictEqual(dataSave.data.customerSignature, mockBase64Signature);
+      assert.strictEqual(dataSave.data.signatureDetails.signerName, 'Rahul Sharma');
+      assert.strictEqual(dataSave.data.signatureDetails.signerRelation, 'Family Member');
+      assert.ok(dataSave.data.signatureDetails.signedAt);
+
+      // 4. Verify database persistence in DeliveryTask
+      const savedTask = await DeliveryTask.findById(riderTask._id);
+      assert.strictEqual(savedTask.customerSignature, mockBase64Signature);
+      assert.strictEqual(savedTask.signatureDetails.signerName, 'Rahul Sharma');
+
+      // 5. Verify SubOrder tracking history entry
+      const subOrderDoc = await SubOrder.findById(riderTask.subOrder);
+      const signatureTrack = subOrderDoc.trackingHistory.find(th => th.note && th.note.includes('Digital signature captured'));
+      assert.ok(signatureTrack, 'SubOrder trackingHistory should include digital signature capture log');
+
+      // 6. GET /delivery/tasks/:id/signature retrieves verifiable POD slip details
+      const resGet = await fetch(`${baseUrl}/delivery/tasks/${riderTask._id}/signature`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resGet.status, 200);
+      const dataGet = await resGet.json();
+      assert.strictEqual(dataGet.success, true);
+      assert.strictEqual(dataGet.data.hasSignature, true);
+      assert.strictEqual(dataGet.data.signatureDetails.signerName, 'Rahul Sharma');
+      assert.strictEqual(dataGet.data.customerSignature, mockBase64Signature);
+      assert.ok(dataGet.data.dropAddress);
+
+      // 7. Non-existent task returns 404
+      const fakeId = new mongoose.Types.ObjectId();
+      const res404 = await fetch(`${baseUrl}/delivery/tasks/${fakeId}/signature`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(res404.status, 404);
+    });
+
     // 9b. Edge Case & Security Validations
     await test('POST /delivery/tasks/:id/verify-otp rejects re-delivery on already DELIVERED task with 400', async () => {
       const targetSubOrder = await SubOrder.findById(riderTask.subOrder);

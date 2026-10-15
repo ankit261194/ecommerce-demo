@@ -8,6 +8,8 @@ const {
   getTaskContactTemplates,
   logContactAttempt,
   resendDeliveryOtp,
+  saveCustomerSignature,
+  getTaskSignature,
 } = require('../controllers/deliveryController');
 const { protect, authorize } = require('../middlewares/auth');
 
@@ -21,5 +23,7 @@ router.post('/tasks/:id/contact-log', logContactAttempt);
 router.post('/tasks/:id/resend-otp', resendDeliveryOtp);
 router.put('/tasks/:id/status', updateDeliveryStatus);
 router.post('/tasks/:id/verify-otp', verifyOtpAndCompleteDelivery);
+router.post('/tasks/:id/signature', saveCustomerSignature);
+router.get('/tasks/:id/signature', getTaskSignature);
 
 module.exports = router;

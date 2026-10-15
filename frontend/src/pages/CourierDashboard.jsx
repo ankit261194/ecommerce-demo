@@ -18,16 +18,20 @@ import {
   RefreshCw,
   Compass,
   Check,
+  PenTool,
+  FileCheck,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { CourierNavigationModal } from '../components/CourierNavigationModal';
 import { CourierContactModal } from '../components/CourierContactModal';
 import CourierOtpVerificationModal from '../components/CourierOtpVerificationModal';
+import CourierSignatureModal from '../components/CourierSignatureModal';
 import api from '../api/client';
 
 export const CourierDashboard = () => {
   const [selectedTaskForNav, setSelectedTaskForNav] = useState(null);
   const [selectedTaskForContact, setSelectedTaskForContact] = useState(null);
+  const [selectedTaskForSignature, setSelectedTaskForSignature] = useState(null);
   const [riderStats, setRiderStats] = useState({
     name: 'Vikram Singh',
     assignedTasks: 2,
@@ -138,6 +142,8 @@ export const CourierDashboard = () => {
             status: t.status,
             expectedOtp: t.subOrder?.deliveryOtp || '4821',
             deliveryInstructions: t.deliveryInstructions || t.subOrder?.deliveryInstructions || '',
+            customerSignature: t.customerSignature || null,
+            signatureDetails: t.signatureDetails || null,
             mapUrl: t.dropLocation?.mapUrl || `https://maps.google.com/?q=${mapQuery}`,
           };
         });
@@ -222,6 +228,23 @@ export const CourierDashboard = () => {
     setSuccessMessage(`✅ Delivery Complete! Sub-order #${target?.subOrderId || taskId} verified via 4-Digit OTP.`);
     setSelectedTaskForOtp(null);
     setErrorMessage('');
+    fetchTasks();
+  };
+
+  // Digital Customer Signature Callback (Point #67)
+  const handleSignatureSuccess = (taskId, base64Signature, signerName, signerRelation) => {
+    setTasks(prev =>
+      prev.map(t =>
+        t.id === taskId || t.rawId === taskId
+          ? {
+              ...t,
+              customerSignature: base64Signature,
+              signatureDetails: { signerName, signerRelation, signedAt: new Date() },
+            }
+          : t
+      )
+    );
+    setSuccessMessage(`✍️ Customer signature captured & attached for #${taskId}!`);
     fetchTasks();
   };
 
@@ -635,6 +658,27 @@ export const CourierDashboard = () => {
 
                 {/* Action Buttons */}
                 <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-end gap-2.5 flex-wrap">
+                  {/* Point #67: Digital Customer Signature Pad Button */}
+                  {task.customerSignature ? (
+                    <button
+                      onClick={() => setSelectedTaskForSignature(task)}
+                      className="px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                      title="View Customer Signature & Print Proof of Delivery (POD) Slip"
+                    >
+                      <PenTool className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>POD Signed ({task.signatureDetails?.signerName || task.customer?.name || 'Customer'})</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setSelectedTaskForSignature(task)}
+                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                      title="Capture Customer Signature on Screen"
+                    >
+                      <PenTool className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Signature Pad</span>
+                    </button>
+                  )}
+
                   {task.status === 'ASSIGNED' && (
                     <button
                       onClick={() => handleAdvanceStatus(task.id, 'PICKED_UP')}
@@ -682,6 +726,14 @@ export const CourierDashboard = () => {
         )}
       </div>
 
+      {/* Point #67: Digital Customer Signature Modal */}
+      {selectedTaskForSignature && (
+        <CourierSignatureModal
+          task={selectedTaskForSignature}
+          onClose={() => setSelectedTaskForSignature(null)}
+          onSuccess={handleSignatureSuccess}
+        />
+      )}
       {/* Point #66: 4-Digit Secret Delivery OTP Verification Modal */}
       {selectedTaskForOtp && (
         <CourierOtpVerificationModal

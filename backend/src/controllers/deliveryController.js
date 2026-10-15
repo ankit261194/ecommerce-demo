@@ -186,6 +186,15 @@ exports.verifyOtpAndCompleteDelivery = async (req, res, next) => {
     if (task.isCod) {
       task.amountCollected = amountCollected !== undefined ? Number(amountCollected) : task.amountToCollect;
     }
+    if (req.body.customerSignature) {
+      task.customerSignature = req.body.customerSignature;
+      task.signatureDetails = {
+        signerName: req.body.signerName || task.dropLocation?.recipientName || 'Customer',
+        signerRelation: req.body.signerRelation || 'Self',
+        signedAt: new Date(),
+        ipAddress: req.ip || '',
+      };
+    }
     await task.save();
 
     // Update SubOrder to Delivered
@@ -453,6 +462,115 @@ exports.resendDeliveryOtp = async (req, res, next) => {
         phone: customerPhone,
         maskedOtp: `**${otp.slice(-2)}`,
         simulated: smsResult.simulated || false,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Save Customer Digital Signature Pad Capture (Point #67)
+// @route   POST /api/delivery/tasks/:id/signature
+exports.saveCustomerSignature = async (req, res, next) => {
+  try {
+    const { signature, signerName, signerRelation } = req.body;
+
+    if (!signature || typeof signature !== 'string' || !signature.trim()) {
+      return res.status(400).json({ success: false, message: 'Digital customer signature data (base64) is required.' });
+    }
+
+    const taskQuery = req.user.role === 'superadmin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, deliveryPartner: req.user._id };
+
+    const task = await DeliveryTask.findOne(taskQuery).populate({
+      path: 'subOrder',
+      populate: { path: 'vendor', select: 'storeName' }
+    });
+
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Delivery task not found' });
+    }
+
+    if (task.status === 'CANCELLED') {
+      return res.status(400).json({ success: false, message: 'Cannot attach signature to a cancelled delivery task.' });
+    }
+
+    const resolvedSigner = (signerName && signerName.trim()) || task.dropLocation?.recipientName || 'Customer';
+    const resolvedRelation = (signerRelation && signerRelation.trim()) || 'Self';
+
+    task.customerSignature = signature.trim();
+    task.signatureDetails = {
+      signerName: resolvedSigner,
+      signerRelation: resolvedRelation,
+      signedAt: new Date(),
+      ipAddress: req.ip || '',
+    };
+    await task.save();
+
+    // Log to suborder tracking if available
+    if (task.subOrder) {
+      const subOrder = await SubOrder.findById(task.subOrder._id || task.subOrder);
+      if (subOrder) {
+        subOrder.trackingHistory.push({
+          status: subOrder.status,
+          timestamp: new Date(),
+          note: `Digital signature captured from ${resolvedSigner} (${resolvedRelation})`,
+        });
+        await subOrder.save();
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Customer digital signature attached successfully!',
+      data: {
+        taskId: task._id,
+        customerSignature: task.customerSignature,
+        signatureDetails: task.signatureDetails,
+        status: task.status,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Customer Digital Signature & Verifiable POD Details (Point #67)
+// @route   GET /api/delivery/tasks/:id/signature
+exports.getTaskSignature = async (req, res, next) => {
+  try {
+    const taskQuery = req.user.role === 'superadmin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, deliveryPartner: req.user._id };
+
+    const task = await DeliveryTask.findOne(taskQuery).populate({
+      path: 'subOrder',
+      populate: [
+        { path: 'vendor', select: 'storeName storeLogo pickupAddress phone' },
+        { path: 'customer', select: 'name phone email' },
+      ],
+    });
+
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Delivery task not found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        taskId: task._id,
+        subOrderId: task.subOrder?._id,
+        orderNumber: task.subOrder?.subOrderId || `TASK-${task._id.toString().slice(-6).toUpperCase()}`,
+        status: task.status,
+        recipientName: task.dropLocation?.recipientName,
+        phone: task.dropLocation?.phone,
+        dropAddress: `${task.dropLocation?.address || ''}, ${task.dropLocation?.city || ''} ${task.dropLocation?.pincode || ''}`.trim(),
+        hasSignature: Boolean(task.customerSignature),
+        customerSignature: task.customerSignature,
+        signatureDetails: task.signatureDetails,
+        deliveredAt: task.deliveredAt,
+        createdAt: task.createdAt,
       },
     });
   } catch (error) {

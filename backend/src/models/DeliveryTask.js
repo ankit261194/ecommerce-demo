@@ -75,6 +75,12 @@ const deliveryTaskSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    signatureDetails: {
+      signerName: { type: String, default: '' },
+      signerRelation: { type: String, default: 'Self' },
+      signedAt: { type: Date, default: null },
+      ipAddress: { type: String, default: '' },
+    },
     // Point #68: Doorstep Photo Proof of Delivery upload
     proofPhoto: {
       type: String,

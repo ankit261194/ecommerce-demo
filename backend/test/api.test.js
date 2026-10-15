@@ -8328,6 +8328,205 @@ const runTests = async () => {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
 
+    // =========================================================================
+    // POINT 9: CATEGORY-WISE & DYNAMIC COMMISSION RULES (MASTER ENTERPRISE)
+    // =========================================================================
+    let createdRuleId = null;
+
+    await test('Point 9 (Master): GET /api/commission/rules returns seeded rules (Electronics 5%, Fashion 15%, Groceries 3%)', async () => {
+      const res = await fetch(`${baseUrl}/commission/rules`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.data.length >= 4, 'Should have at least 4 default commission rules');
+
+      const elec = data.data.find(r => r.categorySlug === 'electronics');
+      assert.ok(elec, 'Must have electronics commission rule');
+      assert.strictEqual(elec.percentage, 5);
+
+      const fashion = data.data.find(r => r.categorySlug === 'fashion');
+      assert.ok(fashion, 'Must have fashion commission rule');
+      assert.strictEqual(fashion.percentage, 15);
+
+      const groc = data.data.find(r => r.categorySlug === 'groceries');
+      assert.ok(groc, 'Must have groceries commission rule');
+      assert.strictEqual(groc.percentage, 3);
+    });
+
+    await test('Point 9 (Master): POST /api/commission/rules validates missing rule name with 400', async () => {
+      const res = await fetch(`${baseUrl}/commission/rules`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          categorySlug: 'books',
+          percentage: 8,
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+    });
+
+    await test('Point 9 (Master): POST /api/commission/rules rejects unauthorized customer with 403', async () => {
+      const res = await fetch(`${baseUrl}/commission/rules`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Unauthorized Rule',
+          categorySlug: 'beauty',
+          percentage: 12,
+        }),
+      });
+      assert.strictEqual(res.status, 403);
+    });
+
+    await test('Point 9 (Master): Super Admin can create custom Category Commission Rule', async () => {
+      const res = await fetch(`${baseUrl}/commission/rules`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Luxury Watches & Jewelry Tier',
+          categorySlug: 'jewelry',
+          ruleType: 'PERCENTAGE',
+          percentage: 20,
+          fixedFee: 50,
+          minCommission: 100,
+          maxCommission: 10000,
+          priority: 15,
+          isActive: true,
+          description: 'High luxury items 20% platform cut + 50 handling fee',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.percentage, 20);
+      assert.strictEqual(data.data.categorySlug, 'jewelry');
+      createdRuleId = data.data._id;
+    });
+
+    await test('Point 9 (Master): PUT /api/commission/rules/:id updates commission percentage and priority', async () => {
+      const res = await fetch(`${baseUrl}/commission/rules/${createdRuleId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          percentage: 18,
+          priority: 20,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.percentage, 18);
+      assert.strictEqual(data.data.priority, 20);
+    });
+
+    await test('Point 9 (Master): DELETE /api/commission/rules/:id removes commission rule', async () => {
+      const res = await fetch(`${baseUrl}/commission/rules/${createdRuleId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+    });
+
+    await test('Point 9 (Master): POST /api/commission/simulate calculates 5% for Electronics order', async () => {
+      const res = await fetch(`${baseUrl}/commission/simulate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          categorySlug: 'electronics',
+          amount: 10000,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.platformCommissionCut, 500);
+      assert.strictEqual(data.data.vendorEarning, 9500);
+      assert.strictEqual(data.data.effectiveRatePercent, 5);
+    });
+
+    await test('Point 9 (Master): POST /api/commission/simulate calculates 15% for Fashion order', async () => {
+      const res = await fetch(`${baseUrl}/commission/simulate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          categorySlug: 'fashion',
+          amount: 4000,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.platformCommissionCut, 600);
+      assert.strictEqual(data.data.vendorEarning, 3400);
+      assert.strictEqual(data.data.effectiveRatePercent, 15);
+    });
+
+    await test('Point 9 (Master): POST /api/commission/simulate calculates 3% for Groceries order', async () => {
+      const res = await fetch(`${baseUrl}/commission/simulate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          categorySlug: 'groceries',
+          amount: 2000,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.platformCommissionCut, 60);
+      assert.strictEqual(data.data.vendorEarning, 1940);
+      assert.strictEqual(data.data.effectiveRatePercent, 3);
+    });
+
+    await test('Point 9 (Master): POST /api/commission/simulate validates negative order amount with 400', async () => {
+      const res = await fetch(`${baseUrl}/commission/simulate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          categorySlug: 'electronics',
+          amount: -500,
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+    });
+
+
       assert.strictEqual(res.status, 200);
       const data = await res.json();
       assert.strictEqual(data.success, true);

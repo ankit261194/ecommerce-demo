@@ -33,6 +33,7 @@ const sizeChartRoutes = require('./routes/sizeChartRoutes');
 const priceDropAlertRoutes = require('./routes/priceDropAlertRoutes');
 const cmsRoutes = require('./routes/cmsRoutes');
 const faqRoutes = require('./routes/faqRoutes');
+const commissionRoutes = require('./routes/commissionRoutes');
 
 const app = express();
 
@@ -127,6 +128,7 @@ app.use('/api/size-charts', sizeChartRoutes);
 app.use('/api/price-drop-alerts', priceDropAlertRoutes);
 app.use('/api/cms', cmsRoutes);
 app.use('/api/faqs', faqRoutes);
+app.use('/api/commission', commissionRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

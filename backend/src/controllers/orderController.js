@@ -39,7 +39,7 @@ exports.createOrder = async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'Valid positive quantity is required' });
       }
 
-      const product = await Product.findById(item.productId).populate('vendor');
+      const product = await Product.findById(item.productId).populate('vendor').populate('category');
       if (!product || !product.isPublished) {
         return res.status(404).json({ success: false, message: `Product '${item.title || item.productId}' is no longer available` });
       }
@@ -99,6 +99,7 @@ exports.createOrder = async (req, res, next) => {
         vendor: product.vendor._id,
         title: product.title,
         image: product.images[0] || '',
+        categorySlug: product.category?.slug || 'all',
         variantSku: variantMatch ? variantMatch.sku : (item.variantSku || product.sku),
         variantName: variantName,
         hsnCode: product.hsnCode || '85183000',
@@ -404,9 +405,25 @@ exports.createOrder = async (req, res, next) => {
     for (const vendorIdStr in vendorItemsMap) {
       const vendorGroup = vendorItemsMap[vendorIdStr];
       const vendor = vendorGroup.vendor;
-      const commissionRate = vendor.commissionRate || 10;
-      const commissionAmount = (vendorGroup.subTotal * commissionRate) / 100;
-      const vendorEarning = vendorGroup.subTotal - commissionAmount;
+      const { calculateCommission } = require('../utils/commissionEngine');
+
+      // Point 9: Category-Wise & Dynamic Commission Rules with Ledger Sync
+      let calculatedCommissionTotal = 0;
+      for (const itm of vendorGroup.items) {
+        const commCalc = await calculateCommission({
+          vendorId: vendor._id,
+          categorySlug: itm.categorySlug || 'all',
+          subTotal: itm.totalPrice,
+          defaultVendorRate: vendor.commissionRate,
+        });
+        calculatedCommissionTotal += commCalc.amount;
+      }
+
+      const commissionAmount = calculatedCommissionTotal;
+      const vendorEarning = Math.max(0, vendorGroup.subTotal - commissionAmount);
+      const commissionRate = vendorGroup.subTotal > 0
+        ? Number(((commissionAmount / vendorGroup.subTotal) * 100).toFixed(2))
+        : (vendor.commissionRate || 10);
 
       totalPlatformCommission += commissionAmount;
 

@@ -10,6 +10,7 @@ const subOrderItemSchema = new mongoose.Schema({
   image: String,
   variantSku: String,
   variantName: String,
+  categorySlug: { type: String, default: 'all' },
   hsnCode: {
     type: String,
     default: '85183000',

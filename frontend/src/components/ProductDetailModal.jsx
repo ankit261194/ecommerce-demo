@@ -39,6 +39,7 @@ import EmiBreakdownModal from './EmiBreakdownModal';
 import SocialShareModal from './SocialShareModal';
 import ProductVariantSwatches from './ProductVariantSwatches';
 import GroupBuyModal from './GroupBuyModal';
+import SubscribeAndSaveModal from './SubscribeAndSaveModal';
 import { useLocalization } from '../context/LocalizationContext';
 
 export const ProductDetailModal = ({
@@ -93,6 +94,9 @@ export const ProductDetailModal = ({
 
   // Group Buying / Team Purchase Modal state (Point #26)
   const [isGroupBuyModalOpen, setIsGroupBuyModalOpen] = useState(false);
+
+  // Subscribe & Save Recurring Modal state (Point 13)
+  const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
 
   // Hover zoom coordinates
   const [zoomStyle, setZoomStyle] = useState({ display: 'none' });
@@ -588,6 +592,35 @@ export const ProductDetailModal = ({
                     </span>
                   </button>
                 )}
+
+                {/* Point 13: Subscribe & Save Engine (Recurring Auto-Delivery with 10% Discount) */}
+                <button
+                  type="button"
+                  onClick={() => setIsSubscribeModalOpen(true)}
+                  className="w-full p-3 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-between group active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-2.5 text-left">
+                    <span className="w-8 h-8 rounded-xl bg-white/20 text-white flex items-center justify-center font-black text-sm shadow-xs shrink-0">
+                      🔄
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-white font-black text-xs sm:text-sm">
+                          Subscribe & Save (Point 13)
+                        </span>
+                        <span className="text-[10px] uppercase font-black px-1.5 py-0.2 rounded-full bg-white/25 text-white">
+                          Save 10% Every Order
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-emerald-100 font-semibold block mt-0.5">
+                        Daily, Weekly or Monthly Auto-Deliveries @ ₹{Math.round((currentSellingPrice || 999) * 0.9).toLocaleString('en-IN')} / unit • Skip or cancel anytime
+                      </span>
+                    </div>
+                  </div>
+                  <span className="px-3 py-1.5 rounded-xl bg-white text-emerald-900 font-black text-xs group-hover:bg-emerald-50 transition-colors shrink-0">
+                    Schedule Auto-Drop →
+                  </span>
+                </button>
               </div>
 
               {/* Point #1: Pincode Delivery & COD Serviceability Engine */}
@@ -966,6 +999,15 @@ export const ProductDetailModal = ({
             );
           }
         }}
+      />
+
+      {/* Point 13: Subscribe & Save Recurring Modal */}
+      <SubscribeAndSaveModal
+        isOpen={isSubscribeModalOpen}
+        onClose={() => setIsSubscribeModalOpen(false)}
+        product={product}
+        selectedVariant={selectedVariant}
+        onSuccessToast={() => {}}
       />
     </div>
   );

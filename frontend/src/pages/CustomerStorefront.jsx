@@ -75,6 +75,7 @@ import VoiceShoppingAssistantModal from '../components/VoiceShoppingAssistantMod
 import WebPushOptInBanner from '../components/WebPushOptInBanner';
 import { GiftOptionsModal } from '../components/GiftOptionsModal';
 import ShoppableReelsModal from '../components/ShoppableReelsModal';
+import SubscribeAndSaveModal from '../components/SubscribeAndSaveModal';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useLocalization } from '../context/LocalizationContext';
@@ -250,12 +251,24 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
     const handleOpenWallet = () => setIsWalletOpen(true);
     window.addEventListener('auramarket_open_wallet', handleOpenWallet);
+
+    const handleOpenSubscriptions = (e) => {
+      if (e?.detail?.product) setSubscribeProduct(e.detail.product);
+      setIsSubscribeModalOpen(true);
+    };
+    window.addEventListener('auramarket_open_subscriptions', handleOpenSubscriptions);
+
     return () => {
       window.removeEventListener('auramarket_wallet_update', handleWalletUpdate);
       window.removeEventListener('storage', handleStorageUpdate);
       window.removeEventListener('auramarket_open_wallet', handleOpenWallet);
+      window.removeEventListener('auramarket_open_subscriptions', handleOpenSubscriptions);
     };
   }, []);
+
+  // Point 13: Subscribe & Save Engine State
+  const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
+  const [subscribeProduct, setSubscribeProduct] = useState(null);
 
   // Wishlist state (persisted in localStorage + synced with backend /api/wishlist)
   const [wishlist, setWishlist] = useState(() => {
@@ -3709,6 +3722,20 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           setSelectedProduct(prod);
         }}
       />
+
+      {/* Point 13: Subscribe & Save Engine Modal */}
+      {isSubscribeModalOpen && (
+        <SubscribeAndSaveModal
+          isOpen={isSubscribeModalOpen}
+          onClose={() => setIsSubscribeModalOpen(false)}
+          product={subscribeProduct || products[0]}
+          user={user}
+          onSuccessToast={(msg) => {
+            setToastMessage(msg);
+            setTimeout(() => setToastMessage(null), 3000);
+          }}
+        />
+      )}
 
       {/* Point #71: WhatsApp Order Confirmation & Bot Modal */}
       {isWhatsAppBotOpen && whatsAppBotOrder && (

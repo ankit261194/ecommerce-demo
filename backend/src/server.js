@@ -62,6 +62,7 @@ const groupBuyRoutes = require('./routes/groupBuyRoutes');
 const videoShoppingRoutes = require('./routes/videoShoppingRoutes');
 const rtoFraudRoutes = require('./routes/rtoFraudRoutes');
 const mapRoutes = require('./routes/mapRoutes');
+const subscriptionRoutes = require('./routes/subscriptionRoutes');
 
 const app = express();
 
@@ -197,6 +198,7 @@ app.use('/api/group-buy', groupBuyRoutes);
 app.use('/api/video-shopping', videoShoppingRoutes);
 app.use('/api/rto-fraud', rtoFraudRoutes);
 app.use('/api/maps', mapRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

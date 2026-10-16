@@ -18395,6 +18395,251 @@ const runTests = async () => {
       assert.ok(data.data.splitPayment.advancePayment.remainingCodDue > 0);
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 13: SUBSCRIBE & SAVE ENGINE (RECURRING AUTO-DELIVERY)
+    // =========================================================================
+    console.log('\n--- PILLAR 1 - POINT 13: SUBSCRIBE & SAVE ENGINE (RECURRING AUTO-DELIVERY) ---');
+
+    const Subscription = require('../src/models/Subscription');
+    let point13SubId = null;
+
+    await test('Point 13: POST /api/subscriptions creates recurring subscription with 10% discount & next delivery date', async () => {
+      const sampleProd = await Product.findOne({ isPublished: true });
+      assert.ok(sampleProd, 'Product required');
+
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/subscriptions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+        body: JSON.stringify({
+          productId: sampleProd._id,
+          quantity: 2,
+          frequency: 'WEEKLY',
+          deliveryTimeSlot: 'MORNING_6_8',
+          paymentMethod: 'WALLET_AUTO_DEBIT',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data._id);
+      point13SubId = data.data._id;
+      assert.strictEqual(data.data.frequency, 'WEEKLY');
+      assert.strictEqual(data.data.frequencyDays, 7);
+      assert.strictEqual(data.data.discountPercentage, 10);
+      assert.strictEqual(data.data.status, 'ACTIVE');
+      assert.strictEqual(data.data.quantity, 2);
+      assert.ok(data.data.discountedUnitPrice < data.data.unitPrice);
+      assert.strictEqual(data.data.cycleTotal, data.data.discountedUnitPrice * 2);
+      assert.ok(data.data.nextDeliveryDate);
+    });
+
+    await test('Point 13: GET /api/subscriptions/my lists customer active subscriptions', async () => {
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/subscriptions/my`, {
+        headers: { Authorization: `Bearer ${custToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.count >= 1);
+      const found = data.data.find((s) => String(s._id) === String(point13SubId));
+      assert.ok(found, 'Created subscription must be in my subscriptions list');
+      assert.ok(found.product, 'Product must be populated');
+    });
+
+    await test('Point 13: GET /api/subscriptions/:id returns single subscription details', async () => {
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/subscriptions/${point13SubId}`, {
+        headers: { Authorization: `Bearer ${custToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(String(data.data._id), String(point13SubId));
+    });
+
+    await test('Point 13: POST /api/subscriptions/:id/pause pauses active subscription', async () => {
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/subscriptions/${point13SubId}/pause`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+        body: JSON.stringify({ reason: 'Traveling for 2 weeks' }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'PAUSED');
+      assert.strictEqual(data.data.pauseReason, 'Traveling for 2 weeks');
+      assert.ok(data.data.pausedAt);
+    });
+
+    await test('Point 13: POST /api/subscriptions/:id/resume resumes paused subscription', async () => {
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/subscriptions/${point13SubId}/resume`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'ACTIVE');
+      assert.strictEqual(data.data.pauseReason, null);
+    });
+
+    await test('Point 13: POST /api/subscriptions/:id/skip skips next scheduled delivery cycle', async () => {
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const initialSub = await Subscription.findById(point13SubId);
+      const originalNextDate = new Date(initialSub.nextDeliveryDate).getTime();
+
+      const res = await fetch(`${baseUrl}/subscriptions/${point13SubId}/skip`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      const newNextDate = new Date(data.data.nextDeliveryDate).getTime();
+      assert.ok(newNextDate > originalNextDate, 'Next delivery date must advance upon skip');
+      assert.ok(data.data.skippedDeliveryDates.length >= 1);
+    });
+
+    await test('Point 13: POST /api/subscriptions/trigger-due processes due recurring subscriptions', async () => {
+      // Artificially backdate nextDeliveryDate to test trigger runner
+      await Subscription.findByIdAndUpdate(point13SubId, {
+        nextDeliveryDate: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      });
+
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/subscriptions/trigger-due`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.processedCount >= 1);
+
+      const updatedSub = await Subscription.findById(point13SubId);
+      assert.strictEqual(updatedSub.totalDeliveriesCount, 1);
+      assert.ok(new Date(updatedSub.nextDeliveryDate) > new Date());
+    });
+
+    await test('Point 13: POST /api/subscriptions/:id/cancel cancels subscription', async () => {
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/subscriptions/${point13SubId}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+        body: JSON.stringify({ reason: 'No longer needed' }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'CANCELLED');
+      assert.strictEqual(data.data.cancellationReason, 'No longer needed');
+    });
+
+    await test('Point 13: POST /api/subscriptions rejects request without productId (400 Bad Request)', async () => {
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/subscriptions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+        body: JSON.stringify({
+          quantity: 1,
+          frequency: 'MONTHLY',
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Product ID is required'));
+    });
+
   } finally {
     if (server) {
       server.close();

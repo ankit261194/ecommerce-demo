@@ -10924,6 +10924,223 @@ const runTests = async () => {
       assert.strictEqual(resCustPost.status, 403);
     });
 
+    // =========================================================================
+    // POINT 3: VISUAL EMAIL SMTP & TRANSACTIONAL TEMPLATE STUDIO TESTS
+    // =========================================================================
+
+    await test('Point 3: GET /api/admin/email/settings returns SMTP, SendGrid, SES, Brevo, Mailgun & auto-seeded 6 templates', async () => {
+      const res = await fetch(`${baseUrl}/admin/email/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.smtp);
+      assert.ok(data.data.sendgrid);
+      assert.ok(data.data.ses);
+      assert.ok(data.data.brevo);
+      assert.ok(data.data.mailgun);
+      assert.ok(Array.isArray(data.data.templates));
+      assert.strictEqual(data.data.templates.length, 6);
+
+      const keys = data.data.templates.map(t => t.templateKey);
+      assert.ok(keys.includes('welcome'));
+      assert.ok(keys.includes('order_placed'));
+      assert.ok(keys.includes('order_dispatched'));
+      assert.ok(keys.includes('order_delivered'));
+      assert.ok(keys.includes('refund_approved'));
+      assert.ok(keys.includes('password_reset'));
+    });
+
+    await test('Point 3: PUT /api/admin/email/settings updates SMTP, SendGrid & AWS SES credentials', async () => {
+      const payload = {
+        activeProvider: 'smtp',
+        smtp: {
+          host: 'smtp.mailgun.org',
+          port: 587,
+          secure: false,
+          username: 'test@mg.auramarket.com',
+          password: 'MY_SMTP_SECRET_PASS_2026',
+          fromEmail: 'orders@auramarket.com',
+          fromName: 'AuraMarket Store Orders',
+        },
+        sendgrid: {
+          apiKey: 'SG.TEST_KEY_LONG_SECRET_12345',
+          fromEmail: 'alerts@auramarket.com',
+          fromName: 'AuraMarket Alerts',
+        },
+        ses: {
+          accessKeyId: 'AKIA_TEST_KEY_2026',
+          secretAccessKey: 'AWS_SECRET_KEY_SUPER_LONG_2026',
+          region: 'ap-south-1',
+          fromEmail: 'aws@auramarket.com',
+          fromName: 'AuraMarket Cloud',
+        },
+      };
+
+      const res = await fetch(`${baseUrl}/admin/email/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.activeProvider, 'smtp');
+      assert.strictEqual(data.data.smtp.host, 'smtp.mailgun.org');
+      assert.strictEqual(data.data.smtp.hasPassword, true);
+    });
+
+    await test('Point 3: GET /api/admin/email/settings properly masks passwords and secrets', async () => {
+      const res = await fetch(`${baseUrl}/admin/email/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.smtp.hasPassword, true);
+      assert.ok(data.data.smtp.passwordMasked.includes('••••'));
+      assert.strictEqual(data.data.sendgrid.hasApiKey, true);
+      assert.ok(data.data.sendgrid.apiKeyMasked.includes('••••'));
+      assert.strictEqual(data.data.ses.hasSecretAccessKey, true);
+      assert.ok(data.data.ses.secretAccessKeyMasked.includes('••••'));
+    });
+
+    await test('Point 3: PUT /api/admin/email/settings preserves masked secret without overwriting', async () => {
+      const payload = {
+        smtp: {
+          password: '••••••••',
+        },
+      };
+
+      const res = await fetch(`${baseUrl}/admin/email/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      assert.strictEqual(res.status, 200);
+
+      const checkRes = await fetch(`${baseUrl}/admin/email/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const checkData = await checkRes.json();
+      assert.strictEqual(checkData.data.smtp.hasPassword, true);
+    });
+
+    await test('Point 3: GET /api/admin/email/templates returns all 6 transactional templates with schema', async () => {
+      const res = await fetch(`${baseUrl}/admin/email/templates`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.templates.length, 6);
+
+      for (const t of data.templates) {
+        assert.ok(t.templateKey);
+        assert.ok(t.name);
+        assert.ok(t.subject);
+        assert.ok(t.bodyHtml);
+        assert.ok(Array.isArray(t.variables));
+        assert.strictEqual(typeof t.enabled, 'boolean');
+      }
+    });
+
+    await test('Point 3: PUT /api/admin/email/templates/:templateKey updates template subject & HTML content', async () => {
+      const newSubject = 'VIP Welcome to AuraMarket, {{customer_name}}! 🌟';
+      const res = await fetch(`${baseUrl}/admin/email/templates/welcome`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          subject: newSubject,
+          enabled: true,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.template.subject, newSubject);
+    });
+
+    await test('Point 3: POST /api/admin/email/preview renders HTML with replaced sample data', async () => {
+      const res = await fetch(`${baseUrl}/admin/email/preview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          templateKey: 'welcome',
+          sampleData: {
+            customer_name: 'Vikramaditya',
+            store_name: 'AuraMarket Pro Edition',
+          },
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.renderedHtml.includes('Vikramaditya'));
+      assert.ok(data.renderedSubject.includes('Vikramaditya'));
+      assert.ok(!data.renderedSubject.includes('{{customer_name}}'));
+    });
+
+    await test('Point 3: POST /api/admin/email/test-dispatch & Validation & RBAC Security', async () => {
+      // 1. Successful test dispatch
+      const resDispatch = await fetch(`${baseUrl}/admin/email/test-dispatch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          email: 'admin@auramarket.com',
+          templateKey: 'welcome',
+        }),
+      });
+      assert.strictEqual(resDispatch.status, 200);
+      const dataDispatch = await resDispatch.json();
+      assert.strictEqual(dataDispatch.success, true);
+      assert.strictEqual(dataDispatch.recipient, 'admin@auramarket.com');
+      assert.ok(dataDispatch.latencyMs >= 0);
+      assert.ok(dataDispatch.messageId.startsWith('<aura.'));
+
+      // 2. Invalid email format rejection
+      const resInvalid = await fetch(`${baseUrl}/admin/email/test-dispatch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ email: 'not-an-email-address' }),
+      });
+      assert.strictEqual(resInvalid.status, 400);
+
+      // 3. Customer token rejected on email settings
+      const resCust = await fetch(`${baseUrl}/admin/email/settings`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403);
+
+      // 4. Reset templates back to defaults
+      const resReset = await fetch(`${baseUrl}/admin/email/templates/reset`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resReset.status, 200);
+      const dataReset = await resReset.json();
+      assert.strictEqual(dataReset.templates.length, 6);
+    });
+
   } finally {
     if (server) {
       server.close();

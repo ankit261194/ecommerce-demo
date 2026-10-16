@@ -117,7 +117,7 @@ const integrationsSchema = new mongoose.Schema(
     email: {
       activeProvider: {
         type: String,
-        enum: ['mock', 'smtp', 'sendgrid'],
+        enum: ['mock', 'smtp', 'gmail', 'sendgrid', 'ses', 'brevo', 'mailgun'],
         default: 'mock',
       },
       smtp: {
@@ -134,6 +134,35 @@ const integrationsSchema = new mongoose.Schema(
         fromEmail: { type: String, default: 'notifications@auramarket.com' },
         fromName: { type: String, default: 'AuraMarket Store' },
       },
+      ses: {
+        accessKeyId: { type: String, default: '' },
+        secretAccessKey: { type: String, default: '' },
+        region: { type: String, default: 'ap-south-1' },
+        fromEmail: { type: String, default: 'notifications@auramarket.com' },
+        fromName: { type: String, default: 'AuraMarket Store' },
+      },
+      brevo: {
+        apiKey: { type: String, default: '' },
+        fromEmail: { type: String, default: 'notifications@auramarket.com' },
+        fromName: { type: String, default: 'AuraMarket Store' },
+      },
+      mailgun: {
+        apiKey: { type: String, default: '' },
+        domain: { type: String, default: 'mg.auramarket.com' },
+        fromEmail: { type: String, default: 'notifications@auramarket.com' },
+        fromName: { type: String, default: 'AuraMarket Store' },
+      },
+      templates: [
+        {
+          templateKey: { type: String, required: true },
+          name: { type: String, required: true },
+          subject: { type: String, required: true },
+          bodyHtml: { type: String, required: true },
+          variables: [{ type: String }],
+          enabled: { type: Boolean, default: true },
+          updatedAt: { type: Date, default: Date.now },
+        },
+      ],
     },
     storage: {
       activeProvider: {

@@ -1,8 +1,22 @@
 const express = require('express');
 const router = express.Router();
-const { getProducts, getProductBySlug, getCategories, getCategoryTree, getBrands, getSearchSuggestions, getFlashDeals, getSocialProofActivities, compareProducts, getProductBundle, getProductRecommendations } = require('../controllers/productController');
+const {
+  getProducts,
+  getProductBySlug,
+  getCategories,
+  getCategoryTree,
+  getBrands,
+  getSearchSuggestions,
+  getFlashDeals,
+  getSocialProofActivities,
+  compareProducts,
+  getProductBundle,
+  getProductRecommendations,
+  getProductFacets,
+} = require('../controllers/productController');
 
 router.get('/', getProducts);
+router.get('/facets', getProductFacets);
 router.post('/compare', compareProducts);
 router.get('/flash-deals', getFlashDeals);
 router.get('/social-proof/recent-activities', getSocialProofActivities);

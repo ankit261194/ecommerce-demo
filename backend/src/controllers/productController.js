@@ -43,7 +43,29 @@ exports.getLiveViewers = getLiveViewers;
 // @route   GET /api/products
 exports.getProducts = async (req, res, next) => {
   try {
-    const { category, subCategory, brand, minRating, rating, search, minPrice, maxPrice, inStock, onSale, featured, sort, page = 1, limit = 20 } = req.query;
+    const {
+      category,
+      subCategory,
+      brand,
+      minRating,
+      rating,
+      search,
+      minPrice,
+      maxPrice,
+      inStock,
+      onSale,
+      featured,
+      sort,
+      page = 1,
+      limit = 20,
+      // Point 14: Dynamic Multi-Facet Attribute Filtering
+      ram,
+      storage,
+      color,
+      size,
+      fabric,
+      battery,
+    } = req.query;
 
     const query = { isPublished: true };
 
@@ -118,6 +140,129 @@ exports.getProducts = async (req, res, next) => {
       query.sellingPrice = {};
       if (minPrice) query.sellingPrice.$gte = Number(minPrice);
       if (maxPrice) query.sellingPrice.$lte = Number(maxPrice);
+    }
+
+    // Point 14: Dynamic Multi-Facet Attribute Filtering Conditions
+    const andConditions = [];
+
+    if (ram) {
+      const ramList = ram.split(',').map(r => r.trim()).filter(Boolean);
+      const ramRegexes = ramList.map(r => new RegExp(r.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+      andConditions.push({
+        $or: [
+          { 'variants.attributes.ram': { $in: ramRegexes } },
+          {
+            specifications: {
+              $elemMatch: {
+                key: { $regex: /ram|memory/i },
+                value: { $in: ramRegexes },
+              },
+            },
+          },
+          { title: { $in: ramRegexes } },
+          { description: { $in: ramRegexes } },
+        ],
+      });
+    }
+
+    if (storage) {
+      const storageList = storage.split(',').map(s => s.trim()).filter(Boolean);
+      const storageRegexes = storageList.map(s => new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+      andConditions.push({
+        $or: [
+          { 'variants.attributes.storage': { $in: storageRegexes } },
+          {
+            specifications: {
+              $elemMatch: {
+                key: { $regex: /storage|rom|capacity/i },
+                value: { $in: storageRegexes },
+              },
+            },
+          },
+          { title: { $in: storageRegexes } },
+          { description: { $in: storageRegexes } },
+        ],
+      });
+    }
+
+    if (color) {
+      const colorList = color.split(',').map(c => c.trim()).filter(Boolean);
+      const colorRegexes = colorList.map(c => new RegExp(c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+      andConditions.push({
+        $or: [
+          { 'variants.attributes.color': { $in: colorRegexes } },
+          { 'variants.name': { $in: colorRegexes } },
+          {
+            specifications: {
+              $elemMatch: {
+                key: { $regex: /color/i },
+                value: { $in: colorRegexes },
+              },
+            },
+          },
+          { title: { $in: colorRegexes } },
+        ],
+      });
+    }
+
+    if (size) {
+      const sizeList = size.split(',').map(s => s.trim()).filter(Boolean);
+      const sizeRegexes = sizeList.map(s => new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+      andConditions.push({
+        $or: [
+          { 'variants.attributes.size': { $in: sizeRegexes } },
+          { 'variants.name': { $in: sizeRegexes } },
+          {
+            specifications: {
+              $elemMatch: {
+                key: { $regex: /size/i },
+                value: { $in: sizeRegexes },
+              },
+            },
+          },
+        ],
+      });
+    }
+
+    if (fabric) {
+      const fabricList = fabric.split(',').map(f => f.trim()).filter(Boolean);
+      const fabricRegexes = fabricList.map(f => new RegExp(f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+      andConditions.push({
+        $or: [
+          {
+            specifications: {
+              $elemMatch: {
+                key: { $regex: /fabric|material/i },
+                value: { $in: fabricRegexes },
+              },
+            },
+          },
+          { description: { $in: fabricRegexes } },
+          { tags: { $in: fabricRegexes } },
+        ],
+      });
+    }
+
+    if (battery) {
+      const batteryList = battery.split(',').map(b => b.trim()).filter(Boolean);
+      const batteryRegexes = batteryList.map(b => new RegExp(b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+      andConditions.push({
+        $or: [
+          {
+            specifications: {
+              $elemMatch: {
+                key: { $regex: /battery/i },
+                value: { $in: batteryRegexes },
+              },
+            },
+          },
+          { description: { $in: batteryRegexes } },
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      query.$and = andConditions;
     }
 
     if (featured === 'true') {
@@ -888,6 +1033,175 @@ exports.getProductRecommendations = async (req, res, next) => {
       categoryName: mainProduct.category?.name || 'Category',
       related: related.map(formatProduct),
       alsoViewed: alsoViewed.map(formatProduct),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ============================================================================
+// Point 14: Dynamic Multi-Facet Attribute Filtering Grid Aggregator
+// @desc    Get dynamic attribute facets (RAM, Storage, Color, Size, Fabric, Battery, Price Bounds, Ratings)
+// @route   GET /api/products/facets
+// @access  Public
+// ============================================================================
+exports.getProductFacets = async (req, res, next) => {
+  try {
+    const { category, subCategory, brand, search } = req.query;
+    const scopeQuery = { isPublished: true };
+
+    if (brand && brand !== 'all') {
+      const brandList = brand.split(',').map(b => b.trim()).filter(Boolean);
+      scopeQuery.brand =
+        brandList.length === 1
+          ? new RegExp(`^${brandList[0]}$`, 'i')
+          : { $in: brandList.map(b => new RegExp(`^${b}$`, 'i')) };
+    }
+
+    if (subCategory) {
+      const subCat = await Category.findOne({
+        $or: [
+          { slug: subCategory },
+          { _id: require('mongoose').Types.ObjectId.isValid(subCategory) ? subCategory : null },
+        ],
+      });
+      if (subCat) {
+        scopeQuery.$or = [{ subCategory: subCat._id }, { category: subCat._id }];
+      }
+    } else if (category && category !== 'all') {
+      const cat = await Category.findOne({
+        $or: [
+          { slug: category },
+          { _id: require('mongoose').Types.ObjectId.isValid(category) ? category : null },
+        ],
+      });
+      if (cat) {
+        const childCats = await Category.find({ parentCategory: cat._id }).select('_id');
+        const childIds = childCats.map(c => c._id);
+        scopeQuery.$or = [
+          { category: cat._id },
+          { subCategory: { $in: [cat._id, ...childIds] } },
+        ];
+      }
+    }
+
+    if (search) {
+      const words = search
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      if (words.length > 0) {
+        const allWordsPattern = words.map(w => `(?=.*${w})`).join('');
+        const allWordsRegex = new RegExp(allWordsPattern, 'i');
+        const anyWordRegex = new RegExp(words.join('|'), 'i');
+        scopeQuery.$or = [
+          { title: allWordsRegex },
+          { description: allWordsRegex },
+          { brand: anyWordRegex },
+          { tags: anyWordRegex },
+        ];
+      }
+    }
+
+    const allProducts = await Product.find(scopeQuery).lean();
+
+    const ramMap = {};
+    const storageMap = {};
+    const colorMap = {};
+    const sizeMap = {};
+    const fabricMap = {};
+    const batteryMap = {};
+    const brandMap = {};
+
+    let minPrice = Infinity;
+    let maxPrice = -Infinity;
+
+    allProducts.forEach(p => {
+      const price = Number(p.sellingPrice) || 0;
+      if (price < minPrice) minPrice = price;
+      if (price > maxPrice) maxPrice = price;
+
+      if (p.brand) {
+        const b = p.brand.trim();
+        brandMap[b] = (brandMap[b] || 0) + 1;
+      }
+
+      // Check specifications
+      (p.specifications || []).forEach(spec => {
+        const k = (spec.key || '').trim().toLowerCase();
+        const v = (spec.value || '').trim();
+        if (!v) return;
+
+        if (k.includes('ram') || k.includes('memory')) {
+          ramMap[v] = (ramMap[v] || 0) + 1;
+        }
+        if (k.includes('storage') || k.includes('rom') || k.includes('capacity')) {
+          storageMap[v] = (storageMap[v] || 0) + 1;
+        }
+        if (k.includes('color')) {
+          colorMap[v] = (colorMap[v] || 0) + 1;
+        }
+        if (k.includes('size')) {
+          sizeMap[v] = (sizeMap[v] || 0) + 1;
+        }
+        if (k.includes('fabric') || k.includes('material')) {
+          fabricMap[v] = (fabricMap[v] || 0) + 1;
+        }
+        if (k.includes('battery')) {
+          batteryMap[v] = (batteryMap[v] || 0) + 1;
+        }
+      });
+
+      // Check variants
+      (p.variants || []).forEach(variant => {
+        const attrs = variant.attributes || {};
+        if (attrs.ram) ramMap[attrs.ram] = (ramMap[attrs.ram] || 0) + 1;
+        if (attrs.storage) storageMap[attrs.storage] = (storageMap[attrs.storage] || 0) + 1;
+        if (attrs.color) {
+          colorMap[attrs.color] = (colorMap[attrs.color] || 0) + 1;
+        }
+        if (attrs.size) sizeMap[attrs.size] = (sizeMap[attrs.size] || 0) + 1;
+      });
+    });
+
+    const standardColors = [
+      { name: 'Midnight Black', hex: '#111827' },
+      { name: 'Obsidian', hex: '#1E293B' },
+      { name: 'Silver Slate', hex: '#94A3B8' },
+      { name: 'Navy Blue', hex: '#1E3A8A' },
+      { name: 'Rose Gold', hex: '#FB7185' },
+      { name: 'Forest Green', hex: '#059669' },
+    ];
+
+    res.status(200).json({
+      success: true,
+      facets: {
+        priceRange: {
+          min: minPrice !== Infinity ? minPrice : 299,
+          max: maxPrice !== -Infinity ? maxPrice : 49999,
+        },
+        ram: Object.entries(ramMap).map(([value, count]) => ({ value, count })),
+        storage: Object.entries(storageMap).map(([value, count]) => ({ value, count })),
+        color: Object.entries(colorMap).map(([value, count]) => ({
+          value,
+          colorCode:
+            standardColors.find(c => c.name.toLowerCase().includes(value.toLowerCase()))?.hex ||
+            '#475569',
+          count,
+        })),
+        size: Object.entries(sizeMap).map(([value, count]) => ({ value, count })),
+        fabric: Object.entries(fabricMap).map(([value, count]) => ({ value, count })),
+        battery: Object.entries(batteryMap).map(([value, count]) => ({ value, count })),
+        brands: Object.entries(brandMap).map(([name, count]) => ({ name, count })),
+        ratings: [
+          { minRating: 4.5, label: '4.5★ & up', count: allProducts.filter(p => p.ratingsAverage >= 4.5).length },
+          { minRating: 4.0, label: '4.0★ & up', count: allProducts.filter(p => p.ratingsAverage >= 4.0).length },
+          { minRating: 3.5, label: '3.5★ & up', count: allProducts.filter(p => p.ratingsAverage >= 3.5).length },
+          { minRating: 3.0, label: '3.0★ & up', count: allProducts.filter(p => p.ratingsAverage >= 3.0).length },
+        ],
+      },
+      totalProducts: allProducts.length,
     });
   } catch (error) {
     next(error);

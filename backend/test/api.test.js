@@ -13820,6 +13820,280 @@ const runTests = async () => {
       assert.strictEqual(resAnalytics.status, 403);
     });
 
+    // --- POINT 14: DYNAMIC MULTI-FACET ATTRIBUTE FILTERING GRID ---
+    console.log('\n--- POINT 14: DYNAMIC MULTI-FACET ATTRIBUTE FILTERING GRID ---');
+
+    let p14Category;
+    let p14Tablet, p14Headphones, p14Hoodie;
+
+    await test('Point 14 Setup: Create products with rich variant attributes and specifications', async () => {
+      const Category = require('../src/models/Category');
+      const User = require('../src/models/User');
+      const testVendor = (await User.findOne({ role: 'vendor' })) || (await User.findOne());
+      p14Category = (await Category.findOne({ slug: 'electronics-audio' })) || (await Category.create({
+        name: 'Electronics & Audio',
+        slug: 'electronics-audio-' + Date.now(),
+      }));
+
+      // Cleanup prior test products if any
+      await Product.deleteMany({ sku: { $in: ['P14-TAB-01', 'P14-HEAD-02', 'P14-HOD-03'] } });
+
+      p14Tablet = await Product.create({
+        title: 'AuraTab Ultra 11-inch AMOLED 5G Tablet',
+        slug: 'auratab-ultra-5g-' + Date.now(),
+        description: 'Snapdragon octa-core with 120Hz dynamic AMOLED screen and 8000mAh battery.',
+        category: p14Category._id,
+        brand: 'AeroTech',
+        sku: 'P14-TAB-01',
+        vendor: testVendor._id,
+        stock: 25,
+        sellingPrice: 24999,
+        mrp: 34999,
+        isPublished: true,
+        ratingsAverage: 4.9,
+        ratingsQuantity: 110,
+        specifications: [
+          { key: 'RAM', value: '8 GB' },
+          { key: 'Storage', value: '128 GB' },
+          { key: 'Battery', value: '12 Hours (8000mAh)' },
+          { key: 'Color', value: 'Space Gray' },
+        ],
+        variants: [
+          {
+            sku: 'P14-TAB-8-128',
+            name: '8 GB RAM / 128 GB Storage',
+            additionalPrice: 0,
+            stock: 15,
+            attributes: { ram: '8 GB', storage: '128 GB', color: 'Space Gray' },
+          },
+          {
+            sku: 'P14-TAB-12-256',
+            name: '12 GB RAM / 256 GB Storage',
+            additionalPrice: 4000,
+            stock: 10,
+            attributes: { ram: '12 GB', storage: '256 GB', color: 'Space Gray' },
+          },
+        ],
+      });
+
+      p14Headphones = await Product.create({
+        title: 'Aura Pro Studio ANC Headphones',
+        slug: 'aura-pro-studio-anc-' + Date.now(),
+        description: 'Titanium drivers with 40-hour battery life and spatial audio.',
+        category: p14Category._id,
+        brand: 'AuraAudio',
+        sku: 'P14-HEAD-02',
+        vendor: testVendor._id,
+        stock: 40,
+        sellingPrice: 8999,
+        mrp: 14999,
+        isPublished: true,
+        ratingsAverage: 4.8,
+        ratingsQuantity: 85,
+        specifications: [
+          { key: 'Battery', value: '40 Hours' },
+          { key: 'Driver', value: '40mm Custom Titanium' },
+        ],
+        variants: [
+          {
+            sku: 'P14-HEAD-BLK',
+            name: 'Color: Midnight Black',
+            additionalPrice: 0,
+            stock: 25,
+            attributes: { color: 'Midnight Black' },
+          },
+        ],
+      });
+
+      p14Hoodie = await Product.create({
+        title: 'Obsidian Oversized Heavyweight Cotton Hoodie',
+        slug: 'obsidian-oversized-cotton-hoodie-' + Date.now(),
+        description: '450 GSM French terry cotton with ribbed cuffs.',
+        category: p14Category._id,
+        brand: 'Vogue Urban',
+        sku: 'P14-HOD-03',
+        vendor: testVendor._id,
+        stock: 30,
+        sellingPrice: 1999,
+        mrp: 3999,
+        isPublished: true,
+        ratingsAverage: 4.7,
+        ratingsQuantity: 64,
+        specifications: [
+          { key: 'Fabric', value: '100% Combed Cotton' },
+          { key: 'GSM', value: '450 GSM Heavyweight' },
+        ],
+        variants: [
+          {
+            sku: 'P14-HOD-M',
+            name: 'Size: M (Medium)',
+            additionalPrice: 0,
+            stock: 15,
+            attributes: { size: 'M', color: 'Obsidian Black' },
+          },
+          {
+            sku: 'P14-HOD-L',
+            name: 'Size: L (Large)',
+            additionalPrice: 0,
+            stock: 15,
+            attributes: { size: 'L', color: 'Obsidian Black' },
+          },
+        ],
+      });
+
+      assert.ok(p14Tablet._id);
+      assert.ok(p14Headphones._id);
+      assert.ok(p14Hoodie._id);
+    });
+
+    await test('Point 14: GET /api/products/facets returns comprehensive facet aggregates with counts', async () => {
+      const res = await fetch(`${baseUrl}/products/facets`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.facets);
+
+      // Price range min and max
+      assert.ok(typeof body.facets.priceRange.min === 'number');
+      assert.ok(typeof body.facets.priceRange.max === 'number');
+      assert.ok(body.facets.priceRange.min <= body.facets.priceRange.max);
+
+      // RAM facets
+      assert.ok(Array.isArray(body.facets.ram));
+      const ram8 = body.facets.ram.find(r => r.value === '8 GB');
+      assert.ok(ram8);
+      assert.ok(ram8.count >= 1);
+
+      // Storage facets
+      assert.ok(Array.isArray(body.facets.storage));
+      const storage128 = body.facets.storage.find(s => s.value === '128 GB');
+      assert.ok(storage128);
+      assert.ok(storage128.count >= 1);
+
+      // Color facets
+      assert.ok(Array.isArray(body.facets.color));
+      const colorObsidian = body.facets.color.find(c => c.value.toLowerCase().includes('obsidian') || c.value.toLowerCase().includes('space gray'));
+      assert.ok(colorObsidian);
+      assert.ok(colorObsidian.count >= 1);
+      assert.ok(colorObsidian.colorCode);
+
+      // Size facets
+      assert.ok(Array.isArray(body.facets.size));
+      const sizeM = body.facets.size.find(s => s.value === 'M');
+      assert.ok(sizeM);
+      assert.ok(sizeM.count >= 1);
+
+      // Fabric facets
+      assert.ok(Array.isArray(body.facets.fabric));
+      const fabricCotton = body.facets.fabric.find(f => f.value.toLowerCase().includes('cotton'));
+      assert.ok(fabricCotton);
+      assert.ok(fabricCotton.count >= 1);
+
+      // Battery facets
+      assert.ok(Array.isArray(body.facets.battery));
+      const battery40 = body.facets.battery.find(b => b.value.includes('40 Hours') || b.value.includes('12 Hours'));
+      assert.ok(battery40);
+      assert.ok(battery40.count >= 1);
+
+      // Ratings & Brands facets
+      assert.ok(Array.isArray(body.facets.ratings));
+      assert.ok(Array.isArray(body.facets.brands));
+      assert.ok(body.totalProducts >= 3);
+    });
+
+    await test('Point 14: GET /api/products/facets?brand=AeroTech returns scoped facets for specific brand', async () => {
+      const res = await fetch(`${baseUrl}/products/facets?brand=AeroTech`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.facets);
+      const aeroTechBrand = body.facets.brands.find(b => b.name === 'AeroTech');
+      assert.ok(aeroTechBrand);
+      // Fabric should not exist in AeroTech tablet facets
+      const hasFabric = body.facets.fabric.some(f => f.value.toLowerCase().includes('cotton'));
+      assert.strictEqual(hasFabric, false);
+    });
+
+    await test('Point 14: GET /api/products?ram=8 GB filters products matching RAM attribute', async () => {
+      const res = await fetch(`${baseUrl}/products?ram=8%20GB`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.length >= 1);
+      const found = body.data.some(p => p.sku === 'P14-TAB-01');
+      assert.strictEqual(found, true);
+      const notFound = body.data.some(p => p.sku === 'P14-HOD-03');
+      assert.strictEqual(notFound, false);
+    });
+
+    await test('Point 14: GET /api/products?storage=128 GB,256 GB supports multi-value comma-separated storage filter', async () => {
+      const res = await fetch(`${baseUrl}/products?storage=128%20GB,256%20GB`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.length >= 1);
+      const tabletFound = body.data.some(p => p.sku === 'P14-TAB-01');
+      assert.strictEqual(tabletFound, true);
+    });
+
+    await test('Point 14: GET /api/products?color=Midnight Black filters products matching color', async () => {
+      const res = await fetch(`${baseUrl}/products?color=Midnight%20Black`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      const headphoneFound = body.data.some(p => p.sku === 'P14-HEAD-02');
+      assert.strictEqual(headphoneFound, true);
+    });
+
+    await test('Point 14: GET /api/products?size=M filters apparel with size M', async () => {
+      const res = await fetch(`${baseUrl}/products?size=M`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      const hoodieFound = body.data.some(p => p.sku === 'P14-HOD-03');
+      assert.strictEqual(hoodieFound, true);
+    });
+
+    await test('Point 14: GET /api/products?fabric=100%25 Combed Cotton filters apparel by fabric', async () => {
+      const res = await fetch(`${baseUrl}/products?fabric=100%25%20Combed%20Cotton`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      const hoodieFound = body.data.some(p => p.sku === 'P14-HOD-03');
+      assert.strictEqual(hoodieFound, true);
+    });
+
+    await test('Point 14: GET /api/products?battery=40 Hours filters products by battery specification', async () => {
+      const res = await fetch(`${baseUrl}/products?battery=40%20Hours`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      const headphoneFound = body.data.some(p => p.sku === 'P14-HEAD-02');
+      assert.strictEqual(headphoneFound, true);
+    });
+
+    await test('Point 14: GET /api/products?minPrice=20000&maxPrice=30000 filters within price range bounds', async () => {
+      const res = await fetch(`${baseUrl}/products?minPrice=20000&maxPrice=30000`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      const tabletFound = body.data.some(p => p.sku === 'P14-TAB-01');
+      assert.strictEqual(tabletFound, true);
+      const hoodieFound = body.data.some(p => p.sku === 'P14-HOD-03');
+      assert.strictEqual(hoodieFound, false);
+    });
+
+    await test('Point 14: Composite Filter: GET /api/products?ram=8 GB&storage=128 GB&minPrice=20000&maxPrice=30000 returns exact matching product', async () => {
+      const res = await fetch(`${baseUrl}/products?ram=8%20GB&storage=128%20GB&minPrice=20000&maxPrice=30000`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.length >= 1);
+      assert.strictEqual(body.data.every(p => p.sellingPrice >= 20000 && p.sellingPrice <= 30000), true);
+      const tablet = body.data.find(p => p.sku === 'P14-TAB-01');
+      assert.ok(tablet);
+    });
+
   } finally {
     if (server) {
       server.close();

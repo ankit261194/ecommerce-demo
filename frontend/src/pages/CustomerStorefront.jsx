@@ -36,6 +36,11 @@ import {
   Coins,
   MessageSquare,
   ShieldAlert,
+  Cpu,
+  HardDrive,
+  Palette,
+  Ruler,
+  Battery,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
@@ -613,8 +618,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     }
   }, [validGateways, paymentMethod]);
 
-  // Rich Product Catalog with Variants, Vendors & Hierarchical Subcategories (Point #4)
-  const [products] = useState([
+  // Rich Product Catalog with Variants, Vendors & Hierarchical Subcategories (Point #4, Point #14)
+  const [products, setProducts] = useState([
     {
       _id: 'prod_001',
       title: 'Aura Pro ANC Wireless Noise-Cancelling Headphones',
@@ -634,8 +639,13 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       vendor: { _id: 'vnd_001', storeName: 'Apex Tech Hub', rating: 4.9 },
       hasVariants: true,
       variants: [
-        { sku: 'APX-HEAD-BLK', name: 'Color: Midnight Black', additionalPrice: 0, stock: 25 },
-        { sku: 'APX-HEAD-SLV', name: 'Color: Silver Matte', additionalPrice: 500, stock: 20 },
+        { sku: 'APX-HEAD-BLK', name: 'Color: Midnight Black', additionalPrice: 0, stock: 25, attributes: { color: 'Midnight Black' } },
+        { sku: 'APX-HEAD-SLV', name: 'Color: Silver Matte', additionalPrice: 500, stock: 20, attributes: { color: 'Silver Matte' } },
+      ],
+      specifications: [
+        { key: 'Battery', value: '40 Hours' },
+        { key: 'Driver', value: '40mm Custom Titanium' },
+        { key: 'Color', value: 'Midnight Black' },
       ],
     },
     {
@@ -656,6 +666,11 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       ratingsQuantity: 88,
       vendor: { _id: 'vnd_001', storeName: 'Apex Tech Hub', rating: 4.9 },
       hasVariants: false,
+      specifications: [
+        { key: 'Display', value: '1.96-inch Always-On AMOLED' },
+        { key: 'Battery', value: '5 Days' },
+        { key: 'Color', value: 'Titanium Grey' },
+      ],
     },
     {
       _id: 'prod_003',
@@ -676,9 +691,14 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       vendor: { _id: 'vnd_002', storeName: 'Vogue Trends Apparel', rating: 4.8 },
       hasVariants: true,
       variants: [
-        { sku: 'VOG-HOD-M', name: 'Size: M (Medium)', additionalPrice: 0, stock: 20 },
-        { sku: 'VOG-HOD-L', name: 'Size: L (Large)', additionalPrice: 0, stock: 25 },
-        { sku: 'VOG-HOD-XL', name: 'Size: XL (Extra Large)', additionalPrice: 100, stock: 15 },
+        { sku: 'VOG-HOD-M', name: 'Size: M (Medium)', additionalPrice: 0, stock: 20, attributes: { size: 'M', color: 'Obsidian Black' } },
+        { sku: 'VOG-HOD-L', name: 'Size: L (Large)', additionalPrice: 0, stock: 25, attributes: { size: 'L', color: 'Obsidian Black' } },
+        { sku: 'VOG-HOD-XL', name: 'Size: XL (Extra Large)', additionalPrice: 100, stock: 15, attributes: { size: 'XL', color: 'Obsidian Black' } },
+      ],
+      specifications: [
+        { key: 'Fabric', value: '100% Combed Cotton' },
+        { key: 'GSM', value: '450 GSM Heavyweight' },
+        { key: 'Color', value: 'Obsidian Black' },
       ],
     },
     {
@@ -698,7 +718,15 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       ratingsAverage: 4.6,
       ratingsQuantity: 49,
       vendor: { _id: 'vnd_002', storeName: 'Vogue Trends Apparel', rating: 4.8 },
-      hasVariants: false,
+      hasVariants: true,
+      variants: [
+        { sku: 'VOG-BLZ-M', name: 'Size: M', additionalPrice: 0, stock: 15, attributes: { size: 'M', color: 'Oatmeal' } },
+        { sku: 'VOG-BLZ-L', name: 'Size: L', additionalPrice: 0, stock: 10, attributes: { size: 'L', color: 'Oatmeal' } },
+      ],
+      specifications: [
+        { key: 'Fabric', value: 'Pure European Linen' },
+        { key: 'Fit', value: 'Relaxed Tailored Fit' },
+      ],
     },
     {
       _id: 'prod_005',
@@ -718,6 +746,11 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       ratingsQuantity: 65,
       vendor: { _id: 'vnd_001', storeName: 'Apex Tech Hub', rating: 4.9 },
       hasVariants: false,
+      specifications: [
+        { key: 'Battery', value: '24 Hours' },
+        { key: 'Output', value: '30W RMS Immersive 360' },
+        { key: 'Waterproof', value: 'IPX7 Submersible' },
+      ],
     },
     {
       _id: 'prod_006',
@@ -737,6 +770,51 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       ratingsQuantity: 28,
       vendor: { _id: 'vnd_001', storeName: 'Apex Tech Hub', rating: 4.9 },
       hasVariants: false,
+      specifications: [
+        { key: 'Wireless Charging', value: '15W Fast Charge' },
+        { key: 'Color Temp', value: '2700K - 6500K Stepless' },
+      ],
+    },
+    {
+      _id: 'prod_007',
+      title: 'AuraTab Ultra 11-inch AMOLED 5G Tablet',
+      description: 'Snapdragon octa-core, 120Hz dynamic AMOLED screen, stylus support and 8000mAh battery.',
+      category: 'electronics-audio',
+      categoryLabel: 'Electronics & Audio',
+      subCategory: 'smartwatches-wearables',
+      subCategoryLabel: 'Tablets & Devices',
+      brand: 'AeroTech',
+      mrp: 34999,
+      sellingPrice: 24999,
+      stock: 20,
+      sku: 'APX-TAB-007',
+      images: ['https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=500&q=80'],
+      ratingsAverage: 4.9,
+      ratingsQuantity: 110,
+      vendor: { _id: 'vnd_001', storeName: 'Apex Tech Hub', rating: 4.9 },
+      hasVariants: true,
+      variants: [
+        {
+          sku: 'APX-TAB-8-128',
+          name: '8 GB RAM / 128 GB Storage',
+          additionalPrice: 0,
+          stock: 12,
+          attributes: { ram: '8 GB', storage: '128 GB', color: 'Space Gray' },
+        },
+        {
+          sku: 'APX-TAB-12-256',
+          name: '12 GB RAM / 256 GB Storage',
+          additionalPrice: 4000,
+          stock: 8,
+          attributes: { ram: '12 GB', storage: '256 GB', color: 'Space Gray' },
+        },
+      ],
+      specifications: [
+        { key: 'RAM', value: '8 GB' },
+        { key: 'Storage', value: '128 GB' },
+        { key: 'Battery', value: '12 Hours (8000mAh)' },
+        { key: 'Color', value: 'Space Gray' },
+      ],
     },
   ]);
 
@@ -889,7 +967,43 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   // Price Range Filter State (Point #3)
   const [priceRange, setPriceRange] = useState([0, 50000]);
 
-  // Filtering products with Multi-Level Category, Subcategory, Brand, Price, Rating, In-Stock & Deals (Points #3, #4, #5, #6 & #7)
+  // Point 14: Dynamic Multi-Facet Attribute Filtering State
+  const [availableFacets, setAvailableFacets] = useState(null);
+  const [selectedRam, setSelectedRam] = useState([]);
+  const [selectedStorage, setSelectedStorage] = useState([]);
+  const [selectedColors, setSelectedColors] = useState([]);
+  const [selectedSizes, setSelectedSizes] = useState([]);
+  const [selectedFabrics, setSelectedFabrics] = useState([]);
+  const [selectedBatteries, setSelectedBatteries] = useState([]);
+
+  // Live catalog & Facet synchronization
+  useEffect(() => {
+    api.get('/products?limit=50')
+      .then(res => {
+        if (res.data?.success && Array.isArray(res.data.data) && res.data.data.length > 0) {
+          setProducts(res.data.data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (selectedCategory && selectedCategory !== 'all') params.append('category', selectedCategory);
+    if (selectedSubCategory) params.append('subCategory', selectedSubCategory);
+    if (selectedBrand && selectedBrand !== 'all') params.append('brand', selectedBrand);
+    if (searchQuery) params.append('search', searchQuery);
+
+    api.get(`/products/facets?${params.toString()}`)
+      .then(res => {
+        if (res.data?.success && res.data.facets) {
+          setAvailableFacets(res.data.facets);
+        }
+      })
+      .catch(() => {});
+  }, [selectedCategory, selectedSubCategory, selectedBrand, searchQuery]);
+
+  // Filtering products with Multi-Level Category, Subcategory, Brand, Price, Rating, In-Stock & Deals (Points #3, #4, #5, #6, #7 & Point #14 Multi-Facet)
   const filteredProducts = products.filter(p => {
     if (selectedCategory === 'wishlist') {
       return wishlist.includes(p._id);
@@ -914,6 +1028,40 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     const matchesInStock = !inStockOnly || p.stock > 0;
     const matchesOnSale = !onSaleOnly || p.mrp > p.sellingPrice;
 
+    // Point 14: Multi-Facet Attribute Filtering
+    const matchesRam = selectedRam.length === 0 || (
+      p.variants?.some(v => selectedRam.includes(v.attributes?.ram)) ||
+      p.specifications?.some(s => (/ram|memory/i).test(s.key) && selectedRam.includes(s.value)) ||
+      selectedRam.some(r => (p.title + ' ' + (p.description || '')).toLowerCase().includes(r.toLowerCase()))
+    );
+
+    const matchesStorage = selectedStorage.length === 0 || (
+      p.variants?.some(v => selectedStorage.includes(v.attributes?.storage)) ||
+      p.specifications?.some(s => (/storage|rom|capacity/i).test(s.key) && selectedStorage.includes(s.value)) ||
+      selectedStorage.some(s => (p.title + ' ' + (p.description || '')).toLowerCase().includes(s.toLowerCase()))
+    );
+
+    const matchesColor = selectedColors.length === 0 || (
+      p.variants?.some(v => selectedColors.some(c => (v.attributes?.color?.toLowerCase() === c.toLowerCase() || v.name?.toLowerCase().includes(c.toLowerCase())))) ||
+      p.specifications?.some(s => (/color/i).test(s.key) && selectedColors.some(c => s.value.toLowerCase().includes(c.toLowerCase()))) ||
+      selectedColors.some(c => (p.title + ' ' + (p.description || '')).toLowerCase().includes(c.toLowerCase()))
+    );
+
+    const matchesSize = selectedSizes.length === 0 || (
+      p.variants?.some(v => selectedSizes.some(sz => (v.attributes?.size?.toLowerCase() === sz.toLowerCase() || v.name?.toLowerCase().includes(sz.toLowerCase())))) ||
+      p.specifications?.some(s => (/size/i).test(s.key) && selectedSizes.some(sz => s.value.toLowerCase().includes(sz.toLowerCase())))
+    );
+
+    const matchesFabric = selectedFabrics.length === 0 || (
+      p.specifications?.some(s => (/fabric|material/i).test(s.key) && selectedFabrics.some(f => s.value.toLowerCase().includes(f.toLowerCase()))) ||
+      selectedFabrics.some(f => (p.description || '').toLowerCase().includes(f.toLowerCase()))
+    );
+
+    const matchesBattery = selectedBatteries.length === 0 || (
+      p.specifications?.some(s => (/battery/i).test(s.key) && selectedBatteries.some(b => s.value.toLowerCase().includes(b.toLowerCase()))) ||
+      selectedBatteries.some(b => (p.description || '').toLowerCase().includes(b.toLowerCase()))
+    );
+
     return (
       matchesCategory &&
       matchesSubCategory &&
@@ -922,7 +1070,13 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       matchesPrice &&
       matchesRating &&
       matchesInStock &&
-      matchesOnSale
+      matchesOnSale &&
+      matchesRam &&
+      matchesStorage &&
+      matchesColor &&
+      matchesSize &&
+      matchesFabric &&
+      matchesBattery
     );
   });
 
@@ -1673,6 +1827,13 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               setMinRating(0);
               setInStockOnly(false);
               setOnSaleOnly(false);
+              setSelectedRam([]);
+              setSelectedStorage([]);
+              setSelectedColors([]);
+              setSelectedSizes([]);
+              setSelectedFabrics([]);
+              setSelectedBatteries([]);
+              setPriceRange([0, 50000]);
             }}
             totalProductsCount={products.length}
             isOpenMobile={isOpenCategoryDrawer}
@@ -1692,6 +1853,32 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             onToggleOnSale={setOnSaleOnly}
             inStockCount={inStockCount}
             onSaleCount={onSaleCount}
+            // Point 14: Dynamic Multi-Facet Attribute Filtering Props
+            facets={availableFacets}
+            priceRange={priceRange}
+            onPriceRangeChange={setPriceRange}
+            selectedRam={selectedRam}
+            onToggleRam={val => setSelectedRam(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val])}
+            selectedStorage={selectedStorage}
+            onToggleStorage={val => setSelectedStorage(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val])}
+            selectedColors={selectedColors}
+            onToggleColor={val => setSelectedColors(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val])}
+            selectedSizes={selectedSizes}
+            onToggleSize={val => setSelectedSizes(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val])}
+            selectedFabrics={selectedFabrics}
+            onToggleFabric={val => setSelectedFabrics(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val])}
+            selectedBatteries={selectedBatteries}
+            onToggleBattery={val => setSelectedBatteries(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val])}
+            onClearAllFacets={() => {
+              setSelectedRam([]);
+              setSelectedStorage([]);
+              setSelectedColors([]);
+              setSelectedSizes([]);
+              setSelectedFabrics([]);
+              setSelectedBatteries([]);
+              setPriceRange([0, 50000]);
+            }}
+            formatPrice={formatPrice}
           />
 
           {/* Catalog Content Area */}
@@ -1766,8 +1953,22 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                 </div>
               </div>
 
-              {/* Active Filter Breadcrumb (Point #4, #5, #6, #7 & #8) */}
-              {(selectedCategory !== 'all' || selectedSubCategory || selectedBrand !== 'all' || minRating > 0 || inStockOnly || onSaleOnly || sortBy !== 'popularity') && (
+              {/* Active Filter Breadcrumb (Point #4, #5, #6, #7, #8 & Point #14 Multi-Facet) */}
+              {(selectedCategory !== 'all' ||
+                selectedSubCategory ||
+                selectedBrand !== 'all' ||
+                minRating > 0 ||
+                inStockOnly ||
+                onSaleOnly ||
+                sortBy !== 'popularity' ||
+                selectedRam.length > 0 ||
+                selectedStorage.length > 0 ||
+                selectedColors.length > 0 ||
+                selectedSizes.length > 0 ||
+                selectedFabrics.length > 0 ||
+                selectedBatteries.length > 0 ||
+                priceRange[0] > 0 ||
+                priceRange[1] < 50000) && (
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-xs shadow-xs animate-in fade-in duration-200">
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 font-bold text-slate-800">
                     <FolderTree className="w-4 h-4 text-amber-600 flex-shrink-0" />
@@ -1833,6 +2034,103 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                         </button>
                       </span>
                     )}
+                    {(priceRange[0] > 0 || priceRange[1] < 50000) && (
+                      <span className="font-extrabold text-slate-950 bg-white px-2 py-0.5 rounded-md shadow-xs border border-amber-300 text-xs flex items-center gap-1.5">
+                        <span>Price: {formatPrice(priceRange[0])} - {formatPrice(priceRange[1])}</span>
+                        <button
+                          type="button"
+                          onClick={() => setPriceRange([0, 50000])}
+                          className="hover:text-red-500 ml-1 text-slate-400 font-bold"
+                          title="Reset price range"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    )}
+                    {selectedRam.map(r => (
+                      <span key={r} className="font-extrabold text-slate-950 bg-white px-2 py-0.5 rounded-md shadow-xs border border-blue-300 text-xs flex items-center gap-1.5">
+                        <Cpu className="w-3.5 h-3.5 text-blue-500" />
+                        <span>RAM: {r}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedRam(prev => prev.filter(x => x !== r))}
+                          className="hover:text-red-500 ml-1 text-slate-400 font-bold"
+                          title="Remove RAM filter"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                    {selectedStorage.map(s => (
+                      <span key={s} className="font-extrabold text-slate-950 bg-white px-2 py-0.5 rounded-md shadow-xs border border-purple-300 text-xs flex items-center gap-1.5">
+                        <HardDrive className="w-3.5 h-3.5 text-purple-500" />
+                        <span>Storage: {s}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedStorage(prev => prev.filter(x => x !== s))}
+                          className="hover:text-red-500 ml-1 text-slate-400 font-bold"
+                          title="Remove Storage filter"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                    {selectedColors.map(c => (
+                      <span key={c} className="font-extrabold text-slate-950 bg-white px-2 py-0.5 rounded-md shadow-xs border border-emerald-300 text-xs flex items-center gap-1.5">
+                        <Palette className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>Color: {c}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedColors(prev => prev.filter(x => x !== c))}
+                          className="hover:text-red-500 ml-1 text-slate-400 font-bold"
+                          title="Remove Color filter"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                    {selectedSizes.map(sz => (
+                      <span key={sz} className="font-extrabold text-slate-950 bg-white px-2 py-0.5 rounded-md shadow-xs border border-amber-300 text-xs flex items-center gap-1.5">
+                        <Ruler className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Size: {sz}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSizes(prev => prev.filter(x => x !== sz))}
+                          className="hover:text-red-500 ml-1 text-slate-400 font-bold"
+                          title="Remove Size filter"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                    {selectedFabrics.map(f => (
+                      <span key={f} className="font-extrabold text-slate-950 bg-white px-2 py-0.5 rounded-md shadow-xs border border-teal-300 text-xs flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-teal-500" />
+                        <span>Fabric: {f}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedFabrics(prev => prev.filter(x => x !== f))}
+                          className="hover:text-red-500 ml-1 text-slate-400 font-bold"
+                          title="Remove Fabric filter"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                    {selectedBatteries.map(b => (
+                      <span key={b} className="font-extrabold text-slate-950 bg-white px-2 py-0.5 rounded-md shadow-xs border border-green-300 text-xs flex items-center gap-1.5">
+                        <Battery className="w-3.5 h-3.5 text-green-500" />
+                        <span>Battery: {b}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedBatteries(prev => prev.filter(x => x !== b))}
+                          className="hover:text-red-500 ml-1 text-slate-400 font-bold"
+                          title="Remove Battery filter"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
                     {sortBy !== 'popularity' && (
                       <span className="font-extrabold text-slate-950 bg-white px-2 py-0.5 rounded-md shadow-xs border border-amber-400 text-xs flex items-center gap-1.5">
                         <ArrowUpDown className="w-3.5 h-3.5 text-amber-600" />
@@ -1860,6 +2158,13 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                       setMinRating(0);
                       setInStockOnly(false);
                       setOnSaleOnly(false);
+                      setSelectedRam([]);
+                      setSelectedStorage([]);
+                      setSelectedColors([]);
+                      setSelectedSizes([]);
+                      setSelectedFabrics([]);
+                      setSelectedBatteries([]);
+                      setPriceRange([0, 50000]);
                       setSortBy('popularity');
                     }}
                     className="font-black text-[11px] text-amber-800 hover:text-amber-950 bg-amber-200/70 hover:bg-amber-300/80 px-2.5 py-1 rounded-xl transition-all flex items-center gap-1"

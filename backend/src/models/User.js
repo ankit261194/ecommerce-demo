@@ -30,7 +30,7 @@ const userSchema = new mongoose.Schema(
     },
     authProvider: {
       type: String,
-      enum: ['LOCAL', 'GOOGLE', 'APPLE', 'PHONE_OTP'],
+      enum: ['LOCAL', 'GOOGLE', 'APPLE', 'PHONE_OTP', 'WHATSAPP'],
       default: 'LOCAL',
     },
     googleId: {

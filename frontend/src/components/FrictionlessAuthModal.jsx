@@ -15,6 +15,8 @@ import {
   Store,
   Truck,
   Crown,
+  MessageCircle,
+  ExternalLink,
 } from 'lucide-react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -28,11 +30,13 @@ export default function FrictionlessAuthModal({
   const { login: setAuthSession } = useAuth();
   const [activeTab, setActiveTab] = useState(initialTab || 'OTP');
 
-  // Phone OTP State
+  // Phone & WhatsApp OTP State
   const [phone, setPhone] = useState('9876543210');
+  const [otpChannel, setOtpChannel] = useState('WHATSAPP'); // 'WHATSAPP' | 'SMS'
   const [otpSent, setOtpSent] = useState(false);
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
   const [demoCode, setDemoCode] = useState('');
+  const [whatsappInstantLink, setWhatsappInstantLink] = useState('');
   const [countdown, setCountdown] = useState(0);
   const [fullName, setFullName] = useState('');
   const otpInputsRef = useRef([]);
@@ -53,6 +57,23 @@ export default function FrictionlessAuthModal({
     }
     return () => clearInterval(timer);
   }, [countdown]);
+
+  // Point 2: Check for WhatsApp 1-tap instant login link from URL hash
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash.includes('wa-login')) {
+      try {
+        const hashQuery = window.location.hash.split('?')[1];
+        if (hashQuery) {
+          const params = new URLSearchParams(hashQuery);
+          const waPhone = params.get('phone');
+          const waOtp = params.get('otp');
+          if (waPhone && waOtp) {
+            handleWhatsAppInstantLogin(waPhone, waOtp);
+          }
+        }
+      } catch (_) {}
+    }
+  }, []);
 
   if (!isOpen) return null;
 
@@ -86,7 +107,7 @@ export default function FrictionlessAuthModal({
     }
     setOtpDigits(newDigits);
     if (pasted.length === 6) {
-      handleVerifyOtp(pasted);
+      handleVerifyCode(pasted);
     }
   };
 
@@ -119,7 +140,37 @@ export default function FrictionlessAuthModal({
     }
   };
 
-  // Verify OTP
+  // Point 2: Request WhatsApp Direct OTP
+  const handleRequestWhatsAppOtp = async () => {
+    const clean = phone.replace(/\D/g, '').slice(0, 10);
+    if (!/^[6-9]\d{9}$/.test(clean)) {
+      setError('Please enter a valid 10-digit Indian mobile number');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.post('/auth/whatsapp/request-otp', { phone: clean });
+      if (res.data?.success) {
+        setOtpSent(true);
+        setDemoCode(res.data.demoOtp || '123456');
+        setWhatsappInstantLink(res.data.instantLink || '');
+        setCountdown(45);
+        setSuccessMsg(res.data.message || `WhatsApp OTP dispatched to +91 ${clean}`);
+        setTimeout(() => setSuccessMsg(''), 5000);
+        setTimeout(() => {
+          if (otpInputsRef.current[0]) otpInputsRef.current[0].focus();
+        }, 100);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to send WhatsApp verification code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Verify SMS OTP
   const handleVerifyOtp = async (codeOverride) => {
     const fullCode = codeOverride || otpDigits.join('');
     if (fullCode.length !== 6) {
@@ -143,6 +194,73 @@ export default function FrictionlessAuthModal({
       setError(err.response?.data?.message || 'Invalid or expired code');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Point 2: Verify WhatsApp OTP
+  const handleVerifyWhatsAppOtp = async (codeOverride) => {
+    const fullCode = codeOverride || otpDigits.join('');
+    if (fullCode.length !== 6) {
+      setError('Please enter all 6 digits of your WhatsApp verification code');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.post('/auth/whatsapp/verify-otp', {
+        phone: phone.replace(/\D/g, '').slice(0, 10),
+        otp: fullCode,
+        name: fullName.trim() || undefined,
+      });
+
+      if (res.data?.success && res.data.token) {
+        completeLogin(res.data.token, res.data.user);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Invalid or expired WhatsApp OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Point 2: 1-Click WhatsApp Instant Link Sign-In
+  const handleWhatsAppInstantLogin = async (customPhone = null, customOtp = null) => {
+    const targetPhone = customPhone || phone.replace(/\D/g, '').slice(0, 10);
+    const targetOtp = customOtp || demoCode || '123456';
+
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.post('/auth/whatsapp/instant-link', {
+        phone: targetPhone,
+        otp: targetOtp,
+      });
+
+      if (res.data?.success && res.data.token) {
+        completeLogin(res.data.token, res.data.user);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'WhatsApp instant login link expired');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Dynamic dispatch according to chosen channel
+  const handleRequestCode = () => {
+    if (otpChannel === 'WHATSAPP') {
+      handleRequestWhatsAppOtp();
+    } else {
+      handleRequestOtp();
+    }
+  };
+
+  const handleVerifyCode = (codeOverride) => {
+    if (otpChannel === 'WHATSAPP') {
+      handleVerifyWhatsAppOtp(codeOverride);
+    } else {
+      handleVerifyOtp(codeOverride);
     }
   };
 
@@ -376,14 +494,56 @@ export default function FrictionlessAuthModal({
           </div>
         )}
 
-        {/* TAB 1: Mobile SMS OTP */}
+        {/* TAB 1: Phone / WhatsApp OTP */}
         {activeTab === 'OTP' && (
-          <div className="space-y-4">
+          <div className="space-y-3.5">
+            {/* Channel Sub-Selector: WhatsApp vs SMS */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpChannel('WHATSAPP');
+                  setOtpSent(false);
+                  setOtpDigits(['', '', '', '', '', '']);
+                  setError('');
+                }}
+                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  otpChannel === 'WHATSAPP'
+                    ? 'bg-emerald-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <MessageCircle className="w-3.5 h-3.5 text-emerald-200" />
+                <span>WhatsApp OTP</span>
+                <span className="text-[9px] px-1 py-0.2 bg-emerald-400 text-slate-950 rounded font-black">
+                  INSTANT
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpChannel('SMS');
+                  setOtpSent(false);
+                  setOtpDigits(['', '', '', '', '', '']);
+                  setError('');
+                }}
+                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  otpChannel === 'SMS'
+                    ? 'bg-amber-500 text-slate-950 shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>SMS OTP</span>
+              </button>
+            </div>
+
             {!otpSent ? (
               <>
                 <div>
                   <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                    Enter Mobile Number
+                    Enter Mobile Number ({otpChannel === 'WHATSAPP' ? 'WhatsApp' : 'SMS'})
                   </label>
                   <div className="flex items-center gap-2">
                     <span className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-300 font-mono font-bold flex items-center gap-1">
@@ -395,11 +555,20 @@ export default function FrictionlessAuthModal({
                       value={phone}
                       onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                       placeholder="9876543210"
-                      className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3 py-2 text-sm text-slate-100 font-mono outline-none tracking-wider"
+                      className={`flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 font-mono outline-none tracking-wider ${
+                        otpChannel === 'WHATSAPP' ? 'focus:border-emerald-400' : 'focus:border-amber-400'
+                      }`}
                     />
                   </div>
-                  <p className="mt-1.5 text-[11px] text-slate-400">
-                    We will send a 6-digit one-time password via SMS to verify.
+                  <p className="mt-1.5 text-[11px] text-slate-400 flex items-center gap-1">
+                    {otpChannel === 'WHATSAPP' ? (
+                      <>
+                        <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Instant 6-digit OTP & 1-tap passwordless login link via WhatsApp.</span>
+                      </>
+                    ) : (
+                      <span>We will send a 6-digit one-time password via SMS to verify.</span>
+                    )}
                   </p>
                 </div>
 
@@ -418,18 +587,27 @@ export default function FrictionlessAuthModal({
 
                 <button
                   type="button"
-                  onClick={handleRequestOtp}
+                  onClick={handleRequestCode}
                   disabled={loading || phone.length !== 10}
-                  className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2"
+                  className={`w-full py-3 disabled:opacity-50 text-xs font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2 ${
+                    otpChannel === 'WHATSAPP'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-950/40'
+                      : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-amber-950/40'
+                  }`}
                 >
                   {loading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Sending SMS...</span>
+                      <span>{otpChannel === 'WHATSAPP' ? 'Sending WhatsApp OTP...' : 'Sending SMS...'}</span>
                     </>
                   ) : (
                     <>
-                      <span>Get Login OTP</span>
+                      {otpChannel === 'WHATSAPP' ? (
+                        <MessageCircle className="w-4 h-4" />
+                      ) : (
+                        <Smartphone className="w-4 h-4" />
+                      )}
+                      <span>{otpChannel === 'WHATSAPP' ? 'Get WhatsApp Login OTP' : 'Get SMS Login OTP'}</span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
@@ -438,7 +616,16 @@ export default function FrictionlessAuthModal({
             ) : (
               <>
                 <div className="flex items-center justify-between text-xs text-slate-300 pb-1">
-                  <span>Code sent to <strong className="text-amber-400">+91 {phone}</strong></span>
+                  <span className="flex items-center gap-1.5">
+                    {otpChannel === 'WHATSAPP' ? (
+                      <span className="text-emerald-400 font-bold">💬 WhatsApp sent to</span>
+                    ) : (
+                      <span>Code sent to</span>
+                    )}
+                    <strong className={otpChannel === 'WHATSAPP' ? 'text-emerald-400' : 'text-amber-400'}>
+                      +91 {phone}
+                    </strong>
+                  </span>
                   <button
                     type="button"
                     onClick={() => {
@@ -452,7 +639,7 @@ export default function FrictionlessAuthModal({
                 </div>
 
                 {/* 6-Digit Individual Inputs */}
-                <div className="flex items-center justify-between gap-1.5 py-2" onPaste={handleOtpPaste}>
+                <div className="flex items-center justify-between gap-1.5 py-1" onPaste={handleOtpPaste}>
                   {otpDigits.map((digit, idx) => (
                     <input
                       key={idx}
@@ -463,48 +650,91 @@ export default function FrictionlessAuthModal({
                       value={digit}
                       onChange={(e) => handleOtpChange(idx, e.target.value)}
                       onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                      className="w-12 h-12 text-center text-lg font-mono font-bold bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl text-amber-400 outline-none transition"
+                      className={`w-12 h-12 text-center text-lg font-mono font-bold bg-slate-950 border rounded-xl outline-none transition ${
+                        otpChannel === 'WHATSAPP'
+                          ? 'border-emerald-500/40 focus:border-emerald-400 text-emerald-400'
+                          : 'border-slate-700 focus:border-amber-400 text-amber-400'
+                      }`}
                     />
                   ))}
                 </div>
 
                 {/* Demo autofill hint */}
                 {demoCode && (
-                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-[11px] text-amber-300">
-                    <span>Demo Verification Code: <strong className="font-mono text-white text-xs">{demoCode}</strong></span>
+                  <div
+                    className={`p-2.5 rounded-xl border flex items-center justify-between text-[11px] ${
+                      otpChannel === 'WHATSAPP'
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                        : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                    }`}
+                  >
+                    <span>
+                      {otpChannel === 'WHATSAPP' ? '💬 WhatsApp Code:' : 'Demo Code:'}{' '}
+                      <strong className="font-mono text-white text-xs">{demoCode}</strong>
+                    </span>
                     <button
                       type="button"
                       onClick={() => {
                         const arr = demoCode.split('');
                         setOtpDigits(arr);
-                        handleVerifyOtp(demoCode);
+                        handleVerifyCode(demoCode);
                       }}
-                      className="px-2 py-1 bg-amber-500 text-slate-950 font-bold rounded-lg text-[10px]"
+                      className={`px-2 py-1 rounded-lg text-[10px] font-bold ${
+                        otpChannel === 'WHATSAPP'
+                          ? 'bg-emerald-500 text-slate-950 hover:bg-emerald-400'
+                          : 'bg-amber-500 text-slate-950 hover:bg-amber-400'
+                      }`}
                     >
-                      Auto-Fill
+                      Auto-Fill & Submit
                     </button>
                   </div>
                 )}
 
+                {/* Point 2: 1-Click WhatsApp Instant Link Login Button */}
+                {otpChannel === 'WHATSAPP' && (
+                  <button
+                    type="button"
+                    onClick={() => handleWhatsAppInstantLogin()}
+                    disabled={loading}
+                    className="w-full py-2.5 px-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-bold text-xs rounded-xl shadow transition flex items-center justify-center gap-2 border border-emerald-400/30"
+                  >
+                    <Sparkles className="w-4 h-4 text-emerald-200" />
+                    <span>⚡ 1-Tap Passwordless Sign-In (Direct Link)</span>
+                  </button>
+                )}
+
                 <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
                   {countdown > 0 ? (
-                    <span>Resend OTP in <strong className="text-slate-200">{countdown}s</strong></span>
+                    <span>
+                      Resend in <strong className="text-slate-200">{countdown}s</strong>
+                    </span>
                   ) : (
                     <button
                       type="button"
-                      onClick={handleRequestOtp}
+                      onClick={handleRequestCode}
                       className="text-amber-400 hover:underline font-bold"
                     >
                       Resend Code
                     </button>
                   )}
+
+                  {otpChannel === 'WHATSAPP' && whatsappInstantLink && (
+                    <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3" />
+                      <span>WhatsApp Link Active</span>
+                    </span>
+                  )}
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => handleVerifyOtp()}
+                  onClick={() => handleVerifyCode()}
                   disabled={loading || otpDigits.join('').length !== 6}
-                  className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2"
+                  className={`w-full py-3 disabled:opacity-50 font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2 ${
+                    otpChannel === 'WHATSAPP'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white'
+                      : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950'
+                  }`}
                 >
                   {loading ? (
                     <>

@@ -17074,6 +17074,121 @@ const runTests = async () => {
       assert.ok(data.message.includes('Supported social providers: GOOGLE, APPLE'));
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 2: WHATSAPP DIRECT OTP & INSTANT PASSWORDLESS LOGIN
+    // =========================================================================
+    let waTestPhone = '9812345678';
+    let waOtpCode = '';
+
+    await test('Point 2: POST /api/auth/whatsapp/request-otp issues 6-digit OTP & 1-tap instant link', async () => {
+      const res = await fetch(`${baseUrl}/auth/whatsapp/request-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: waTestPhone }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.demoOtp);
+      assert.strictEqual(data.demoOtp.length, 6);
+      assert.ok(data.instantLink);
+      assert.ok(data.instantLink.includes(`phone=${waTestPhone}`));
+      assert.ok(data.instantLink.includes(`otp=${data.demoOtp}`));
+      waOtpCode = data.demoOtp;
+    });
+
+    await test('Point 2: POST /api/auth/whatsapp/request-otp rejects invalid phone format (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/auth/whatsapp/request-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: '12345' }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('valid 10-digit Indian mobile number'));
+    });
+
+    await test('Point 2: POST /api/auth/whatsapp/verify-otp rejects incorrect OTP code', async () => {
+      const res = await fetch(`${baseUrl}/auth/whatsapp/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: waTestPhone,
+          otp: '000000',
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Invalid WhatsApp verification code'));
+    });
+
+    await test('Point 2: POST /api/auth/whatsapp/verify-otp successfully logs in and issues JWT session', async () => {
+      const res = await fetch(`${baseUrl}/auth/whatsapp/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: waTestPhone,
+          otp: waOtpCode,
+          name: 'Kabir WhatsApp User',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token);
+      assert.strictEqual(data.user.phone, waTestPhone);
+      assert.strictEqual(data.user.authProvider, 'WHATSAPP');
+      assert.strictEqual(data.user.name, 'Kabir WhatsApp User');
+    });
+
+    await test('Point 2: POST /api/auth/whatsapp/instant-link completes 1-click passwordless login via WhatsApp link', async () => {
+      const instantPhone = '9823456789';
+      const reqRes = await fetch(`${baseUrl}/auth/whatsapp/request-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: instantPhone }),
+      });
+      const reqData = await reqRes.json();
+      assert.strictEqual(reqRes.status, 200);
+
+      const instantRes = await fetch(`${baseUrl}/auth/whatsapp/instant-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: instantPhone,
+          otp: reqData.demoOtp,
+        }),
+      });
+
+      assert.strictEqual(instantRes.status, 200);
+      const instantData = await instantRes.json();
+      assert.strictEqual(instantData.success, true);
+      assert.ok(instantData.token);
+      assert.strictEqual(instantData.user.phone, instantPhone);
+      assert.strictEqual(instantData.user.authProvider, 'WHATSAPP');
+    });
+
+    await test('Point 2: POST /api/auth/whatsapp/instant-link rejects already consumed instant link', async () => {
+      const consumedRes = await fetch(`${baseUrl}/auth/whatsapp/instant-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: '9823456789',
+          otp: '999999',
+        }),
+      });
+
+      assert.strictEqual(consumedRes.status, 400);
+      const consumedData = await consumedRes.json();
+      assert.strictEqual(consumedData.success, false);
+    });
+
   } finally {
     if (server) {
       server.close();

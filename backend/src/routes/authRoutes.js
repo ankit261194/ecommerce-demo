@@ -15,6 +15,9 @@ const {
   googleOneTapLogin,
   appleLogin,
   socialLogin,
+  requestWhatsAppOtp,
+  verifyWhatsAppOtp,
+  whatsappInstantLinkLogin,
 } = require('../controllers/authController');
 const { protect } = require('../middlewares/auth');
 
@@ -28,6 +31,11 @@ router.post('/google/one-tap', googleOneTapLogin);
 router.post('/google', googleOneTapLogin);
 router.post('/apple', appleLogin);
 router.post('/social-login', socialLogin);
+
+// Point 2: WhatsApp Direct OTP & Instant Passwordless Login
+router.post('/whatsapp/request-otp', requestWhatsAppOtp);
+router.post('/whatsapp/verify-otp', verifyWhatsAppOtp);
+router.post('/whatsapp/instant-link', whatsappInstantLinkLogin);
 
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);

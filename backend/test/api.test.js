@@ -18865,6 +18865,194 @@ const runTests = async () => {
       assert.strictEqual(res.status, 403);
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 15: AUTOMATED PRICE DROP & BACK-IN-STOCK WHATSAPP/SMS ALERTS
+    // =========================================================================
+    console.log('\n--- PILLAR 1 - POINT 15: AUTOMATED PRICE DROP & BACK-IN-STOCK WHATSAPP/SMS ALERTS ---');
+
+    let point15StockAlertId = null;
+    let point15PriceAlertId = null;
+    let point15ProductId = null;
+
+    await test('Point 15: POST /api/product-alerts creates Back-in-Stock WhatsApp & SMS alert subscription', async () => {
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      const sampleProduct = await Product.findOne({ isPublished: true });
+      assert.ok(sampleProduct, 'Product must exist');
+      point15ProductId = sampleProduct._id;
+
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/product-alerts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+        body: JSON.stringify({
+          productId: point15ProductId,
+          alertType: 'BACK_IN_STOCK',
+          phone: '9888899991',
+          channel: 'WHATSAPP',
+          name: 'Restock Waiting Shopper',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.alertType, 'BACK_IN_STOCK');
+      assert.strictEqual(data.data.status, 'ACTIVE');
+      assert.strictEqual(data.data.customerPhone, '9888899991');
+      point15StockAlertId = data.data._id;
+    });
+
+    await test('Point 15: POST /api/product-alerts creates Price Drop alert with target price', async () => {
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      const sampleProduct = await Product.findById(point15ProductId);
+      const currentPrice = sampleProduct.sellingPrice || 1000;
+      const targetPrice = Math.round(currentPrice * 0.85);
+
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/product-alerts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+        body: JSON.stringify({
+          productId: point15ProductId,
+          alertType: 'PRICE_DROP',
+          targetPrice,
+          phone: '9888899992',
+          email: 'pricedrop@shopper.com',
+          channel: 'BOTH',
+          name: 'Deal Hunter Shopper',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.alertType, 'PRICE_DROP');
+      assert.strictEqual(data.data.targetPrice, targetPrice);
+      point15PriceAlertId = data.data._id;
+    });
+
+    await test('Point 15: POST /api/price-drop-alerts/simulate-stock triggers alerts on 0 -> >0 stock transition', async () => {
+      const res = await fetch(`${baseUrl}/price-drop-alerts/simulate-stock`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          productId: point15ProductId,
+          oldStock: 0,
+          newStock: 25,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.triggeredCount >= 1);
+
+      // Verify in DB that alert was marked ALERTED and restockedUnits recorded
+      const PriceDropAlert = mongoose.models.PriceDropAlert || require('../src/models/PriceDropAlert');
+      const updatedAlert = await PriceDropAlert.findById(point15StockAlertId);
+      assert.strictEqual(updatedAlert.status, 'ALERTED');
+      assert.strictEqual(updatedAlert.restockedUnits, 25);
+    });
+
+    await test('Point 15: POST /api/price-drop-alerts/simulate triggers price drop alerts when price drops to target', async () => {
+      const sampleProduct = await Product.findById(point15ProductId);
+      const prevPrice = sampleProduct.sellingPrice || 1000;
+      const newDroppedPrice = Math.round(prevPrice * 0.80); // 20% drop, lower than 15% target
+
+      const res = await fetch(`${baseUrl}/price-drop-alerts/simulate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          productId: point15ProductId,
+          oldPrice: prevPrice,
+          newPrice: newDroppedPrice,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.triggeredCount >= 1);
+
+      // Verify in DB that price alert was marked ALERTED
+      const PriceDropAlert = mongoose.models.PriceDropAlert || require('../src/models/PriceDropAlert');
+      const updatedAlert = await PriceDropAlert.findById(point15PriceAlertId);
+      assert.strictEqual(updatedAlert.status, 'ALERTED');
+      assert.strictEqual(updatedAlert.alertedPrice, newDroppedPrice);
+    });
+
+    await test('Point 15: GET /api/product-alerts/my lists customer subscriptions with product details', async () => {
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/product-alerts/my`, {
+        headers: {
+          Authorization: `Bearer ${custToken}`,
+        },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.count >= 1);
+      assert.ok(Array.isArray(data.data));
+    });
+
+    await test('Point 15: DELETE /api/product-alerts/:id cancels active alert subscription', async () => {
+      const res = await fetch(`${baseUrl}/product-alerts/${point15StockAlertId}`, {
+        method: 'DELETE',
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'CANCELLED');
+    });
+
+    await test('Point 15: Validation: POST /api/product-alerts validates missing required fields (400 Bad Request)', async () => {
+      const res1 = await fetch(`${baseUrl}/product-alerts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(res1.status, 400);
+
+      const res2 = await fetch(`${baseUrl}/product-alerts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId: point15ProductId,
+          alertType: 'PRICE_DROP',
+          targetPrice: -10,
+        }),
+      });
+      assert.strictEqual(res2.status, 400);
+    });
+
   } finally {
     if (server) {
       server.close();

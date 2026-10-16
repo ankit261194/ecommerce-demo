@@ -80,8 +80,9 @@ export const ProductDetailModal = ({
   // Size Guide Modal state (Point #4)
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
 
-  // Price Drop Alert Modal state (Point #6)
+  // Price Drop & Back-in-Stock Alert Modal state (Point 15)
   const [isPriceDropModalOpen, setIsPriceDropModalOpen] = useState(false);
+  const [alertModalMode, setAlertModalMode] = useState('PRICE_DROP');
 
   // Live Customer-to-Vendor Chat Modal state (Point #14)
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
@@ -411,7 +412,10 @@ export const ProductDetailModal = ({
                   </p>
                   <button
                     type="button"
-                    onClick={() => setIsPriceDropModalOpen(true)}
+                    onClick={() => {
+                      setAlertModalMode('PRICE_DROP');
+                      setIsPriceDropModalOpen(true);
+                    }}
                     className="flex items-center gap-1.5 text-xs font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100/80 border border-amber-200/80 px-2.5 py-1 rounded-xl transition-all shadow-xs active:scale-95"
                     title="Get instant WhatsApp / Email alert when price drops"
                   >
@@ -561,6 +565,21 @@ export const ProductDetailModal = ({
                     <span>{isOrderingPaused ? '🌴 Orders Paused' : t('buyNow', 'Buy Now')}</span>
                   </button>
                 </div>
+
+                {/* Point 15: Automated Back-in-Stock WhatsApp/SMS Alert Trigger Button */}
+                {currentStock <= 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAlertModalMode('BACK_IN_STOCK');
+                      setIsPriceDropModalOpen(true);
+                    }}
+                    className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 active:scale-[0.99] transition-all"
+                  >
+                    <Bell className="w-4 h-4 fill-current text-emerald-200" />
+                    <span>Notify Me When In Stock (WhatsApp & SMS)</span>
+                  </button>
+                )}
 
                 {/* Point #26: Group Buying / Team Purchase Engine ("Khareedo Saath Me") */}
                 {(product.groupBuy?.enabled ?? true) && (
@@ -935,11 +954,12 @@ export const ProductDetailModal = ({
         }}
       />
 
-      {/* Point 6: Smart Price Drop Alert Subscription Modal */}
+      {/* Point 15: Smart Price Drop & Back-in-Stock Alert Subscription Modal */}
       <PriceDropAlertModal
         isOpen={isPriceDropModalOpen}
         onClose={() => setIsPriceDropModalOpen(false)}
         product={product}
+        initialMode={alertModalMode}
       />
 
       {/* Point 14: Direct Customer-to-Vendor Live Inquiry Chat Modal */}

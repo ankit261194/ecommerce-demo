@@ -159,6 +159,7 @@ app.use('/api/pincodes', pincodeRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/size-charts', sizeChartRoutes);
 app.use('/api/price-drop-alerts', priceDropAlertRoutes);
+app.use('/api/product-alerts', priceDropAlertRoutes);
 app.use('/api/cms', cmsRoutes);
 app.use('/api/faqs', faqRoutes);
 app.use('/api/commission', commissionRoutes);

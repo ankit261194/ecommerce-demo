@@ -9,5 +9,6 @@ router.post('/subscribe', optionalAuth, priceDropAlertController.subscribePriceD
 router.get('/my', optionalAuth, priceDropAlertController.getMyAlerts);
 router.delete('/:id', optionalAuth, priceDropAlertController.deleteAlert);
 router.post('/simulate', priceDropAlertController.simulatePriceDrop);
+router.post('/simulate-stock', priceDropAlertController.simulateStockAlert);
 
 module.exports = router;

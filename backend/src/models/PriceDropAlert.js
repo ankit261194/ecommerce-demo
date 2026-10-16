@@ -14,9 +14,9 @@ const priceDropAlertSchema = new mongoose.Schema(
     },
     customerEmail: {
       type: String,
-      required: true,
       trim: true,
       lowercase: true,
+      default: '',
     },
     customerPhone: {
       type: String,
@@ -27,17 +27,32 @@ const priceDropAlertSchema = new mongoose.Schema(
       type: String,
       default: 'Valued Shopper',
     },
+    // Point 15: Automated Price Drop & Back-in-Stock Alerts
+    alertType: {
+      type: String,
+      enum: ['PRICE_DROP', 'BACK_IN_STOCK', 'BOTH'],
+      default: 'PRICE_DROP',
+      index: true,
+    },
     currentPrice: {
       type: Number,
-      required: true,
+      default: 0,
     },
     targetPrice: {
       type: Number,
-      required: true,
+      default: 0,
+    },
+    initialStock: {
+      type: Number,
+      default: 0,
+    },
+    restockedUnits: {
+      type: Number,
+      default: null,
     },
     channel: {
       type: String,
-      enum: ['EMAIL', 'WHATSAPP', 'BOTH'],
+      enum: ['EMAIL', 'WHATSAPP', 'SMS', 'ALL', 'BOTH'],
       default: 'BOTH',
     },
     status: {

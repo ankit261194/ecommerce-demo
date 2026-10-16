@@ -200,16 +200,23 @@ exports.updateProduct = async (req, res, next) => {
     }
 
     const oldSelling = product.sellingPrice || product.price || 0;
+    const oldStock = product.stock || 0;
 
     product = await Product.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,
     });
 
-    // Point 6: Automatically trigger Price Drop Alerts if price dropped
+    // Point 6 & Point 15: Automatically trigger Price Drop Alerts if price dropped
     if (req.body.sellingPrice !== undefined && Number(req.body.sellingPrice) < oldSelling) {
       const { checkAndTriggerPriceDropAlerts } = require('./priceDropAlertController');
       checkAndTriggerPriceDropAlerts(product._id, oldSelling, Number(req.body.sellingPrice)).catch(console.error);
+    }
+
+    // Point 15: Automatically trigger Back-in-Stock Alerts if restocked
+    if (oldStock <= 0 && product.stock > 0) {
+      const { checkAndTriggerStockAlerts } = require('./priceDropAlertController');
+      checkAndTriggerStockAlerts(product._id, oldStock, product.stock).catch(console.error);
     }
 
     const priceChanged = req.body.sellingPrice !== undefined && Number(req.body.sellingPrice) !== oldSelling;
@@ -1501,6 +1508,7 @@ exports.updateProductStock = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Product not found or not owned by your store' });
     }
 
+    const oldStock = product.stock || 0;
     const { stock, additionalStock, lowStockThreshold } = req.body;
     if (typeof stock === 'number') {
       product.stock = Math.max(0, stock);
@@ -1513,6 +1521,12 @@ exports.updateProductStock = async (req, res, next) => {
     }
 
     await product.save();
+
+    // Point 15: Automatically trigger Back-in-Stock Alerts if restocked
+    if (oldStock <= 0 && product.stock > 0) {
+      const { checkAndTriggerStockAlerts } = require('./priceDropAlertController');
+      checkAndTriggerStockAlerts(product._id, oldStock, product.stock).catch(console.error);
+    }
 
     res.status(200).json({
       success: true,

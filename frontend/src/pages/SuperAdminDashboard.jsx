@@ -64,6 +64,8 @@ import {
   Activity,
   Wallet,
   Gift,
+  MapPin,
+  Navigation,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -106,6 +108,7 @@ import AdminWalletVault from '../components/AdminWalletVault';
 import AdminEmiManager from '../components/AdminEmiManager';
 import AdminSocialShareHub from '../components/AdminSocialShareHub';
 import { AdminGiftWrapManager } from '../components/AdminGiftWrapManager';
+import HyperlocalGeofenceManager from '../components/HyperlocalGeofenceManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1647,6 +1650,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('hyperlocal')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'hyperlocal'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <MapPin className="w-4 h-4 text-amber-400" />
+            <span>Hyperlocal Geofence & Hubs</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-200 ml-1">
+              Point #22
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveDashboardTab('cms-pages')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
               activeDashboardTab === 'cms-pages'
@@ -2636,6 +2654,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'gift-wrap' && (
         <AdminGiftWrapManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB: ⚡ GEOFENCED HYPERLOCAL POLYGON RADIUS & DARK STORE HUBS (Point #22) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'hyperlocal' && (
+        <HyperlocalGeofenceManager />
       )}
 
       {/* ========================================================================= */}

@@ -15375,6 +15375,224 @@ const runTests = async () => {
       assert.ok(data.message.includes('Unauthorized'));
     });
 
+    // ==========================================
+    // POINT 22: GEOFENCED HYPERLOCAL DARK STORES
+    // ==========================================
+    let circleDarkStore = null;
+    let polygonDarkStore = null;
+
+    await test('Point 22: POST /api/hyperlocal/admin/dark-stores allows Super Admin to create dark store with circle radius', async () => {
+      const res = await fetch(`${baseUrl}/hyperlocal/admin/dark-stores`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Aura Express Hub - South Extension',
+          hubCode: `DS-DEL-${Date.now().toString().slice(-4)}`,
+          city: 'New Delhi',
+          state: 'Delhi',
+          address: 'Plot 42, Main Market, South Extension Part 2',
+          pincode: '110049',
+          contactPhone: '+919811001122',
+          geofenceType: 'RADIUS_CIRCLE',
+          centerLocation: {
+            latitude: 28.5684,
+            longitude: 77.2201,
+          },
+          radiusKm: 5,
+          deliveryPromise: {
+            minMinutes: 15,
+            maxMinutes: 25,
+            badgeText: '⚡ 15-25 Mins Hyperlocal Quick Commerce',
+          },
+          pricing: {
+            baseDeliveryFee: 29,
+            freeDeliveryThreshold: 499,
+            isSurgeActive: false,
+            surgeFee: 20,
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      circleDarkStore = data.data;
+      assert.ok(circleDarkStore._id);
+      assert.strictEqual(circleDarkStore.geofenceType, 'RADIUS_CIRCLE');
+    });
+
+    await test('Point 22: POST /api/hyperlocal/admin/dark-stores allows Super Admin to create dark store with 5-point polygon boundary', async () => {
+      const res = await fetch(`${baseUrl}/hyperlocal/admin/dark-stores`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Aura Express Hub - Noida Cyber City',
+          hubCode: `DS-NOI-${Date.now().toString().slice(-4)}`,
+          city: 'Noida',
+          state: 'Uttar Pradesh',
+          address: 'Block B, Sector 62, Electronic City',
+          pincode: '201309',
+          contactPhone: '+919822334455',
+          geofenceType: 'POLYGON',
+          centerLocation: {
+            latitude: 28.6250,
+            longitude: 77.3750,
+          },
+          polygonCoordinates: [
+            { latitude: 28.6400, longitude: 77.3600 },
+            { latitude: 28.6400, longitude: 77.3900 },
+            { latitude: 28.6100, longitude: 77.3900 },
+            { latitude: 28.6100, longitude: 77.3600 },
+            { latitude: 28.6400, longitude: 77.3600 },
+          ],
+          deliveryPromise: {
+            minMinutes: 10,
+            maxMinutes: 20,
+            badgeText: '⚡ 10-20 Mins Instant Delivery',
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      polygonDarkStore = data.data;
+      assert.strictEqual(polygonDarkStore.geofenceType, 'POLYGON');
+      assert.strictEqual(polygonDarkStore.polygonCoordinates.length, 5);
+    });
+
+    await test('Point 22: POST /api/hyperlocal/admin/dark-stores rejects duplicate hubCode (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/hyperlocal/admin/dark-stores`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Duplicate Hub',
+          hubCode: circleDarkStore.hubCode,
+          city: 'New Delhi',
+          state: 'Delhi',
+          address: 'Some Address',
+          pincode: '110049',
+          centerLocation: { latitude: 28.5684, longitude: 77.2201 },
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('already exists'));
+    });
+
+    await test('Point 22: GET /api/hyperlocal/dark-stores returns active dark store geofences for storefront', async () => {
+      const res = await fetch(`${baseUrl}/hyperlocal/dark-stores`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.length >= 2);
+      assert.ok(data.data.some(d => d.hubCode === circleDarkStore.hubCode));
+    });
+
+    await test('Point 22: POST /api/hyperlocal/check-boundary correctly identifies GPS point INSIDE radius circle (⚡ 15-Min Quick Commerce)', async () => {
+      // 28.5690, 77.2210 is ~100m away from South Ext center (28.5684, 77.2201) -> definitely inside 5km
+      const res = await fetch(`${baseUrl}/hyperlocal/check-boundary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          latitude: 28.5690,
+          longitude: 77.2210,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.isHyperlocal, true);
+      assert.strictEqual(data.matchedHub.hubCode, circleDarkStore.hubCode);
+      assert.ok(data.matchedHub.distanceKm < 1);
+    });
+
+    await test('Point 22: POST /api/hyperlocal/check-boundary correctly identifies GPS point INSIDE polygon boundary', async () => {
+      // 28.6250, 77.3750 is right in the center of the bounding box [28.61-28.64, 77.36-77.39]
+      const res = await fetch(`${baseUrl}/hyperlocal/check-boundary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          latitude: 28.6250,
+          longitude: 77.3750,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.isHyperlocal, true);
+      assert.ok([circleDarkStore.hubCode, polygonDarkStore.hubCode].includes(data.matchedHub.hubCode));
+    });
+
+    await test('Point 22: POST /api/hyperlocal/check-boundary identifies GPS point OUTSIDE geofence boundary (standard courier fallback)', async () => {
+      // Mumbai coordinates (19.0760, 72.8777) are hundreds of km away from Delhi/Noida hubs
+      const res = await fetch(`${baseUrl}/hyperlocal/check-boundary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          latitude: 19.0760,
+          longitude: 72.8777,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.isHyperlocal, false);
+      assert.strictEqual(data.deliveryType, 'STANDARD_COURIER');
+      assert.ok(data.closestHubDistanceKm > 100);
+    });
+
+    await test('Point 22: POST /api/hyperlocal/admin/dark-stores/:id/toggle-surge enables surge pricing (+₹30 surgeFee)', async () => {
+      const res = await fetch(`${baseUrl}/hyperlocal/admin/dark-stores/${circleDarkStore._id}/toggle-surge`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          isSurgeActive: true,
+          surgeFee: 30,
+          surgeReason: 'Heavy Monsoon Rain Surge',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'SURGE');
+      assert.strictEqual(data.data.pricing.surgeFee, 30);
+    });
+
+    await test('Point 22: Role Security: Customer cannot create dark stores or toggle surge (403 Forbidden)', async () => {
+      const res = await fetch(`${baseUrl}/hyperlocal/admin/dark-stores`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Hacked Hub',
+          hubCode: 'HACK-01',
+        }),
+      });
+
+      assert.strictEqual(res.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

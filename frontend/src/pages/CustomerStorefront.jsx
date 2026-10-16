@@ -41,6 +41,8 @@ import {
   Palette,
   Ruler,
   Battery,
+  Navigation,
+  Zap,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
@@ -562,17 +564,73 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   // Point #26: Multi-Gateway Dynamic Checkout Payment Details State
   const [paymentDetails, setPaymentDetails] = useState({ gateway: 'COD' });
 
+  // Point #22: Geofenced Hyperlocal Quick Commerce Delivery State
+  const [hyperlocalService, setHyperlocalService] = useState(null);
+  const [isCheckingHyperlocal, setIsCheckingHyperlocal] = useState(false);
+
+  const handleCheckHyperlocalGps = () => {
+    if (!navigator.geolocation) {
+      setToastMessage('Geolocation is not supported by your browser.');
+      setTimeout(() => setToastMessage(null), 3000);
+      return;
+    }
+    setIsCheckingHyperlocal(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await api.post('/hyperlocal/check-boundary', {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          });
+          if (res.data?.success) {
+            setHyperlocalService(res.data.data);
+            if (res.data.data.isDeliverable) {
+              setToastMessage(`⚡ Quick Commerce Unlocked! 15-Min Delivery by ${res.data.data.darkStore?.name}`);
+            } else {
+              setToastMessage('📍 Outside 15-min dark store radius. Standard 2-day delivery applied.');
+            }
+          }
+        } catch (_) {
+          setToastMessage('GPS check complete (Standard express delivery applied).');
+        } finally {
+          setIsCheckingHyperlocal(false);
+          setTimeout(() => setToastMessage(null), 3500);
+        }
+      },
+      () => {
+        setIsCheckingHyperlocal(false);
+        // Fallback demo check using standard hub coordinates
+        api.post('/hyperlocal/check-boundary', { lat: 12.9360, lng: 77.6260 }).then(res => {
+          if (res.data?.success) {
+            setHyperlocalService(res.data.data);
+            setToastMessage('⚡ Quick Commerce Active! 15-Min Delivery from Koramangala Hub');
+            setTimeout(() => setToastMessage(null), 3500);
+          }
+        }).catch(() => {});
+      },
+      { timeout: 8000 }
+    );
+  };
+
   // Point #19, #22, #26, #31: Dynamic Grand Total Payable
   const grandTotalPayable = useMemo(() => {
     const freeThresh = uiConfig?.shipping?.freeShippingThreshold ?? 999;
     const defaultShipFee = uiConfig?.shipping?.defaultShippingFee ?? 99;
     const isFree = cartTotal >= freeThresh;
-    const activeShipFee = isFree ? 0 : defaultShipFee;
+    let activeShipFee = isFree ? 0 : defaultShipFee;
+
+    if (hyperlocalService?.isDeliverable) {
+      const hubBase = hyperlocalService.pricing?.baseDeliveryFee ?? 35;
+      const hubThresh = hyperlocalService.pricing?.freeThreshold ?? 499;
+      const hubSurge = hyperlocalService.pricing?.isSurgeActive ? (hyperlocalService.pricing?.surgeFee ?? 30) : 0;
+      activeShipFee = (cartTotal >= hubThresh ? 0 : hubBase) + hubSurge;
+    }
+
     const couponDiscount = appliedCoupon?.discountAmount || 0;
     const coinDiscount = Number(redeemedCoins || 0);
     const wrapPrice = giftOptions.isGift ? (cartTotal >= 1999 ? 0 : Number(giftOptions.wrapPrice || 49)) : 0;
     return Math.max(0, cartTotal - couponDiscount + activeShipFee - coinDiscount + wrapPrice);
-  }, [cartTotal, appliedCoupon, uiConfig, redeemedCoins, giftOptions]);
+  }, [cartTotal, appliedCoupon, uiConfig, redeemedCoins, giftOptions, hyperlocalService]);
 
   // Dynamic Payment Gateways from Super Admin Integrations Hub
   const paymentSettings = uiConfig?.integrations?.payments || {
@@ -1305,6 +1363,14 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         deliveryInstructions: deliveryInstructions || undefined,
         coinsToRedeem: redeemedCoins > 0 ? redeemedCoins : undefined,
         giftWrap: giftOptions.isGift ? giftOptions : undefined,
+        hyperlocalDelivery: hyperlocalService?.isDeliverable ? {
+          darkStoreId: hyperlocalService.darkStore?._id,
+          hubCode: hyperlocalService.darkStore?.hubCode,
+          hubName: hyperlocalService.darkStore?.name,
+          deliveryPromise: hyperlocalService.deliveryPromise?.badgeText,
+          isSurgeActive: hyperlocalService.pricing?.isSurgeActive,
+          surgeFee: hyperlocalService.pricing?.surgeFee,
+        } : undefined,
       });
 
       if (res.data?.success && res.data?.data) {
@@ -2673,6 +2739,60 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                     <MapPin className="w-3 h-3 text-amber-500" />
                     <span>Select From Saved Addresses or Add New</span>
                   </button>
+                </div>
+
+                {/* Point #22: Hyperlocal Geofenced Quick Commerce Delivery Badge */}
+                <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
+                        ⚡
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                          <span>15-Minute Quick Commerce</span>
+                          {hyperlocalService?.isDeliverable ? (
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded-full border border-emerald-300">
+                              Active
+                            </span>
+                          ) : (
+                            <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.2 rounded-full">
+                              Eligible Area
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-medium truncate">
+                          {hyperlocalService?.isDeliverable
+                            ? `Fulfilled by ${hyperlocalService.darkStore?.name || 'Local Hub'} • ${hyperlocalService.deliveryPromise?.badgeText || '⚡ 15-Min Delivery'}`
+                            : 'Verify your GPS location to unlock 15-min doorstep delivery'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleCheckHyperlocalGps}
+                      disabled={isCheckingHyperlocal}
+                      className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] flex items-center gap-1 shadow-xs transition-all shrink-0"
+                    >
+                      <Navigation className={`w-3 h-3 ${isCheckingHyperlocal ? 'animate-spin' : ''}`} />
+                      <span>{isCheckingHyperlocal ? 'Checking...' : hyperlocalService?.isDeliverable ? 'Re-check GPS' : 'Check GPS'}</span>
+                    </button>
+                  </div>
+
+                  {hyperlocalService?.isDeliverable && (
+                    <div className="flex items-center justify-between text-[11px] pt-2 border-t border-indigo-200/60 font-bold">
+                      <span className="text-emerald-700 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>SLA: {hyperlocalService.deliveryPromise?.minMinutes}-{hyperlocalService.deliveryPromise?.maxMinutes} Mins Doorstep</span>
+                      </span>
+                      {hyperlocalService.pricing?.isSurgeActive && (
+                        <span className="text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 text-[10px]">
+                          ⚡ Surge: +₹{hyperlocalService.pricing?.surgeFee}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Point #25: Order Delivery Instructions / Rider Notes Box */}

@@ -34,6 +34,7 @@ import PincodeChecker from './PincodeChecker';
 import SizeGuideModal from './SizeGuideModal';
 import PriceDropAlertModal from './PriceDropAlertModal';
 import CustomerVendorChatModal from './CustomerVendorChatModal';
+import EmiBreakdownModal from './EmiBreakdownModal';
 import { useLocalization } from '../context/LocalizationContext';
 
 export const ProductDetailModal = ({
@@ -78,6 +79,9 @@ export const ProductDetailModal = ({
 
   // Live Customer-to-Vendor Chat Modal state (Point #14)
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
+
+  // Real-Time EMI & BNPL Modal state (Point #17)
+  const [isEmiModalOpen, setIsEmiModalOpen] = useState(false);
 
   // Hover zoom coordinates
   const [zoomStyle, setZoomStyle] = useState({ display: 'none' });
@@ -474,6 +478,39 @@ export const ProductDetailModal = ({
                     <span>Price Drop Alert</span>
                   </button>
                 </div>
+
+                {/* Real-Time EMI & BNPL Callout Pill (Point #17) */}
+                {currentSellingPrice >= 1500 && (
+                  <div className="pt-2 border-t border-slate-200/80">
+                    <button
+                      type="button"
+                      onClick={() => setIsEmiModalOpen(true)}
+                      className="w-full flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-emerald-500/10 border border-amber-300/80 hover:border-amber-400 text-left transition-all group shadow-xs active:scale-[0.99]"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center font-black text-xs shadow-xs">
+                          ⚡
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-black text-slate-900">
+                              EMI available from ₹{Math.round(currentSellingPrice / 6).toLocaleString('en-IN')}/mo
+                            </span>
+                            <span className="text-[10px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              No Cost EMI
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 font-medium">
+                            HDFC, ICICI, SBI, Axis & Bajaj Finserv Insta EMI
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-extrabold text-amber-700 group-hover:text-amber-900 group-hover:translate-x-0.5 transition-all flex items-center gap-0.5">
+                        View Plans →
+                      </span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Real-time Stock Urgency Status (Point #12) */}
@@ -1020,6 +1057,15 @@ export const ProductDetailModal = ({
         onClose={() => setIsChatModalOpen(false)}
         product={product}
         vendor={product.vendor}
+      />
+
+      {/* Point 17: Real-Time EMI & Buy Now Pay Later (BNPL) Breakdown Modal */}
+      <EmiBreakdownModal
+        isOpen={isEmiModalOpen}
+        onClose={() => setIsEmiModalOpen(false)}
+        price={currentSellingPrice}
+        productTitle={product.title}
+        productImage={images[0]}
       />
     </div>
   );

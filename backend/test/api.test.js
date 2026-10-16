@@ -14548,6 +14548,190 @@ const runTests = async () => {
       assert.strictEqual(resAdjust.status, 403);
     });
 
+    console.log('\n--- POINT 17: REAL-TIME EMI & BUY NOW PAY LATER (BNPL) BREAKDOWN TABLE ---');
+
+    await test('Point 17: GET /api/emi/config returns active public configuration and providers', async () => {
+      const res = await fetch(`${baseUrl}/emi/config`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(typeof body.data.isEnabled, 'boolean');
+      assert.ok(body.data.minOrderAmount >= 500);
+      assert.ok(Array.isArray(body.data.banks));
+      assert.ok(body.data.banks.length >= 3);
+      assert.ok(Array.isArray(body.data.bnplProviders));
+      assert.ok(body.data.bnplProviders.length >= 2);
+      assert.ok(Array.isArray(body.data.faqItems));
+      assert.ok(body.data.faqItems.length >= 2);
+    });
+
+    await test('Point 17: POST /api/emi/calculate validates missing or invalid price (400 Bad Request)', async () => {
+      const resMissing = await fetch(`${baseUrl}/emi/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(resMissing.status, 400);
+
+      const resNegative = await fetch(`${baseUrl}/emi/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ price: -500 }),
+      });
+      assert.strictEqual(resNegative.status, 400);
+    });
+
+    await test('Point 17: POST /api/emi/calculate with price < minOrderAmount returns isEligible: false', async () => {
+      const res = await fetch(`${baseUrl}/emi/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ price: 1200 }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.isEligible, false);
+      assert.strictEqual(body.price, 1200);
+    });
+
+    await test('Point 17: POST /api/emi/calculate for ₹15,000 calculates accurate Credit & Debit Card plans', async () => {
+      const res = await fetch(`${baseUrl}/emi/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ price: 15000 }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.isEligible, true);
+      assert.strictEqual(body.price, 15000);
+      assert.ok(body.minMonthlyEmi > 0);
+      assert.ok(body.breakdown.creditCards.length >= 3);
+      assert.ok(body.breakdown.debitCards.length >= 2);
+
+      // Verify HDFC Bank plan
+      const hdfc = body.breakdown.creditCards.find(b => b.bankCode === 'HDFC');
+      assert.ok(hdfc, 'HDFC Bank should be present in credit card EMI plans');
+      assert.ok(hdfc.tenures.length >= 4);
+
+      // Verify 3 Months No-Cost EMI
+      const tenure3 = hdfc.tenures.find(t => t.months === 3);
+      assert.ok(tenure3);
+      assert.strictEqual(tenure3.isNoCost, true);
+      assert.strictEqual(tenure3.monthlyEmi, 5000); // 15000 / 3
+      assert.strictEqual(tenure3.totalPayable, 15000);
+      assert.ok(tenure3.upfrontDiscount > 300, 'Upfront discount should be positive to offset bank interest');
+      assert.strictEqual(tenure3.processingFee, 199);
+      assert.strictEqual(tenure3.processingFeeWithGst, 235); // 199 * 1.18 = 234.82 -> 235
+
+      // Verify 12 Months Standard EMI
+      const tenure12 = hdfc.tenures.find(t => t.months === 12);
+      assert.ok(tenure12);
+      assert.strictEqual(tenure12.isNoCost, false);
+      assert.ok(tenure12.monthlyEmi > 1250);
+      assert.ok(tenure12.totalInterest > 0);
+      assert.strictEqual(tenure12.upfrontDiscount, 0);
+      assert.strictEqual(tenure12.totalPayable, tenure12.monthlyEmi * 12);
+    });
+
+    await test('Point 17: POST /api/emi/calculate returns Cardless NBFC & BNPL (Bajaj Finserv, Simpl, LazyPay)', async () => {
+      const res = await fetch(`${baseUrl}/emi/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ price: 18000 }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+
+      // Verify Bajaj Finserv
+      const bajaj = body.breakdown.cardlessEmi.find(p => p.providerCode === 'BAJAJ_FINSERV');
+      assert.ok(bajaj, 'Bajaj Finserv should be present in cardless EMI');
+      assert.strictEqual(bajaj.processingFee, 117);
+      const bajaj6m = bajaj.tenures.find(t => t.months === 6);
+      assert.ok(bajaj6m);
+      assert.strictEqual(bajaj6m.monthlyEmi, 3000); // 18000 / 6
+      assert.strictEqual(bajaj6m.isNoCost, true);
+      assert.strictEqual(bajaj6m.totalPayable, 18000);
+
+      // Verify BNPL Pay Later (Simpl or LazyPay)
+      assert.ok(body.breakdown.payLater.length >= 1);
+      const simpl = body.breakdown.payLater.find(p => p.providerCode === 'SIMPL');
+      if (simpl) {
+        const simpl3m = simpl.tenures.find(t => t.months === 3);
+        assert.ok(simpl3m);
+        assert.strictEqual(simpl3m.monthlyEmi, 6000); // 18000 / 3
+        assert.strictEqual(simpl3m.isNoCost, true);
+      }
+    });
+
+    await test('Point 17: GET /api/emi/calculate?price=30000 via query parameters succeeds', async () => {
+      const res = await fetch(`${baseUrl}/emi/calculate?price=30000`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.price, 30000);
+      assert.ok(body.minMonthlyEmi > 0);
+      assert.ok(body.breakdown.creditCards.length > 0);
+    });
+
+    await test('Point 17: GET /api/emi/admin/config returns full matrix to Super Admin', async () => {
+      const res = await fetch(`${baseUrl}/emi/admin/config`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.banks.length >= 3);
+      assert.ok(body.data.bnplProviders.length >= 2);
+      assert.ok(typeof body.data.defaultProcessingFee === 'number');
+    });
+
+    await test('Point 17: PUT /api/emi/admin/config updates configuration and logs AuditLog', async () => {
+      const res = await fetch(`${baseUrl}/emi/admin/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          minOrderAmount: 2000,
+          noCostEmiEnabled: true,
+          subsidizedBy: 'PLATFORM',
+          bannerMessage: '⚡ Special Festival No Cost EMI on Credit Cards & Bajaj Finserv from ₹%minEmi%/mo!',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.minOrderAmount, 2000);
+
+      // Verify immutable audit log
+      const audit = await AuditLog.findOne({
+        targetType: 'EmiConfig',
+      }).sort({ createdAt: -1 });
+      assert.ok(audit);
+      assert.strictEqual(audit.module, 'FINANCE');
+      assert.ok(audit.description.toLowerCase().includes('platform emi & bnpl rules'));
+    });
+
+    await test('Point 17: Role Security: Customer cannot access Super Admin EMI config routes (403 Forbidden)', async () => {
+      const resGet = await fetch(`${baseUrl}/emi/admin/config`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resGet.status, 403);
+
+      const resPut = await fetch(`${baseUrl}/emi/admin/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ minOrderAmount: 100 }),
+      });
+      assert.strictEqual(resPut.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

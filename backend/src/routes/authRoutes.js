@@ -13,17 +13,21 @@ const {
   requestOtp,
   verifyOtp,
   googleOneTapLogin,
+  appleLogin,
+  socialLogin,
 } = require('../controllers/authController');
 const { protect } = require('../middlewares/auth');
 
 router.post('/register', register);
 router.post('/login', login);
 
-// Point #3: Instant Google 1-Tap & Mobile SMS OTP Frictionless Login
+// Point 1: 1-Click Social Login (Google OAuth2 & Apple ID integration with backend JWT)
 router.post('/otp/request', requestOtp);
 router.post('/otp/verify', verifyOtp);
 router.post('/google/one-tap', googleOneTapLogin);
 router.post('/google', googleOneTapLogin);
+router.post('/apple', appleLogin);
+router.post('/social-login', socialLogin);
 
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);

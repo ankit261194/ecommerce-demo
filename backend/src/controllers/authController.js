@@ -503,3 +503,143 @@ exports.googleOneTapLogin = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Instant Apple ID Passwordless Sign-In & Account Linking
+// @route   POST /api/auth/apple
+exports.appleLogin = async (req, res, next) => {
+  try {
+    const { email, name, appleId, sub } = req.body;
+
+    const aId = appleId || sub;
+    if (!aId && !email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid Apple ID identifier or email is required',
+      });
+    }
+
+    const cleanEmail = email ? email.toLowerCase().trim() : `user_${(aId || Date.now()).toString().slice(-8)}@privaterelay.appleid.com`;
+    const fallbackAppleId = aId || `apple_${Date.now()}`;
+
+    let user = await User.findOne({
+      $or: [{ appleId: fallbackAppleId }, { email: cleanEmail }],
+    });
+
+    if (!user) {
+      user = await User.create({
+        name: name || cleanEmail.split('@')[0] || 'Apple User',
+        email: cleanEmail,
+        phone: req.body.phone || '9876543210',
+        appleId: fallbackAppleId,
+        authProvider: 'APPLE',
+        role: 'customer',
+        isVerified: true,
+        walletBalance: 250,
+        walletCoins: 500,
+      });
+    } else {
+      if (!user.appleId) user.appleId = fallbackAppleId;
+      if (name && (!user.name || user.name === 'Apple User')) user.name = name;
+      await user.save();
+    }
+
+    const token = generateToken(user._id);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Signed in with Apple successfully!',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        avatar: user.avatar,
+        authProvider: user.authProvider,
+        walletBalance: user.walletBalance,
+        walletCoins: user.walletCoins,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Unified 1-Click Social Sign-In (Google OAuth2 & Apple ID)
+// @route   POST /api/auth/social-login
+exports.socialLogin = async (req, res, next) => {
+  try {
+    const { provider, email, name, picture, sub, id } = req.body;
+
+    const normalizedProvider = (provider || 'GOOGLE').toUpperCase();
+    if (!['GOOGLE', 'APPLE'].includes(normalizedProvider)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid provider. Supported social providers: GOOGLE, APPLE',
+      });
+    }
+
+    const socialId = sub || id || (normalizedProvider === 'GOOGLE' ? req.body.googleId : req.body.appleId);
+    if (!email && !socialId) {
+      return res.status(400).json({
+        success: false,
+        message: `Valid email or ${normalizedProvider} ID is required`,
+      });
+    }
+
+    const cleanEmail = email ? email.toLowerCase().trim() : `${normalizedProvider.toLowerCase()}_${Date.now()}@socialauth.auramarket.com`;
+    const cleanId = socialId || `${normalizedProvider.toLowerCase()}_${Date.now()}`;
+
+    const query = {
+      $or: [
+        { email: cleanEmail },
+        normalizedProvider === 'GOOGLE' ? { googleId: cleanId } : { appleId: cleanId },
+      ],
+    };
+
+    let user = await User.findOne(query);
+
+    if (!user) {
+      user = await User.create({
+        name: name || cleanEmail.split('@')[0] || `${normalizedProvider} User`,
+        email: cleanEmail,
+        phone: req.body.phone || '9876543210',
+        googleId: normalizedProvider === 'GOOGLE' ? cleanId : '',
+        appleId: normalizedProvider === 'APPLE' ? cleanId : '',
+        avatar: picture || '',
+        authProvider: normalizedProvider,
+        role: 'customer',
+        isVerified: true,
+        walletBalance: 250,
+        walletCoins: 500,
+      });
+    } else {
+      if (normalizedProvider === 'GOOGLE' && !user.googleId) user.googleId = cleanId;
+      if (normalizedProvider === 'APPLE' && !user.appleId) user.appleId = cleanId;
+      if (picture && !user.avatar) user.avatar = picture;
+      await user.save();
+    }
+
+    const token = generateToken(user._id);
+
+    return res.status(200).json({
+      success: true,
+      message: `Signed in with ${normalizedProvider === 'GOOGLE' ? 'Google' : 'Apple'} successfully!`,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        avatar: user.avatar,
+        authProvider: user.authProvider,
+        walletBalance: user.walletBalance,
+        walletCoins: user.walletCoins,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};

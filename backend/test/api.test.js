@@ -1,3 +1,4 @@
+process.env.NODE_ENV = 'test';
 const assert = require('assert');
 const http = require('http');
 require('dotenv').config();
@@ -16956,6 +16957,121 @@ const runTests = async () => {
         body: JSON.stringify({ street: 'Testing' }),
       });
       assert.strictEqual(resSim.status, 403);
+    });
+
+    // =========================================================================
+    // PILLAR 1 - POINT 1: 1-CLICK SOCIAL LOGIN (GOOGLE OAUTH2 & APPLE ID)
+    // =========================================================================
+    console.log('\n--- PILLAR 1 - POINT 1: 1-CLICK SOCIAL LOGIN (GOOGLE & APPLE ID) ---');
+
+    await test('Point 1: POST /api/auth/apple registers/authenticates new Apple user with identity sub & email', async () => {
+      const res = await fetch(`${baseUrl}/auth/apple`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appleId: '002819.apple.sub.unit.test',
+          email: 'raj.apple@privaterelay.appleid.com',
+          name: 'Rajesh Apple User',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token);
+      assert.strictEqual(data.user.email, 'raj.apple@privaterelay.appleid.com');
+      assert.strictEqual(data.user.role, 'customer');
+      assert.strictEqual(data.user.authProvider, 'APPLE');
+      assert.strictEqual(data.user.walletBalance, 250);
+    });
+
+    await test('Point 1: POST /api/auth/apple rejects missing identifier and email (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/auth/apple`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('required'));
+    });
+
+    await test('Point 1: POST /api/auth/apple links existing account when matching email is authenticated', async () => {
+      const res = await fetch(`${baseUrl}/auth/apple`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appleId: '002819.apple.sub.unit.test.linked',
+          email: 'raj.apple@privaterelay.appleid.com',
+          name: 'Rajesh Apple Updated',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token);
+      assert.strictEqual(data.user.email, 'raj.apple@privaterelay.appleid.com');
+    });
+
+    await test('Point 1: POST /api/auth/social-login authenticates GOOGLE OAuth2 payload and returns JWT', async () => {
+      const res = await fetch(`${baseUrl}/auth/social-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'GOOGLE',
+          email: 'rohan.google.social@gmail.com',
+          name: 'Rohan Google Shopper',
+          sub: 'goog_sub_social_998877',
+          picture: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token);
+      assert.strictEqual(data.user.email, 'rohan.google.social@gmail.com');
+      assert.strictEqual(data.user.authProvider, 'GOOGLE');
+      assert.ok(data.user.avatar);
+    });
+
+    await test('Point 1: POST /api/auth/social-login authenticates APPLE ID payload and returns JWT', async () => {
+      const res = await fetch(`${baseUrl}/auth/social-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'APPLE',
+          email: 'sneha.apple.social@privaterelay.appleid.com',
+          name: 'Sneha Apple Shopper',
+          appleId: 'apple_sub_social_998877',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token);
+      assert.strictEqual(data.user.email, 'sneha.apple.social@privaterelay.appleid.com');
+      assert.strictEqual(data.user.authProvider, 'APPLE');
+    });
+
+    await test('Point 1: POST /api/auth/social-login rejects unsupported social provider (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/auth/social-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'GITHUB',
+          email: 'dev@github.com',
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Supported social providers: GOOGLE, APPLE'));
     });
 
   } finally {

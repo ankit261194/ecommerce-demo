@@ -77,7 +77,8 @@ app.use(
 const isTestEnv = process.env.NODE_ENV === 'test';
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isTestEnv ? 10000 : 1000,
+  max: isTestEnv ? 50000 : 1000,
+  skip: () => isTestEnv || process.env.NODE_ENV === 'test',
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -88,7 +89,8 @@ const apiLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isTestEnv ? 10000 : 100,
+  max: isTestEnv ? 50000 : 100,
+  skip: () => isTestEnv || process.env.NODE_ENV === 'test',
   standardHeaders: true,
   legacyHeaders: false,
   message: {

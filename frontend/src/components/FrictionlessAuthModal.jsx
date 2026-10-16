@@ -169,6 +169,61 @@ export default function FrictionlessAuthModal({
     }
   };
 
+  // Apple ID Sign-In
+  const handleAppleLogin = async (customPayload = null) => {
+    setLoading(true);
+    setError('');
+    try {
+      const payload = customPayload || {
+        appleId: '001928.apple_id_sub_test',
+        email: 'priya.patel@privaterelay.appleid.com',
+        name: 'Priya Patel (Apple User)',
+        sub: '001928.apple_id_sub_test',
+      };
+
+      const res = await api.post('/auth/apple', payload);
+      if (res.data?.success && res.data.token) {
+        completeLogin(res.data.token, res.data.user);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Apple Sign-In failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Unified Social Sign-In (Google & Apple)
+  const handleSocialLogin = async (provider, customPayload = null) => {
+    setLoading(true);
+    setError('');
+    try {
+      const payload = customPayload || (
+        provider === 'APPLE' ? {
+          provider: 'APPLE',
+          appleId: '001928.apple_id_sub_test',
+          email: 'priya.patel@privaterelay.appleid.com',
+          name: 'Priya Patel',
+          sub: '001928.apple_id_sub_test',
+        } : {
+          provider: 'GOOGLE',
+          email: 'aman.sharma@example.com',
+          name: 'Aman Sharma',
+          picture: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
+          sub: 'google_oauth_sub_2026_test',
+        }
+      );
+
+      const res = await api.post('/auth/social-login', payload);
+      if (res.data?.success && res.data.token) {
+        completeLogin(res.data.token, res.data.user);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || `${provider} Sign-In failed`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Traditional Email/Password Login
   const handlePasswordLogin = async (e) => {
     if (e) e.preventDefault();
@@ -242,21 +297,21 @@ export default function FrictionlessAuthModal({
         </div>
 
         {/* Mode Tabs */}
-        <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-950 rounded-2xl border border-slate-800 mb-5 relative z-10">
+        <div className="grid grid-cols-4 gap-1 p-1 bg-slate-950 rounded-2xl border border-slate-800 mb-5 relative z-10 text-[11px]">
           <button
             type="button"
             onClick={() => {
               setActiveTab('OTP');
               setError('');
             }}
-            className={`py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
+            className={`py-2 px-1 font-bold rounded-xl transition flex items-center justify-center gap-1 ${
               activeTab === 'OTP'
                 ? 'bg-amber-500 text-slate-950 shadow-md font-black'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Smartphone className="w-3.5 h-3.5" />
-            <span>Mobile OTP</span>
+            <Smartphone className="w-3 h-3" />
+            <span>OTP</span>
           </button>
 
           <button
@@ -265,13 +320,28 @@ export default function FrictionlessAuthModal({
               setActiveTab('GOOGLE');
               setError('');
             }}
-            className={`py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
+            className={`py-2 px-1 font-bold rounded-xl transition flex items-center justify-center gap-1 ${
               activeTab === 'GOOGLE'
                 ? 'bg-amber-500 text-slate-950 shadow-md font-black'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>Google 1-Tap</span>
+            <span>Google</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('APPLE');
+              setError('');
+            }}
+            className={`py-2 px-1 font-bold rounded-xl transition flex items-center justify-center gap-1 ${
+              activeTab === 'APPLE'
+                ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <span>Apple ID</span>
           </button>
 
           <button
@@ -280,14 +350,14 @@ export default function FrictionlessAuthModal({
               setActiveTab('PASSWORD');
               setError('');
             }}
-            className={`py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
+            className={`py-2 px-1 font-bold rounded-xl transition flex items-center justify-center gap-1 ${
               activeTab === 'PASSWORD'
                 ? 'bg-amber-500 text-slate-950 shadow-md font-black'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Key className="w-3.5 h-3.5" />
-            <span>Demo Keys</span>
+            <Key className="w-3 h-3" />
+            <span>Demos</span>
           </button>
         </div>
 
@@ -520,7 +590,61 @@ export default function FrictionlessAuthModal({
           </div>
         )}
 
-        {/* TAB 3: Demo Keys & Personas */}
+        {/* TAB 3: Apple ID 1-Click Sign-In */}
+        {activeTab === 'APPLE' && (
+          <div className="space-y-4">
+            <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-black mx-auto flex items-center justify-center shadow-md border border-neutral-700">
+                {/* Official Apple Logo */}
+                <svg className="w-6 h-6 fill-white" viewBox="0 0 170 170">
+                  <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.7-3.07-7.6-7.85-11.7-14.34-6.3-9.98-11.14-21.2-14.52-33.65-3.38-12.45-5.07-24.28-5.07-35.48 0-14.48 3.51-26.4 10.53-35.76 7.02-9.36 15.82-14.15 26.4-14.37 4.91 0 10.57 1.34 16.98 4.02 6.41 2.68 10.56 4.09 12.45 4.22 1.45 0 5.86-1.54 13.24-4.63 7.38-3.09 13.54-4.42 18.48-3.99 13.68 1.15 24.38 6.55 32.1 16.2-12.21 7.38-18.17 17.58-17.88 30.6.29 10.37 4.16 19.06 11.61 26.07 7.45 7.01 16.27 11.03 26.46 12.06-2.12 6.51-4.7 13.06-7.74 19.64zm-37.49-106.6c.07-3.17-.67-6.52-2.22-10.05-1.55-3.53-3.8-6.66-6.75-9.39-3.38-3.13-7.25-5.24-11.61-6.33-4.36-1.09-8.48-1.39-12.36-.9-.08 3.09.68 6.45 2.28 10.08 1.6 3.63 3.88 6.8 6.84 9.51 3.26 2.98 7.06 5.06 11.4 6.24 4.34 1.18 8.48 1.46 12.42.84z" />
+                </svg>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-bold text-slate-100">Sign in with Apple ID</h4>
+                <p className="text-[11px] text-slate-400">TouchID / FaceID & Private Relay Masked Email</p>
+              </div>
+
+              {/* Simulated Apple ID account card */}
+              <div
+                onClick={() => handleAppleLogin()}
+                className="p-3 rounded-xl bg-slate-900 border border-slate-700 hover:border-amber-400 cursor-pointer transition flex items-center justify-between text-left group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-neutral-800 border border-neutral-600 flex items-center justify-center font-bold text-xs text-white">
+                    
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-100 group-hover:text-amber-400 transition">
+                      Priya Patel
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono">priya.patel@privaterelay.appleid.com</div>
+                  </div>
+                </div>
+                <span className="text-[10px] px-2 py-1 rounded bg-neutral-700 text-neutral-200 font-bold">
+                  Continue
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleAppleLogin()}
+                disabled={loading}
+                className="w-full py-2.5 bg-black hover:bg-neutral-900 border border-neutral-700 text-white font-bold text-xs rounded-xl shadow transition flex items-center justify-center gap-2"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : (
+                  <svg className="w-4 h-4 fill-current" viewBox="0 0 170 170">
+                    <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.7-3.07-7.6-7.85-11.7-14.34-6.3-9.98-11.14-21.2-14.52-33.65-3.38-12.45-5.07-24.28-5.07-35.48 0-14.48 3.51-26.4 10.53-35.76 7.02-9.36 15.82-14.15 26.4-14.37 4.91 0 10.57 1.34 16.98 4.02 6.41 2.68 10.56 4.09 12.45 4.22 1.45 0 5.86-1.54 13.24-4.63 7.38-3.09 13.54-4.42 18.48-3.99 13.68 1.15 24.38 6.55 32.1 16.2-12.21 7.38-18.17 17.58-17.88 30.6.29 10.37 4.16 19.06 11.61 26.07 7.45 7.01 16.27 11.03 26.46 12.06-2.12 6.51-4.7 13.06-7.74 19.64zm-37.49-106.6c.07-3.17-.67-6.52-2.22-10.05-1.55-3.53-3.8-6.66-6.75-9.39-3.38-3.13-7.25-5.24-11.61-6.33-4.36-1.09-8.48-1.39-12.36-.9-.08 3.09.68 6.45 2.28 10.08 1.6 3.63 3.88 6.8 6.84 9.51 3.26 2.98 7.06 5.06 11.4 6.24 4.34 1.18 8.48 1.46 12.42.84z" />
+                  </svg>
+                )}
+                <span>Sign in with Apple</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: Demo Keys & Personas */}
         {activeTab === 'PASSWORD' && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-2 text-xs">

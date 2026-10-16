@@ -30,10 +30,15 @@ const userSchema = new mongoose.Schema(
     },
     authProvider: {
       type: String,
-      enum: ['LOCAL', 'GOOGLE', 'PHONE_OTP'],
+      enum: ['LOCAL', 'GOOGLE', 'APPLE', 'PHONE_OTP'],
       default: 'LOCAL',
     },
     googleId: {
+      type: String,
+      default: '',
+      index: true,
+    },
+    appleId: {
       type: String,
       default: '',
       index: true,

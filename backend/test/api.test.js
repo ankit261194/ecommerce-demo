@@ -18076,6 +18076,80 @@ const runTests = async () => {
       assert.ok(data.ar3dModel.deepLinks.qrPayload.includes(`id=${sampleProd._id}`));
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 11: REAL-TIME STOCK SCARCITY & FAST DELIVERY COUNTDOWN
+    // =========================================================================
+    console.log('\n--- PILLAR 1 - POINT 11: REAL-TIME STOCK SCARCITY & FAST DELIVERY COUNTDOWN ---');
+
+    await test('Point 11: GET /api/products/:identifier/delivery-countdown returns cutoff time and ticking countdown', async () => {
+      const sampleProd = await Product.findOne({ isPublished: true });
+      assert.ok(sampleProd, 'Product required for countdown test');
+
+      const res = await fetch(`${baseUrl}/products/${sampleProd._id}/delivery-countdown`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(String(data.productId), String(sampleProd._id));
+      assert.ok(typeof data.remainingSeconds === 'number');
+      assert.ok(data.remainingSeconds > 0);
+      assert.ok(data.formattedCountdown.includes('h '));
+      assert.ok(data.formattedCountdown.includes('m '));
+      assert.ok(data.formattedCountdown.includes('s'));
+      assert.ok(data.cutoffTime.includes('19:00:00'));
+    });
+
+    await test('Point 11: GET /api/products/:identifier/delivery-countdown?pincode=110001 evaluates Metro next-day eligibility', async () => {
+      const sampleProd = await Product.findOne({ isPublished: true });
+      const res = await fetch(`${baseUrl}/products/${sampleProd._id}/delivery-countdown?pincode=110001`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.pincode, '110001');
+      assert.strictEqual(data.isMetro, true);
+      assert.strictEqual(data.courierPartner, 'Bluedart Air Express');
+      assert.ok(data.formattedDeliveryDate);
+    });
+
+    await test('Point 11: GET /api/products/:identifier/delivery-countdown?pincode=795001 evaluates Non-Metro delivery SLA', async () => {
+      const sampleProd = await Product.findOne({ isPublished: true });
+      const res = await fetch(`${baseUrl}/products/${sampleProd._id}/delivery-countdown?pincode=795001`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.pincode, '795001');
+      assert.strictEqual(data.isMetro, false);
+      assert.strictEqual(data.courierPartner, 'Delhivery Surface Plus');
+      assert.ok(data.deliveryDays >= 2);
+    });
+
+    await test('Point 11: GET /api/products/:identifier/delivery-countdown computes stock urgency & live cart holders', async () => {
+      const sampleProd = await Product.findOne({ isPublished: true });
+      const res = await fetch(`${baseUrl}/products/${sampleProd._id}/delivery-countdown`);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.stockUrgency);
+      assert.ok(typeof data.stockUrgency.stock === 'number');
+      assert.ok(typeof data.stockUrgency.isLowStock === 'boolean');
+      assert.ok(typeof data.liveCartHolders === 'number');
+      assert.ok(data.liveCartHolders >= 0);
+    });
+
+    await test('Point 11: GET /api/products/:identifier/delivery-countdown supports lookup via slug', async () => {
+      const sampleProd = await Product.findOne({ isPublished: true, slug: { $exists: true, $ne: '' } });
+      const res = await fetch(`${baseUrl}/products/${sampleProd.slug}/delivery-countdown`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(String(data.productId), String(sampleProd._id));
+    });
+
+    await test('Point 11: GET /api/products/:identifier/delivery-countdown returns 404 for invalid product', async () => {
+      const res = await fetch(`${baseUrl}/products/64b8a1c8f1a2b3c4d5e6f7a8/delivery-countdown`);
+      assert.strictEqual(res.status, 404);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
   } finally {
     if (server) {
       server.close();

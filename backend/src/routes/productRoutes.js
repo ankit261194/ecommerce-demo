@@ -20,6 +20,7 @@ const {
   updateProductVariants,
   getProduct3DModel,
   updateProduct3DModel,
+  getDeliveryCountdown,
 } = require('../controllers/productController');
 const { protect, authorize } = require('../middlewares/auth');
 
@@ -42,6 +43,7 @@ router.get('/:identifier/bundle', getProductBundle);
 router.get('/:identifier/recommendations', getProductRecommendations);
 router.get('/:identifier/3d-model', getProduct3DModel);
 router.put('/:id/3d-model', protect, authorize('superadmin', 'admin', 'vendor'), updateProduct3DModel);
+router.get('/:identifier/delivery-countdown', getDeliveryCountdown);
 router.get('/:slug', getProductBySlug);
 
 module.exports = router;

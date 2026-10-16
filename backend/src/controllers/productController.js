@@ -950,6 +950,104 @@ exports.updateProduct3DModel = async (req, res, next) => {
   }
 };
 
+// @desc    Real-Time Stock Scarcity & Fast Delivery Countdown ("Order within X mins") (Point 11)
+// @route   GET /api/products/:identifier/delivery-countdown
+exports.getDeliveryCountdown = async (req, res, next) => {
+  try {
+    const mongoose = require('mongoose');
+    const isObjectId = mongoose.Types.ObjectId.isValid(req.params.identifier);
+    const query = isObjectId
+      ? { $or: [{ slug: req.params.identifier }, { _id: req.params.identifier }] }
+      : { slug: req.params.identifier };
+
+    const product = await Product.findOne(query);
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    const rawPincode = (req.query.pincode || req.query.pin || '110001').trim();
+    const pincode = /^[1-9][0-9]{5}$/.test(rawPincode) ? rawPincode : '110001';
+
+    // Metro Pincode prefix lookup for express next-day delivery
+    const metroPrefixes = ['11', '12', '20', '40', '56', '70', '50', '60', '38', '41'];
+    const isMetro = metroPrefixes.some(prefix => pincode.startsWith(prefix));
+
+    // Time calculations in IST (UTC + 5:30)
+    const nowUtc = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const nowIst = new Date(nowUtc.getTime() + istOffset);
+
+    // Daily dispatch cutoff: 19:00 IST (7:00 PM)
+    const cutoffHour = 19;
+    const cutoffDate = new Date(nowIst);
+    cutoffDate.setUTCHours(cutoffHour, 0, 0, 0);
+
+    let isBeforeCutoff = true;
+    if (nowIst.getUTCHours() >= cutoffHour) {
+      isBeforeCutoff = false;
+      // Cutoff moves to tomorrow 19:00 IST
+      cutoffDate.setUTCDate(cutoffDate.getUTCDate() + 1);
+    }
+
+    const remainingMs = Math.max(1000, cutoffDate.getTime() - nowIst.getTime());
+    const remainingSeconds = Math.floor(remainingMs / 1000);
+    const hoursLeft = Math.floor(remainingSeconds / 3600);
+    const minutesLeft = Math.floor((remainingSeconds % 3600) / 60);
+    const secondsLeft = remainingSeconds % 60;
+
+    const formattedCountdown = `${String(hoursLeft).padStart(2, '0')}h ${String(minutesLeft).padStart(2, '0')}m ${String(secondsLeft).padStart(2, '0')}s`;
+
+    // Calculate Estimated Delivery Date
+    const deliveryDays = isMetro ? (isBeforeCutoff ? 1 : 2) : (isBeforeCutoff ? 2 : 3);
+    const estDelivery = new Date(nowIst);
+    estDelivery.setUTCDate(estDelivery.getUTCDate() + deliveryDays);
+
+    const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const deliveryDayName = weekdays[estDelivery.getUTCDay()];
+    const formattedDeliveryDate = deliveryDays === 1
+      ? `Tomorrow (${deliveryDayName}) by 2:00 PM`
+      : `${deliveryDayName} by 5:00 PM`;
+
+    // Dynamic Live Cart Holders (Social Scarcity)
+    const stock = product.stock !== undefined ? product.stock : 10;
+    const liveCartHolders = stock > 0 ? Math.min(18, Math.max(3, (stock % 7) + 5)) : 0;
+
+    res.status(200).json({
+      success: true,
+      productId: product._id,
+      title: product.title,
+      pincode,
+      isMetro,
+      isNextDayEligible: isMetro && isBeforeCutoff,
+      cutoffTime: '19:00:00 IST',
+      remainingSeconds,
+      hoursLeft,
+      minutesLeft,
+      secondsLeft,
+      formattedCountdown,
+      deliveryDays,
+      estimatedDeliveryDate: estDelivery.toISOString(),
+      formattedDeliveryDate,
+      courierPartner: isMetro ? 'Bluedart Air Express' : 'Delhivery Surface Plus',
+      liveCartHolders,
+      stockUrgency: {
+        stock,
+        isLowStock: stock <= 10,
+        isCritical: stock <= 5,
+        stockMessage: stock <= 0
+          ? 'Out of Stock'
+          : stock <= 5
+          ? `Hurry! Only ${stock} left in stock!`
+          : stock <= 10
+          ? `Low stock: ${stock} units remaining`
+          : 'In Stock — Ready to ship',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Live Search with Autocomplete suggestions (Products, Categories, Brands & Popular Searches) (Point #9 & Point 7)
 // @route   GET /api/products/search/suggestions
 exports.getSearchSuggestions = async (req, res, next) => {

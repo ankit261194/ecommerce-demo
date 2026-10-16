@@ -25,6 +25,7 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import StockUrgencyBadge from './StockUrgencyBadge';
+import FastDeliveryCountdown from './FastDeliveryCountdown';
 import RecentPurchaseCounter from './RecentPurchaseCounter';
 import ProductReviewsSection from './ProductReviewsSection';
 import ProductQnASection from './ProductQnASection';
@@ -449,9 +450,10 @@ export const ProductDetailModal = ({
                 )}
               </div>
 
-              {/* Real-time Stock Urgency Status (Point #12) */}
-              <div>
+              {/* Real-time Stock Urgency Status & Fast Delivery Countdown (Point 11) */}
+              <div className="space-y-3">
                 <StockUrgencyBadge stock={currentStock} variant="detailed" />
+                <FastDeliveryCountdown productId={product._id || product.id} initialStock={currentStock} />
               </div>
 
               {/* Multi-Attribute Product Variants Matrix with Swatches & Dynamic SKU (Point #2 & Point #20) */}

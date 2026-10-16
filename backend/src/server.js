@@ -39,6 +39,7 @@ const manifestRoutes = require('./routes/manifestRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const posRoutes = require('./routes/posRoutes');
 const scannerRoutes = require('./routes/scannerRoutes');
+const voiceAssistantRoutes = require('./routes/voiceAssistantRoutes');
 
 const app = express();
 
@@ -139,6 +140,7 @@ app.use('/api/manifests', manifestRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/pos', posRoutes);
 app.use('/api/scanner', scannerRoutes);
+app.use('/api/ai', voiceAssistantRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

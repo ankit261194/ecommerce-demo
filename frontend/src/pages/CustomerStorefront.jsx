@@ -60,6 +60,7 @@ import VendorPublicStoreModal from '../components/VendorPublicStoreModal';
 import WhatsAppOrderBotModal from '../components/WhatsAppOrderBotModal';
 import RtoRiskOtpModal from '../components/RtoRiskOtpModal';
 import FaqSection from '../components/FaqSection';
+import VoiceShoppingAssistantModal from '../components/VoiceShoppingAssistantModal';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useLocalization } from '../context/LocalizationContext';
@@ -98,6 +99,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [isWhatsAppBotOpen, setIsWhatsAppBotOpen] = useState(false); // Point #71: WhatsApp Order Bot
   const [whatsAppBotOrder, setWhatsAppBotOrder] = useState(null);
   const [rtoVerificationOrder, setRtoVerificationOrder] = useState(null); // Point #74: RTO Guard High-Risk Verification
+  const [isVoiceAssistantOpen, setIsVoiceAssistantOpen] = useState(false); // Point #20: AI Voice Shopping Assistant
 
   // Point #31: In-App Wallet & Reward Coins State
   const [isWalletOpen, setIsWalletOpen] = useState(false);
@@ -376,8 +378,13 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       setIsOrderTrackerOpen(true);
     };
 
+    const handleOpenVoiceAssistant = () => {
+      setIsVoiceAssistantOpen(true);
+    };
+
     window.addEventListener('auramarket_open_wishlist', handleOpenWishlist);
     window.addEventListener('auramarket_open_order_tracker', handleOpenOrderTracker);
+    window.addEventListener('auramarket_open_voice_assistant', handleOpenVoiceAssistant);
     window.addEventListener('auramarket_select_category', handleSelectCategory);
     window.addEventListener('auramarket_select_brand', handleSelectBrand);
     window.addEventListener('auramarket_open_product_pdp', handleOpenProductPDP);
@@ -385,6 +392,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     return () => {
       window.removeEventListener('auramarket_open_wishlist', handleOpenWishlist);
       window.removeEventListener('auramarket_open_order_tracker', handleOpenOrderTracker);
+      window.removeEventListener('auramarket_open_voice_assistant', handleOpenVoiceAssistant);
       window.removeEventListener('auramarket_select_category', handleSelectCategory);
       window.removeEventListener('auramarket_select_brand', handleSelectBrand);
       window.removeEventListener('auramarket_open_product_pdp', handleOpenProductPDP);
@@ -2877,6 +2885,39 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           }}
         />
       )}
+
+      {/* Point #20: AI Voice Shopping Assistant Modal */}
+      <VoiceShoppingAssistantModal
+        isOpen={isVoiceAssistantOpen}
+        onClose={() => setIsVoiceAssistantOpen(false)}
+        onSelectProduct={(prod) => {
+          setSelectedProduct(prod);
+          if (prod.hasVariants && prod.variants?.length > 0) {
+            setSelectedVariant(prod.variants[0]);
+          }
+        }}
+        onOpenCart={() => setIsCartOpen(true)}
+        onOpenOrderTracker={(orderNumber) => {
+          setTrackedOrderId(orderNumber);
+          setIsOrderTrackerOpen(true);
+        }}
+      />
+
+      {/* Point #20: Floating AI Voice Assistant Launch Pill */}
+      <button
+        type="button"
+        onClick={() => setIsVoiceAssistantOpen(true)}
+        className="fixed bottom-6 left-6 z-40 px-3.5 py-2.5 rounded-full bg-slate-900/90 hover:bg-slate-950 text-white font-black text-xs shadow-2xl flex items-center gap-2 border border-amber-400/50 backdrop-blur-md group hover:scale-105 active:scale-95 transition-all"
+        title="AI Voice Shopping Assistant (Hindi / English)"
+      >
+        <div className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center group-hover:rotate-12 transition-transform shadow-md">
+          <Sparkles className="w-3.5 h-3.5" />
+        </div>
+        <span className="hidden sm:inline font-bold text-amber-300">Voice Assistant</span>
+        <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-black uppercase border border-emerald-500/30">
+          AI
+        </span>
+      </button>
     </div>
   );
 };

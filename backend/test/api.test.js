@@ -10092,6 +10092,119 @@ const runTests = async () => {
       assert.strictEqual(res.status, 401);
     });
 
+    // =========================================================================
+    // POINT 20: AI VOICE SHOPPING ASSISTANT TESTS
+    // =========================================================================
+    await test('Point 20: GET /api/ai/voice-prompts returns curated bilingual shopping hints', async () => {
+      const res = await fetch(`${baseUrl}/ai/voice-prompts`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.prompts));
+      assert.ok(data.prompts.length >= 4);
+      assert.ok(data.languages.includes('hi'));
+      assert.ok(data.languages.includes('en'));
+    });
+
+    await test('Point 20: POST /api/ai/voice-assistant rejects empty query with 400', async () => {
+      const res = await fetch(`${baseUrl}/ai/voice-assistant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: '   ' }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 20: POST /api/ai/voice-assistant handles Hindi product search query', async () => {
+      const res = await fetch(`${baseUrl}/ai/voice-assistant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: 'Aura Pro headphones dikhao',
+          language: 'hi',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.intent, 'SEARCH_PRODUCTS');
+      assert.strictEqual(data.language, 'hi');
+      assert.strictEqual(data.action, 'DISPLAY_SEARCH_RESULTS');
+      assert.ok(data.replyText && data.replyText.length > 5);
+      assert.ok(Array.isArray(data.payload.products));
+    });
+
+    await test('Point 20: POST /api/ai/voice-assistant extracts price constraints (under 5000)', async () => {
+      const res = await fetch(`${baseUrl}/ai/voice-assistant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: 'Smartwatches under 5000',
+          language: 'en',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.intent, 'SEARCH_PRODUCTS');
+      assert.strictEqual(data.payload.maxPrice, 5000);
+      assert.ok(Array.isArray(data.payload.products));
+    });
+
+    await test('Point 20: POST /api/ai/voice-assistant processes order tracking intent', async () => {
+      const res = await fetch(`${baseUrl}/ai/voice-assistant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: 'Mera order kahan hai track karo',
+          language: 'hi',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.intent, 'TRACK_ORDER');
+      assert.strictEqual(data.action, 'SHOW_ORDER_TRACKER');
+      assert.ok(data.payload.orderNumber);
+      assert.ok(data.payload.status);
+      assert.ok(data.replyText.includes('order'));
+    });
+
+    await test('Point 20: POST /api/ai/voice-assistant processes discount and coupon offers intent', async () => {
+      const res = await fetch(`${baseUrl}/ai/voice-assistant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: 'Are there any discount offers or coupons today?',
+          language: 'en',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.intent, 'GET_OFFERS');
+      assert.strictEqual(data.action, 'SHOW_COUPONS');
+      assert.ok(data.replyText);
+    });
+
+    await test('Point 20: POST /api/ai/voice-assistant processes open cart intent', async () => {
+      const res = await fetch(`${baseUrl}/ai/voice-assistant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: 'Open my shopping cart and checkout',
+          language: 'en',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.intent, 'CHECK_CART');
+      assert.strictEqual(data.action, 'OPEN_CART_DRAWER');
+    });
+
   } finally {
     if (server) {
       server.close();

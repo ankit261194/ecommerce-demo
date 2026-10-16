@@ -237,6 +237,17 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
                 <Wallet className="w-4 h-4" />
               </button>
 
+              {/* Point #20: Mobile AI Voice Assistant */}
+              <button
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('auramarket_open_voice_assistant'));
+                }}
+                className="relative p-2 rounded-lg bg-amber-400/20 text-amber-300 hover:text-white transition-colors border border-amber-400/30"
+                title="AI Voice Assistant (Hindi & English)"
+              >
+                <Sparkles className="w-4 h-4 text-amber-400" />
+              </button>
+
               {/* Point #78: Mobile Currency & Language Switcher */}
               <LocalizationSelector variant="compact" />
 
@@ -275,6 +286,18 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
 
           {/* Desktop Right Header Navigation: Location, Wishlist, Account & Cart */}
           <div className={`${isMobileMode ? 'hidden' : 'hidden md:flex'} items-center gap-3.5 flex-shrink-0`}>
+            {/* Point #20: Desktop AI Voice Assistant */}
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('auramarket_open_voice_assistant'));
+              }}
+              className="relative p-2 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 border border-amber-400/30 transition-all flex items-center gap-1.5"
+              title="AI Voice Shopping Assistant (Hindi & English)"
+            >
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-black hidden lg:inline">Voice AI</span>
+            </button>
+
             {/* Live Order Tracker */}
             <button
               onClick={() => {

@@ -67,6 +67,7 @@ import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import TaxInvoiceModal from '../components/TaxInvoiceModal';
 import SmartSplitPackingSlipModal from '../components/SmartSplitPackingSlipModal';
+import BulkThermalLabelPrinterModal from '../components/BulkThermalLabelPrinterModal';
 import CategoryTreeManager from '../components/CategoryTreeManager';
 import BrandDirectoryManager from '../components/BrandDirectoryManager';
 import BannerManager from '../components/BannerManager';
@@ -553,6 +554,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
   const [showBulkActionDropdown, setShowBulkActionDropdown] = useState(false);
+  const [isAdminBulkLabelsOpen, setIsAdminBulkLabelsOpen] = useState(false); // Point 9: Bulk 4x6 Thermal Labels
 
   // Point 33: Multi-Vendor Commission Split Inspector State
   const [selectedSplitOrder, setSelectedSplitOrder] = useState(null);
@@ -2078,7 +2080,17 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
                     className="px-3.5 py-2 rounded-xl bg-white text-slate-900 hover:bg-slate-100 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm border border-slate-200 disabled:opacity-50"
                   >
                     <Download className="w-3.5 h-3.5 text-slate-700" />
-                    <span>Export Selected ({selectedOrderIds.length})</span>
+                    <span>Export CSV ({selectedOrderIds.length})</span>
+                  </button>
+
+                  {/* Point 9: Bulk 4x6 Thermal Shipping Labels */}
+                  <button
+                    onClick={() => setIsAdminBulkLabelsOpen(true)}
+                    className="px-3.5 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Thermal Labels ({selectedOrderIds.length})</span>
+                    <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">#9</span>
                   </button>
                 </div>
               </div>
@@ -3683,6 +3695,16 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           isOpen={!!selectedThermalOrderId}
           onClose={() => setSelectedThermalOrderId(null)}
           orderId={selectedThermalOrderId}
+          role="admin"
+        />
+      )}
+
+      {/* Point 9: Bulk 4x6 Thermal Shipping Label & Barcode Sticker Generator Modal */}
+      {isAdminBulkLabelsOpen && (
+        <BulkThermalLabelPrinterModal
+          isOpen={isAdminBulkLabelsOpen}
+          onClose={() => setIsAdminBulkLabelsOpen(false)}
+          selectedOrderIds={selectedOrderIds}
           role="admin"
         />
       )}

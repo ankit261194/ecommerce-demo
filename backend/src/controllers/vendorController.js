@@ -705,6 +705,704 @@ exports.getShippingLabelData = async (req, res, next) => {
   }
 };
 
+// =========================================================================
+// Point 9: Bulk 4x6 Thermal Shipping Label & Barcode Sticker Generator
+// =========================================================================
+
+function generateBulkThermalHtml({ labels, paperSize = '4x6', manifestSummary }) {
+  const isA4Stickers = paperSize === 'a4_stickers';
+  const pageTitle = `AuraMarket Thermal Shipping Labels - ${labels.length} Orders (${manifestSummary.totalCodOrders} COD, ${manifestSummary.totalPrepaidOrders} Prepaid)`;
+
+  const labelsHtml = labels
+    .map((d, index) => {
+      return `
+    <div class="label-wrapper ${isA4Stickers ? 'a4-sticker-card' : 'thermal-roll-card'}">
+      <div class="thermal-box">
+        <!-- Carrier & Header -->
+        <div class="label-header">
+          <div class="carrier-brand">
+            <span class="carrier-logo">AuraMarket</span>
+            <span class="carrier-express">EXPRESS</span>
+          </div>
+          <div class="carrier-badge">${d.courierPartner}</div>
+          <div class="routing-badge">${d.routingPincode}</div>
+        </div>
+
+        <!-- Barcode Block -->
+        <div class="barcode-container">
+          <div class="barcode-lines"></div>
+          <div class="barcode-text">${d.subOrderNumber} &bull; ${d.awbCode}</div>
+        </div>
+
+        <!-- Routing & Package Meta -->
+        <div class="meta-row">
+          <div><strong>ROUTING:</strong> ${d.routingCode}</div>
+          <div><strong>WT:</strong> ${d.totalWeightKg} KG &bull; ${d.packageCount}</div>
+        </div>
+
+        <!-- Payment Banner -->
+        ${
+          d.isCOD
+            ? `<div class="payment-banner cod-banner">
+                 &#9888; CASH ON DELIVERY: &#8377;${Number(d.amountToCollect).toLocaleString('en-IN')}
+                 <span class="cod-sub">COLLECT EXACT CASH BEFORE OPENING</span>
+               </div>`
+            : `<div class="payment-banner prepaid-banner">
+                 &#10003; PREPAID ORDER &mdash; DO NOT COLLECT CASH
+               </div>`
+        }
+
+        <!-- Addresses Grid -->
+        <div class="address-grid">
+          <div class="address-col ship-to">
+            <div class="addr-label">DELIVER TO:</div>
+            <div class="customer-name">${d.recipient.name}</div>
+            <div class="customer-addr">${d.recipient.address}</div>
+            <div class="customer-phone"><strong>Phone:</strong> ${d.recipient.phone}</div>
+          </div>
+          <div class="address-col return-to">
+            <div class="addr-label">RETURN TO (SELLER):</div>
+            <div class="seller-name">${d.seller.storeName}</div>
+            <div class="seller-gstin">GSTIN: ${d.seller.gstin}</div>
+            <div class="seller-addr">${d.seller.address}</div>
+            <div class="seller-contact">Ph: ${d.seller.phone}</div>
+          </div>
+        </div>
+
+        <!-- Order Items Manifest Table -->
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th style="width: 25%;">SKU</th>
+              <th>Product Description</th>
+              <th style="width: 15%; text-align: center;">HSN</th>
+              <th style="width: 10%; text-align: center;">Qty</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${d.items
+              .slice(0, 4)
+              .map(
+                (item) => `
+              <tr>
+                <td class="font-mono">${item.sku}</td>
+                <td>${item.title.length > 40 ? item.title.slice(0, 37) + '...' : item.title}</td>
+                <td style="text-align: center;">${item.hsnCode || '85183000'}</td>
+                <td style="text-align: center; font-weight: bold;">${item.quantity}</td>
+              </tr>
+            `
+              )
+              .join('')}
+            ${d.items.length > 4 ? `<tr><td colspan="4" style="text-align: center; font-style: italic;">+ ${d.items.length - 4} more items in package</td></tr>` : ''}
+          </tbody>
+        </table>
+
+        <!-- Footer Verification & OTP -->
+        <div class="label-footer">
+          <div class="qr-mock">
+            <div class="qr-squares"></div>
+            <span class="qr-text">SCAN AWB</span>
+          </div>
+          <div class="footer-center">
+            <div class="inv-details">Inv: <strong>${d.invoiceNumber}</strong> &bull; ${new Date(d.invoiceDate).toLocaleDateString('en-IN')}</div>
+            <div class="otp-pill">&#128274; 4-Digit Secure OTP Required for Handover</div>
+            <div class="tracking-url">Track: auramarket.com/track/${d.orderNumber}</div>
+          </div>
+          <div class="page-num">
+            <span>#${index + 1}</span>
+            <small>OF ${labels.length}</small>
+          </div>
+        </div>
+      </div>
+    </div>
+    `;
+    })
+    .join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${pageTitle}</title>
+  <style>
+    ${
+      isA4Stickers
+        ? `
+        @page { size: A4; margin: 10mm; }
+        .labels-container {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 12mm 8mm;
+        }
+        .a4-sticker-card {
+          page-break-inside: avoid;
+          break-inside: avoid;
+          border: 1px dashed #94a3b8;
+          padding: 3mm;
+          height: 128mm;
+          box-sizing: border-box;
+        }
+        `
+        : `
+        @page {
+          size: 100mm 150mm;
+          margin: 0;
+        }
+        .thermal-roll-card {
+          width: 100mm;
+          height: 148mm;
+          margin: 0 auto;
+          page-break-after: always;
+          break-after: page;
+          box-sizing: border-box;
+          padding: 3mm;
+        }
+        `
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #000;
+      background: #f1f5f9;
+      font-size: 10px;
+      line-height: 1.25;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Floating UI Toolbar for Screen Preview */
+    .print-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    }
+    .toolbar-title {
+      font-size: 15px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge-count {
+      background: #f59e0b;
+      color: #000;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 9999px;
+    }
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .btn-print {
+      background: #22c55e;
+      color: #052e16;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-weight: 800;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 2px 6px rgba(34, 197, 94, 0.4);
+      transition: background 0.15s ease;
+    }
+    .btn-print:hover {
+      background: #16a34a;
+      color: #fff;
+    }
+
+    .thermal-box {
+      border: 2px solid #000;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 6px;
+      background: #fff;
+    }
+
+    .label-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #000;
+      padding-bottom: 4px;
+    }
+    .carrier-brand {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+    .carrier-logo {
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+    }
+    .carrier-express {
+      font-size: 9px;
+      font-weight: 900;
+      background: #000;
+      color: #fff;
+      padding: 1px 4px;
+      border-radius: 2px;
+    }
+    .carrier-badge {
+      font-size: 11px;
+      font-weight: 800;
+      border: 1.5px solid #000;
+      padding: 1px 6px;
+      border-radius: 3px;
+      text-transform: uppercase;
+    }
+    .routing-badge {
+      font-size: 13px;
+      font-weight: 900;
+      background: #000;
+      color: #fff;
+      padding: 2px 6px;
+      border-radius: 3px;
+      letter-spacing: 0.5px;
+    }
+
+    .barcode-container {
+      text-align: center;
+      margin: 4px 0 2px 0;
+    }
+    .barcode-lines {
+      height: 42px;
+      background: repeating-linear-gradient(90deg, #000, #000 2px, #fff 2px, #fff 4px, #000 4px, #000 7px, #fff 7px, #fff 8px, #000 8px, #000 11px, #fff 11px, #fff 13px);
+      width: 90%;
+      margin: 0 auto;
+    }
+    .barcode-text {
+      font-family: "Courier New", Courier, monospace;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      margin-top: 2px;
+    }
+
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      border-top: 1px solid #000;
+      border-bottom: 1px solid #000;
+      padding: 3px 2px;
+      margin: 2px 0;
+    }
+
+    .payment-banner {
+      text-align: center;
+      font-weight: 900;
+      padding: 4px;
+      font-size: 12px;
+      margin: 2px 0;
+      border-radius: 2px;
+    }
+    .cod-banner {
+      background: #000;
+      color: #fff;
+    }
+    .cod-sub {
+      display: block;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin-top: 1px;
+      opacity: 0.9;
+    }
+    .prepaid-banner {
+      border: 1.5px dashed #000;
+      color: #000;
+      font-size: 11px;
+    }
+
+    .address-grid {
+      display: grid;
+      grid-template-columns: 1.25fr 1fr;
+      gap: 6px;
+      border: 1px solid #000;
+      padding: 4px;
+      margin: 2px 0;
+    }
+    .address-col {
+      display: flex;
+      flex-direction: column;
+    }
+    .addr-label {
+      font-size: 8px;
+      font-weight: 900;
+      color: #333;
+      margin-bottom: 1px;
+    }
+    .customer-name {
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1.2;
+    }
+    .customer-addr {
+      font-size: 9.5px;
+      line-height: 1.25;
+      margin: 1px 0;
+    }
+    .customer-phone {
+      font-size: 9.5px;
+      margin-top: auto;
+    }
+    .seller-name {
+      font-size: 10.5px;
+      font-weight: 800;
+    }
+    .seller-gstin {
+      font-size: 8.5px;
+      font-weight: 700;
+    }
+    .seller-addr {
+      font-size: 8.5px;
+      color: #222;
+      line-height: 1.2;
+    }
+    .seller-contact {
+      font-size: 8.5px;
+      margin-top: auto;
+    }
+
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 2px 0;
+      font-size: 8.5px;
+    }
+    .items-table th, .items-table td {
+      border: 1px solid #000;
+      padding: 2.5px 3px;
+      text-align: left;
+    }
+    .items-table th {
+      background: #000;
+      color: #fff;
+      font-size: 8px;
+      text-transform: uppercase;
+    }
+    .font-mono { font-family: monospace; font-size: 8px; }
+
+    .label-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid #000;
+      padding-top: 3px;
+      margin-top: 2px;
+    }
+    .qr-mock {
+      border: 1px solid #000;
+      padding: 2px;
+      text-align: center;
+      width: 38px;
+      height: 38px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .qr-squares {
+      width: 24px;
+      height: 24px;
+      background: 
+        linear-gradient(45deg, #000 25%, transparent 25%), 
+        linear-gradient(-45deg, #000 25%, transparent 25%), 
+        linear-gradient(45deg, transparent 75%, #000 75%), 
+        linear-gradient(-45deg, transparent 75%, #000 75%);
+      background-size: 6px 6px;
+    }
+    .qr-text { font-size: 6px; font-weight: bold; margin-top: 1px; }
+
+    .footer-center {
+      text-align: center;
+      flex: 1;
+      padding: 0 4px;
+    }
+    .inv-details { font-size: 8.5px; }
+    .otp-pill {
+      display: inline-block;
+      font-size: 8px;
+      font-weight: 800;
+      background: #f1f5f9;
+      border: 1px solid #000;
+      padding: 1px 4px;
+      border-radius: 2px;
+      margin: 1px 0;
+    }
+    .tracking-url { font-size: 7.5px; color: #444; }
+
+    .page-num {
+      text-align: right;
+      font-weight: 900;
+      font-size: 13px;
+      line-height: 1;
+    }
+    .page-num small { display: block; font-size: 7px; color: #666; }
+
+    @media print {
+      body { background: #fff; margin: 0; padding: 0; }
+      .no-print { display: none !important; }
+      .thermal-roll-card {
+        margin: 0;
+        border: none;
+      }
+      .a4-sticker-card {
+        border: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-toolbar no-print">
+    <div class="toolbar-title">
+      <span>&#128229; AuraMarket Enterprise 4x6 Thermal Shipping Labels</span>
+      <span class="badge-count">${labels.length} Orders Loaded</span>
+    </div>
+    <div class="toolbar-actions">
+      <span style="font-size: 12px; color: #94a3b8;">
+        Paper: <strong>${isA4Stickers ? 'A4 Sheet (4 Labels/page)' : '4x6" Thermal Roll (100x150mm)'}</strong>
+      </span>
+      <button onclick="window.print()" class="btn-print">
+        &#128424; Print All Labels (Ctrl+P)
+      </button>
+    </div>
+  </div>
+
+  <div class="labels-container" style="padding: 12px 0;">
+    ${labelsHtml}
+  </div>
+</body>
+</html>`;
+}
+
+// @desc    Generate Multi-Order 4x6 Thermal Shipping Labels & Barcodes (Point 9)
+// @route   POST /api/vendor/orders/bulk-shipping-labels
+// @route   GET /api/vendor/orders/bulk-shipping-labels
+// @route   POST /api/admin/orders/bulk-shipping-labels
+exports.generateBulkShippingLabels = async (req, res, next) => {
+  try {
+    let vendor;
+    const isAdmin = req.user && (req.user.role === 'superadmin' || req.user.role === 'admin');
+
+    if (isAdmin) {
+      const targetVendorId = req.body?.vendorId || req.query?.vendorId;
+      if (targetVendorId) {
+        vendor = await VendorProfile.findById(targetVendorId);
+      } else {
+        vendor = (await VendorProfile.findOne({ status: 'approved' })) || (await VendorProfile.findOne({}));
+      }
+    } else {
+      vendor = await VendorProfile.findOne({ user: req.user._id });
+    }
+
+    if (!vendor && !isAdmin) {
+      return res.status(404).json({ success: false, message: 'Vendor profile not found' });
+    }
+
+    let subOrderIds = req.body?.subOrderIds || req.query?.subOrderIds;
+    if (typeof subOrderIds === 'string') {
+      subOrderIds = subOrderIds
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+    }
+
+    if (!Array.isArray(subOrderIds) || subOrderIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide an array of subOrderIds to generate bulk shipping labels.',
+      });
+    }
+
+    if (subOrderIds.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Maximum 100 shipping labels can be generated in a single batch.',
+      });
+    }
+
+    const query = { _id: { $in: subOrderIds } };
+    if (!isAdmin && vendor) {
+      query.vendor = vendor._id;
+    }
+
+    const subOrders = await SubOrder.find(query)
+      .populate('customer', 'name email phone')
+      .populate('deliveryPartner', 'name phone')
+      .populate('vendor', 'storeName storeSlug phone supportEmail address gstin')
+      .populate('parentOrder', 'orderNumber paymentMethod paymentStatus totalAmount createdAt');
+
+    if (!subOrders || subOrders.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No matching sub-orders found for shipping label generation.',
+      });
+    }
+
+    const paperSize = req.body?.paperSize || req.query?.paperSize || '4x6';
+    const maskPhone = req.body?.maskPhone === true || req.query?.maskPhone === 'true';
+
+    let totalCodAmount = 0;
+    let totalCodOrders = 0;
+    let totalPrepaidOrders = 0;
+    let totalWeightKg = 0;
+
+    const labels = subOrders.map((so) => {
+      const v = so.vendor || vendor || {
+        storeName: 'Apex Tech Hub',
+        phone: '+91 98765 43210',
+        gstin: '07AAAAA0000A1Z5',
+        address: 'Plot 42, Tech Hub Logistics Center, Sector 62, Noida, UP, 201301',
+      };
+      const parent = so.parentOrder || {};
+      const orderRef = parent.orderNumber || `ORD-${so._id.toString().slice(-8).toUpperCase()}`;
+      const subOrderRef = `SUB-${so._id.toString().slice(-6).toUpperCase()}`;
+      const routingPincode = so.shippingAddress?.pincode || '110001';
+      const routingCode = `EXP-${routingPincode.slice(0, 3)}-${so._id.toString().slice(-4).toUpperCase()}`;
+      const awbCode = so.trackingNumber || `AWB-${so._id.toString().slice(-8).toUpperCase()}`;
+      const barcodeValue = `*${subOrderRef}*`;
+      const invoiceNumber = `INV-${new Date().getFullYear()}-${so._id.toString().slice(-6).toUpperCase()}`;
+      const weight = parseFloat((so.items.reduce((acc, i) => acc + (i.quantity * 0.45), 0)).toFixed(2));
+      totalWeightKg += weight;
+
+      const isCOD = (parent.paymentMethod || '').toUpperCase() === 'COD';
+      const amountToCollect = isCOD ? so.subTotal : 0;
+      if (isCOD) {
+        totalCodOrders++;
+        totalCodAmount += amountToCollect;
+      } else {
+        totalPrepaidOrders++;
+      }
+
+      let custPhone = so.shippingAddress?.phone || so.customer?.phone || '9876543210';
+      if (maskPhone && custPhone.length >= 10) {
+        custPhone = `${custPhone.slice(0, 2)}XXXXXX${custPhone.slice(-2)}`;
+      }
+
+      return {
+        labelId: `LBL-${so._id.toString().slice(-8).toUpperCase()}`,
+        subOrderId: so._id,
+        subOrderNumber: subOrderRef,
+        parentOrderId: parent._id || so.parentOrder,
+        orderNumber: orderRef,
+        invoiceNumber,
+        invoiceDate: so.createdAt || new Date(),
+        routingCode,
+        routingPincode,
+        awbCode,
+        barcodeValue,
+        courierPartner: so.carrier || so.deliveryPartner?.name || 'AuraMarket Express',
+        paymentMethod: (parent.paymentMethod || 'PREPAID').toUpperCase(),
+        paymentStatus: parent.paymentStatus || 'PAID',
+        isCOD,
+        amountToCollect,
+        totalWeightKg: weight,
+        dimensions: '22 x 16 x 8 cm',
+        packageCount: '1/1',
+        seller: {
+          storeName: v.storeName || 'Apex Tech Hub',
+          storeSlug: v.storeSlug || 'apex-tech',
+          email: v.supportEmail || 'seller@auramarket.com',
+          phone: v.phone || '+91 98765 43210',
+          address: v.address || 'Plot 42, Tech Hub Logistics Center, Sector 62, Noida, UP, 201301',
+          gstin: v.gstin || '07AAAAA0000A1Z5',
+        },
+        recipient: {
+          name: so.shippingAddress?.recipientName || so.customer?.name || 'Valued Customer',
+          phone: custPhone,
+          address: `${so.shippingAddress?.street || 'Flat 402, Green Valley Apartments'}, ${so.shippingAddress?.city || 'New Delhi'}, ${so.shippingAddress?.state || 'Delhi'} - ${routingPincode}`,
+          city: so.shippingAddress?.city || 'New Delhi',
+          state: so.shippingAddress?.state || 'Delhi',
+          pincode: routingPincode,
+        },
+        items: (so.items || []).map((it) => ({
+          title: it.title,
+          sku: it.variantSku || 'SKU-STD',
+          hsnCode: it.hsnCode || '85183000',
+          quantity: it.quantity,
+          price: it.price,
+          totalPrice: it.totalPrice,
+        })),
+        deliveryOtpNotice: 'Customer 4-digit secret OTP required at doorstep verification.',
+      };
+    });
+
+    // Record audit event
+    await recordAuditLog({
+      action: 'BULK_SHIPPING_LABELS_PRINTED',
+      module: 'ORDERS',
+      req,
+      description: `Generated ${labels.length} bulk 4x6 thermal shipping labels for vendor '${vendor?.storeName || 'Multi-Vendor'}'`,
+      targetType: 'SubOrder',
+      details: {
+        orderCount: labels.length,
+        paperSize,
+        totalCodAmount,
+        totalCodOrders,
+        totalPrepaidOrders,
+        subOrderIds,
+      },
+      severity: 'LOW',
+    });
+
+    const isHtmlRequested =
+      req.query?.format === 'html' ||
+      req.body?.format === 'html' ||
+      req.headers?.accept?.includes('text/html');
+
+    if (isHtmlRequested) {
+      const html = generateBulkThermalHtml({
+        labels,
+        paperSize,
+        manifestSummary: {
+          totalOrders: labels.length,
+          totalCodOrders,
+          totalCodAmount,
+          totalPrepaidOrders,
+          totalWeightKg: parseFloat(totalWeightKg.toFixed(2)),
+        },
+      });
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(200).send(html);
+    }
+
+    res.status(200).json({
+      success: true,
+      paperSize,
+      count: labels.length,
+      manifestSummary: {
+        totalOrders: labels.length,
+        totalCodOrders,
+        totalCodAmount,
+        totalPrepaidOrders,
+        totalWeightKg: parseFloat(totalWeightKg.toFixed(2)),
+      },
+      labels,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Request Wallet Payout (Point #62: Bank NEFT / IMPS / Direct UPI)
 // @route   POST /api/vendor/payout
 exports.requestPayout = async (req, res, next) => {

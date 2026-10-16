@@ -12406,6 +12406,336 @@ const runTests = async () => {
       assert.strictEqual(resExp.status, 403);
     });
 
+    // =========================================================================
+    // POINT 9: BULK 4x6 THERMAL SHIPPING LABEL & BARCODE STICKER GENERATOR TESTS
+    // =========================================================================
+
+    let point9VendorToken = null;
+    let point9SubOrderId1 = null;
+    let point9SubOrderId2 = null;
+
+    await test('Point 9: Setup: Ensure test sub-orders and vendor credentials exist', async () => {
+      const res = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'apex@auramarket.com', password: 'vendor123456' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token);
+      point9VendorToken = data.token;
+
+      const apexUser = await User.findOne({ email: 'apex@auramarket.com' });
+      const customer = (await User.findOne({ role: 'customer' })) || apexUser;
+      let apexVendor = await VendorProfile.findOne({ user: apexUser._id });
+      if (!apexVendor) {
+        apexVendor = await VendorProfile.create({
+          user: apexUser._id,
+          storeName: 'Apex Tech Hub',
+          status: 'approved',
+          address: 'Plot 42, Tech Hub Logistics Center, Sector 62, Noida, UP, 201301',
+          gstin: '07AAAAA0000A1Z5',
+          phone: '+91 98765 43210',
+        });
+      }
+
+      // Create test parent order 1 (COD)
+      const parentOrder1 = await Order.create({
+        orderNumber: `ORD-P9-COD-${Date.now().toString().slice(-4)}`,
+        customer: customer._id,
+        items: [
+          {
+            title: 'Aura Thermal Test Item 1',
+            quantity: 1,
+            price: 1200,
+            totalPrice: 1200,
+            product: new mongoose.Types.ObjectId(),
+            vendor: apexVendor._id,
+          },
+        ],
+        totalAmount: 1200,
+        paymentMethod: 'COD',
+        paymentStatus: 'PENDING',
+        status: 'PLACED',
+        shippingAddress: {
+          recipientName: 'Rahul Verma',
+          phone: '9876543210',
+          street: 'Block B, Sector 18',
+          city: 'Noida',
+          state: 'Uttar Pradesh',
+          pincode: '201301',
+        },
+      });
+
+      const subOrder1 = await SubOrder.create({
+        parentOrder: parentOrder1._id,
+        vendor: apexVendor._id,
+        customer: customer._id,
+        items: [
+          {
+            title: 'Aura Thermal Test Item 1',
+            quantity: 1,
+            price: 1200,
+            totalPrice: 1200,
+            product: new mongoose.Types.ObjectId(),
+            variantSku: 'SKU-THM-01',
+            hsnCode: '85183000',
+          },
+        ],
+        subTotal: 1200,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 120,
+        vendorEarning: 1080,
+        status: 'ready_for_pickup',
+        trackingNumber: 'AWB-DEL-9901',
+        carrier: 'Delhivery Surface',
+        shippingAddress: {
+          recipientName: 'Rahul Verma',
+          phone: '9876543210',
+          street: 'Block B, Sector 18',
+          city: 'Noida',
+          state: 'Uttar Pradesh',
+          pincode: '201301',
+        },
+      });
+      point9SubOrderId1 = subOrder1._id.toString();
+
+      // Create test parent order 2 (PREPAID)
+      const parentOrder2 = await Order.create({
+        orderNumber: `ORD-P9-PRE-${Date.now().toString().slice(-4)}`,
+        customer: customer._id,
+        items: [
+          {
+            title: 'Aura Thermal Test Item 2',
+            quantity: 2,
+            price: 800,
+            totalPrice: 1600,
+            product: new mongoose.Types.ObjectId(),
+            vendor: apexVendor._id,
+          },
+        ],
+        totalAmount: 1600,
+        paymentMethod: 'UPI',
+        paymentStatus: 'PAID',
+        status: 'CONFIRMED',
+        shippingAddress: {
+          recipientName: 'Priya Sharma',
+          phone: '9812345678',
+          street: 'Flat 104, Green Heights',
+          city: 'Gurugram',
+          state: 'Haryana',
+          pincode: '122001',
+        },
+      });
+
+      const subOrder2 = await SubOrder.create({
+        parentOrder: parentOrder2._id,
+        vendor: apexVendor._id,
+        customer: customer._id,
+        items: [
+          {
+            title: 'Aura Thermal Test Item 2',
+            quantity: 2,
+            price: 800,
+            totalPrice: 1600,
+            product: new mongoose.Types.ObjectId(),
+            variantSku: 'SKU-THM-02',
+            hsnCode: '85183000',
+          },
+        ],
+        subTotal: 1600,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 160,
+        vendorEarning: 1440,
+        status: 'packaging',
+        trackingNumber: 'AWB-DEL-9902',
+        carrier: 'Shiprocket Express',
+        shippingAddress: {
+          recipientName: 'Priya Sharma',
+          phone: '9812345678',
+          street: 'Flat 104, Green Heights',
+          city: 'Gurugram',
+          state: 'Haryana',
+          pincode: '122001',
+        },
+      });
+      point9SubOrderId2 = subOrder2._id.toString();
+    });
+
+    await test('Point 9: POST /api/vendor/orders/bulk-shipping-labels returns structured JSON manifests with summary telemetry', async () => {
+      const res = await fetch(`${baseUrl}/vendor/orders/bulk-shipping-labels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point9VendorToken}`,
+        },
+        body: JSON.stringify({
+          subOrderIds: [point9SubOrderId1, point9SubOrderId2],
+          paperSize: '4x6',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.count, 2);
+      assert.strictEqual(body.paperSize, '4x6');
+      assert.ok(body.manifestSummary);
+      assert.strictEqual(body.manifestSummary.totalOrders, 2);
+      assert.strictEqual(body.manifestSummary.totalCodOrders, 1);
+      assert.strictEqual(body.manifestSummary.totalCodAmount, 1200);
+      assert.strictEqual(body.manifestSummary.totalPrepaidOrders, 1);
+      assert.ok(Array.isArray(body.labels));
+      assert.strictEqual(body.labels.length, 2);
+
+      const codLabel = body.labels.find((l) => l.isCOD);
+      assert.ok(codLabel);
+      assert.strictEqual(codLabel.amountToCollect, 1200);
+      assert.strictEqual(codLabel.recipient.name, 'Rahul Verma');
+      assert.ok(codLabel.barcodeValue);
+      assert.ok(codLabel.seller.gstin);
+      assert.ok(codLabel.routingPincode);
+
+      const prepaidLabel = body.labels.find((l) => !l.isCOD);
+      assert.ok(prepaidLabel);
+      assert.strictEqual(prepaidLabel.amountToCollect, 0);
+      assert.strictEqual(prepaidLabel.recipient.name, 'Priya Sharma');
+    });
+
+    await test('Point 9: POST /api/vendor/orders/bulk-shipping-labels?format=html returns multi-page thermal print document with page-breaks', async () => {
+      const res = await fetch(`${baseUrl}/vendor/orders/bulk-shipping-labels?format=html`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point9VendorToken}`,
+        },
+        body: JSON.stringify({
+          subOrderIds: [point9SubOrderId1, point9SubOrderId2],
+          paperSize: '4x6',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      assert.ok(res.headers.get('content-type').includes('text/html'));
+      const html = await res.text();
+      assert.ok(html.includes('100mm 150mm'));
+      assert.ok(html.includes('page-break-after: always'));
+      assert.ok(html.includes('AuraMarket'));
+      assert.ok(html.includes('Rahul Verma'));
+      assert.ok(html.includes('CASH ON DELIVERY'));
+      assert.ok(html.includes('Priya Sharma'));
+      assert.ok(html.includes('PREPAID ORDER'));
+      assert.ok(html.includes('Print All Labels'));
+    });
+
+    await test('Point 9: GET /api/vendor/orders/bulk-shipping-labels?subOrderIds=... allows popup window HTML printing', async () => {
+      const res = await fetch(
+        `${baseUrl}/vendor/orders/bulk-shipping-labels?format=html&subOrderIds=${point9SubOrderId1},${point9SubOrderId2}`,
+        {
+          headers: { Authorization: `Bearer ${point9VendorToken}` },
+        }
+      );
+      assert.strictEqual(res.status, 200);
+      assert.ok(res.headers.get('content-type').includes('text/html'));
+      const html = await res.text();
+      assert.ok(html.includes('2 Orders Loaded'));
+    });
+
+    await test('Point 9: POST /api/vendor/orders/bulk-shipping-labels supports A4 sticker sheets (paperSize: "a4_stickers")', async () => {
+      const res = await fetch(`${baseUrl}/vendor/orders/bulk-shipping-labels?format=html`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point9VendorToken}`,
+        },
+        body: JSON.stringify({
+          subOrderIds: [point9SubOrderId1, point9SubOrderId2],
+          paperSize: 'a4_stickers',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const html = await res.text();
+      assert.ok(html.includes('size: A4'));
+      assert.ok(html.includes('a4-sticker-card'));
+    });
+
+    await test('Point 9: POST /api/vendor/orders/bulk-shipping-labels supports customer phone masking (maskPhone: true)', async () => {
+      const res = await fetch(`${baseUrl}/vendor/orders/bulk-shipping-labels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point9VendorToken}`,
+        },
+        body: JSON.stringify({
+          subOrderIds: [point9SubOrderId1],
+          maskPhone: true,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.labels[0].recipient.phone.includes('XXXXXX'));
+    });
+
+    await test('Point 9: POST /api/vendor/orders/bulk-shipping-labels validation: empty subOrderIds returns 400', async () => {
+      const res = await fetch(`${baseUrl}/vendor/orders/bulk-shipping-labels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point9VendorToken}`,
+        },
+        body: JSON.stringify({
+          subOrderIds: [],
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+      assert.ok(body.message.includes('subOrderIds'));
+    });
+
+    await test('Point 9: POST /api/admin/orders/bulk-shipping-labels allows Super Admin cross-vendor print', async () => {
+      const res = await fetch(`${baseUrl}/admin/orders/bulk-shipping-labels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          subOrderIds: [point9SubOrderId1, point9SubOrderId2],
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.count, 2);
+    });
+
+    await test('Point 9: Role Security: Customer cannot call bulk-shipping-labels (403 Forbidden)', async () => {
+      const resVendorRoute = await fetch(`${baseUrl}/vendor/orders/bulk-shipping-labels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          subOrderIds: [point9SubOrderId1],
+        }),
+      });
+      assert.strictEqual(resVendorRoute.status, 403);
+
+      const resAdminRoute = await fetch(`${baseUrl}/admin/orders/bulk-shipping-labels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          subOrderIds: [point9SubOrderId1],
+        }),
+      });
+      assert.strictEqual(resAdminRoute.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

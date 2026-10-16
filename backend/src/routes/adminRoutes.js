@@ -50,6 +50,7 @@ const {
   bulkUploadProducts,
   exportProductsCSV,
   getProductSampleTemplate,
+  generateBulkShippingLabels,
 } = require('../controllers/vendorController');
 const { protect, authorize, requirePermission } = require('../middlewares/auth');
 
@@ -89,6 +90,8 @@ router.put('/orders/bulk-status', bulkUpdateOrderStatus);
 router.get('/orders/export-csv', exportOrdersCSV);
 router.post('/orders/export-csv', exportOrdersCSV);
 router.post('/orders/bulk-invoices', getBulkInvoices);
+router.post('/orders/bulk-shipping-labels', generateBulkShippingLabels);
+router.get('/orders/bulk-shipping-labels', generateBulkShippingLabels);
 router.put('/orders/:id/status', updateOrderStatus);
 router.patch('/orders/:id/status', updateOrderStatus);
 router.get('/orders/:id/commission-split', getOrderCommissionSplit);

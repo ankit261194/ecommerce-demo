@@ -31,6 +31,7 @@ import MultiVariantProductModal from '../components/MultiVariantProductModal';
 import ProductGalleryUploader from '../components/ProductGalleryUploader';
 import BulkProductExcelModal from '../components/BulkProductExcelModal';
 import ShippingLabelPrinterModal from '../components/ShippingLabelPrinterModal';
+import BulkThermalLabelPrinterModal from '../components/BulkThermalLabelPrinterModal';
 import SmartSplitPackingSlipModal from '../components/SmartSplitPackingSlipModal';
 import ThermalReceiptPrinterModal from '../components/ThermalReceiptPrinterModal';
 import AiProductCopyModal from '../components/AiProductCopyModal';
@@ -160,6 +161,8 @@ export const VendorPortal = () => {
   const [orderFilter, setOrderFilter] = useState('all'); // Point #56: all | pending | packaging | ready_for_pickup | dispatched | delivered
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false); // Point #57: Thermal & A4 Shipping Label Printer
   const [selectedOrderForLabel, setSelectedOrderForLabel] = useState(null);
+  const [selectedOrderIdsForLabels, setSelectedOrderIdsForLabels] = useState([]); // Point 9: Bulk Orders Selection
+  const [isBulkLabelsModalOpen, setIsBulkLabelsModalOpen] = useState(false); // Point 9: Bulk 4x6 Thermal Label Modal
   const [isSplitSlipModalOpen, setIsSplitSlipModalOpen] = useState(false); // Point #73: Smart Multi-Vendor Split Packing Slip with QR Codes
   const [selectedOrderForSplitSlip, setSelectedOrderForSplitSlip] = useState(null);
   const [isThermalModalOpen, setIsThermalModalOpen] = useState(false); // Point #75: Thermal Receipt Printer Modal
@@ -814,6 +817,96 @@ export const VendorPortal = () => {
           </div>
         </div>
 
+        {/* Quick Multi-Select Controls (Point 9) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const visibleIds = subOrders
+                  .filter((order) => {
+                    if (orderFilter === 'pending') return ['placed', 'pending'].includes(order.status);
+                    if (orderFilter === 'packaging') return ['confirmed', 'packaging'].includes(order.status);
+                    if (orderFilter === 'ready_for_pickup') return ['packed', 'ready_for_pickup'].includes(order.status);
+                    if (orderFilter === 'dispatched') return ['dispatched', 'handed_to_courier', 'out_for_delivery'].includes(order.status);
+                    if (orderFilter === 'delivered') return order.status === 'delivered';
+                    return true;
+                  })
+                  .map((o) => o.rawId || o.id)
+                  .slice(0, 50);
+
+                const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedOrderIdsForLabels.includes(id));
+                if (allSelected) {
+                  setSelectedOrderIdsForLabels((prev) => prev.filter((id) => !visibleIds.includes(id)));
+                } else {
+                  setSelectedOrderIdsForLabels((prev) => Array.from(new Set([...prev, ...visibleIds])));
+                }
+              }}
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold transition-all flex items-center gap-1.5 border border-slate-200"
+            >
+              <Printer className="w-3.5 h-3.5 text-amber-600" />
+              <span>Select All Visible (Up to 50)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const readyIds = subOrders
+                  .filter((o) => ['confirmed', 'packaging', 'packed', 'ready_for_pickup'].includes(o.status))
+                  .map((o) => o.rawId || o.id)
+                  .slice(0, 50);
+                setSelectedOrderIdsForLabels(readyIds);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold transition-all border border-amber-200"
+            >
+              ⚡ Select All Ready to Pack/Ship
+            </button>
+          </div>
+
+          {selectedOrderIdsForLabels.length > 0 && (
+            <span className="text-amber-700 font-bold bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+              {selectedOrderIdsForLabels.length} orders selected for bulk dispatch
+            </span>
+          )}
+        </div>
+
+        {/* Bulk Dispatch Batch Action Bar (Point 9) */}
+        {selectedOrderIdsForLabels.length > 0 && (
+          <div className="p-4 bg-slate-950 text-white rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-xl border border-slate-800">
+            <div className="flex items-center gap-3">
+              <span className="w-3 h-3 rounded-full bg-amber-400 animate-pulse"></span>
+              <div>
+                <span className="text-sm font-bold">
+                  <strong className="text-amber-400 font-mono text-base">{selectedOrderIdsForLabels.length}</strong> Orders Selected for Bulk Dispatch
+                </span>
+                <span className="text-xs text-slate-400 block">
+                  Click below to generate thermal printer-ready 4x6 barcode stickers (max 50/batch)
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedOrderIdsForLabels([])}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all"
+              >
+                Clear Selection
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsBulkLabelsModalOpen(true)}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Generate 4x6 Thermal Labels ({selectedOrderIdsForLabels.length})</span>
+                <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-amber-400">#9</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Filtered Sub-Orders Grid */}
         <div className="space-y-4">
           {subOrders
@@ -840,6 +933,20 @@ export const VendorPortal = () => {
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedOrderIdsForLabels.includes(order.rawId || order.id)}
+                          onChange={() => {
+                            const targetId = order.rawId || order.id;
+                            setSelectedOrderIdsForLabels((prev) =>
+                              prev.includes(targetId)
+                                ? prev.filter((x) => x !== targetId)
+                                : [...prev, targetId]
+                            );
+                          }}
+                          className="w-4 h-4 rounded border-slate-300 text-amber-500 focus:ring-amber-400 cursor-pointer"
+                          title="Select order for bulk 4x6 thermal shipping label"
+                        />
                         <span className="font-black text-slate-900 text-base">{order.id}</span>
                         <span className="text-xs text-slate-400 font-medium">{order.date}</span>
                         <span
@@ -1645,6 +1752,14 @@ export const VendorPortal = () => {
         onClose={() => setIsLabelModalOpen(false)}
         order={selectedOrderForLabel}
         vendorData={vendorData}
+      />
+
+      {/* Point 9: Bulk 4x6 Thermal Shipping Label & Barcode Sticker Generator Modal */}
+      <BulkThermalLabelPrinterModal
+        isOpen={isBulkLabelsModalOpen}
+        onClose={() => setIsBulkLabelsModalOpen(false)}
+        selectedOrderIds={selectedOrderIdsForLabels}
+        role="vendor"
       />
 
       {/* Point 73: Smart Multi-Vendor Split Packing Slip with QR Codes Modal */}

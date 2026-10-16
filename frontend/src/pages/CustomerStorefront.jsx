@@ -76,6 +76,7 @@ import WebPushOptInBanner from '../components/WebPushOptInBanner';
 import { GiftOptionsModal } from '../components/GiftOptionsModal';
 import ShoppableReelsModal from '../components/ShoppableReelsModal';
 import SubscribeAndSaveModal from '../components/SubscribeAndSaveModal';
+import RiderTipPicker from '../components/RiderTipPicker';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useLocalization } from '../context/LocalizationContext';
@@ -555,6 +556,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('COD');
 
+  // Point 14: Customer Delivery Rider Tipping State
+  const [riderTip, setRiderTip] = useState(0);
+
   // Point #19: Gift Wrapping & Greeting Card State
   const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
   const [giftOptions, setGiftOptions] = useState({
@@ -662,8 +666,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     const couponDiscount = appliedCoupon?.discountAmount || 0;
     const coinDiscount = Number(redeemedCoins || 0);
     const wrapPrice = giftOptions.isGift ? (cartTotal >= 1999 ? 0 : Number(giftOptions.wrapPrice || 49)) : 0;
-    return Math.max(0, cartTotal - couponDiscount + activeShipFee - coinDiscount + wrapPrice);
-  }, [cartTotal, appliedCoupon, uiConfig, redeemedCoins, giftOptions, hyperlocalService]);
+    const tipAdd = Number(riderTip || 0);
+    return Math.max(0, cartTotal - couponDiscount + activeShipFee - coinDiscount + wrapPrice + tipAdd);
+  }, [cartTotal, appliedCoupon, uiConfig, redeemedCoins, giftOptions, hyperlocalService, riderTip]);
 
   // Dynamic Payment Gateways from Super Admin Integrations Hub
   const paymentSettings = uiConfig?.integrations?.payments || {
@@ -1457,6 +1462,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         deliveryInstructions: deliveryInstructions || undefined,
         coinsToRedeem: redeemedCoins > 0 ? redeemedCoins : undefined,
         giftWrap: giftOptions.isGift ? giftOptions : undefined,
+        // Point 14: Customer Delivery Rider Tip
+        tipAmount: Number(riderTip || 0) > 0 ? Number(riderTip) : 0,
         isGuestCheckout,
         hyperlocalDelivery: hyperlocalService?.isDeliverable ? {
           darkStoreId: hyperlocalService.darkStore?._id,
@@ -1494,6 +1501,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             status: 'placed',
           })),
           totalAmount: order.totalAmount,
+          tipAmount: order.tipAmount !== undefined ? order.tipAmount : riderTip,
           walletCoinsUsed: order.walletCoinsUsed || redeemedCoins,
           cashbackEarned: order.cashbackEarned || Math.max(10, Math.round(order.totalAmount * 0.05)),
           address,
@@ -1518,6 +1526,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         clearCart();
         setAppliedCoupon(null);
         setRedeemedCoins(0);
+        setRiderTip(0);
         setDeliveryInstructions('');
         setGiftOptions({
           isGift: false,
@@ -3028,6 +3037,14 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   />
                 </div>
 
+                {/* Point 14: Customer Delivery Rider Tipping Option */}
+                <div className="pt-1">
+                  <RiderTipPicker
+                    selectedTip={riderTip}
+                    onTipChange={setRiderTip}
+                  />
+                </div>
+
                 {/* Point #26: Multi-Gateway Dynamic Checkout UI (COD, Razorpay, Stripe, Direct UPI QR) */}
                 <DynamicCheckoutPayment
                   activeGateway={paymentMethod}
@@ -3161,7 +3178,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   const couponDiscount = appliedCoupon?.discountAmount || 0;
                   const coinDiscount = Number(redeemedCoins || 0);
                   const wrapFee = giftOptions.isGift ? (cartTotal >= 1999 ? 0 : Number(giftOptions.wrapPrice || 49)) : 0;
-                  const grandTotalPayable = Math.max(0, cartTotal - couponDiscount + activeShipFee - coinDiscount + wrapFee);
+                  const tipAmt = Number(riderTip || 0);
+                  const grandTotalPayable = Math.max(0, cartTotal - couponDiscount + activeShipFee - coinDiscount + wrapFee + tipAmt);
 
                   return (
                     <div className="pt-4 border-t border-slate-200 space-y-2.5">
@@ -3218,6 +3236,16 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                           <span className="text-slate-900 font-black">{formatPrice(defaultShipFee)}</span>
                         )}
                       </div>
+
+                      {tipAmt > 0 && (
+                        <div className="flex items-center justify-between text-xs font-bold text-rose-800 bg-rose-50 px-2.5 py-1.5 rounded-xl border border-rose-200">
+                          <span className="flex items-center gap-1.5">
+                            <Heart className="w-3.5 h-3.5 fill-rose-500 text-rose-500" />
+                            <span>Delivery Partner Tip (100% to rider):</span>
+                          </span>
+                          <span className="font-black text-rose-600">+{formatPrice(tipAmt)}</span>
+                        </div>
+                      )}
 
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-sm">
                         <div>
@@ -3383,6 +3411,17 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                     <span className="font-bold block text-[10px] uppercase text-indigo-700">Online Paid ({activeOrderConfirmation.splitPayment.onlineMethod || 'UPI'}):</span>
                     <strong className="font-black text-xs font-mono">{formatPrice(activeOrderConfirmation.splitPayment.onlineAmount)}</strong>
                   </div>
+                </div>
+              )}
+
+              {/* Point 14: Rider Tip Callout */}
+              {activeOrderConfirmation.tipAmount > 0 && (
+                <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 font-bold">
+                  <span className="flex items-center gap-1.5">
+                    <Heart className="w-3.5 h-3.5 fill-rose-500 text-rose-500" />
+                    <span>Rider Tip (100% directly to rider):</span>
+                  </span>
+                  <span className="font-black text-rose-700">+{formatPrice(activeOrderConfirmation.tipAmount)}</span>
                 </div>
               )}
 

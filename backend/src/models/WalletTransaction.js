@@ -38,12 +38,13 @@ const walletTransactionSchema = new mongoose.Schema(
         'ADJUSTMENT',
         'SPLIT_PAYMENT',
         'PARTIAL_COD_ADVANCE',
+        'RIDER_TIP',
       ],
       default: 'COIN_REDEMPTION',
     },
     paymentMethod: {
       type: String,
-      enum: ['UPI', 'CARD', 'NETBANKING', 'RAZORPAY', 'STRIPE', 'PHONEPE', 'SYSTEM', 'COINS'],
+      enum: ['UPI', 'CARD', 'NETBANKING', 'RAZORPAY', 'STRIPE', 'PHONEPE', 'SYSTEM', 'COINS', 'WALLET'],
       default: 'UPI',
     },
     transactionReference: {

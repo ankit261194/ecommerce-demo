@@ -21,7 +21,8 @@ const generateToken = (id) =>
 // @route   POST /api/orders
 exports.createOrder = async (req, res, next) => {
   try {
-    const { items, shippingAddress, paymentMethod, couponCode, deliveryInstructions, paymentDetails, giftWrap } = req.body;
+    const { items, shippingAddress, paymentMethod, couponCode, deliveryInstructions, paymentDetails, giftWrap, tipAmount: rawTipAmount } = req.body;
+    const tipAmount = Math.max(0, Number(rawTipAmount !== undefined ? rawTipAmount : (req.body.tip || 0)));
 
     if (!items || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Cart items are required to place an order' });
@@ -366,7 +367,7 @@ exports.createOrder = async (req, res, next) => {
     const netTaxAdd = calculationMode === 'EXCLUSIVE' ? taxAmount : 0;
     const finalTotalAmount = Math.max(
       0,
-      totalOrderAmount + netTaxAdd + giftWrapPrice - couponDiscountAmount + shippingFee - coinDiscount
+      totalOrderAmount + netTaxAdd + giftWrapPrice - couponDiscountAmount + shippingFee - coinDiscount + tipAmount
     );
 
     // Point #26 & Point 12: Resolve Payment Gateway, Split Payment Engine & Verification
@@ -575,6 +576,10 @@ exports.createOrder = async (req, res, next) => {
       cashbackEarned,
       totalAmount: finalTotalAmount,
       shippingFee,
+      // Point 14: Customer Delivery Rider Tipping
+      tipAmount,
+      tipPaidToRider: false,
+      tipCreditedAt: null,
       taxAmount,
       taxDetails,
       giftWrap: isGift
@@ -655,6 +660,7 @@ exports.createOrder = async (req, res, next) => {
       deliveryPartner = await User.findOne({ email: 'rider@auramarket.com' });
     }
 
+    let isTipAssigned = false;
     for (const vendorIdStr in vendorItemsMap) {
       const vendorGroup = vendorItemsMap[vendorIdStr];
       const vendor = vendorGroup.vendor;
@@ -722,10 +728,14 @@ exports.createOrder = async (req, res, next) => {
 
       // Create Delivery Task for courier partner
       if (deliveryPartner) {
+        const allocatedTip = !isTipAssigned ? tipAmount : 0;
+        isTipAssigned = true;
         await DeliveryTask.create({
           subOrder: subOrder._id,
           deliveryPartner: deliveryPartner._id,
           deliveryInstructions: deliveryInstructions || '',
+          tipAmount: allocatedTip,
+          tipPaidOut: false,
           pickupLocation: {
             storeName: vendor.storeName,
             phone: vendor.pickupAddress?.phone || '9876543210',
@@ -2431,3 +2441,112 @@ exports.calculateSplitPayment = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Add or Update Rider Tip for an existing order (Point 14)
+// @route   POST /api/orders/:id/tip
+// @access  Private
+exports.addOrderTip = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const tipAmount = Number(req.body.tipAmount);
+    const paymentMethod = req.body.paymentMethod || 'WALLET';
+
+    if (!tipAmount || tipAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'A valid tip amount greater than 0 is required.',
+      });
+    }
+
+    const order = await Order.findById(id).populate('subOrders');
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found.',
+      });
+    }
+
+    // Security check: Only the customer who placed the order or admin can tip
+    if (req.user.role !== 'superadmin' && order.customer.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to add a tip to this order.',
+      });
+    }
+
+    // If paid via wallet, check balance and deduct
+    if (paymentMethod === 'WALLET') {
+      const user = await User.findById(req.user._id);
+      if (!user || (user.walletBalance || 0) < tipAmount) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient wallet balance. You have ₹${user?.walletBalance || 0}, but tip amount is ₹${tipAmount}.`,
+        });
+      }
+      user.walletBalance = Math.max(0, user.walletBalance - tipAmount);
+      await user.save();
+
+      const WalletTransaction = require('../models/WalletTransaction');
+      await WalletTransaction.create({
+        user: user._id,
+        order: order._id,
+        orderNumber: order.orderNumber,
+        type: 'DEBIT',
+        category: 'RIDER_TIP',
+        amount: tipAmount,
+        currency: 'INR',
+        paymentMethod: 'WALLET',
+        title: 'Delivery Rider Tip',
+        description: `₹${tipAmount} tip added for delivery rider on Order #${order.orderNumber}`,
+        balanceAfter: user.walletBalance,
+      }).catch(err => console.error('Failed to log wallet tip txn:', err));
+    }
+
+    // Update Order tipAmount
+    order.tipAmount = (order.tipAmount || 0) + tipAmount;
+
+    // Find assigned delivery partner through DeliveryTask or SubOrder
+    const DeliveryTask = mongoose.models.DeliveryTask || require('../models/DeliveryTask');
+    let task = null;
+    if (order.subOrders && order.subOrders.length > 0) {
+      const subOrderIds = order.subOrders.map(s => s._id || s);
+      task = await DeliveryTask.findOne({ subOrder: { $in: subOrderIds } });
+    }
+
+    let riderCredited = false;
+    let riderName = 'Delivery Partner';
+
+    if (task && task.deliveryPartner) {
+      const rider = await User.findById(task.deliveryPartner);
+      if (rider) {
+        rider.tipEarnings = (rider.tipEarnings || 0) + tipAmount;
+        rider.walletBalance = (rider.walletBalance || 0) + tipAmount;
+        await rider.save();
+        riderCredited = true;
+        riderName = rider.name || 'Delivery Partner';
+      }
+      task.tipAmount = (task.tipAmount || 0) + tipAmount;
+      task.tipPaidOut = true;
+      await task.save();
+    }
+
+    if (riderCredited) {
+      order.tipPaidToRider = true;
+      order.tipCreditedAt = new Date();
+    }
+
+    await order.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Thank you! ₹${tipAmount} tip added successfully. 100% of this tip goes directly to ${riderName}.`,
+      tipAmount: order.tipAmount,
+      tipPaidToRider: order.tipPaidToRider,
+      riderName: riderCredited ? riderName : null,
+      order,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

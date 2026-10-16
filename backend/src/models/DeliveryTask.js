@@ -80,6 +80,16 @@ const deliveryTaskSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Point 14: Delivery Rider Tipping
+    tipAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    tipPaidOut: {
+      type: Boolean,
+      default: false,
+    },
     // Point #25: Order Delivery Instructions / Rider Notes
     deliveryInstructions: {
       type: String,

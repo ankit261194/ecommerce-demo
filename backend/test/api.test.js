@@ -18640,6 +18640,231 @@ const runTests = async () => {
       assert.ok(data.message.includes('Product ID is required'));
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 14: CUSTOMER DELIVERY RIDER TIPPING OPTION AT CHECKOUT
+    // =========================================================================
+    console.log('\n--- PILLAR 1 - POINT 14: CUSTOMER DELIVERY RIDER TIPPING OPTION AT CHECKOUT ---');
+
+    let point14OrderId = null;
+    let point14RiderId = null;
+    let point14InitialRiderTipEarnings = 0;
+
+    await test('Point 14: POST /api/orders places order with delivery rider tip, updating Order and DeliveryTask', async () => {
+      let sampleCustomer = await User.findOne({ role: 'customer' });
+      if (!sampleCustomer) {
+        sampleCustomer = await User.create({
+          name: 'Tipping Customer',
+          email: 'tipper@auramarket.com',
+          phone: '9888877771',
+          password: 'Password123!',
+          walletBalance: 1500,
+          walletCoins: 100,
+        });
+      } else {
+        sampleCustomer.walletBalance = Math.max(sampleCustomer.walletBalance || 0, 1500);
+        await sampleCustomer.save();
+      }
+
+      let sampleRider = await User.findOne({ role: 'delivery', isActive: true });
+      if (!sampleRider) {
+        sampleRider = await User.create({
+          name: 'Fast Rider Mohan',
+          email: 'rider.mohan@auramarket.com',
+          phone: '9888877772',
+          role: 'delivery',
+          isActive: true,
+          tipEarnings: 0,
+          walletBalance: 0,
+        });
+      }
+      point14RiderId = sampleRider._id;
+      point14InitialRiderTipEarnings = sampleRider.tipEarnings || 0;
+
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const sampleProduct = await Product.findOne({ isPublished: true, stock: { $gte: 2 } }).populate('vendor');
+      assert.ok(sampleProduct, 'Published sample product must exist');
+
+      const tipAmount = 50;
+      const res = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+        body: JSON.stringify({
+          items: [
+            {
+              productId: sampleProduct._id,
+              quantity: 1,
+            },
+          ],
+          shippingAddress: {
+            recipientName: 'Tipping Customer',
+            phone: '9888877771',
+            street: '404 Innovation Hub',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'COD',
+          tipAmount,
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.tipAmount, tipAmount);
+      point14OrderId = data.data._id;
+
+      // Verify that DeliveryTask was created with tipAmount = 50
+      const DeliveryTask = mongoose.models.DeliveryTask || require('../src/models/DeliveryTask');
+      const task = await DeliveryTask.findOne({ subOrder: { $in: data.data.subOrders } });
+      if (task) {
+        assert.strictEqual(task.tipAmount, tipAmount);
+        assert.strictEqual(task.tipPaidOut, false);
+      }
+    });
+
+    await test('Point 14: POST /api/orders/:id/tip adds post-checkout tip from wallet & credits rider tipEarnings', async () => {
+      const sampleCustomer = await User.findOne({ email: 'tipper@auramarket.com' }) || await User.findOne({ role: 'customer' });
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const tipToAdd = 30;
+      const res = await fetch(`${baseUrl}/orders/${point14OrderId}/tip`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+        body: JSON.stringify({
+          tipAmount: tipToAdd,
+          paymentMethod: 'WALLET',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.tipAmount, 80); // 50 initial + 30 added
+      assert.ok(data.message.includes('tip added successfully'));
+
+      // Check updated order
+      const Order = mongoose.models.Order || require('../src/models/Order');
+      const order = await Order.findById(point14OrderId);
+      assert.strictEqual(order.tipAmount, 80);
+
+      // Check delivery partner rider received the credit
+      const DeliveryTask = mongoose.models.DeliveryTask || require('../src/models/DeliveryTask');
+      const task = await DeliveryTask.findOne({ subOrder: { $in: order.subOrders } });
+      if (task && task.deliveryPartner) {
+        const rider = await User.findById(task.deliveryPartner);
+        assert.ok(rider.tipEarnings >= tipToAdd, 'Rider tipEarnings must have received the credited tip');
+      }
+    });
+
+    await test('Point 14: POST /api/orders/:id/tip rejects 0 or negative tip amounts (400 Bad Request)', async () => {
+      const sampleCustomer = await User.findOne({ email: 'tipper@auramarket.com' }) || await User.findOne({ role: 'customer' });
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/orders/${point14OrderId}/tip`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+        body: JSON.stringify({
+          tipAmount: 0,
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('valid tip amount greater than 0'));
+    });
+
+    await test('Point 14: POST /api/orders/:id/tip prevents other unauthorized customers from tipping (403 Forbidden)', async () => {
+      const otherCustomer = await User.create({
+        name: 'Unrelated Customer',
+        email: `unrelated_${Date.now()}@test.com`,
+        phone: '9888877773',
+        password: 'Password123!',
+      });
+
+      const otherToken = jwt.sign(
+        { id: otherCustomer._id, role: otherCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/orders/${point14OrderId}/tip`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${otherToken}`,
+        },
+        body: JSON.stringify({
+          tipAmount: 50,
+        }),
+      });
+
+      assert.strictEqual(res.status, 403);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Not authorized'));
+    });
+
+    await test('Point 14: GET /api/delivery/rider/tips retrieves rider tips summary and tipped deliveries count', async () => {
+      const riderToken = jwt.sign(
+        { id: point14RiderId, role: 'delivery' },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/delivery/rider/tips`, {
+        headers: {
+          Authorization: `Bearer ${riderToken}`,
+        },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.tipEarnings !== undefined);
+      assert.ok(Array.isArray(data.tasks));
+    });
+
+    await test('Point 14: Role Security: Customer cannot access GET /api/delivery/rider/tips (403 Forbidden)', async () => {
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/delivery/rider/tips`, {
+        headers: {
+          Authorization: `Bearer ${custToken}`,
+        },
+      });
+
+      assert.strictEqual(res.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

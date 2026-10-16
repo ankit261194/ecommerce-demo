@@ -142,6 +142,12 @@ const userSchema = new mongoose.Schema(
       default: 500, // Welcome reward coins (1 coin = ₹1 discount)
       min: 0,
     },
+    // Point 14: Delivery Rider Tipping
+    tipEarnings: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   { timestamps: true }
 );

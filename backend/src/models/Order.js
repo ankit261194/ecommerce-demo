@@ -68,6 +68,20 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Point 14: Customer Delivery Rider Tipping
+    tipAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    tipPaidToRider: {
+      type: Boolean,
+      default: false,
+    },
+    tipCreditedAt: {
+      type: Date,
+      default: null,
+    },
     taxAmount: {
       type: Number,
       default: 0,

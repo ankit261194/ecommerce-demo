@@ -22,6 +22,7 @@ const {
   updateRiderLocation,
   getOptimizedRoute,
   applyRouteSequence,
+  getRiderTipsSummary,
 } = require('../controllers/deliveryController');
 const { protect, authorize } = require('../middlewares/auth');
 
@@ -30,6 +31,9 @@ router.get('/live-tracking/:identifier', getLiveGpsTracking);
 
 router.use(protect);
 router.use(authorize('delivery', 'superadmin'));
+
+// Point 14: Rider Delivery Tips & Earnings Summary
+router.get('/rider/tips', getRiderTipsSummary);
 
 // Point 16: Rider GPS Location Updates
 router.patch('/rider/location', updateRiderLocation);

@@ -1,6 +1,7 @@
 const DeliveryTask = require('../models/DeliveryTask');
 const SubOrder = require('../models/SubOrder');
 const Order = require('../models/Order');
+const User = require('../models/User');
 const CodReconciliation = require('../models/CodReconciliation');
 const smsService = require('../services/smsService');
 const mailService = require('../services/mailService');
@@ -224,6 +225,27 @@ exports.verifyOtpAndCompleteDelivery = async (req, res, next) => {
       if (allDelivered && parentOrder.paymentMethod === 'COD') {
         parentOrder.paymentStatus = 'PAID';
         await parentOrder.save();
+      }
+    }
+
+    // Point 14: Customer Delivery Rider Tipping Payout
+    if (task.tipAmount > 0 && !task.tipPaidOut) {
+      try {
+        const rider = await User.findById(task.deliveryPartner);
+        if (rider) {
+          rider.tipEarnings = (rider.tipEarnings || 0) + task.tipAmount;
+          rider.walletBalance = (rider.walletBalance || 0) + task.tipAmount;
+          await rider.save();
+          task.tipPaidOut = true;
+          await task.save();
+        }
+        if (parentOrder && !parentOrder.tipPaidToRider) {
+          parentOrder.tipPaidToRider = true;
+          parentOrder.tipCreditedAt = new Date();
+          await parentOrder.save();
+        }
+      } catch (tipErr) {
+        console.warn('Rider tip payout error on delivery:', tipErr.message);
       }
     }
 
@@ -1545,6 +1567,43 @@ exports.applyRouteSequence = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Get Rider Tips & Earnings Summary (Point 14)
+// @route   GET /api/delivery/rider/tips
+// @access  Private (delivery, superadmin)
+exports.getRiderTipsSummary = async (req, res, next) => {
+  try {
+    const riderId = req.user._id;
+    const rider = await User.findById(riderId);
+
+    const tippedTasks = await DeliveryTask.find({
+      deliveryPartner: riderId,
+      tipAmount: { $gt: 0 },
+    })
+      .populate({
+        path: 'subOrder',
+        select: 'orderNumber subTotal items status',
+      })
+      .sort({ updatedAt: -1 });
+
+    const totalTipsReceived = tippedTasks.reduce((acc, t) => acc + (t.tipAmount || 0), 0);
+    const paidOutTips = tippedTasks.filter(t => t.tipPaidOut).reduce((acc, t) => acc + (t.tipAmount || 0), 0);
+    const pendingTips = totalTipsReceived - paidOutTips;
+
+    return res.status(200).json({
+      success: true,
+      tipEarnings: rider?.tipEarnings || 0,
+      totalTipsReceived,
+      paidOutTips,
+      pendingTips,
+      tippedDeliveriesCount: tippedTasks.length,
+      tasks: tippedTasks,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 
 

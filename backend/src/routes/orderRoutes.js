@@ -17,6 +17,7 @@ const {
   getOrderPod,
   getOrderPodSlip,
   calculateSplitPayment,
+  addOrderTip,
 } = require('../controllers/orderController');
 const { protect } = require('../middlewares/auth');
 
@@ -40,6 +41,7 @@ router.get('/:id/pod', getOrderPod);
 router.post('/:id/pod-signature', saveOrderPodSignature);
 router.post('/:id/cancel', cancelOrder);
 router.post('/:id/advance-step', simulateOrderStep);
+router.post('/:id/tip', addOrderTip);
 router.post('/:id/verify-rto-risk', verifyRtoRisk);
 router.post('/:id/resend-rto-otp', resendRtoOtp);
 

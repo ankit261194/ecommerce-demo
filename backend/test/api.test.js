@@ -10520,6 +10520,218 @@ const runTests = async () => {
       assert.strictEqual(resSettle.status, 403);
     });
 
+    // =========================================================================
+    // POINT 1 (28 MASTER SPRINT): THIRD-PARTY PAYMENT GATEWAY GUI SETTINGS MANAGER
+    // =========================================================================
+    await test('Point 1: GET /api/admin/payments/gateways returns all 8 payment gateways with masked secrets', async () => {
+      const res = await fetch(`${baseUrl}/admin/payments/gateways`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data);
+      assert.ok(data.data.razorpay);
+      assert.ok(data.data.stripe);
+      assert.ok(data.data.cashfree);
+      assert.ok(data.data.paypal);
+      assert.ok(data.data.phonepe);
+      assert.ok(data.data.paytm);
+      assert.ok(data.data.upi);
+      assert.ok(data.data.cod);
+
+      // Verify secrets are masked
+      if (data.data.razorpay.keySecretMasked) {
+        assert.ok(data.data.razorpay.keySecretMasked.includes('••••'));
+      }
+      if (data.data.stripe.secretKeyMasked) {
+        assert.ok(data.data.stripe.secretKeyMasked.includes('••••'));
+      }
+    });
+
+    await test('Point 1: PUT /api/admin/payments/gateways updates gateway settings and preserves masked secrets', async () => {
+      const res = await fetch(`${baseUrl}/admin/payments/gateways`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          razorpay: {
+            enabled: true,
+            mode: 'live',
+            keyId: 'rzp_live_test_1234567890',
+            keySecret: '••••••••', // Masked secret should NOT overwrite actual secret
+          },
+          cashfree: {
+            enabled: true,
+            mode: 'test',
+            appId: 'CF_APP_TEST_9988',
+            secretKey: 'cf_sec_test_token_2026',
+            apiVersion: '2023-08-01',
+          },
+          phonepe: {
+            enabled: true,
+            mode: 'live',
+            merchantId: 'PHONEPE_PROD_MID',
+            saltKey: 'phonepe_salt_secret_key_prod',
+            saltIndex: 1,
+          },
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.payments.razorpay.mode, 'live');
+      assert.strictEqual(data.payments.razorpay.keyId, 'rzp_live_test_1234567890');
+      assert.strictEqual(data.payments.cashfree.enabled, true);
+      assert.strictEqual(data.payments.phonepe.merchantId, 'PHONEPE_PROD_MID');
+    });
+
+    await test('Point 1: POST /api/admin/payments/test-connection verifies valid Razorpay credentials', async () => {
+      const res = await fetch(`${baseUrl}/admin/payments/test-connection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          gateway: 'razorpay',
+          mode: 'test',
+          credentials: {
+            keyId: 'rzp_test_LiveCheck9988',
+            keySecret: 'sec_test_secret_sample_key',
+          },
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.gateway, 'razorpay');
+      assert.strictEqual(data.status, 'SUCCESS');
+      assert.ok(data.latencyMs >= 0);
+      assert.ok(data.message.includes('Razorpay'));
+    });
+
+    await test('Point 1: POST /api/admin/payments/test-connection validates invalid Razorpay key ID format with 400', async () => {
+      const res = await fetch(`${baseUrl}/admin/payments/test-connection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          gateway: 'razorpay',
+          credentials: {
+            keyId: 'invalid_prefix_key_123',
+            keySecret: 'some_secret',
+          },
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('rzp_test_'));
+    });
+
+    await test('Point 1: POST /api/admin/payments/test-connection verifies Stripe, Cashfree, PayPal, PhonePe & Paytm handshakes', async () => {
+      // Stripe
+      const resStripe = await fetch(`${baseUrl}/admin/payments/test-connection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          gateway: 'stripe',
+          credentials: {
+            publishableKey: 'pk_test_51MockStripeAuraMarket2026',
+            secretKey: 'sk_test_51MockStripeSecretKey2026',
+          },
+        }),
+      });
+      assert.strictEqual(resStripe.status, 200);
+      const dataStripe = await resStripe.json();
+      assert.strictEqual(dataStripe.success, true);
+      assert.ok(dataStripe.message.includes('Stripe'));
+
+      // Cashfree
+      const resCashfree = await fetch(`${baseUrl}/admin/payments/test-connection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          gateway: 'cashfree',
+          credentials: {
+            appId: 'TEST_CF_98765',
+            secretKey: 'cf_sec_live_handshake_key',
+          },
+        }),
+      });
+      assert.strictEqual(resCashfree.status, 200);
+      const dataCashfree = await resCashfree.json();
+      assert.strictEqual(dataCashfree.success, true);
+
+      // PhonePe
+      const resPhonePe = await fetch(`${baseUrl}/admin/payments/test-connection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          gateway: 'phonepe',
+          credentials: {
+            merchantId: 'PHONEPE_UAT_TEST',
+            saltKey: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+            saltIndex: 1,
+          },
+        }),
+      });
+      assert.strictEqual(resPhonePe.status, 200);
+      const dataPhonePe = await resPhonePe.json();
+      assert.strictEqual(dataPhonePe.success, true);
+    });
+
+    await test('Point 1: GET /api/payments/active-gateways returns public active gateways with ZERO secret leaks', async () => {
+      const res = await fetch(`${baseUrl}/payments/active-gateways`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.data.length >= 1);
+
+      // Ensure no secrets leaked in public payload
+      for (const gw of data.data) {
+        assert.strictEqual(gw.keySecret, undefined);
+        assert.strictEqual(gw.secretKey, undefined);
+        assert.strictEqual(gw.saltKey, undefined);
+        assert.strictEqual(gw.clientSecret, undefined);
+        assert.strictEqual(gw.merchantKey, undefined);
+        assert.ok(gw.name);
+        assert.ok(gw.type);
+      }
+    });
+
+    await test('Point 1: Role Security: Customer cannot access payment gateway admin settings (403 Forbidden)', async () => {
+      const resGateways = await fetch(`${baseUrl}/admin/payments/gateways`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resGateways.status, 403);
+
+      const resTest = await fetch(`${baseUrl}/admin/payments/test-connection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ gateway: 'razorpay' }),
+      });
+      assert.strictEqual(resTest.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

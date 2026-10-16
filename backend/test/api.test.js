@@ -17189,6 +17189,96 @@ const runTests = async () => {
       assert.strictEqual(consumedData.success, false);
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 3: WEBOTP AUTO-READ SMS API FOR MOBILE BROWSERS
+    // =========================================================================
+    await test('Point 3: GET /api/auth/web-otp/status returns W3C WebOTP capabilities & domain binding', async () => {
+      const res = await fetch(`${baseUrl}/auth/web-otp/status`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.standard.includes('WebOTP Specification'));
+      assert.ok(data.formatPattern.includes('@'));
+      assert.ok(data.features.zeroTyping);
+    });
+
+    let webOtpPhone = '9834567890';
+    let webOtpCode = '';
+
+    await test('Point 3: POST /api/auth/otp/request formats SMS payload with WebOTP @domain #code tag', async () => {
+      const res = await fetch(`${baseUrl}/auth/otp/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: webOtpPhone }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.webOtp);
+      assert.strictEqual(data.webOtp.supported, true);
+      assert.ok(data.webOtp.smsBody.includes(`@${data.webOtp.domain} #${data.webOtp.code}`));
+      webOtpCode = data.webOtp.code;
+    });
+
+    await test('Point 3: POST /api/auth/web-otp/verify authenticates user via auto-read credential', async () => {
+      const res = await fetch(`${baseUrl}/auth/web-otp/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: webOtpPhone,
+          otp: webOtpCode,
+          clientOrigin: 'https://shribalajikripadham.online',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token);
+      assert.strictEqual(data.verifiedVia, 'WEB_OTP_AUTO_READ');
+      assert.strictEqual(data.user.authProvider, 'WEB_OTP');
+      assert.strictEqual(data.user.webOtpVerified, true);
+    });
+
+    await test('Point 3: POST /api/auth/web-otp/verify rejects invalid WebOTP code', async () => {
+      const testInvalidPhone = '9834567891';
+      await fetch(`${baseUrl}/auth/otp/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: testInvalidPhone }),
+      });
+
+      const res = await fetch(`${baseUrl}/auth/web-otp/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: testInvalidPhone,
+          otp: '000000',
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Invalid WebOTP verification code'));
+    });
+
+    await test('Point 3: POST /api/auth/web-otp/verify rejects missing phone or otp', async () => {
+      const res = await fetch(`${baseUrl}/auth/web-otp/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: '',
+          otp: '',
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
   } finally {
     if (server) {
       server.close();

@@ -18,6 +18,8 @@ const {
   requestWhatsAppOtp,
   verifyWhatsAppOtp,
   whatsappInstantLinkLogin,
+  getWebOtpStatus,
+  verifyWebOtp,
 } = require('../controllers/authController');
 const { protect } = require('../middlewares/auth');
 
@@ -36,6 +38,10 @@ router.post('/social-login', socialLogin);
 router.post('/whatsapp/request-otp', requestWhatsAppOtp);
 router.post('/whatsapp/verify-otp', verifyWhatsAppOtp);
 router.post('/whatsapp/instant-link', whatsappInstantLinkLogin);
+
+// Point 3: WebOTP Auto-Read SMS API for mobile browsers
+router.get('/web-otp/status', getWebOtpStatus);
+router.post('/web-otp/verify', verifyWebOtp);
 
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);

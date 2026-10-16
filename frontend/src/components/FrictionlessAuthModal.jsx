@@ -41,6 +41,12 @@ export default function FrictionlessAuthModal({
   const [fullName, setFullName] = useState('');
   const otpInputsRef = useRef([]);
 
+  // Point 3: WebOTP Auto-Read SMS State
+  const [webOtpListening, setWebOtpListening] = useState(false);
+  const [webOtpAutoDetected, setWebOtpAutoDetected] = useState(false);
+  const webOtpAbortControllerRef = useRef(null);
+  const isWebOtpSupported = typeof window !== 'undefined' && 'OTPCredential' in window;
+
   // Traditional Password State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -57,6 +63,17 @@ export default function FrictionlessAuthModal({
     }
     return () => clearInterval(timer);
   }, [countdown]);
+
+  // Point 3: Clean up WebOTP abort listener on unmount
+  useEffect(() => {
+    return () => {
+      if (webOtpAbortControllerRef.current) {
+        try {
+          webOtpAbortControllerRef.current.abort();
+        } catch (_) {}
+      }
+    };
+  }, []);
 
   // Point 2: Check for WhatsApp 1-tap instant login link from URL hash
   useEffect(() => {
@@ -132,9 +149,72 @@ export default function FrictionlessAuthModal({
         setTimeout(() => {
           if (otpInputsRef.current[0]) otpInputsRef.current[0].focus();
         }, 100);
+
+        // Point 3: Trigger W3C WebOTP API Auto-Read on supported mobile browsers
+        startWebOtpListener(clean);
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to send verification code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Point 3: WebOTP Auto-Read SMS API Listener
+  const startWebOtpListener = (targetPhone) => {
+    if (webOtpAbortControllerRef.current) {
+      try {
+        webOtpAbortControllerRef.current.abort();
+      } catch (_) {}
+    }
+
+    const ac = new AbortController();
+    webOtpAbortControllerRef.current = ac;
+    setWebOtpListening(true);
+    setWebOtpAutoDetected(false);
+
+    if (typeof window !== 'undefined' && 'OTPCredential' in window && navigator.credentials) {
+      navigator.credentials
+        .get({
+          otp: { transport: ['sms'] },
+          signal: ac.signal,
+        })
+        .then((content) => {
+          if (content && content.code) {
+            const code = content.code.trim();
+            setWebOtpListening(false);
+            setWebOtpAutoDetected(true);
+            setOtpDigits(code.split('').slice(0, 6));
+            setSuccessMsg(`WebOTP detected SMS code: ${code}. Auto-signing in...`);
+            handleVerifyWebOtp(targetPhone, code);
+          }
+        })
+        .catch((err) => {
+          setWebOtpListening(false);
+        });
+    }
+  };
+
+  // Point 3: Verify Auto-Read WebOTP Code
+  const handleVerifyWebOtp = async (customPhone = null, customCode = null) => {
+    const targetPhone = customPhone || phone.replace(/\D/g, '').slice(0, 10);
+    const targetCode = customCode || otpDigits.join('') || demoCode || '123456';
+
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.post('/auth/web-otp/verify', {
+        phone: targetPhone,
+        otp: targetCode,
+        clientOrigin: typeof window !== 'undefined' ? window.location.origin : '',
+      });
+
+      if (res.data?.success && res.data.token) {
+        setWebOtpAutoDetected(true);
+        completeLogin(res.data.token, res.data.user);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'WebOTP auto-read verification failed');
     } finally {
       setLoading(false);
     }
@@ -686,6 +766,41 @@ export default function FrictionlessAuthModal({
                       }`}
                     >
                       Auto-Fill & Submit
+                    </button>
+                  </div>
+                )}
+
+                {/* Point 3: WebOTP Auto-Read SMS Status Card */}
+                {otpChannel === 'SMS' && (
+                  <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-between text-[11px] text-blue-300">
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+                      </span>
+                      <div>
+                        <div className="font-bold flex items-center gap-1.5 text-white">
+                          <span>WebOTP Auto-Read Active</span>
+                          <span className="text-[9px] px-1 py-0.2 bg-blue-500 text-slate-950 font-black rounded">
+                            {isWebOtpSupported ? 'W3C API READY' : 'MOBILE READY'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-blue-300/80">
+                          Listening for incoming SMS format: @domain #123456
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const testCode = demoCode || '123456';
+                        setOtpDigits(testCode.split(''));
+                        handleVerifyWebOtp(phone, testCode);
+                      }}
+                      className="px-2.5 py-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 text-white font-bold rounded-lg text-[10px] shadow flex items-center gap-1"
+                    >
+                      <span>⚡ Auto-Read (Test)</span>
                     </button>
                   </div>
                 )}

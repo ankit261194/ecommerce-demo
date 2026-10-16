@@ -30,8 +30,12 @@ const userSchema = new mongoose.Schema(
     },
     authProvider: {
       type: String,
-      enum: ['LOCAL', 'GOOGLE', 'APPLE', 'PHONE_OTP', 'WHATSAPP'],
+      enum: ['LOCAL', 'GOOGLE', 'APPLE', 'PHONE_OTP', 'WHATSAPP', 'WEB_OTP'],
       default: 'LOCAL',
+    },
+    webOtpVerified: {
+      type: Boolean,
+      default: false,
     },
     googleId: {
       type: String,

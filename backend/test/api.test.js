@@ -16217,6 +16217,250 @@ const runTests = async () => {
       assert.strictEqual(resAlert.status, 403);
     });
 
+    // =========================================================================
+    // POINT 26: GROUP BUYING / TEAM PURCHASE ENGINE ("KHAREEDO SAATH ME - SAVE 20%")
+    // =========================================================================
+    console.log('\n--- POINT 26: GROUP BUYING / TEAM PURCHASE ENGINE ---');
+
+    let testGbProduct;
+    let createdPoolId;
+    let createdPoolCode;
+    let secondaryBuyerToken;
+
+    await test('Point 26 Setup: Ensure product with group buying configuration and secondary customer exist', async () => {
+      testGbProduct = await Product.findOne({ isPublished: { $ne: false }, stock: { $gt: 5 } });
+      if (!testGbProduct) {
+        testGbProduct = await Product.create({
+          title: 'Khareedo Saath Me SoundBar 100W',
+          sellingPrice: 4000,
+          mrp: 6000,
+          stock: 20,
+          sku: 'GB-SOUND-' + Date.now(),
+          category: 'Electronics',
+          groupBuy: {
+            enabled: true,
+            groupPrice: 3200,
+            discountPercentage: 20,
+            teamSize: 2,
+            durationHours: 24,
+            activePoolsCount: 0,
+          },
+        });
+      } else {
+        testGbProduct.groupBuy = {
+          enabled: true,
+          groupPrice: Math.round(testGbProduct.sellingPrice * 0.8),
+          discountPercentage: 20,
+          teamSize: 2,
+          durationHours: 24,
+          activePoolsCount: 0,
+        };
+        await testGbProduct.save();
+      }
+
+      // Create or log in secondary customer for joining team pool
+      const regRes = await fetch(`${baseUrl}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Anjali Sharma (Team Member)',
+          email: `anjali.team.${Date.now()}@example.com`,
+          password: 'Password123!',
+          phone: '+919876543299',
+        }),
+      });
+      const regData = await regRes.json();
+      secondaryBuyerToken = regData.token;
+
+      assert.ok(testGbProduct);
+      assert.ok(secondaryBuyerToken);
+    });
+
+    await test('Point 26: POST /api/group-buy/pools allows customer to initiate team buy pool (generates unique poolCode, group price, savings & 24h expiry)', async () => {
+      const res = await fetch(`${baseUrl}/group-buy/pools`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          productId: testGbProduct._id,
+          requiredMembers: 2,
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.poolCode.startsWith('TEAM-'));
+      assert.strictEqual(data.data.requiredMembers, 2);
+      assert.strictEqual(data.data.currentMembers, 1);
+      assert.strictEqual(data.data.status, 'OPEN');
+      assert.ok(data.data.savingsAmount > 0);
+      assert.ok(data.data.shareUrl.includes(data.data.poolCode));
+
+      createdPoolId = data.data._id;
+      createdPoolCode = data.data.poolCode;
+    });
+
+    await test('Point 26: POST /api/group-buy/pools rejects duplicate active open pool creation by same customer for same product', async () => {
+      const res = await fetch(`${baseUrl}/group-buy/pools`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          productId: testGbProduct._id,
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('already have an active open Team Buy pool'));
+    });
+
+    await test('Point 26: GET /api/group-buy/pools/:poolCodeOrId returns public pool details with live countdown seconds & spots left', async () => {
+      const res = await fetch(`${baseUrl}/group-buy/pools/${createdPoolCode}`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.poolCode, createdPoolCode);
+      assert.strictEqual(data.data.spotsLeft, 1);
+      assert.ok(data.data.remainingSeconds > 0);
+      assert.strictEqual(data.data.isExpired, false);
+    });
+
+    await test('Point 26: GET /api/group-buy/product/:productId/pools lists active open pools for storefront shoppers to join', async () => {
+      const res = await fetch(`${baseUrl}/group-buy/product/${testGbProduct._id}/pools`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.data.some((p) => p.poolCode === createdPoolCode));
+    });
+
+    await test('Point 26: POST /api/group-buy/pools/:id/join prevents member from joining same pool twice (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/group-buy/pools/${createdPoolId}/join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('already joined'));
+    });
+
+    await test('Point 26: POST /api/group-buy/pools/:id/join allows another customer to join and atomically completes group buy when team size reached', async () => {
+      const res = await fetch(`${baseUrl}/group-buy/pools/${createdPoolId}/join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${secondaryBuyerToken}`,
+        },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.isCompleted, true);
+      assert.strictEqual(data.data.pool.status, 'COMPLETED');
+      assert.strictEqual(data.data.pool.currentMembers, 2);
+    });
+
+    await test('Point 26: POST /api/group-buy/pools/:id/join rejects joining already completed or expired pool', async () => {
+      const res = await fetch(`${baseUrl}/group-buy/pools/${createdPoolId}/join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('expired or completed'));
+    });
+
+    await test('Point 26: GET /api/group-buy/storefront/deals returns active products with group pricing & trending pools', async () => {
+      const res = await fetch(`${baseUrl}/group-buy/storefront/deals`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data.products));
+      assert.ok(Array.isArray(data.data.activePools));
+    });
+
+    await test('Point 26: GET /api/group-buy/admin/pools & POST /api/group-buy/admin/expire-check manages pools, telemetry & auto-expiration', async () => {
+      const res = await fetch(`${baseUrl}/group-buy/admin/pools`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.telemetry);
+      assert.ok(data.data.telemetry.totalCompleted >= 1);
+      assert.ok(Array.isArray(data.data.pools));
+
+      const resExpire = await fetch(`${baseUrl}/group-buy/admin/expire-check`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resExpire.status, 200);
+      const dataExpire = await resExpire.json();
+      assert.strictEqual(dataExpire.success, true);
+    });
+
+    await test('Point 26: PUT /api/group-buy/admin/product/:productId updates group buying pricing and discount percentage', async () => {
+      const res = await fetch(`${baseUrl}/group-buy/admin/product/${testGbProduct._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          enabled: true,
+          discountPercentage: 25,
+          teamSize: 3,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.discountPercentage, 25);
+      assert.strictEqual(data.data.teamSize, 3);
+    });
+
+    await test('Point 26: Role Security: Customer cannot access admin pool telemetry, expire check or edit product group buy config (403 Forbidden)', async () => {
+      const resAdmin = await fetch(`${baseUrl}/group-buy/admin/pools`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resAdmin.status, 403);
+
+      const resExpire = await fetch(`${baseUrl}/group-buy/admin/expire-check`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resExpire.status, 403);
+
+      const resEdit = await fetch(`${baseUrl}/group-buy/admin/product/${testGbProduct._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ discountPercentage: 30 }),
+      });
+      assert.strictEqual(resEdit.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

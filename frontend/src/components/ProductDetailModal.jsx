@@ -37,6 +37,7 @@ import CustomerVendorChatModal from './CustomerVendorChatModal';
 import EmiBreakdownModal from './EmiBreakdownModal';
 import SocialShareModal from './SocialShareModal';
 import ProductVariantSwatches from './ProductVariantSwatches';
+import GroupBuyModal from './GroupBuyModal';
 import { useLocalization } from '../context/LocalizationContext';
 
 export const ProductDetailModal = ({
@@ -88,6 +89,9 @@ export const ProductDetailModal = ({
 
   // Dynamic OpenGraph Social Share Modal state (Point #18)
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  // Group Buying / Team Purchase Modal state (Point #26)
+  const [isGroupBuyModalOpen, setIsGroupBuyModalOpen] = useState(false);
 
   // Hover zoom coordinates
   const [zoomStyle, setZoomStyle] = useState({ display: 'none' });
@@ -551,6 +555,37 @@ export const ProductDetailModal = ({
                     <span>{isOrderingPaused ? '🌴 Orders Paused' : t('buyNow', 'Buy Now')}</span>
                   </button>
                 </div>
+
+                {/* Point #26: Group Buying / Team Purchase Engine ("Khareedo Saath Me") */}
+                {(product.groupBuy?.enabled ?? true) && (
+                  <button
+                    type="button"
+                    onClick={() => setIsGroupBuyModalOpen(true)}
+                    className="w-full p-3 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-black text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-between group active:scale-[0.99]"
+                  >
+                    <div className="flex items-center gap-2.5 text-left">
+                      <span className="w-8 h-8 rounded-xl bg-slate-950 text-amber-400 flex items-center justify-center font-black text-sm shadow-xs shrink-0">
+                        👥
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-white font-black text-xs sm:text-sm">
+                            Khareedo Saath Me (Group Buy)
+                          </span>
+                          <span className="text-[10px] uppercase font-black px-1.5 py-0.2 rounded-full bg-slate-950 text-amber-300">
+                            Save {product.groupBuy?.discountPercentage || 20}% Extra
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-amber-100 font-semibold block mt-0.5">
+                          Unlock Group Price @ ₹{(product.groupBuy?.groupPrice || Math.round((currentSellingPrice || 999) * 0.8)).toLocaleString('en-IN')} • 24h Team Pool
+                        </span>
+                      </div>
+                    </div>
+                    <span className="px-3 py-1.5 rounded-xl bg-slate-950 text-white font-black text-xs group-hover:bg-slate-900 transition-colors shrink-0">
+                      Join or Start Pool →
+                    </span>
+                  </button>
+                )}
               </div>
 
               {/* Point #1: Pincode Delivery & COD Serviceability Engine */}
@@ -894,6 +929,41 @@ export const ProductDetailModal = ({
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
         product={product}
+      />
+
+      {/* Point 26: Group Buying / Team Purchase Engine Modal ("Khareedo Saath Me") */}
+      <GroupBuyModal
+        isOpen={isGroupBuyModalOpen}
+        onClose={() => setIsGroupBuyModalOpen(false)}
+        product={product}
+        onJoinPoolSuccess={(pool) => {
+          if (onAddToCart) {
+            onAddToCart(
+              {
+                ...product,
+                sellingPrice: pool.groupPrice || product.groupBuy?.groupPrice || Math.round(product.sellingPrice * 0.8),
+                isGroupBuy: true,
+                groupBuyPoolId: pool._id
+              },
+              selectedVariant,
+              1
+            );
+          }
+        }}
+        onStartPoolSuccess={(pool) => {
+          if (onAddToCart) {
+            onAddToCart(
+              {
+                ...product,
+                sellingPrice: pool.groupPrice || product.groupBuy?.groupPrice || Math.round(product.sellingPrice * 0.8),
+                isGroupBuy: true,
+                groupBuyPoolId: pool._id
+              },
+              selectedVariant,
+              1
+            );
+          }
+        }}
       />
     </div>
   );

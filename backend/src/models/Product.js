@@ -173,6 +173,14 @@ const productSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    groupBuy: {
+      enabled: { type: Boolean, default: true },
+      groupPrice: { type: Number, default: 0 },
+      discountPercentage: { type: Number, default: 20 },
+      teamSize: { type: Number, default: 2 },
+      durationHours: { type: Number, default: 24 },
+      activePoolsCount: { type: Number, default: 0 },
+    },
   },
   {
     timestamps: true,

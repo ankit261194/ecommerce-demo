@@ -11326,6 +11326,183 @@ const runTests = async () => {
       assert.strictEqual(resCustPing.status, 403);
     });
 
+    // =========================================================================
+    // POINT 5: AUTOMATED SCHEDULED DATABASE BACKUP & CLOUD SYNC TESTS
+    // =========================================================================
+
+    let testBackupId = null;
+
+    await test('Point 5: GET /api/admin/backup/stats returns live MongoDB collections and record counts', async () => {
+      const res = await fetch(`${baseUrl}/admin/backup/stats`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.databaseStatus, 'OPTIMAL_CONNECTED');
+      assert.ok(data.data.totalCollections >= 7);
+      assert.ok(Array.isArray(data.data.collections));
+      assert.ok(data.data.totalRecords >= 1);
+    });
+
+    await test('Point 5: POST /api/admin/backup/create creates full snapshot with sha256 checksum & byte size', async () => {
+      const res = await fetch(`${baseUrl}/admin/backup/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ type: 'MANUAL' }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.backup.backupId.startsWith('bkp_'));
+      assert.ok(data.backup.fileSizeBytes > 0);
+      assert.ok(data.backup.totalRecords >= 1);
+      assert.ok(data.backup.collectionsCount >= 7);
+      assert.strictEqual(data.backup.status, 'SUCCESS');
+      assert.strictEqual(data.backup.checksum.length, 64);
+
+      testBackupId = data.backup.backupId;
+    });
+
+    await test('Point 5: GET /api/admin/backup/list returns archived backup history list', async () => {
+      const res = await fetch(`${baseUrl}/admin/backup/list`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.count >= 1);
+      assert.ok(Array.isArray(data.backups));
+
+      const found = data.backups.find(b => b.backupId === testBackupId);
+      assert.ok(found);
+      assert.ok(found.fileSizeFormatted);
+    });
+
+    await test('Point 5: GET /api/admin/backup/:id/download serves complete JSON payload with manifest', async () => {
+      const res = await fetch(`${baseUrl}/admin/backup/${testBackupId}/download`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      assert.ok(res.headers.get('content-type').includes('application/json'));
+
+      const data = await res.json();
+      assert.ok(data.manifest);
+      assert.ok(data.manifest.platform.includes('AuraMarket'));
+      assert.ok(data.collections);
+      assert.ok(Array.isArray(data.collections.users));
+    });
+
+    await test('Point 5: POST /api/admin/backup/:id/cloud-sync synchronizes snapshot to AWS S3 & Google Drive', async () => {
+      // 1. Sync to AWS S3
+      const resS3 = await fetch(`${baseUrl}/admin/backup/${testBackupId}/cloud-sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ provider: 'AWS_S3' }),
+      });
+      assert.strictEqual(resS3.status, 200);
+      const dataS3 = await resS3.json();
+      assert.strictEqual(dataS3.success, true);
+      assert.strictEqual(dataS3.backup.cloudSyncStatus, 'SYNCED');
+      assert.strictEqual(dataS3.backup.cloudProvider, 'AWS_S3');
+      assert.ok(dataS3.backup.cloudUrl.includes('s3.amazonaws.com'));
+
+      // 2. Sync to Google Drive
+      const resDrive = await fetch(`${baseUrl}/admin/backup/${testBackupId}/cloud-sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ provider: 'GOOGLE_DRIVE' }),
+      });
+      assert.strictEqual(resDrive.status, 200);
+      const dataDrive = await resDrive.json();
+      assert.strictEqual(dataDrive.success, true);
+      assert.strictEqual(dataDrive.backup.cloudProvider, 'GOOGLE_DRIVE');
+      assert.ok(dataDrive.backup.cloudUrl.includes('drive.google.com'));
+    });
+
+    await test('Point 5: GET & PUT /api/admin/backup/schedule manages automated nightly cron schedule', async () => {
+      // 1. Get current schedule
+      const resGet = await fetch(`${baseUrl}/admin/backup/schedule`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resGet.status, 200);
+      const dataGet = await resGet.json();
+      assert.strictEqual(dataGet.success, true);
+      assert.ok(dataGet.schedule.frequency);
+
+      // 2. Update schedule
+      const updatePayload = {
+        enabled: true,
+        frequency: 'DAILY',
+        scheduledTime: '03:30',
+        retentionDays: 45,
+        storageDestination: 'S3_SECURE',
+        s3Bucket: 'auramarket-prod-backups',
+      };
+      const resPut = await fetch(`${baseUrl}/admin/backup/schedule`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify(updatePayload),
+      });
+      assert.strictEqual(resPut.status, 200);
+      const dataPut = await resPut.json();
+      assert.strictEqual(dataPut.success, true);
+      assert.strictEqual(dataPut.schedule.retentionDays, 45);
+      assert.strictEqual(dataPut.schedule.s3Bucket, 'auramarket-prod-backups');
+    });
+
+    await test('Point 5: DELETE /api/admin/backup/:id removes backup snapshot record', async () => {
+      const res = await fetch(`${baseUrl}/admin/backup/${testBackupId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+
+      // Verify it's no longer in the list
+      const listRes = await fetch(`${baseUrl}/admin/backup/list`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const listData = await listRes.json();
+      const stillThere = listData.backups.some(b => b.backupId === testBackupId);
+      assert.strictEqual(stillThere, false);
+    });
+
+    await test('Point 5: Role Security: Customer token cannot trigger backup, modify schedule or download dump (403 Forbidden)', async () => {
+      const resCustCreate = await fetch(`${baseUrl}/admin/backup/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ type: 'MANUAL' }),
+      });
+      assert.strictEqual(resCustCreate.status, 403);
+
+      const resCustSched = await fetch(`${baseUrl}/admin/backup/schedule`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustSched.status, 403);
+
+      const resCustList = await fetch(`${baseUrl}/admin/backup/list`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustList.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

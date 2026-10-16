@@ -1,4 +1,4 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 
 const systemBackupSchema = new mongoose.Schema(
   {
@@ -49,6 +49,24 @@ const systemBackupSchema = new mongoose.Schema(
     retentionDays: {
       type: Number,
       default: 30,
+    },
+    cloudSyncStatus: {
+      type: String,
+      enum: ['LOCAL_ONLY', 'SYNCED', 'PENDING', 'FAILED'],
+      default: 'LOCAL_ONLY',
+    },
+    cloudProvider: {
+      type: String,
+      enum: ['NONE', 'AWS_S3', 'GOOGLE_DRIVE', 'CLOUDFLARE_R2'],
+      default: 'NONE',
+    },
+    cloudUrl: {
+      type: String,
+      default: '',
+    },
+    syncedAt: {
+      type: Date,
+      default: null,
     },
     createdBy: {
       type: String,

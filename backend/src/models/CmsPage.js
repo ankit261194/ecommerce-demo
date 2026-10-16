@@ -56,4 +56,4 @@ const CmsPageSchema = new mongoose.Schema(
 
 CmsPageSchema.index({ category: 1, isPublished: 1 });
 
-module.exports = mongoose.model('CmsPage', CmsPageSchema);
+module.exports = mongoose.models.CmsPage || mongoose.model('CmsPage', CmsPageSchema);

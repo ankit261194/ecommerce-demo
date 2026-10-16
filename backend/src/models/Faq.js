@@ -45,4 +45,4 @@ const FaqSchema = new mongoose.Schema(
 
 FaqSchema.index({ category: 1, displayOrder: 1 });
 
-module.exports = mongoose.model('Faq', FaqSchema);
+module.exports = mongoose.models.Faq || mongoose.model('Faq', FaqSchema);

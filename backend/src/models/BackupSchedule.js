@@ -1,4 +1,4 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 
 const backupScheduleSchema = new mongoose.Schema(
   {
@@ -23,8 +23,16 @@ const backupScheduleSchema = new mongoose.Schema(
     },
     storageDestination: {
       type: String,
-      enum: ['LOCAL_DISK', 'S3_SECURE', 'GCS_COLDLINE'],
+      enum: ['LOCAL_DISK', 'S3_SECURE', 'GOOGLE_DRIVE', 'CLOUDFLARE_R2', 'GCS_COLDLINE'],
       default: 'LOCAL_DISK',
+    },
+    s3Bucket: {
+      type: String,
+      default: 'auramarket-backups',
+    },
+    gdriveFolderId: {
+      type: String,
+      default: '',
     },
     notifyOnSuccess: {
       type: Boolean,

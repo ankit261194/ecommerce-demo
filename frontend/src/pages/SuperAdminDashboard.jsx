@@ -93,6 +93,7 @@ import ShippingManifestManager from '../components/ShippingManifestManager';
 import PaymentGatewayManager from '../components/PaymentGatewayManager';
 import SmsWhatsAppSettingsManager from '../components/SmsWhatsAppSettingsManager';
 import EmailTemplateManager from '../components/EmailTemplateManager';
+import StorageConfigManager from '../components/StorageConfigManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -2612,7 +2613,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
               }`}
             >
               <HardDrive className="w-4 h-4 text-amber-600" />
-              <span>☁️ Cloud Storage</span>
+              <span>☁️ Multi-Cloud & S3 CDN</span>
             </button>
           </div>
 
@@ -2640,228 +2641,10 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           )}
 
           {/* ------------------------------------------------------------- */}
-          {/* 4. CLOUD STORAGE & MEDIA MANAGER */}
+          {/* 4. MULTI-CLOUD STORAGE & S3 CDN CONFIGURATOR (Point 4) */}
           {/* ------------------------------------------------------------- */}
           {integrationSubTab === 'storage' && (
-            <div className="space-y-6 animate-fade-in">
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                      <HardDrive className="w-5 h-5 text-amber-600" />
-                      Cloud Storage & Media Manager
-                    </h2>
-                    <p className="text-xs text-slate-500 font-medium mt-1">
-                      Manage product image and document uploads across Local Disk, Cloudinary, or Amazon AWS S3.
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-600">Active Storage:</span>
-                    <select
-                      value={integrations.storage.activeProvider}
-                      onChange={e =>
-                        setIntegrations({
-                          ...integrations,
-                          storage: { ...integrations.storage, activeProvider: e.target.value },
-                        })
-                      }
-                      className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-bold text-xs text-slate-900 focus:outline-none focus:border-amber-500"
-                    >
-                      <option value="local">Local Server Storage (Free Default, No Setup)</option>
-                      <option value="cloudinary">Cloudinary Media CDN</option>
-                      <option value="s3">Amazon AWS S3 Bucket</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Cloudinary Card */}
-                  <div className={`p-5 rounded-2xl border ${
-                    integrations.storage.activeProvider === 'cloudinary' ? 'border-amber-400 bg-amber-50/20 ring-2 ring-amber-400/20' : 'border-slate-200 bg-slate-50'
-                  }`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-bold text-slate-900 text-sm">Cloudinary Image CDN</h4>
-                      {integrations.storage.activeProvider === 'cloudinary' && (
-                        <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                          Active
-                        </span>
-                      )}
-                    </div>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-600 uppercase">Cloud Name</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. auramarket-live"
-                          value={integrations.storage.cloudinary.cloudName}
-                          onChange={e =>
-                            setIntegrations({
-                              ...integrations,
-                              storage: {
-                                ...integrations.storage,
-                                cloudinary: { ...integrations.storage.cloudinary, cloudName: e.target.value },
-                              },
-                            })
-                          }
-                          className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-xs font-semibold"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-600 uppercase">API Key</label>
-                        <input
-                          type="text"
-                          value={integrations.storage.cloudinary.apiKey}
-                          onChange={e =>
-                            setIntegrations({
-                              ...integrations,
-                              storage: {
-                                ...integrations.storage,
-                                cloudinary: { ...integrations.storage.cloudinary, apiKey: e.target.value },
-                              },
-                            })
-                          }
-                          className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-xs font-mono font-semibold"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-600 uppercase">API Secret</label>
-                        <div className="relative">
-                          <input
-                            type={showSecrets.cloudinarySecret ? 'text' : 'password'}
-                            value={integrations.storage.cloudinary.apiSecret}
-                            onChange={e =>
-                              setIntegrations({
-                                ...integrations,
-                                storage: {
-                                  ...integrations.storage,
-                                  cloudinary: { ...integrations.storage.cloudinary, apiSecret: e.target.value },
-                                },
-                              })
-                            }
-                            className="w-full px-3 py-2 pr-10 rounded-lg bg-white border border-slate-300 text-xs font-mono font-semibold"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowSecrets({ ...showSecrets, cloudinarySecret: !showSecrets.cloudinarySecret })}
-                            className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
-                          >
-                            {showSecrets.cloudinarySecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Amazon S3 Card */}
-                  <div className={`p-5 rounded-2xl border ${
-                    integrations.storage.activeProvider === 's3' ? 'border-amber-400 bg-amber-50/20 ring-2 ring-amber-400/20' : 'border-slate-200 bg-slate-50'
-                  }`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-bold text-slate-900 text-sm">Amazon AWS S3</h4>
-                      {integrations.storage.activeProvider === 's3' && (
-                        <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                          Active
-                        </span>
-                      )}
-                    </div>
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-600 uppercase">S3 Bucket Name</label>
-                          <input
-                            type="text"
-                            placeholder="auramarket-media"
-                            value={integrations.storage.s3.bucket}
-                            onChange={e =>
-                              setIntegrations({
-                                ...integrations,
-                                storage: {
-                                  ...integrations.storage,
-                                  s3: { ...integrations.storage.s3, bucket: e.target.value },
-                                },
-                              })
-                            }
-                            className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-xs font-semibold"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-600 uppercase">AWS Region</label>
-                          <input
-                            type="text"
-                            placeholder="ap-south-1"
-                            value={integrations.storage.s3.region}
-                            onChange={e =>
-                              setIntegrations({
-                                ...integrations,
-                                storage: {
-                                  ...integrations.storage,
-                                  s3: { ...integrations.storage.s3, region: e.target.value },
-                                },
-                              })
-                            }
-                            className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-xs font-semibold"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-600 uppercase">AWS Access Key</label>
-                        <input
-                          type="text"
-                          value={integrations.storage.s3.accessKey}
-                          onChange={e =>
-                            setIntegrations({
-                              ...integrations,
-                              storage: {
-                                ...integrations.storage,
-                                s3: { ...integrations.storage.s3, accessKey: e.target.value },
-                              },
-                            })
-                          }
-                          className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-xs font-mono font-semibold"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-600 uppercase">AWS Secret Key</label>
-                        <div className="relative">
-                          <input
-                            type={showSecrets.s3Secret ? 'text' : 'password'}
-                            value={integrations.storage.s3.secretKey}
-                            onChange={e =>
-                              setIntegrations({
-                                ...integrations,
-                                storage: {
-                                  ...integrations.storage,
-                                  s3: { ...integrations.storage.s3, secretKey: e.target.value },
-                                },
-                              })
-                            }
-                            className="w-full px-3 py-2 pr-10 rounded-lg bg-white border border-slate-300 text-xs font-mono font-semibold"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowSecrets({ ...showSecrets, s3Secret: !showSecrets.s3Secret })}
-                            className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
-                          >
-                            {showSecrets.s3Secret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-slate-200 flex justify-end">
-                  <button
-                    onClick={handleSaveIntegrations}
-                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition-all"
-                  >
-                    <Save className="w-4 h-4 text-amber-400" />
-                    <span>Apply Storage Settings Live</span>
-                  </button>
-                </div>
-              </div>
-            </div>
+            <StorageConfigManager />
           )}
         </div>
       )}

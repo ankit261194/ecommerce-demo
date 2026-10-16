@@ -11141,6 +11141,191 @@ const runTests = async () => {
       assert.strictEqual(dataReset.templates.length, 6);
     });
 
+    // =========================================================================
+    // POINT 4: MULTI-CLOUD STORAGE & S3 CDN BUCKET CONFIGURATOR TESTS
+    // =========================================================================
+
+    await test('Point 4: GET /api/admin/storage/settings returns all 6 providers & imageOptimization settings', async () => {
+      const res = await fetch(`${baseUrl}/admin/storage/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.local);
+      assert.ok(data.data.cloudinary);
+      assert.ok(data.data.s3);
+      assert.ok(data.data.wasabi);
+      assert.ok(data.data.spaces);
+      assert.ok(data.data.r2);
+      assert.ok(data.data.imageOptimization);
+      assert.strictEqual(data.data.imageOptimization.autoWebp, true);
+    });
+
+    await test('Point 4: PUT /api/admin/storage/settings updates S3, Cloudflare R2, Wasabi, Spaces & WebP settings', async () => {
+      const payload = {
+        activeProvider: 'r2',
+        s3: {
+          bucket: 'prod-s3-bucket',
+          region: 'ap-south-1',
+          accessKey: 'AKIA_S3_KEY_2026',
+          secretKey: 'SECRET_S3_PASS_SUPER_SECRET',
+          cdnUrl: 'https://cdn.auramarket.com',
+          forcePathStyle: false,
+        },
+        r2: {
+          accountId: 'acc_cf_123456789',
+          bucket: 'prod-r2-bucket',
+          accessKey: 'CF_R2_ACCESS_TOKEN',
+          secretKey: 'CF_R2_SECRET_KEY_SUPER_SAFE',
+          publicCustomDomain: 'https://media.auramarket.com',
+        },
+        wasabi: {
+          bucket: 'prod-wasabi',
+          region: 'us-east-1',
+          endpoint: 'https://s3.wasabisys.com',
+          accessKey: 'WASABI_KEY',
+          secretKey: 'WASABI_SECRET',
+        },
+        spaces: {
+          bucket: 'prod-spaces',
+          region: 'blr1',
+          endpoint: 'https://blr1.digitaloceanspaces.com',
+          key: 'SPACES_KEY',
+          secret: 'SPACES_SECRET_123',
+        },
+        imageOptimization: {
+          autoWebp: true,
+          quality: 80,
+          maxDimension: 2560,
+          generateThumbnails: true,
+        },
+      };
+
+      const res = await fetch(`${baseUrl}/admin/storage/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.activeProvider, 'r2');
+    });
+
+    await test('Point 4: GET /api/admin/storage/settings properly masks secrets across all providers', async () => {
+      const res = await fetch(`${baseUrl}/admin/storage/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.s3.hasSecretKey, true);
+      assert.ok(data.data.s3.secretKeyMasked.includes('••••'));
+      assert.strictEqual(data.data.r2.hasSecretKey, true);
+      assert.ok(data.data.r2.secretKeyMasked.includes('••••'));
+      assert.strictEqual(data.data.wasabi.hasSecretKey, true);
+      assert.ok(data.data.wasabi.secretKeyMasked.includes('••••'));
+      assert.strictEqual(data.data.spaces.hasSecret, true);
+      assert.ok(data.data.spaces.secretMasked.includes('••••'));
+    });
+
+    await test('Point 4: PUT /api/admin/storage/settings preserves masked secret without overwriting', async () => {
+      const payload = {
+        r2: {
+          secretKey: '••••••••',
+        },
+      };
+
+      const res = await fetch(`${baseUrl}/admin/storage/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      assert.strictEqual(res.status, 200);
+
+      const checkRes = await fetch(`${baseUrl}/admin/storage/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const checkData = await checkRes.json();
+      assert.strictEqual(checkData.data.r2.hasSecretKey, true);
+    });
+
+    await test('Point 4: POST /api/admin/storage/test-ping tests local storage path', async () => {
+      const res = await fetch(`${baseUrl}/admin/storage/test-ping`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ provider: 'local' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.provider, 'local');
+      assert.strictEqual(data.writable, true);
+      assert.ok(data.latencyMs <= 10);
+    });
+
+    await test('Point 4: POST /api/admin/storage/test-ping tests Cloudflare R2 bucket connectivity & CDN status', async () => {
+      const res = await fetch(`${baseUrl}/admin/storage/test-ping`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ provider: 'r2' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.provider, 'r2');
+      assert.ok(data.latencyMs >= 0);
+      assert.ok(data.cdnStatus.includes('media.auramarket.com'));
+    });
+
+    await test('Point 4: POST /api/admin/storage/optimize-preview calculates WebP compression bandwidth reduction', async () => {
+      const res = await fetch(`${baseUrl}/admin/storage/optimize-preview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ originalSizeKb: 3000, quality: 85 }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.originalSizeKb, 3000);
+      assert.ok(data.optimizedSizeKb < 1000);
+      assert.ok(data.savingsPercent >= 70);
+      assert.strictEqual(data.targetFormat, 'image/webp');
+    });
+
+    await test('Point 4: Role Security: Customer token cannot access storage settings or trigger ping (403 Forbidden)', async () => {
+      const resCustGet = await fetch(`${baseUrl}/admin/storage/settings`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustGet.status, 403);
+
+      const resCustPing = await fetch(`${baseUrl}/admin/storage/test-ping`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ provider: 's3' }),
+      });
+      assert.strictEqual(resCustPing.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

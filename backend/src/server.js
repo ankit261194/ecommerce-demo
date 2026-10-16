@@ -44,6 +44,7 @@ const payoutSplitRoutes = require('./routes/payoutSplitRoutes');
 const paymentGatewayRoutes = require('./routes/paymentGatewayRoutes');
 const messagingConfigRoutes = require('./routes/messagingConfigRoutes');
 const emailConfigRoutes = require('./routes/emailConfigRoutes');
+const storageConfigRoutes = require('./routes/storageConfigRoutes');
 
 const app = express();
 
@@ -150,6 +151,7 @@ app.use('/api/payments', paymentGatewayRoutes);
 app.use('/api/admin/payments', paymentGatewayRoutes);
 app.use('/api/admin/messaging', messagingConfigRoutes);
 app.use('/api/admin/email', emailConfigRoutes);
+app.use('/api/admin/storage', storageConfigRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

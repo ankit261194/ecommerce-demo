@@ -49,6 +49,32 @@ const deliveryTaskSchema = new mongoose.Schema(
       },
       mapUrl: String,
     },
+    // Point 16: Live Interactive Moving Rider Map & Telemetry
+    riderLocation: {
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null },
+      speed: { type: Number, default: 0 },
+      heading: { type: Number, default: 0 },
+      accuracy: { type: Number, default: 5 },
+      batteryLevel: { type: Number, default: 100 },
+      isMoving: { type: Boolean, default: false },
+      lastUpdatedAt: { type: Date, default: null },
+    },
+    telemetryHistory: [
+      {
+        lat: Number,
+        lng: Number,
+        speed: Number,
+        heading: Number,
+        timestamp: { type: Date, default: Date.now },
+      },
+    ],
+    simulationState: {
+      isSimulating: { type: Boolean, default: false },
+      currentWaypointIndex: { type: Number, default: 0 },
+      totalWaypoints: { type: Number, default: 8 },
+      lastSimulatedAt: { type: Date, default: null },
+    },
     status: {
       type: String,
       enum: ['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED', 'CANCELLED'],

@@ -19053,6 +19053,215 @@ const runTests = async () => {
       assert.strictEqual(res2.status, 400);
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 16: LIVE INTERACTIVE MOVING RIDER MAP ON ORDER TRACKING (SOCKET.IO REAL-TIME TELEMETRY)
+    // =========================================================================
+    console.log('\n--- PILLAR 1 - POINT 16: LIVE INTERACTIVE MOVING RIDER MAP ON ORDER TRACKING (SOCKET.IO REAL-TIME TELEMETRY) ---');
+
+    let point16Task;
+
+    await test('Point 16: Setup active DeliveryTask for Real-Time Telemetry testing', async () => {
+      const riderUser = await User.findOne({ role: 'delivery' });
+      assert.ok(riderUser, 'Delivery rider user must exist');
+
+      point16Task = await DeliveryTask.create({
+        deliveryPartner: riderUser._id,
+        taskType: 'FORWARD_DELIVERY',
+        status: 'OUT_FOR_DELIVERY',
+        dropLocation: {
+          recipientName: 'Vikram Mehta',
+          phone: '9876543210',
+          address: 'Flat 402, Skyline Towers, BKC',
+          city: 'Mumbai',
+          pincode: '400051',
+          coordinates: { lat: 19.1136, lng: 72.8697 },
+        },
+        pickupLocation: {
+          storeName: 'Aura BKC Hub',
+          city: 'Mumbai',
+          pincode: '400051',
+        },
+        riderLocation: {
+          lat: 19.0760,
+          lng: 72.8777,
+          speed: 26,
+          heading: 42,
+          batteryLevel: 94,
+          isMoving: true,
+          lastUpdatedAt: new Date(),
+        },
+        simulationState: {
+          isSimulating: false,
+          currentWaypointIndex: 2,
+          totalWaypoints: 8,
+        },
+      });
+
+      assert.ok(point16Task._id);
+    });
+
+    await test('Point 16: GET /api/delivery/live-tracking/:identifier returns complete telemetry, route polyline, and socket room', async () => {
+      const res = await fetch(`${baseUrl}/delivery/live-tracking/${point16Task._id}`);
+      assert.strictEqual(res.status, 200);
+
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.socketRoom.includes('order_'));
+      assert.strictEqual(body.data.rider.currentLocation.lat, 19.0760);
+      assert.strictEqual(body.data.rider.currentLocation.lng, 72.8777);
+      assert.strictEqual(body.data.rider.speedKmH, 26);
+      assert.strictEqual(body.data.rider.headingDegrees, 42);
+      assert.strictEqual(body.data.rider.batteryLevel, 94);
+      assert.ok(body.data.route.polyline.length >= 8);
+      assert.ok(body.data.route.distanceRemainingKm >= 0);
+      assert.ok(body.data.route.etaMinutes >= 0);
+      assert.strictEqual(body.data.route.trafficStatus, 'FLOWING');
+    });
+
+    await test('Point 16: POST /api/delivery/rider/location updates GPS coordinates, logs telemetry breadcrumb, and emits to Socket.io', async () => {
+      const res = await fetch(`${baseUrl}/delivery/rider/location`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          taskId: point16Task._id,
+          lat: 19.0880,
+          lng: 72.8740,
+          speed: 34,
+          heading: 52,
+          accuracy: 3,
+          batteryLevel: 90,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.lat, 19.0880);
+      assert.strictEqual(body.data.lng, 72.8740);
+      assert.strictEqual(body.data.speed, 34);
+      assert.strictEqual(body.data.heading, 52);
+      assert.strictEqual(body.data.batteryLevel, 90);
+      assert.strictEqual(body.data.isMoving, true);
+
+      // Verify DB persistence
+      const updated = await DeliveryTask.findById(point16Task._id);
+      assert.strictEqual(updated.riderLocation.lat, 19.0880);
+      assert.strictEqual(updated.riderLocation.speed, 34);
+      assert.ok(updated.telemetryHistory.length >= 1);
+    });
+
+    await test('Point 16: POST /api/delivery/rider/location validates missing coordinates (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/delivery/rider/location`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ speed: 20 }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+      assert.ok(body.message.includes('Latitude'));
+    });
+
+    await test('Point 16: POST /api/delivery/live-tracking/:identifier/simulate-step advances rider along route polyline', async () => {
+      const res = await fetch(`${baseUrl}/delivery/live-tracking/${point16Task._id}/simulate-step`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stepIndex: 5, customSpeed: 30 }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.currentWaypointIndex, 5);
+      assert.strictEqual(body.data.isCompleted, false);
+      assert.strictEqual(body.data.location.speed, 30);
+      assert.ok(body.data.location.lat);
+      assert.ok(body.data.location.lng);
+      assert.ok(body.data.route.distanceRemainingKm >= 0);
+      assert.ok(body.data.route.etaMinutes >= 0);
+    });
+
+    await test('Point 16: GET /api/delivery/live-tracking/:identifier/telemetry-history returns breadcrumb history', async () => {
+      const res = await fetch(`${baseUrl}/delivery/live-tracking/${point16Task._id}/telemetry-history`);
+      assert.strictEqual(res.status, 200);
+
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.count >= 2);
+      assert.ok(Array.isArray(body.data.history));
+      assert.ok(body.data.history[0].lat);
+      assert.ok(body.data.history[0].timestamp);
+    });
+
+    await test('Point 16: POST /api/delivery/rider/ping returns rider heartbeat confirmation', async () => {
+      const res = await fetch(`${baseUrl}/delivery/rider/ping`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.message, 'Rider gateway active');
+      assert.ok(body.timestamp);
+    });
+
+    await test('Point 16: Socket.io Service correctly initializes and handles real-time broadcasts', async () => {
+      const socketService = require('../src/services/socketService');
+      const ioInstance = socketService.getIO();
+      assert.ok(ioInstance, 'Socket.io instance should be initialized');
+
+      // Verify emit methods execute safely
+      const emittedLocation = socketService.emitRiderLocation('TEST-ORD-16', {
+        lat: 19.1000,
+        lng: 72.8700,
+        speed: 32,
+        heading: 45,
+      });
+      assert.strictEqual(emittedLocation, true);
+
+      const emittedEta = socketService.emitEtaUpdate('TEST-ORD-16', {
+        distanceRemainingKm: 1.2,
+        etaMinutes: 4,
+      });
+      assert.strictEqual(emittedEta, true);
+
+      const emittedStatus = socketService.emitOrderStatus('TEST-ORD-16', {
+        status: 'OUT_FOR_DELIVERY',
+      });
+      assert.strictEqual(emittedStatus, true);
+    });
+
+    await test('Point 16: Role Security: Customer cannot POST /api/delivery/rider/location (403 Forbidden)', async () => {
+      const res = await fetch(`${baseUrl}/delivery/rider/location`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ lat: 19.1, lng: 72.8 }),
+      });
+
+      assert.strictEqual(res.status, 403);
+    });
+
+    await test('Point 16: Auth Security: Unauthenticated request to /api/delivery/rider/location is rejected (401 Unauthorized)', async () => {
+      const res = await fetch(`${baseUrl}/delivery/rider/location`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: 19.1, lng: 72.8 }),
+      });
+
+      assert.strictEqual(res.status, 401);
+    });
+
   } finally {
     if (server) {
       server.close();

@@ -14,7 +14,14 @@ import {
   Truck,
   Flame,
   Radio,
+  BatteryCharging,
+  Layers,
+  History,
+  Activity,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
+import { io } from 'socket.io-client';
 import api from '../api/client';
 
 export default function LiveGpsTrackingMap({
@@ -29,18 +36,34 @@ export default function LiveGpsTrackingMap({
   const [isSimulating, setIsSimulating] = useState(false);
   const [progress, setProgress] = useState(0.65); // 0 to 1 along polyline
   const [countdownSeconds, setCountdownSeconds] = useState(360);
-  const animFrameRef = useRef(null);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [socketId, setSocketId] = useState(null);
+  const [lastTelemetryPing, setLastTelemetryPing] = useState(null);
+  const [telemetryHistory, setTelemetryHistory] = useState([]);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [mapTheme, setMapTheme] = useState('obsidian'); // obsidian, blueprint, satellite
+  const [speedGauge, setSpeedGauge] = useState(28);
+  const [batteryLevel, setBatteryLevel] = useState(92);
+  const [headingDegrees, setHeadingDegrees] = useState(42);
 
-  // Fetch initial GPS and route data
+  const socketRef = useRef(null);
+  const simIntervalRef = useRef(null);
+  const identifier = subOrderId || orderId || 'DEMO-ORDER';
+
+  // 1. Fetch initial GPS and route data
   useEffect(() => {
     let isMounted = true;
     const fetchGps = async () => {
       try {
-        const identifier = subOrderId || orderId || 'DEMO-ORDER';
         const res = await api.get(`/delivery/live-tracking/${identifier}`);
         if (res.data?.success && isMounted) {
-          setGpsData(res.data.data);
-          setCountdownSeconds(res.data.data.route?.etaSeconds || 360);
+          const d = res.data.data;
+          setGpsData(d);
+          setCountdownSeconds(d.route?.etaSeconds || 360);
+          setSpeedGauge(d.rider?.speedKmH || 28);
+          setHeadingDegrees(d.rider?.headingDegrees || 42);
+          setBatteryLevel(d.rider?.batteryLevel || 92);
+          if (d.telemetryHistory) setTelemetryHistory(d.telemetryHistory);
         }
       } catch (err) {
         console.warn('Fallback to local GPS data:', err.message);
@@ -53,9 +76,117 @@ export default function LiveGpsTrackingMap({
     return () => {
       isMounted = false;
     };
-  }, [orderId, subOrderId]);
+  }, [identifier]);
 
-  // Live countdown timer ticking down
+  // 2. Setup Real-time Socket.io Telemetry Gateway
+  useEffect(() => {
+    // Determine socket server URL based on current host
+    const socketUrl = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1')
+      ? 'http://localhost:5000'
+      : window.location.origin;
+
+    const socket = io(socketUrl, {
+      transports: ['websocket', 'polling'],
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2000,
+      timeout: 10000,
+    });
+
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      setSocketConnected(true);
+      setSocketId(socket.id);
+      // Join order-specific telemetry room
+      socket.emit('join_tracking_room', {
+        orderId: identifier,
+        role: 'customer',
+      });
+    });
+
+    socket.on('joined_room', (data) => {
+      setSocketConnected(true);
+    });
+
+    // Handle real-time incoming rider GPS coordinates broadcast
+    socket.on('rider:location_update', (event) => {
+      if (event?.location) {
+        const loc = event.location;
+        setLastTelemetryPing(new Date());
+        if (loc.speed !== undefined) setSpeedGauge(loc.speed);
+        if (loc.heading !== undefined) setHeadingDegrees(loc.heading);
+        if (loc.batteryLevel !== undefined) setBatteryLevel(loc.batteryLevel);
+
+        setGpsData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            rider: {
+              ...prev.rider,
+              currentLocation: { lat: loc.lat, lng: loc.lng },
+              speedKmH: loc.speed || prev.rider?.speedKmH,
+              headingDegrees: loc.heading || prev.rider?.headingDegrees,
+              batteryLevel: loc.batteryLevel || prev.rider?.batteryLevel,
+            },
+          };
+        });
+
+        setTelemetryHistory((prev) => [
+          ...prev.slice(-15),
+          {
+            lat: loc.lat,
+            lng: loc.lng,
+            speed: loc.speed,
+            heading: loc.heading,
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+      }
+    });
+
+    // Handle real-time ETA & distance update
+    socket.on('telemetry:eta_update', (event) => {
+      if (event?.eta) {
+        if (event.eta.etaSeconds !== undefined) setCountdownSeconds(event.eta.etaSeconds);
+        setGpsData((prev) => {
+          if (!prev?.route) return prev;
+          return {
+            ...prev,
+            route: {
+              ...prev.route,
+              distanceRemainingKm: event.eta.distanceRemainingKm ?? prev.route.distanceRemainingKm,
+              etaMinutes: event.eta.etaMinutes ?? prev.route.etaMinutes,
+              etaSeconds: event.eta.etaSeconds ?? prev.route.etaSeconds,
+            },
+          };
+        });
+      }
+    });
+
+    // Handle order status transitions
+    socket.on('order:status_update', (event) => {
+      if (event?.status) {
+        setGpsData((prev) => (prev ? { ...prev, status: event.status } : prev));
+      }
+    });
+
+    socket.on('disconnect', () => {
+      setSocketConnected(false);
+    });
+
+    socket.on('connect_error', () => {
+      setSocketConnected(false);
+    });
+
+    return () => {
+      if (socket) {
+        socket.emit('leave_tracking_room', { orderId: identifier });
+        socket.disconnect();
+      }
+    };
+  }, [identifier]);
+
+  // 3. Live countdown timer ticking down
   useEffect(() => {
     if (countdownSeconds <= 0) return;
     const timer = setInterval(() => {
@@ -64,28 +195,55 @@ export default function LiveGpsTrackingMap({
     return () => clearInterval(timer);
   }, [countdownSeconds]);
 
-  // Animated simulation of bike moving along route polyline
-  useEffect(() => {
-    if (!isSimulating) return;
+  // 4. Server-synced simulation of bike moving along route polyline
+  const startSimulation = () => {
+    if (isSimulating) return;
+    setIsSimulating(true);
+    setProgress(0);
 
-    let current = progress;
-    const step = () => {
-      current += 0.003;
-      if (current >= 1) {
-        current = 1;
+    let step = 0;
+    const totalSteps = 8;
+
+    simIntervalRef.current = setInterval(async () => {
+      step += 1;
+      const newProgress = Math.min(1, step / totalSteps);
+      setProgress(newProgress);
+
+      try {
+        const res = await api.post(`/delivery/live-tracking/${identifier}/simulate-step`, {
+          stepIndex: step,
+          customSpeed: step === totalSteps ? 0 : 32,
+        });
+        if (res.data?.success) {
+          const loc = res.data.data.location;
+          setSpeedGauge(loc.speed);
+          setHeadingDegrees(loc.heading);
+          setBatteryLevel(loc.batteryLevel);
+          if (res.data.data.route?.etaSeconds !== undefined) {
+            setCountdownSeconds(res.data.data.route.etaSeconds);
+          }
+        }
+      } catch (err) {
+        console.warn('Simulation step local fallback:', err.message);
+      }
+
+      if (step >= totalSteps) {
+        clearInterval(simIntervalRef.current);
         setIsSimulating(false);
       }
-      setProgress(current);
-      if (current < 1) {
-        animFrameRef.current = requestAnimationFrame(step);
-      }
-    };
+    }, 1600);
+  };
 
-    animFrameRef.current = requestAnimationFrame(step);
+  const stopSimulation = () => {
+    if (simIntervalRef.current) clearInterval(simIntervalRef.current);
+    setIsSimulating(false);
+  };
+
+  useEffect(() => {
     return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (simIntervalRef.current) clearInterval(simIntervalRef.current);
     };
-  }, [isSimulating]);
+  }, []);
 
   // Default coordinate set if API loading or offline
   const routePoints = gpsData?.route?.polyline || [
@@ -108,7 +266,6 @@ export default function LiveGpsTrackingMap({
 
   const project = (lat, lng) => {
     const x = ((lng - minLng) / (maxLng - minLng)) * 520 + 40;
-    // Invert Y because SVG coordinates increase downwards
     const y = 300 - (((lat - minLat) / (maxLat - minLat)) * 240 + 40);
     return { x, y };
   };
@@ -137,7 +294,8 @@ export default function LiveGpsTrackingMap({
   // Compute heading angle for bike rotation
   const deltaX = project(p2[0], p2[1]).x - project(p1[0], p1[1]).x;
   const deltaY = project(p2[0], p2[1]).y - project(p1[0], p1[1]).y;
-  const headingAngle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+  const calculatedAngle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+  const activeHeading = isSimulating ? calculatedAngle : headingDegrees;
 
   const startPoint = project(routePoints[0][0], routePoints[0][1]);
   const endPoint = project(routePoints[routePoints.length - 1][0], routePoints[routePoints.length - 1][1]);
@@ -155,50 +313,88 @@ export default function LiveGpsTrackingMap({
   };
 
   return (
-    <div className="bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-xl text-white relative">
+    <div className="bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl text-white relative">
       
-      {/* Top Telemetry Header */}
-      <div className="px-5 py-3.5 bg-slate-950/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+      {/* Top Telemetry & Socket Status Header */}
+      <div className="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+          <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
             <Radio className="w-4 h-4 animate-pulse" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h4 className="text-xs sm:text-sm font-black tracking-tight text-white flex items-center gap-1.5">
-                <span>Live Real-Time GPS Delivery Tracking</span>
+                <span>Live Moving Rider Map & Telemetry</span>
                 <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500 text-slate-950">
-                  LIVE
+                  REAL-TIME
                 </span>
                 <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
                   #16
                 </span>
               </h4>
             </div>
-            <p className="text-[11px] text-slate-400">
-              Rider is en route with express 2-wheeler delivery
-            </p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
+                socketConnected ? 'text-emerald-400' : 'text-amber-400'
+              }`}>
+                {socketConnected ? (
+                  <>
+                    <Wifi className="w-3 h-3 text-emerald-400 animate-pulse" />
+                    <span>Socket.IO Connected (Room: order_{identifier.substring(0, 10)})</span>
+                  </>
+                ) : (
+                  <>
+                    <WifiOff className="w-3 h-3 text-amber-400" />
+                    <span>Live Telemetry Active (REST Polling fallback)</span>
+                  </>
+                )}
+              </span>
+            </div>
           </div>
         </div>
 
+        {/* Action Controls */}
         <div className="flex items-center gap-2">
+          {/* Map Theme Toggle */}
           <button
             type="button"
             onClick={() => {
-              setProgress(0.1);
-              setIsSimulating(true);
+              const themes = ['obsidian', 'blueprint', 'satellite'];
+              const next = themes[(themes.indexOf(mapTheme) + 1) % themes.length];
+              setMapTheme(next);
             }}
-            disabled={isSimulating}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 transition"
+            title="Switch Map Theme"
+          >
+            <Layers className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="capitalize">{mapTheme}</span>
+          </button>
+
+          {/* Breadcrumbs History Toggle */}
+          <button
+            type="button"
+            onClick={() => setShowHistoryModal(!showHistoryModal)}
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+            title="View GPS Breadcrumb History"
+          >
+            <History className="w-3.5 h-3.5 text-amber-400" />
+          </button>
+
+          {/* Simulate Movement Button */}
+          <button
+            type="button"
+            onClick={isSimulating ? stopSimulation : startSimulation}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm ${
               isSimulating
-                ? 'bg-amber-500 text-slate-950 animate-pulse'
-                : 'bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700'
+                ? 'bg-rose-500 hover:bg-rose-600 text-white animate-pulse'
+                : 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black'
             }`}
           >
             <Play className="w-3 h-3 fill-current" />
-            <span>{isSimulating ? 'Simulating Ride...' : 'Simulate Live GPS Ride'}</span>
+            <span>{isSimulating ? 'Stop Telemetry' : 'Simulate Rider Movement'}</span>
           </button>
 
+          {/* Recenter Button */}
           <button
             type="button"
             onClick={() => {
@@ -214,7 +410,7 @@ export default function LiveGpsTrackingMap({
       </div>
 
       {/* Floating HUD Badges */}
-      <div className="p-4 bg-slate-900/90 grid grid-cols-2 sm:grid-cols-4 gap-2.5 border-b border-slate-800 text-xs">
+      <div className="p-4 bg-slate-900/90 grid grid-cols-2 sm:grid-cols-5 gap-2.5 border-b border-slate-800 text-xs">
         <div className="bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60">
           <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
             <Clock className="w-3 h-3 text-amber-400" />
@@ -242,17 +438,29 @@ export default function LiveGpsTrackingMap({
         <div className="bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60">
           <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
             <Zap className="w-3 h-3 text-emerald-400" />
-            Rider Speed
+            Live Rider Speed
           </span>
-          <div className="text-base sm:text-lg font-black text-emerald-400 font-mono mt-0.5">
-            {progress >= 1 ? '0 km/h' : `${rider.speedKmH || 28} km/h`}
+          <div className="text-base sm:text-lg font-black text-emerald-400 font-mono mt-0.5 flex items-center gap-1">
+            <span>{progress >= 1 ? '0' : speedGauge}</span>
+            <span className="text-[11px] text-slate-400 font-normal">km/h</span>
           </div>
         </div>
 
-        <div className="bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/30">
+        <div className="bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60">
+          <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
+            <BatteryCharging className="w-3 h-3 text-cyan-400" />
+            Rider Battery
+          </span>
+          <div className="text-base sm:text-lg font-black text-cyan-400 font-mono mt-0.5 flex items-center gap-1">
+            <span>{batteryLevel}%</span>
+            <span className="text-[10px] text-slate-400 font-normal">EV</span>
+          </div>
+        </div>
+
+        <div className="bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/30 col-span-2 sm:col-span-1">
           <span className="text-[10px] uppercase font-bold text-amber-300 flex items-center gap-1">
             <ShieldCheck className="w-3 h-3 text-amber-400" />
-            Doorstep Delivery OTP
+            Handover OTP
           </span>
           <div className="text-base sm:text-lg font-black text-amber-300 font-mono tracking-widest mt-0.5">
             {deliveryOtp}
@@ -261,18 +469,20 @@ export default function LiveGpsTrackingMap({
       </div>
 
       {/* SVG Interactive GPS Map Canvas */}
-      <div className="relative w-full h-72 sm:h-80 bg-[#0f172a] overflow-hidden select-none">
+      <div className={`relative w-full h-72 sm:h-84 overflow-hidden select-none transition-colors duration-500 ${
+        mapTheme === 'obsidian' ? 'bg-[#0b1329]' : mapTheme === 'blueprint' ? 'bg-[#0f284e]' : 'bg-[#14231f]'
+      }`}>
         
         {/* Subtle Map Grid lines */}
         <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" strokeWidth="0.8" />
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke={mapTheme === 'blueprint' ? '#1e40af' : '#1e293b'} strokeWidth="0.8" opacity="0.6" />
             </pattern>
             {/* Road route gradient */}
             <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#3b82f6" />
-              <stop offset="60%" stopColor="#10b981" />
+              <stop offset="50%" stopColor="#10b981" />
               <stop offset="100%" stopColor="#f59e0b" />
             </linearGradient>
             <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
@@ -285,14 +495,29 @@ export default function LiveGpsTrackingMap({
           <rect width="100%" height="100%" fill="url(#grid)" />
 
           {/* City Street Blocks Simulation */}
-          <rect x="50" y="30" width="120" height="70" rx="8" fill="#1e293b" opacity="0.4" />
-          <text x="110" y="70" fill="#475569" fontSize="10" textAnchor="middle" fontWeight="bold">BKC Financial District</text>
+          <rect x="50" y="30" width="130" height="70" rx="8" fill="#1e293b" opacity="0.35" />
+          <text x="115" y="70" fill="#64748b" fontSize="10" textAnchor="middle" fontWeight="bold">Fulfillment District</text>
 
-          <rect x="220" y="50" width="140" height="80" rx="8" fill="#1e293b" opacity="0.4" />
-          <text x="290" y="95" fill="#475569" fontSize="10" textAnchor="middle" fontWeight="bold">Kurla Transit Flyover</text>
+          <rect x="220" y="50" width="140" height="80" rx="8" fill="#1e293b" opacity="0.35" />
+          <text x="290" y="95" fill="#64748b" fontSize="10" textAnchor="middle" fontWeight="bold">Transit Expressway</text>
 
-          <rect x="390" y="140" width="130" height="90" rx="8" fill="#1e293b" opacity="0.4" />
-          <text x="455" y="190" fill="#475569" fontSize="10" textAnchor="middle" fontWeight="bold">Residential Enclave</text>
+          <rect x="390" y="140" width="140" height="90" rx="8" fill="#1e293b" opacity="0.35" />
+          <text x="460" y="190" fill="#64748b" fontSize="10" textAnchor="middle" fontWeight="bold">Destination Enclave</text>
+
+          {/* Breadcrumb Trail from Telemetry History */}
+          {telemetryHistory.map((pt, i) => {
+            const pos = project(pt.lat, pt.lng);
+            return (
+              <circle
+                key={`crumb-${i}`}
+                cx={pos.x}
+                cy={pos.y}
+                r="3"
+                fill="#38bdf8"
+                opacity="0.5"
+              />
+            );
+          })}
 
           {/* Polyline Route Glow Line */}
           <path
@@ -340,22 +565,22 @@ export default function LiveGpsTrackingMap({
           {/* Moving Delivery Rider Bike Marker */}
           <g transform={`translate(${bikePos.x}, ${bikePos.y})`}>
             {/* Radar Pulsing Wave */}
-            <circle r="20" fill="#f59e0b" opacity="0.25" className="animate-ping" />
+            <circle r="22" fill="#f59e0b" opacity="0.3" className="animate-ping" />
             <circle r="14" fill="#d97706" opacity="0.4" />
 
             {/* Bike Outer Circle Container */}
             <circle r="12" fill="#0f172a" stroke="#f59e0b" strokeWidth="2.5" />
 
-            {/* Direction Pointer Arrow */}
-            <g transform={`rotate(${headingAngle})`}>
+            {/* Direction Pointer Arrow with dynamic heading */}
+            <g transform={`rotate(${activeHeading})`}>
               <polygon points="0,-10 6,4 0,1 -6,4" fill="#fbbf24" />
             </g>
 
-            {/* Rider Label Tooltip */}
+            {/* Rider Label Tooltip with Live Speed */}
             <g transform="translate(0, 24)">
-              <rect x="-42" y="-10" width="84" height="16" rx="4" fill="#0f172a" stroke="#d97706" strokeWidth="1" />
+              <rect x="-48" y="-10" width="96" height="16" rx="4" fill="#0f172a" stroke="#d97706" strokeWidth="1" />
               <text y="2" fill="#fef08a" fontSize="9" textAnchor="middle" fontWeight="black">
-                🏍️ {rider.name?.split(' ')[0] || 'Rider'}
+                🏍️ {rider.name?.split(' ')[0] || 'Rider'} ({progress >= 1 ? '0' : speedGauge} km/h)
               </text>
             </g>
           </g>
@@ -383,6 +608,38 @@ export default function LiveGpsTrackingMap({
           </div>
         </div>
       </div>
+
+      {/* GPS Breadcrumbs Modal / Drawer */}
+      {showHistoryModal && (
+        <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-2">
+          <div className="flex items-center justify-between">
+            <h5 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5" />
+              Live Telemetry Ping History ({telemetryHistory.length} breadcrumbs)
+            </h5>
+            <button
+              type="button"
+              onClick={() => setShowHistoryModal(false)}
+              className="text-xs text-slate-400 hover:text-white"
+            >
+              Close
+            </button>
+          </div>
+          <div className="max-h-36 overflow-y-auto space-y-1.5 font-mono text-[11px]">
+            {telemetryHistory.length === 0 ? (
+              <p className="text-slate-500 py-2">No telemetry breadcrumbs recorded yet. Start simulation or rider ping to stream live coordinates.</p>
+            ) : (
+              telemetryHistory.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between p-1.5 bg-slate-900 rounded border border-slate-800 text-slate-300">
+                  <span>GPS: {Number(item.lat).toFixed(4)}, {Number(item.lng).toFixed(4)}</span>
+                  <span className="text-emerald-400">{item.speed || 0} km/h</span>
+                  <span className="text-slate-500">{new Date(item.timestamp).toLocaleTimeString()}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Rider Profile Card & Action Bar */}
       <div className="p-4 bg-slate-950 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 text-xs">

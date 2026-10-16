@@ -320,15 +320,21 @@ app.use((req, res, next) => {
 // Error Handling Middleware
 app.use(errorHandler);
 
+const http = require('http');
+const socketService = require('./services/socketService');
+const server = http.createServer(app);
+socketService.init(server);
+
 const PORT = process.env.PORT || 5000;
 
 // Start server if executed directly (e.g., node src/server.js or npm start)
 if (require.main === module) {
   connectDB().then(() => {
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`====================================================`);
       console.log(`🚀 Multi-Vendor API Gateway running on port ${PORT}`);
       console.log(`🌐 Health check: http://localhost:${PORT}/api/health`);
+      console.log(`📡 Socket.IO Real-time Gateway attached`);
       console.log(`🎨 Design Theme: Obsidian Slate & Electric Amber`);
       console.log(`====================================================`);
     });
@@ -343,4 +349,6 @@ process.on('unhandledRejection', (err, promise) => {
   console.error(`[Unhandled Error]: ${err.message}`);
 });
 
+app.server = server;
 module.exports = app;
+

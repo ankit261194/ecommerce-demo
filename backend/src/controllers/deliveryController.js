@@ -1153,7 +1153,34 @@ exports.rescheduleTask = async (req, res, next) => {
   }
 };
 
-// Point 16: Live Real-Time GPS Delivery Tracking Map
+// Helper to calculate distance in km using Haversine formula
+const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
+  const R = 6371; // Earth's radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 100) / 100;
+};
+
+// Helper to calculate bearing angle (0 to 360 degrees)
+const calculateBearing = (lat1, lon1, lat2, lon2) => {
+  const y = Math.sin(((lon2 - lon1) * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180);
+  const x =
+    Math.cos((lat1 * Math.PI) / 180) * Math.sin((lat2 * Math.PI) / 180) -
+    Math.sin((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.cos(((lon2 - lon1) * Math.PI) / 180);
+  const b = (Math.atan2(y, x) * 180) / Math.PI;
+  return Math.round((b + 360) % 360);
+};
+
+// Point 16: Live Real-Time GPS Delivery Tracking Map (Socket.io Telemetry)
 // @desc    Get Live GPS Coordinates, Moving Bike Position, Route Polyline and ETA
 // @route   GET /api/delivery/live-tracking/:identifier
 // @access  Public / Customer / Rider
@@ -1220,7 +1247,26 @@ exports.getLiveGpsTracking = async (req, res, next) => {
         destLat = deliveryTask.dropLocation.coordinates.lat;
         destLng = deliveryTask.dropLocation.coordinates.lng;
       }
+    } else if (order) {
+      deliveryTask = await DeliveryTask.findOne({ subOrder: { $in: order.subOrders } }).populate('deliveryPartner');
+      if (deliveryTask?.dropLocation?.coordinates?.lat && deliveryTask.dropLocation.coordinates.lng) {
+        destLat = deliveryTask.dropLocation.coordinates.lat;
+        destLng = deliveryTask.dropLocation.coordinates.lng;
+      }
     }
+
+    if (!deliveryTask && mongoose.Types.ObjectId.isValid(identifier)) {
+      deliveryTask = await DeliveryTask.findById(identifier).populate('deliveryPartner');
+      if (deliveryTask?.dropLocation?.coordinates?.lat && deliveryTask.dropLocation.coordinates.lng) {
+        destLat = deliveryTask.dropLocation.coordinates.lat;
+        destLng = deliveryTask.dropLocation.coordinates.lng;
+      }
+      if (deliveryTask?.deliveryPartner) {
+        riderName = deliveryTask.deliveryPartner.name || riderName;
+        riderPhone = deliveryTask.deliveryPartner.phone || riderPhone;
+      }
+    }
+
 
     // Generate realistic multi-point street polyline between origin and destination
     const numPoints = 8;
@@ -1236,15 +1282,35 @@ exports.getLiveGpsTracking = async (req, res, next) => {
       ]);
     }
 
-    // Current rider position is typically 65% of the way to the customer
-    const riderProgressIndex = subOrderStatus === 'delivered' ? polyline.length - 1 : Math.floor(polyline.length * 0.65);
-    const riderPos = polyline[riderProgressIndex] || [19.0980, 72.8715];
+    // Determine current rider position: use stored task coordinates if available, else waypoint index
+    let riderPos;
+    let speedKmH = subOrderStatus === 'delivered' ? 0 : 28;
+    let headingDegrees = 42;
+    let batteryLevel = 92;
+    let lastUpdatedAt = new Date();
+
+    if (deliveryTask?.riderLocation?.lat && deliveryTask?.riderLocation?.lng) {
+      riderPos = [deliveryTask.riderLocation.lat, deliveryTask.riderLocation.lng];
+      speedKmH = deliveryTask.riderLocation.speed !== undefined ? deliveryTask.riderLocation.speed : speedKmH;
+      headingDegrees = deliveryTask.riderLocation.heading || headingDegrees;
+      batteryLevel = deliveryTask.riderLocation.batteryLevel || batteryLevel;
+      lastUpdatedAt = deliveryTask.riderLocation.lastUpdatedAt || lastUpdatedAt;
+    } else {
+      const simIndex = deliveryTask?.simulationState?.currentWaypointIndex !== undefined
+        ? deliveryTask.simulationState.currentWaypointIndex
+        : (subOrderStatus === 'delivered' ? polyline.length - 1 : Math.floor(polyline.length * 0.65));
+      riderPos = polyline[simIndex] || [19.0980, 72.8715];
+    }
 
     // Compute remaining distance & ETA
-    const totalDistanceKm = 4.2;
-    const distanceRemainingKm = subOrderStatus === 'delivered' ? 0 : 1.4;
-    const etaMinutes = subOrderStatus === 'delivered' ? 0 : 6;
-    const etaSeconds = subOrderStatus === 'delivered' ? 0 : 360;
+    const totalDistanceKm = calculateDistanceKm(originLat, originLng, destLat, destLng) || 4.2;
+    const distanceRemainingKm = subOrderStatus === 'delivered'
+      ? 0
+      : calculateDistanceKm(riderPos[0], riderPos[1], destLat, destLng);
+    const etaMinutes = subOrderStatus === 'delivered'
+      ? 0
+      : Math.max(1, Math.round((distanceRemainingKm / (speedKmH || 25)) * 60));
+    const etaSeconds = etaMinutes * 60;
 
     res.status(200).json({
       success: true,
@@ -1252,18 +1318,22 @@ exports.getLiveGpsTracking = async (req, res, next) => {
         orderIdentifier: identifier,
         status: subOrderStatus,
         deliveryOtp,
+        socketRoom: `order_${identifier}`,
         rider: {
           name: riderName,
           phone: riderPhone,
           vehicle: riderVehicle,
           rating: riderRating,
           photo: riderPhoto,
-          speedKmH: subOrderStatus === 'delivered' ? 0 : 28,
-          headingDegrees: 42,
+          speedKmH,
+          headingDegrees,
+          batteryLevel,
+          isMoving: speedKmH > 0,
           currentLocation: {
             lat: riderPos[0],
             lng: riderPos[1],
           },
+          lastUpdatedAt,
         },
         origin: {
           lat: originLat,
@@ -1282,8 +1352,14 @@ exports.getLiveGpsTracking = async (req, res, next) => {
           etaMinutes,
           etaSeconds,
           trafficStatus: 'FLOWING',
-          lastUpdatedAt: new Date(),
+          lastUpdatedAt,
         },
+        simulationState: deliveryTask?.simulationState || {
+          isSimulating: false,
+          currentWaypointIndex: Math.floor(polyline.length * 0.65),
+          totalWaypoints: polyline.length,
+        },
+        telemetryHistory: (deliveryTask?.telemetryHistory || []).slice(-10),
       },
     });
   } catch (error) {
@@ -1292,11 +1368,11 @@ exports.getLiveGpsTracking = async (req, res, next) => {
 };
 
 // @desc    Update Rider GPS Coordinates from Mobile / App
-// @route   PATCH /api/delivery/rider/location
+// @route   POST or PATCH /api/delivery/rider/location
 // @access  Private (Courier Rider / Admin)
 exports.updateRiderLocation = async (req, res, next) => {
   try {
-    const { lat, lng, speed, heading, taskId } = req.body;
+    const { lat, lng, speed, heading, accuracy, batteryLevel, taskId, orderIdentifier } = req.body;
 
     if (lat === undefined || lng === undefined) {
       return res.status(400).json({
@@ -1305,40 +1381,265 @@ exports.updateRiderLocation = async (req, res, next) => {
       });
     }
 
-    let updatedTask = null;
+    let task = null;
     if (taskId) {
-      updatedTask = await DeliveryTask.findByIdAndUpdate(
-        taskId,
-        {
-          $set: {
-            'riderLocation.lat': lat,
-            'riderLocation.lng': lng,
-            'riderLocation.speed': speed || 0,
-            'riderLocation.heading': heading || 0,
-            'riderLocation.lastUpdatedAt': new Date(),
-          },
-        },
-        { new: true }
-      );
+      task = await DeliveryTask.findById(taskId);
+    } else if (orderIdentifier) {
+      const ord = await Order.findOne({ orderNumber: orderIdentifier });
+      if (ord && ord.subOrders?.length > 0) {
+        task = await DeliveryTask.findOne({ subOrder: { $in: ord.subOrders } });
+      }
     }
+    if (!task && req.user?._id) {
+      task = await DeliveryTask.findOne({
+        deliveryPartner: req.user._id,
+        status: { $in: ['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY'] },
+      });
+    }
+
+    const numericLat = Number(lat);
+    const numericLng = Number(lng);
+    const numericSpeed = Number(speed || 0);
+    const numericHeading = Number(heading || 0);
+    const numericBattery = Number(batteryLevel || 100);
+    const numericAccuracy = Number(accuracy || 5);
+
+    const locationUpdate = {
+      lat: numericLat,
+      lng: numericLng,
+      speed: numericSpeed,
+      heading: numericHeading,
+      accuracy: numericAccuracy,
+      batteryLevel: numericBattery,
+      isMoving: numericSpeed > 0,
+      lastUpdatedAt: new Date(),
+    };
+
+    if (task) {
+      task.riderLocation = locationUpdate;
+      if (!task.telemetryHistory) task.telemetryHistory = [];
+      task.telemetryHistory.push({
+        lat: numericLat,
+        lng: numericLng,
+        speed: numericSpeed,
+        heading: numericHeading,
+        timestamp: new Date(),
+      });
+      if (task.telemetryHistory.length > 50) {
+        task.telemetryHistory = task.telemetryHistory.slice(-50);
+      }
+      await task.save();
+    }
+
+    // Broadcast over Socket.io
+    const socketService = require('../services/socketService');
+    const broadcastIdentifier = orderIdentifier || (task?.subOrder ? String(task.subOrder) : (task?._id ? String(task._id) : 'live'));
+    socketService.emitRiderLocation(broadcastIdentifier, locationUpdate);
 
     res.status(200).json({
       success: true,
       message: 'Rider location updated successfully',
       data: {
         riderId: req.user?._id,
-        lat,
-        lng,
-        speed: speed || 0,
-        heading: heading || 0,
-        updatedAt: new Date(),
-        task: updatedTask,
+        ...locationUpdate,
+        taskId: task?._id || taskId || null,
+        socketRoom: `order_${broadcastIdentifier}`,
       },
     });
   } catch (error) {
     next(error);
   }
 };
+
+// @desc    Simulate Single Rider Step along Polyline for Interactive Telemetry Demo
+// @route   POST /api/delivery/live-tracking/:identifier/simulate-step
+// @access  Public / Customer / Demo
+exports.simulateTrackingStep = async (req, res, next) => {
+  try {
+    const { identifier } = req.params;
+    const { reset, customSpeed, stepIndex } = req.body || {};
+    const mongoose = require('mongoose');
+
+    let subOrder = null;
+    let order = null;
+
+    if (mongoose.Types.ObjectId.isValid(identifier)) {
+      subOrder = await SubOrder.findById(identifier);
+      if (!subOrder) {
+        order = await Order.findById(identifier);
+      }
+    }
+    if (!order && !subOrder) {
+      order = await Order.findOne({ orderNumber: identifier });
+    }
+    if (order && !subOrder && order.subOrders?.length > 0) {
+      subOrder = await SubOrder.findById(order.subOrders[0]._id || order.subOrders[0]);
+    }
+
+    let task = null;
+    if (subOrder) {
+      task = await DeliveryTask.findOne({ subOrder: subOrder._id });
+    }
+    if (!task && mongoose.Types.ObjectId.isValid(identifier)) {
+      task = await DeliveryTask.findById(identifier);
+    }
+
+    let originLat = 19.0760;
+    let originLng = 72.8777;
+    let destLat = 19.1136;
+    let destLng = 72.8697;
+
+    if (task?.dropLocation?.coordinates?.lat && task?.dropLocation?.coordinates?.lng) {
+      destLat = task.dropLocation.coordinates.lat;
+      destLng = task.dropLocation.coordinates.lng;
+    }
+
+    const numPoints = 8;
+    const polyline = [];
+    for (let i = 0; i <= numPoints; i++) {
+      const ratio = i / numPoints;
+      const jitterLat = Math.sin(ratio * Math.PI) * 0.004;
+      const jitterLng = Math.cos(ratio * Math.PI * 1.5) * 0.003;
+      polyline.push([
+        Math.round((originLat + (destLat - originLat) * ratio + jitterLat) * 10000) / 10000,
+        Math.round((originLng + (destLng - originLng) * ratio + jitterLng) * 10000) / 10000,
+      ]);
+    }
+
+    let currentIndex = 0;
+    if (reset) {
+      currentIndex = 0;
+    } else if (typeof stepIndex === 'number') {
+      currentIndex = Math.max(0, Math.min(stepIndex, polyline.length - 1));
+    } else if (task?.simulationState?.currentWaypointIndex !== undefined) {
+      currentIndex = (task.simulationState.currentWaypointIndex + 1) % polyline.length;
+    } else {
+      currentIndex = 1;
+    }
+
+    const currentCoords = polyline[currentIndex];
+    const nextCoords = polyline[Math.min(currentIndex + 1, polyline.length - 1)];
+    const heading = calculateBearing(currentCoords[0], currentCoords[1], nextCoords[0], nextCoords[1]);
+    const speed = customSpeed !== undefined ? Number(customSpeed) : (currentIndex === polyline.length - 1 ? 0 : 32);
+    const distanceRemainingKm = calculateDistanceKm(currentCoords[0], currentCoords[1], destLat, destLng);
+    const etaMinutes = currentIndex === polyline.length - 1 ? 0 : Math.max(1, Math.round((distanceRemainingKm / (speed || 25)) * 60));
+
+    const simulatedLocation = {
+      lat: currentCoords[0],
+      lng: currentCoords[1],
+      speed,
+      heading,
+      accuracy: 4,
+      batteryLevel: Math.max(20, 95 - currentIndex * 2),
+      isMoving: speed > 0,
+      lastUpdatedAt: new Date(),
+    };
+
+    if (task) {
+      task.riderLocation = simulatedLocation;
+      task.simulationState = {
+        isSimulating: currentIndex < polyline.length - 1,
+        currentWaypointIndex: currentIndex,
+        totalWaypoints: polyline.length,
+        lastSimulatedAt: new Date(),
+      };
+      if (!task.telemetryHistory) task.telemetryHistory = [];
+      task.telemetryHistory.push({
+        lat: currentCoords[0],
+        lng: currentCoords[1],
+        speed,
+        heading,
+        timestamp: new Date(),
+      });
+      if (task.telemetryHistory.length > 50) {
+        task.telemetryHistory = task.telemetryHistory.slice(-50);
+      }
+      await task.save();
+    }
+
+    const socketService = require('../services/socketService');
+    socketService.emitRiderLocation(identifier, simulatedLocation);
+    socketService.emitEtaUpdate(identifier, {
+      distanceRemainingKm,
+      etaMinutes,
+      etaSeconds: etaMinutes * 60,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Simulated tracking step executed',
+      data: {
+        orderIdentifier: identifier,
+        currentWaypointIndex: currentIndex,
+        totalWaypoints: polyline.length,
+        isCompleted: currentIndex === polyline.length - 1,
+        location: simulatedLocation,
+        route: {
+          polyline,
+          distanceRemainingKm,
+          etaMinutes,
+          etaSeconds: etaMinutes * 60,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Rider Telemetry History Breadcrumbs
+// @route   GET /api/delivery/live-tracking/:identifier/telemetry-history
+// @access  Public / Customer / Rider
+exports.getTelemetryHistory = async (req, res, next) => {
+  try {
+    const { identifier } = req.params;
+    const mongoose = require('mongoose');
+
+    let task = null;
+    if (mongoose.Types.ObjectId.isValid(identifier)) {
+      task = await DeliveryTask.findById(identifier);
+      if (!task) {
+        task = await DeliveryTask.findOne({ subOrder: identifier });
+      }
+    }
+    if (!task) {
+      const order = await Order.findOne({ orderNumber: identifier });
+      if (order?.subOrders?.length > 0) {
+        task = await DeliveryTask.findOne({ subOrder: { $in: order.subOrders } });
+      }
+    }
+
+    const history = task?.telemetryHistory || [];
+
+    res.status(200).json({
+      success: true,
+      data: {
+        orderIdentifier: identifier,
+        count: history.length,
+        history,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Ping Rider Gateway (Heartbeat)
+// @route   POST /api/delivery/rider/ping
+// @access  Private (Courier Rider / Admin)
+exports.pingRider = async (req, res, next) => {
+  try {
+    res.status(200).json({
+      success: true,
+      message: 'Rider gateway active',
+      timestamp: new Date().toISOString(),
+      riderId: req.user?._id,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 // ========================================================
 // Point 17: Multi-Stop Rider Delivery Route Optimizer

@@ -53,6 +53,12 @@ const integrationsSchema = new mongoose.Schema(
       templateNamespace: { type: String, default: 'auramarket_commerce_alerts' },
       apiVersion: { type: String, default: 'v20.0' },
       webhookVerifyToken: { type: String, default: 'auramarket_wa_verify_2026' },
+      botEnabled: { type: Boolean, default: true },
+      botName: { type: String, default: 'AuraBot' },
+      greetingMessage: { type: String, default: 'Namaste! Welcome to AuraMarket WhatsApp Shopping Concierge.' },
+      supportPhone: { type: String, default: '+91 98765 43210' },
+      catalogSearchLimit: { type: Number, default: 4 },
+      autoCodBookingEnabled: { type: Boolean, default: true },
       automatedAlerts: {
         orderConfirmation: { type: Boolean, default: true },
         outForDelivery: { type: Boolean, default: true },

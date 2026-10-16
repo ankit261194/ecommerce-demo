@@ -15989,6 +15989,234 @@ const runTests = async () => {
       assert.strictEqual(res.status, 401);
     });
 
+    // =========================================================================
+    // POINT 25: WHATSAPP CONVERSATIONAL SHOPPING BOT & AUTOMATED ORDER ALERTS
+    // =========================================================================
+    console.log('\n--- POINT 25: WHATSAPP CONVERSATIONAL SHOPPING BOT & AUTOMATED ORDER ALERTS ---');
+
+    let testWaProduct;
+    let createdWaOrderNumber;
+
+    await test('Point 25 Setup: Seed or fetch target product for WhatsApp Shopping Bot', async () => {
+      testWaProduct = await Product.findOne({ isPublished: { $ne: false }, stock: { $gt: 5 } });
+      if (!testWaProduct) {
+        testWaProduct = await Product.create({
+          title: 'AuraBot Test Wireless Earbuds',
+          sellingPrice: 1999,
+          mrp: 3999,
+          stock: 25,
+          sku: 'WA-BOT-' + Date.now(),
+          category: 'Electronics',
+          categoryLabel: 'Electronics',
+        });
+      }
+      assert.ok(testWaProduct);
+    });
+
+    await test('Point 25: GET /api/whatsapp-bot/webhook Meta Cloud API handshake verification (hub.challenge response)', async () => {
+      const challengeCode = '1122334455';
+      const res = await fetch(`${baseUrl}/whatsapp-bot/webhook?hub.mode=subscribe&hub.verify_token=auramarket_wa_verify_2026&hub.challenge=${challengeCode}`);
+      assert.strictEqual(res.status, 200);
+      const text = await res.text();
+      assert.strictEqual(text, challengeCode);
+    });
+
+    await test('Point 25: GET /api/whatsapp-bot/webhook rejects invalid token (403 Forbidden)', async () => {
+      const res = await fetch(`${baseUrl}/whatsapp-bot/webhook?hub.mode=subscribe&hub.verify_token=wrong_token&hub.challenge=123`);
+      assert.strictEqual(res.status, 403);
+    });
+
+    await test('Point 25: POST /api/whatsapp-bot/webhook handles GREETING / MENU intent with interactive shopping options', async () => {
+      const res = await fetch(`${baseUrl}/whatsapp-bot/webhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromPhone: '+919988776655',
+          customerName: 'Priya Sharma',
+          text: 'HI',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.intent, 'GREETING');
+      assert.ok(data.data.replyText.includes('Namaste Priya Sharma'));
+      assert.ok(data.data.replyText.includes('CATALOG'));
+      assert.ok(data.data.replyText.includes('SEARCH'));
+      assert.ok(data.data.replyText.includes('TRACK'));
+    });
+
+    await test('Point 25: POST /api/whatsapp-bot/webhook handles SEARCH intent and returns matching products with quick-buy syntax', async () => {
+      const res = await fetch(`${baseUrl}/whatsapp-bot/webhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromPhone: '+919988776655',
+          customerName: 'Priya Sharma',
+          text: 'SEARCH ' + testWaProduct.title.split(' ')[0],
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.intent, 'SEARCH');
+      assert.ok(data.data.replyText.includes(testWaProduct.title));
+      assert.ok(data.data.replyText.includes('BUY ' + testWaProduct._id));
+    });
+
+    await test('Point 25: POST /api/whatsapp-bot/webhook handles BUY / COD instant booking, creates database Order with 4-digit OTP & decrements stock', async () => {
+      const initialStock = testWaProduct.stock;
+      const res = await fetch(`${baseUrl}/whatsapp-bot/webhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromPhone: '+919988776655',
+          customerName: 'Priya Sharma',
+          text: `BUY ${testWaProduct._id}`,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.intent, 'CHECKOUT_COD');
+      assert.ok(data.data.replyText.includes('CONGRATULATIONS! YOUR ORDER IS CONFIRMED'));
+      assert.ok(data.data.payload.orderNumber);
+      assert.ok(data.data.payload.deliveryOtp);
+      createdWaOrderNumber = data.data.payload.orderNumber;
+
+      // Verify Order exists in database
+      const orderInDb = await Order.findOne({ orderNumber: createdWaOrderNumber });
+      assert.ok(orderInDb);
+      assert.strictEqual(orderInDb.paymentMethod, 'COD');
+      assert.strictEqual(orderInDb.deliveryOtp, data.data.payload.deliveryOtp);
+
+      // Verify stock was decremented
+      const updatedProd = await Product.findById(testWaProduct._id);
+      assert.strictEqual(updatedProd.stock, initialStock - 1);
+    });
+
+    await test('Point 25: POST /api/whatsapp-bot/webhook handles TRACK intent and returns real-time order status and secret delivery OTP', async () => {
+      const res = await fetch(`${baseUrl}/whatsapp-bot/webhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromPhone: '+919988776655',
+          text: `TRACK ${createdWaOrderNumber}`,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.intent, 'TRACK_ORDER');
+      assert.ok(data.data.replyText.includes(createdWaOrderNumber));
+      assert.ok(data.data.replyText.includes('Live Order Status'));
+    });
+
+    await test('Point 25: POST /api/whatsapp-bot/simulate allows Admin/Vendor to test conversations in UI simulator', async () => {
+      const res = await fetch(`${baseUrl}/whatsapp-bot/simulate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          fromPhone: '+919876543210',
+          customerName: 'Admin Simulator User',
+          text: 'CATALOG',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.replyText.includes('Top Trending Products'));
+    });
+
+    await test('Point 25: GET /api/whatsapp-bot/config & PUT /api/whatsapp-bot/config manages bot settings with AuditLog', async () => {
+      const resGet = await fetch(`${baseUrl}/whatsapp-bot/config`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resGet.status, 200);
+      const dataGet = await resGet.json();
+      assert.strictEqual(dataGet.success, true);
+      assert.ok(dataGet.data.config);
+      assert.ok(dataGet.data.telemetry);
+
+      const resPut = await fetch(`${baseUrl}/whatsapp-bot/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          botName: 'AuraBot Pro',
+          greetingMessage: 'Welcome to AuraMarket Live Shopping Assistant!',
+        }),
+      });
+      assert.strictEqual(resPut.status, 200);
+      const dataPut = await resPut.json();
+      assert.strictEqual(dataPut.success, true);
+      assert.strictEqual(dataPut.data.botName, 'AuraBot Pro');
+    });
+
+    await test('Point 25: GET /api/whatsapp-bot/conversations returns logged session history with transcripts', async () => {
+      const res = await fetch(`${baseUrl}/whatsapp-bot/conversations`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data.conversations));
+      assert.ok(data.data.total >= 1);
+    });
+
+    await test('Point 25: POST /api/whatsapp-bot/send-alert sends manual/transactional test alert and records in WhatsAppAlertLog', async () => {
+      const res = await fetch(`${baseUrl}/whatsapp-bot/send-alert`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          phone: '+919988776655',
+          customerName: 'Priya Sharma',
+          message: 'Flash Deal: Extra 20% OFF today on electronics with code DEAL20!',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.recipientPhone, '+919988776655');
+      assert.strictEqual(data.data.alertType, 'MANUAL_TEST');
+    });
+
+    await test('Point 25: Role Security: Customer cannot update bot config, view sessions or send manual alerts (403 Forbidden)', async () => {
+      const resConfig = await fetch(`${baseUrl}/whatsapp-bot/config`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resConfig.status, 403);
+
+      const resConvs = await fetch(`${baseUrl}/whatsapp-bot/conversations`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resConvs.status, 403);
+
+      const resAlert = await fetch(`${baseUrl}/whatsapp-bot/send-alert`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ phone: '123', message: 'test' }),
+      });
+      assert.strictEqual(resAlert.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

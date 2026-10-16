@@ -57,6 +57,7 @@ const giftWrapRoutes = require('./routes/giftWrapRoutes');
 const hyperlocalRoutes = require('./routes/hyperlocalRoutes');
 const codVaultRoutes = require('./routes/codVaultRoutes');
 const aiProductListingRoutes = require('./routes/aiProductListingRoutes');
+const whatsappBotRoutes = require('./routes/whatsappBotRoutes');
 
 const app = express();
 
@@ -185,6 +186,7 @@ app.use('/api/gift-wrap', giftWrapRoutes);
 app.use('/api/hyperlocal', hyperlocalRoutes);
 app.use('/api/cod-vault', codVaultRoutes);
 app.use('/api/ai-product', aiProductListingRoutes);
+app.use('/api/whatsapp-bot', whatsappBotRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

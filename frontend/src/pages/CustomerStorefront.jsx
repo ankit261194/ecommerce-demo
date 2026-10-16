@@ -43,6 +43,7 @@ import {
   Battery,
   Navigation,
   Zap,
+  Video,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
@@ -70,6 +71,7 @@ import FaqSection from '../components/FaqSection';
 import VoiceShoppingAssistantModal from '../components/VoiceShoppingAssistantModal';
 import WebPushOptInBanner from '../components/WebPushOptInBanner';
 import { GiftOptionsModal } from '../components/GiftOptionsModal';
+import ShoppableReelsModal from '../components/ShoppableReelsModal';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useLocalization } from '../context/LocalizationContext';
@@ -109,6 +111,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [whatsAppBotOrder, setWhatsAppBotOrder] = useState(null);
   const [rtoVerificationOrder, setRtoVerificationOrder] = useState(null); // Point #74: RTO Guard High-Risk Verification
   const [isVoiceAssistantOpen, setIsVoiceAssistantOpen] = useState(false); // Point #20: AI Voice Shopping Assistant
+  const [isShoppableReelsOpen, setIsShoppableReelsOpen] = useState(false); // Point #27: Live Video Shopping & Shoppable Reels
 
   // Point #31: In-App Wallet & Reward Coins State
   const [isWalletOpen, setIsWalletOpen] = useState(false);
@@ -3533,6 +3536,36 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         giftOptions={giftOptions}
         setGiftOptions={setGiftOptions}
         subtotal={cartTotal}
+      />
+
+      {/* Point #27: Floating Live Video Shopping & Shoppable Reels Launch Pill */}
+      <button
+        type="button"
+        onClick={() => setIsShoppableReelsOpen(true)}
+        className="fixed bottom-20 left-6 z-40 px-3.5 py-2 rounded-full bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-black text-xs shadow-2xl flex items-center gap-2 border border-white/20 backdrop-blur-md group hover:scale-105 active:scale-95 transition-all"
+        title="Live Video Shopping & Shoppable Reels Stream"
+      >
+        <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+        <Video className="w-4 h-4 fill-white" />
+        <span className="font-bold text-white">Live Reels</span>
+        <span className="px-1.5 py-0.2 rounded-full bg-black/30 text-rose-200 text-[9px] font-black uppercase">
+          LIVE
+        </span>
+      </button>
+
+      {/* Point #27: Live Video Shopping & Shoppable Reels Modal */}
+      <ShoppableReelsModal
+        isOpen={isShoppableReelsOpen}
+        onClose={() => setIsShoppableReelsOpen(false)}
+        onAddToCart={(prod) => {
+          addToCart(prod);
+          setToastMessage(`🎉 Added "${prod.title}" to cart from Live Reel!`);
+          setTimeout(() => setToastMessage(null), 3000);
+        }}
+        onBuyNow={(prod) => {
+          addToCart(prod);
+          setIsCartOpen(true);
+        }}
       />
 
       {/* Point 15: True Native Web Push Notifications Opt-In & Floating Status Bell */}

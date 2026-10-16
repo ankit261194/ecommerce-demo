@@ -16461,6 +16461,220 @@ const runTests = async () => {
       assert.strictEqual(resEdit.status, 403);
     });
 
+    console.log('\n--- POINT 27: LIVE VIDEO SHOPPING & SHOPPABLE REELS STREAM ---');
+    let testReelId = null;
+    let testReelProduct = null;
+
+    await test('Point 27 Setup: Ensure target product exists for Shoppable Reels', async () => {
+      const res = await fetch(`${baseUrl}/products?limit=1`);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.length > 0);
+      testReelProduct = data.data[0];
+    });
+
+    await test('Point 27: GET /api/video-shopping/reels returns active reels with populated products & vendors', async () => {
+      const res = await fetch(`${baseUrl}/video-shopping/reels`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.data.length > 0);
+      testReelId = data.data[0]._id;
+      assert.ok(data.data[0].videoUrl);
+      assert.ok(data.data[0].title);
+    });
+
+    await test('Point 27: GET /api/video-shopping/reels/:id returns single reel details', async () => {
+      const res = await fetch(`${baseUrl}/video-shopping/reels/${testReelId}`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data._id.toString(), testReelId.toString());
+      assert.ok(data.data.title);
+    });
+
+    await test('Point 27: POST /api/video-shopping/reels/:id/view increments viewsCount', async () => {
+      const resBefore = await fetch(`${baseUrl}/video-shopping/reels/${testReelId}`);
+      const dataBefore = await resBefore.json();
+      const initialViews = dataBefore.data.viewsCount || 0;
+
+      const res = await fetch(`${baseUrl}/video-shopping/reels/${testReelId}/view`, {
+        method: 'POST',
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.viewsCount, initialViews + 1);
+    });
+
+    await test('Point 27: POST /api/video-shopping/reels/:id/like increments likesCount', async () => {
+      const resBefore = await fetch(`${baseUrl}/video-shopping/reels/${testReelId}`);
+      const dataBefore = await resBefore.json();
+      const initialLikes = dataBefore.data.likesCount || 0;
+
+      const res = await fetch(`${baseUrl}/video-shopping/reels/${testReelId}/like`, {
+        method: 'POST',
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.likesCount, initialLikes + 1);
+    });
+
+    await test('Point 27: POST /api/video-shopping/reels/:id/comment adds comment and increments commentsCount', async () => {
+      const res = await fetch(`${baseUrl}/video-shopping/reels/${testReelId}/comment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: 'Where can I buy this with instant delivery?',
+          userName: 'Rhea Sen',
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.text, 'Where can I buy this with instant delivery?');
+      assert.strictEqual(data.data.userName, 'Rhea Sen');
+      assert.ok(data.commentsCount >= 1);
+    });
+
+    let createdReelId = null;
+
+    await test('Point 27: POST /api/video-shopping/admin/reels allows Admin/Vendor to create new shoppable reel with product tags', async () => {
+      const res = await fetch(`${baseUrl}/video-shopping/admin/reels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: '⚡ Live Studio Demo: Noise Cancelling in Subway Trains',
+          description: 'Testing ANC microphones in heavy noise environments.',
+          videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-young-woman-listening-to-music-with-headphones-40994-large.mp4',
+          thumbnailUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600',
+          isLive: false,
+          products: [
+            {
+              product: testReelProduct._id,
+              tagX: 45,
+              tagY: 65,
+              customPrice: Math.round(testReelProduct.sellingPrice * 0.85),
+              isFeatured: true,
+            },
+          ],
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data._id);
+      assert.strictEqual(data.data.title, '⚡ Live Studio Demo: Noise Cancelling in Subway Trains');
+      assert.strictEqual(data.data.products.length, 1);
+      createdReelId = data.data._id;
+    });
+
+    await test('Point 27: POST /api/video-shopping/admin/reels validates required title and videoUrl (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/video-shopping/admin/reels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          description: 'Missing title and videoUrl',
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 27: PUT /api/video-shopping/admin/reels/:id updates reel details and toggles live status', async () => {
+      const res = await fetch(`${baseUrl}/video-shopping/admin/reels/${createdReelId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: '⚡ Live Broadcast: Flash Sale ANC Live Stream',
+          isLive: true,
+          liveViewerCount: 340,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.isLive, true);
+      assert.strictEqual(data.data.liveViewerCount, 340);
+    });
+
+    await test('Point 27: GET /api/video-shopping/admin/reels returns telemetry and video commerce metrics', async () => {
+      const res = await fetch(`${baseUrl}/video-shopping/admin/reels`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.telemetry);
+      assert.ok(data.data.telemetry.totalReels >= 1);
+      assert.ok(data.data.telemetry.estimatedGmv >= 0);
+      assert.ok(Array.isArray(data.data.reels));
+    });
+
+    await test('Point 27: DELETE /api/video-shopping/admin/reels/:id deletes reel', async () => {
+      const res = await fetch(`${baseUrl}/video-shopping/admin/reels/${createdReelId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+
+      // Verify 404 on fetch
+      const resCheck = await fetch(`${baseUrl}/video-shopping/reels/${createdReelId}`);
+      assert.strictEqual(resCheck.status, 404);
+    });
+
+    await test('Point 27: Role Security: Customer cannot create, update, delete reels or access admin telemetry (403 Forbidden)', async () => {
+      const resTelemetry = await fetch(`${baseUrl}/video-shopping/admin/reels`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resTelemetry.status, 403);
+
+      const resCreate = await fetch(`${baseUrl}/video-shopping/admin/reels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ title: 'Hacked', videoUrl: 'https://example.com/hacked.mp4' }),
+      });
+      assert.strictEqual(resCreate.status, 403);
+
+      const resUpdate = await fetch(`${baseUrl}/video-shopping/admin/reels/${testReelId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ title: 'Hacked' }),
+      });
+      assert.strictEqual(resUpdate.status, 403);
+
+      const resDelete = await fetch(`${baseUrl}/video-shopping/admin/reels/${testReelId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resDelete.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

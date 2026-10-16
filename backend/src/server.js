@@ -59,6 +59,7 @@ const codVaultRoutes = require('./routes/codVaultRoutes');
 const aiProductListingRoutes = require('./routes/aiProductListingRoutes');
 const whatsappBotRoutes = require('./routes/whatsappBotRoutes');
 const groupBuyRoutes = require('./routes/groupBuyRoutes');
+const videoShoppingRoutes = require('./routes/videoShoppingRoutes');
 
 const app = express();
 
@@ -189,6 +190,7 @@ app.use('/api/cod-vault', codVaultRoutes);
 app.use('/api/ai-product', aiProductListingRoutes);
 app.use('/api/whatsapp-bot', whatsappBotRoutes);
 app.use('/api/group-buy', groupBuyRoutes);
+app.use('/api/video-shopping', videoShoppingRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

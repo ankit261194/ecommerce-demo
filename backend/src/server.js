@@ -128,6 +128,7 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/coupons', couponRoutes);
+app.use('/api/promotions', couponRoutes);
 app.use('/api/returns', returnRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/categories', categoryRoutes);

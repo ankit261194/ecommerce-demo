@@ -56,6 +56,7 @@ const {
   triggerRestockAlert,
   quickRestockInventory,
 } = require('../controllers/vendorController');
+const { getAdminVendorFundedPromotions } = require('../controllers/couponController');
 const { protect, authorize, requirePermission } = require('../middlewares/auth');
 
 // All admin routes require Super Admin or Sub-Admin authorization
@@ -84,6 +85,9 @@ router.get('/inventory/low-stock', getLowStockInventory);
 router.put('/inventory/thresholds', updateInventoryThresholds);
 router.post('/inventory/trigger-restock-alert', triggerRestockAlert);
 router.patch('/inventory/quick-restock', quickRestockInventory);
+
+// Point 11: Vendor-Funded Custom Promotions & BOGO Overview
+router.get('/promotions/vendor-funded', getAdminVendorFundedPromotions);
 
 // Vendor Withdrawal / Payout Approval Hub (Point #45)
 router.get('/payouts', getAllPayouts);

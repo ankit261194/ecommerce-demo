@@ -65,6 +65,20 @@ const subOrderSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    // Point 11: Vendor-Funded Custom Promotions & BOGO Attribution
+    vendorDiscount: {
+      type: Number,
+      default: 0,
+    },
+    promotionApplied: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Coupon',
+      default: null,
+    },
+    bogoSavings: {
+      type: Number,
+      default: 0,
+    },
     status: {
       type: String,
       enum: [

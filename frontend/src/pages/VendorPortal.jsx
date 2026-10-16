@@ -25,6 +25,7 @@ import {
   MessageSquare,
   Barcode,
   ShieldAlert,
+  Gift,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -47,6 +48,7 @@ import VendorChatInboxModal from '../components/VendorChatInboxModal';
 import VendorTaxReportModal from '../components/VendorTaxReportModal';
 import PosCounterScreen from '../components/PosCounterScreen';
 import InventoryAlertsModal from '../components/InventoryAlertsModal';
+import VendorPromotionsManager from '../components/VendorPromotionsManager';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -182,6 +184,7 @@ export const VendorPortal = () => {
   const [isTaxReportModalOpen, setIsTaxReportModalOpen] = useState(false); // Point #15: Vendor GST/VAT & HSN Tax Filing Report
   const [isPosModalOpen, setIsPosModalOpen] = useState(false); // Point #18: Offline POS Counter Billing Screen
   const [isInventoryAlertsModalOpen, setIsInventoryAlertsModalOpen] = useState(false); // Point 10: Inventory Low-Stock Threshold & Auto-Restock Studio
+  const [isPromotionsModalOpen, setIsPromotionsModalOpen] = useState(false); // Point 11: Vendor-Funded Custom Promotions & BOGO Studio
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
 
@@ -661,6 +664,19 @@ export const VendorPortal = () => {
             <span>Low Stock Radar</span>
             <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-white text-red-600">
               #10
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsPromotionsModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-black shadow-lg shadow-orange-500/20 transition-all"
+            title="Point 11: Vendor-Funded Custom Promotions & BOGO Studio (BOGO Deals, Tiered Discounts & Store Vouchers)"
+          >
+            <Gift className="w-4 h-4 text-slate-950" />
+            <span>BOGO & Promos</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-amber-400">
+              #11
             </span>
           </button>
 
@@ -1231,6 +1247,14 @@ export const VendorPortal = () => {
             >
               <ShieldAlert className="w-4 h-4 text-white" />
               <span>Low-Stock Radar & Alerts (Point #10)</span>
+            </button>
+            <button
+              onClick={() => setIsPromotionsModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 rounded-xl text-xs font-bold shadow-md shadow-orange-500/20 transition-all hover:scale-105"
+              title="Point 11: Vendor-Funded Custom Promotions & BOGO Studio"
+            >
+              <Gift className="w-4 h-4 text-slate-950" />
+              <span>BOGO & Promos (Point #11)</span>
             </button>
             <button
               onClick={() => setIsAddProductDrawerOpen(true)}
@@ -1950,6 +1974,14 @@ export const VendorPortal = () => {
         onClose={() => setIsInventoryAlertsModalOpen(false)}
         isAdmin={false}
         onRestocked={fetchVendorData}
+      />
+
+      {/* Point 11: Vendor-Funded Custom Promotions & BOGO Studio */}
+      <VendorPromotionsManager
+        isOpen={isPromotionsModalOpen}
+        onClose={() => setIsPromotionsModalOpen(false)}
+        storeProducts={products}
+        onPromoUpdated={fetchVendorData}
       />
     </div>
   );

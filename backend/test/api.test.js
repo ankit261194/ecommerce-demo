@@ -13046,6 +13046,346 @@ const runTests = async () => {
       assert.strictEqual(resPatch.status, 403);
     });
 
+    // =========================================================================
+    // Point 11: Vendor-Funded Custom Promotions & BOGO Engine
+    // =========================================================================
+    let prodBogoA, prodBogoB, bogoPromoId, voucherPromoId;
+
+    await test('Point 11: Setup test products for Vendor Promotions & BOGO engine', async () => {
+      const Category = require('../src/models/Category');
+      const testCat = (await Category.findOne()) || (await Category.create({ name: 'Promo Cat', slug: 'promo-cat-' + Date.now() }));
+
+      prodBogoA = await Product.create({
+        title: 'Point 11 Luxury Sneaker A ($500)',
+        slug: 'p11-sneaker-a-' + Date.now(),
+        description: 'Point 11 Luxury Sneaker for BOGO testing',
+        category: testCat._id,
+        sku: 'P11-BOGO-A',
+        vendor: point10Vendor._id,
+        stock: 50,
+        sellingPrice: 500,
+        mrp: 1000,
+      });
+
+      prodBogoB = await Product.create({
+        title: 'Point 11 Luxury Watch B ($300)',
+        slug: 'p11-watch-b-' + Date.now(),
+        description: 'Point 11 Luxury Watch for BOGO testing',
+        category: testCat._id,
+        sku: 'P11-BOGO-B',
+        vendor: point10Vendor._id,
+        stock: 30,
+        sellingPrice: 300,
+        mrp: 600,
+      });
+
+      assert.ok(prodBogoA._id);
+      assert.ok(prodBogoB._id);
+    });
+
+    await test('Point 11: POST /api/vendor/promotions creates vendor-funded BOGO promotion with banner badge', async () => {
+      const res = await fetch(`${baseUrl}/vendor/promotions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point10VendorToken}`,
+        },
+        body: JSON.stringify({
+          code: 'BOGOPRO11',
+          promotionType: 'BOGO',
+          discountType: 'PERCENTAGE',
+          discountAmount: 100,
+          minOrderAmount: 0,
+          startDate: new Date().toISOString(),
+          endDate: new Date(Date.now() + 7 * 86400000).toISOString(),
+          bogoConfig: {
+            buyQty: 1,
+            getQty: 1,
+            discountPercentage: 100,
+            applicableProducts: [prodBogoA._id.toString()],
+          },
+          bannerBadge: {
+            enabled: true,
+            badgeText: 'BUY 1 GET 1 FREE',
+            badgeColor: '#e11d48',
+            bannerMessage: 'Exclusive Vendor BOGO Deal: Buy 1 Sneaker, Get 1 FREE!',
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.promotion.code, 'BOGOPRO11');
+      assert.strictEqual(body.promotion.promotionType, 'BOGO');
+      assert.strictEqual(body.promotion.fundingSource, 'VENDOR');
+      assert.strictEqual(body.promotion.bogoConfig.buyQty, 1);
+      assert.strictEqual(body.promotion.bogoConfig.getQty, 1);
+      assert.strictEqual(body.promotion.bogoConfig.discountPercentage, 100);
+      assert.strictEqual(body.promotion.bannerBadge.badgeText, 'BUY 1 GET 1 FREE');
+
+      bogoPromoId = body.promotion._id;
+      assert.ok(bogoPromoId);
+
+      // Verify audit log entry
+      const AuditLog = require('../src/models/AuditLog');
+      const audit = await AuditLog.findOne({
+        action: 'VENDOR_PROMOTION_CREATED',
+        $or: [{ 'details.code': 'BOGOPRO11' }, { 'metadata.code': 'BOGOPRO11' }],
+      });
+      assert.ok(audit, 'Audit log must record VENDOR_PROMOTION_CREATED');
+      assert.strictEqual(audit.module, 'MARKETING');
+    });
+
+    await test('Point 11: POST /api/vendor/promotions creates Store-Exclusive Volume Voucher', async () => {
+      const res = await fetch(`${baseUrl}/vendor/promotions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point10VendorToken}`,
+        },
+        body: JSON.stringify({
+          code: 'TIER20OFF',
+          promotionType: 'STORE_VOUCHER',
+          discountType: 'PERCENTAGE',
+          discountAmount: 20,
+          minOrderAmount: 1000,
+          startDate: new Date().toISOString(),
+          endDate: new Date(Date.now() + 14 * 86400000).toISOString(),
+          bannerBadge: {
+            enabled: true,
+            badgeText: 'FLAT 20% OFF STOREWIDE',
+            badgeColor: '#7c3aed',
+            bannerMessage: 'Vendor Appreciation Week: 20% OFF on all orders over $1000',
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.promotion.code, 'TIER20OFF');
+      assert.strictEqual(body.promotion.promotionType, 'STORE_VOUCHER');
+      assert.strictEqual(body.promotion.discountAmount, 20);
+
+      voucherPromoId = body.promotion._id;
+      assert.ok(voucherPromoId);
+    });
+
+    await test('Point 11: GET /api/vendor/promotions returns telemetry metrics and list', async () => {
+      const res = await fetch(`${baseUrl}/vendor/promotions`, {
+        headers: { Authorization: `Bearer ${point10VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.telemetry.totalActive >= 2);
+      assert.ok(body.telemetry.bogoCount >= 1);
+      assert.ok(body.telemetry.voucherCount >= 1);
+      assert.ok(Array.isArray(body.promotions));
+      const codes = body.promotions.map(p => p.code);
+      assert.ok(codes.includes('BOGOPRO11'));
+      assert.ok(codes.includes('TIER20OFF'));
+    });
+
+    await test('Point 11: POST /api/promotions/bogo/calculate evaluates cart bundles & savings accurately', async () => {
+      // Case 1: 1 Sneaker -> Buy 1 Get 1 requires at least 2 units to trigger free item
+      const resSingle = await fetch(`${baseUrl}/promotions/bogo/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: 'BOGOPRO11',
+          cartItems: [
+            { product: prodBogoA._id.toString(), quantity: 1, price: 500 },
+          ],
+        }),
+      });
+      assert.strictEqual(resSingle.status, 200);
+      const bodySingle = await resSingle.json();
+      assert.strictEqual(bodySingle.success, true);
+      assert.strictEqual(bodySingle.bogoSavings, 0);
+      assert.strictEqual(bodySingle.freeUnitsCount, 0);
+
+      // Case 2: 2 Sneakers -> 1 Sneaker is 100% Free ($500 savings)
+      const resPair = await fetch(`${baseUrl}/promotions/bogo/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: 'BOGOPRO11',
+          cartItems: [
+            { product: prodBogoA._id.toString(), quantity: 2, price: 500 },
+          ],
+        }),
+      });
+      assert.strictEqual(resPair.status, 200);
+      const bodyPair = await resPair.json();
+      assert.strictEqual(bodyPair.success, true);
+      assert.strictEqual(bodyPair.bogoSavings, 500);
+      assert.strictEqual(bodyPair.freeUnitsCount, 1);
+      assert.strictEqual(bodyPair.summaryText, 'Buy 1 Get 1: 1 items free ($500 saved)');
+
+      // Case 3: 4 Sneakers -> 2 Sneakers Free ($1000 savings)
+      const resFour = await fetch(`${baseUrl}/promotions/bogo/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: 'BOGOPRO11',
+          cartItems: [
+            { product: prodBogoA._id.toString(), quantity: 4, price: 500 },
+          ],
+        }),
+      });
+      assert.strictEqual(resFour.status, 200);
+      const bodyFour = await resFour.json();
+      assert.strictEqual(bodyFour.success, true);
+      assert.strictEqual(bodyFour.bogoSavings, 1000);
+      assert.strictEqual(bodyFour.freeUnitsCount, 2);
+
+      // Case 4: Non-applicable product Watch B gets 0 BOGO savings
+      const resNonApp = await fetch(`${baseUrl}/promotions/bogo/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: 'BOGOPRO11',
+          cartItems: [
+            { product: prodBogoB._id.toString(), quantity: 4, price: 300 },
+          ],
+        }),
+      });
+      assert.strictEqual(resNonApp.status, 200);
+      const bodyNonApp = await resNonApp.json();
+      assert.strictEqual(bodyNonApp.bogoSavings, 0);
+      assert.strictEqual(bodyNonApp.freeUnitsCount, 0);
+    });
+
+    await test('Point 11: PUT /api/vendor/promotions/:id updates promotion discount and banner message', async () => {
+      const res = await fetch(`${baseUrl}/vendor/promotions/${voucherPromoId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point10VendorToken}`,
+        },
+        body: JSON.stringify({
+          discountAmount: 25,
+          bannerBadge: {
+            enabled: true,
+            badgeText: 'FLAT 25% OFF STOREWIDE',
+            badgeColor: '#10b981',
+            bannerMessage: 'Vendor Super Sale: 25% OFF on orders over $1000',
+          },
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.promotion.discountAmount, 25);
+      assert.strictEqual(body.promotion.bannerBadge.badgeText, 'FLAT 25% OFF STOREWIDE');
+      assert.strictEqual(body.promotion.bannerBadge.badgeColor, '#10b981');
+    });
+
+    await test('Point 11: PATCH /api/vendor/promotions/:id/toggle pauses and activates deal with audit log', async () => {
+      // Toggle to inactive
+      const resPause = await fetch(`${baseUrl}/vendor/promotions/${bogoPromoId}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${point10VendorToken}` },
+      });
+      assert.strictEqual(resPause.status, 200);
+      const bodyPause = await resPause.json();
+      assert.strictEqual(bodyPause.success, true);
+      assert.strictEqual(bodyPause.promotion.isActive, false);
+
+      // Toggle back to active
+      const resResume = await fetch(`${baseUrl}/vendor/promotions/${bogoPromoId}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${point10VendorToken}` },
+      });
+      assert.strictEqual(resResume.status, 200);
+      const bodyResume = await resResume.json();
+      assert.strictEqual(bodyResume.success, true);
+      assert.strictEqual(bodyResume.promotion.isActive, true);
+    });
+
+    await test('Point 11: GET /api/promotions/store/:vendorId returns active storefront promotional badges', async () => {
+      const res = await fetch(`${baseUrl}/promotions/store/${point10Vendor._id}`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.count >= 2);
+      assert.ok(Array.isArray(body.banners));
+      const badges = body.banners.map(b => b.badgeText);
+      assert.ok(badges.includes('BUY 1 GET 1 FREE'));
+      assert.ok(badges.includes('FLAT 25% OFF STOREWIDE'));
+    });
+
+    await test('Point 11: GET /api/admin/promotions/vendor-funded provides admin oversight & platform protections', async () => {
+      const res = await fetch(`${baseUrl}/admin/promotions/vendor-funded`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.telemetry.vendorFundedCount >= 2);
+      assert.ok(body.promotions.some(p => p.code === 'BOGOPRO11'));
+      assert.strictEqual(body.promotions.find(p => p.code === 'BOGOPRO11').fundingSource, 'VENDOR');
+    });
+
+    await test('Point 11: Role Security: Customer cannot create, update, toggle, or delete vendor promotions (403 Forbidden)', async () => {
+      const resPost = await fetch(`${baseUrl}/vendor/promotions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ code: 'HACKER10' }),
+      });
+      assert.strictEqual(resPost.status, 403);
+
+      const resPut = await fetch(`${baseUrl}/vendor/promotions/${bogoPromoId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ discountAmount: 90 }),
+      });
+      assert.strictEqual(resPut.status, 403);
+
+      const resToggle = await fetch(`${baseUrl}/vendor/promotions/${bogoPromoId}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resToggle.status, 403);
+
+      const resDel = await fetch(`${baseUrl}/vendor/promotions/${bogoPromoId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resDel.status, 403);
+    });
+
+    await test('Point 11: DELETE /api/vendor/promotions/:id deletes promotion with audit record', async () => {
+      const res = await fetch(`${baseUrl}/vendor/promotions/${voucherPromoId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${point10VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+
+      // Verify deletion from DB
+      const Coupon = require('../src/models/Coupon');
+      const found = await Coupon.findById(voucherPromoId);
+      assert.strictEqual(found, null);
+
+      // Verify audit log
+      const AuditLog = require('../src/models/AuditLog');
+      const audit = await AuditLog.findOne({
+        action: 'VENDOR_PROMOTION_DELETED',
+        $or: [{ 'details.code': 'TIER20OFF' }, { 'metadata.code': 'TIER20OFF' }],
+      });
+      assert.ok(audit, 'Audit log must record VENDOR_PROMOTION_DELETED');
+    });
+
   } finally {
     if (server) {
       server.close();

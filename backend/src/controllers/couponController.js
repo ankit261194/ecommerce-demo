@@ -1,4 +1,7 @@
 const Coupon = require('../models/Coupon');
+const VendorProfile = require('../models/VendorProfile');
+const Product = require('../models/Product');
+const { recordAuditLog } = require('../utils/auditLogger');
 
 // @desc    Validate Promo Code / Coupon at Checkout
 // @route   POST /api/coupons/validate
@@ -83,6 +86,11 @@ exports.validateCoupon = async (req, res, next) => {
         discountValue: coupon.discountValue,
         maxDiscountAmount: coupon.maxDiscountAmount,
         minOrderAmount: coupon.minOrderAmount,
+        fundingSource: coupon.fundingSource || 'PLATFORM',
+        vendor: coupon.vendor || null,
+        promotionType: coupon.promotionType || 'DISCOUNT_CODE',
+        bogoConfig: coupon.bogoConfig,
+        bannerBadge: coupon.bannerBadge,
         discountAmount,
         originalTotal: numericTotal,
         newTotal,
@@ -392,3 +400,587 @@ exports.toggleCouponStatus = async (req, res, next) => {
     next(error);
   }
 };
+
+// =========================================================================
+// POINT 11: VENDOR-FUNDED CUSTOM PROMOTIONS & BOGO ENGINE
+// =========================================================================
+
+// @desc    Get all promotions created and funded by vendor
+// @route   GET /api/vendor/promotions
+exports.getVendorPromotions = async (req, res, next) => {
+  try {
+    let vendor;
+    const isAdmin = req.user && (req.user.role === 'superadmin' || req.user.role === 'admin');
+
+    if (isAdmin && req.query.vendorId) {
+      vendor = await VendorProfile.findById(req.query.vendorId);
+    } else {
+      vendor = await VendorProfile.findOne({ user: req.user._id });
+    }
+
+    if (!vendor && !isAdmin) {
+      return res.status(404).json({ success: false, message: 'Vendor profile not found' });
+    }
+
+    const query = { fundingSource: 'VENDOR' };
+    if (vendor) {
+      query.vendor = vendor._id;
+    }
+
+    const promotions = await Coupon.find(query)
+      .populate('bogoConfig.applicableProducts', 'title sku sellingPrice thumbnail')
+      .sort({ createdAt: -1 });
+
+    let totalActive = 0;
+    let bogoCount = 0;
+    let voucherCount = 0;
+    let totalDiscountFunded = 0;
+    let totalOrdersDriven = 0;
+
+    promotions.forEach((p) => {
+      if (p.isActive) totalActive++;
+      if (['BOGO', 'BUY_X_GET_Y'].includes(p.promotionType)) bogoCount++;
+      if (p.promotionType === 'STORE_VOUCHER' || p.promotionType === 'DISCOUNT_CODE') voucherCount++;
+      totalDiscountFunded += p.totalDiscountGiven || 0;
+      totalOrdersDriven += p.ordersDrivenCount || 0;
+    });
+
+    res.status(200).json({
+      success: true,
+      count: promotions.length,
+      telemetry: {
+        totalPromotions: promotions.length,
+        totalActive,
+        bogoCount,
+        voucherCount,
+        totalDiscountFunded,
+        totalOrdersDriven,
+      },
+      promotions,
+      data: promotions,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Create a Vendor-Funded Promotion or BOGO Deal
+// @route   POST /api/vendor/promotions
+exports.createVendorPromotion = async (req, res, next) => {
+  try {
+    let vendor;
+    const isAdmin = req.user && (req.user.role === 'superadmin' || req.user.role === 'admin');
+
+    if (isAdmin && req.body.vendorId) {
+      vendor = await VendorProfile.findById(req.body.vendorId);
+    } else {
+      vendor = await VendorProfile.findOne({ user: req.user._id });
+    }
+
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor profile not found' });
+    }
+
+    const {
+      code,
+      title,
+      description,
+      promotionType = 'DISCOUNT_CODE',
+      discountType = 'PERCENTAGE',
+      discountValue,
+      discountAmount,
+      maxDiscountAmount,
+      minOrderAmount = 0,
+      expiryDate,
+      endDate,
+      usageLimit,
+      perUserLimit = 1,
+      storeWide = false,
+      bogoConfig = {},
+      bannerBadge = {},
+    } = req.body;
+
+    const cleanCode = code
+      ? code.trim().toUpperCase()
+      : `VND-${vendor.storeName ? vendor.storeName.replace(/[^A-Za-z0-9]/g, '').slice(0, 4).toUpperCase() : 'DEAL'}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+
+    const finalTitle = (title || bannerBadge?.badgeText || `${cleanCode} Special Offer`).trim();
+    const finalDiscountValue = Number(
+      discountValue !== undefined && discountValue !== 0
+        ? discountValue
+        : (discountAmount !== undefined ? discountAmount : (promotionType === 'BOGO' ? 100 : 0))
+    ) || 0;
+    const finalExpiryDate = expiryDate ? new Date(expiryDate) : (endDate ? new Date(endDate) : null);
+
+    // Verify code uniqueness
+    const existing = await Coupon.findOne({ code: cleanCode });
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: `Promotion code "${cleanCode}" already exists. Please choose a unique code.`,
+      });
+    }
+
+    const newPromotion = await Coupon.create({
+      code: cleanCode,
+      title: finalTitle,
+      description: description || `Vendor sponsored deal by ${vendor.storeName}`,
+      fundingSource: 'VENDOR',
+      vendor: vendor._id,
+      applicableVendors: [vendor._id],
+      promotionType,
+      discountType,
+      discountValue: finalDiscountValue,
+      maxDiscountAmount: maxDiscountAmount !== undefined && maxDiscountAmount !== '' ? Number(maxDiscountAmount) : null,
+      minOrderAmount: Number(minOrderAmount) || 0,
+      expiryDate: finalExpiryDate,
+      usageLimit: usageLimit ? Number(usageLimit) : null,
+      perUserLimit: Number(perUserLimit) || 1,
+      storeWide: Boolean(storeWide),
+      bogoConfig: {
+        buyQty: Math.max(1, Number(bogoConfig.buyQty) || 1),
+        getQty: Math.max(1, Number(bogoConfig.getQty) || 1),
+        discountPercentage: bogoConfig.discountPercentage !== undefined ? Number(bogoConfig.discountPercentage) : 100,
+        applicableProducts: Array.isArray(bogoConfig.applicableProducts) ? bogoConfig.applicableProducts : [],
+      },
+      bannerBadge: {
+        enabled: bannerBadge.enabled !== undefined ? Boolean(bannerBadge.enabled) : true,
+        badgeText: bannerBadge.badgeText || (promotionType === 'BOGO' ? 'BUY 1 GET 1 FREE' : 'VENDOR PROMO'),
+        badgeColor: bannerBadge.badgeColor || (promotionType === 'BOGO' ? '#e11d48' : '#DC2626'),
+        bannerMessage: bannerBadge.bannerMessage || `${finalTitle} — Special Vendor Offer!`,
+      },
+      isActive: true,
+      isFeatured: true,
+    });
+
+    await recordAuditLog({
+      action: 'VENDOR_PROMOTION_CREATED',
+      module: 'MARKETING',
+      req,
+      description: `Created vendor-funded promotion "${cleanCode}" (${promotionType}) for store "${vendor.storeName}"`,
+      targetType: 'Coupon',
+      targetId: newPromotion._id,
+      details: {
+        code: cleanCode,
+        promotionType,
+        fundingSource: 'VENDOR',
+        vendorId: vendor._id,
+      },
+      severity: 'LOW',
+    });
+
+    res.status(201).json({
+      success: true,
+      message: `Vendor promotion "${cleanCode}" created successfully!`,
+      data: newPromotion,
+      promotion: newPromotion,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update a Vendor Promotion
+// @route   PUT /api/vendor/promotions/:id
+exports.updateVendorPromotion = async (req, res, next) => {
+  try {
+    let vendor;
+    const isAdmin = req.user && (req.user.role === 'superadmin' || req.user.role === 'admin');
+
+    if (!isAdmin) {
+      vendor = await VendorProfile.findOne({ user: req.user._id });
+      if (!vendor) {
+        return res.status(404).json({ success: false, message: 'Vendor profile not found' });
+      }
+    }
+
+    const promoQuery = { _id: req.params.id, fundingSource: 'VENDOR' };
+    if (!isAdmin && vendor) {
+      promoQuery.vendor = vendor._id;
+    }
+
+    const promotion = await Coupon.findOne(promoQuery);
+    if (!promotion) {
+      return res.status(404).json({
+        success: false,
+        message: 'Promotion not found or you do not have permission to modify it',
+      });
+    }
+
+    const {
+      title,
+      description,
+      promotionType,
+      discountType,
+      discountValue,
+      discountAmount,
+      maxDiscountAmount,
+      minOrderAmount,
+      expiryDate,
+      endDate,
+      usageLimit,
+      perUserLimit,
+      storeWide,
+      bogoConfig,
+      bannerBadge,
+    } = req.body;
+
+    if (title) promotion.title = title;
+    if (description !== undefined) promotion.description = description;
+    if (promotionType) promotion.promotionType = promotionType;
+    if (discountType) promotion.discountType = discountType;
+    if (discountValue !== undefined) {
+      promotion.discountValue = Number(discountValue);
+    } else if (discountAmount !== undefined) {
+      promotion.discountValue = Number(discountAmount);
+    }
+    if (maxDiscountAmount !== undefined) {
+      promotion.maxDiscountAmount = maxDiscountAmount === '' ? null : Number(maxDiscountAmount);
+    }
+    if (minOrderAmount !== undefined) promotion.minOrderAmount = Number(minOrderAmount);
+    if (expiryDate !== undefined) promotion.expiryDate = expiryDate ? new Date(expiryDate) : null;
+    if (endDate !== undefined) promotion.expiryDate = endDate ? new Date(endDate) : null;
+    if (usageLimit !== undefined) promotion.usageLimit = usageLimit ? Number(usageLimit) : null;
+    if (perUserLimit !== undefined) promotion.perUserLimit = Number(perUserLimit);
+    if (storeWide !== undefined) promotion.storeWide = Boolean(storeWide);
+
+    if (bogoConfig) {
+      promotion.bogoConfig = {
+        buyQty: Math.max(1, Number(bogoConfig.buyQty) || promotion.bogoConfig?.buyQty || 1),
+        getQty: Math.max(1, Number(bogoConfig.getQty) || promotion.bogoConfig?.getQty || 1),
+        discountPercentage:
+          bogoConfig.discountPercentage !== undefined
+            ? Number(bogoConfig.discountPercentage)
+            : promotion.bogoConfig?.discountPercentage ?? 100,
+        applicableProducts: Array.isArray(bogoConfig.applicableProducts)
+          ? bogoConfig.applicableProducts
+          : promotion.bogoConfig?.applicableProducts || [],
+      };
+    }
+
+    if (bannerBadge) {
+      promotion.bannerBadge = {
+        enabled: bannerBadge.enabled !== undefined ? Boolean(bannerBadge.enabled) : promotion.bannerBadge?.enabled,
+        badgeText: bannerBadge.badgeText || promotion.bannerBadge?.badgeText || 'PROMO',
+        badgeColor: bannerBadge.badgeColor || promotion.bannerBadge?.badgeColor || '#DC2626',
+        bannerMessage: bannerBadge.bannerMessage || promotion.bannerBadge?.bannerMessage || '',
+      };
+    }
+
+    await promotion.save();
+
+    await recordAuditLog({
+      action: 'VENDOR_PROMOTION_UPDATED',
+      module: 'MARKETING',
+      req,
+      description: `Updated vendor promotion "${promotion.code}"`,
+      targetType: 'Coupon',
+      targetId: promotion._id,
+      severity: 'LOW',
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Promotion updated successfully',
+      data: promotion,
+      promotion,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Toggle Vendor Promotion Active Status
+// @route   PATCH /api/vendor/promotions/:id/toggle
+exports.toggleVendorPromotion = async (req, res, next) => {
+  try {
+    let vendor;
+    const isAdmin = req.user && (req.user.role === 'superadmin' || req.user.role === 'admin');
+
+    if (!isAdmin) {
+      vendor = await VendorProfile.findOne({ user: req.user._id });
+      if (!vendor) {
+        return res.status(404).json({ success: false, message: 'Vendor profile not found' });
+      }
+    }
+
+    const promoQuery = { _id: req.params.id, fundingSource: 'VENDOR' };
+    if (!isAdmin && vendor) {
+      promoQuery.vendor = vendor._id;
+    }
+
+    const promotion = await Coupon.findOne(promoQuery);
+    if (!promotion) {
+      return res.status(404).json({ success: false, message: 'Promotion not found' });
+    }
+
+    promotion.isActive = !promotion.isActive;
+    await promotion.save();
+
+    await recordAuditLog({
+      action: 'VENDOR_PROMOTION_STATUS_TOGGLED',
+      module: 'MARKETING',
+      req,
+      description: `Toggled vendor promotion "${promotion.code}" to ${promotion.isActive ? 'ACTIVE' : 'PAUSED'}`,
+      targetType: 'Coupon',
+      targetId: promotion._id,
+      severity: 'LOW',
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Promotion is now ${promotion.isActive ? 'active' : 'paused'}`,
+      data: promotion,
+      promotion,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Delete Vendor Promotion
+// @route   DELETE /api/vendor/promotions/:id
+exports.deleteVendorPromotion = async (req, res, next) => {
+  try {
+    let vendor;
+    const isAdmin = req.user && (req.user.role === 'superadmin' || req.user.role === 'admin');
+
+    if (!isAdmin) {
+      vendor = await VendorProfile.findOne({ user: req.user._id });
+      if (!vendor) {
+        return res.status(404).json({ success: false, message: 'Vendor profile not found' });
+      }
+    }
+
+    const promoQuery = { _id: req.params.id, fundingSource: 'VENDOR' };
+    if (!isAdmin && vendor) {
+      promoQuery.vendor = vendor._id;
+    }
+
+    const promotion = await Coupon.findOneAndDelete(promoQuery);
+    if (!promotion) {
+      return res.status(404).json({ success: false, message: 'Promotion not found' });
+    }
+
+    await recordAuditLog({
+      action: 'VENDOR_PROMOTION_DELETED',
+      module: 'MARKETING',
+      req,
+      description: `Deleted vendor promotion "${promotion.code}"`,
+      targetType: 'Coupon',
+      targetId: req.params.id,
+      details: {
+        code: promotion.code,
+        promotionType: promotion.promotionType,
+        fundingSource: 'VENDOR',
+      },
+      severity: 'MEDIUM',
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Promotion deleted successfully',
+      deletedId: req.params.id,
+      data: promotion,
+      promotion,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Calculate BOGO & Tiered Promotions on Cart Items
+// @route   POST /api/promotions/bogo/calculate
+exports.calculateBogoSavings = async (req, res, next) => {
+  try {
+    const rawItems = req.body.cartItems || req.body.items || [];
+    const code = req.body.code ? req.body.code.trim().toUpperCase() : null;
+
+    if (!Array.isArray(rawItems) || rawItems.length === 0) {
+      return res.status(200).json({
+        success: true,
+        bogoApplied: false,
+        totalBogoDiscount: 0,
+        bogoSavings: 0,
+        freeUnitsCount: 0,
+        summaryText: 'No BOGO applied',
+        deals: [],
+        message: 'No items in cart for promotion calculation',
+      });
+    }
+
+    const promoQuery = {
+      isActive: true,
+      promotionType: { $in: ['BOGO', 'BUY_X_GET_Y'] },
+      $or: [{ expiryDate: null }, { expiryDate: { $gt: new Date() } }],
+    };
+    if (code) {
+      promoQuery.code = code;
+    }
+
+    const activePromos = await Coupon.find(promoQuery);
+
+    let totalBogoDiscount = 0;
+    let totalFreeUnits = 0;
+    const appliedDeals = [];
+
+    for (const promo of activePromos) {
+      const bogo = promo.bogoConfig || {};
+      const buyQty = Math.max(1, bogo.buyQty || 1);
+      const getQty = Math.max(1, bogo.getQty || 1);
+      const discountPct = bogo.discountPercentage !== undefined ? bogo.discountPercentage : 100;
+      const bundleSize = buyQty + getQty;
+
+      const applicableProductIds = (bogo.applicableProducts || []).map((id) => id.toString());
+
+      for (const item of rawItems) {
+        const pId = item.productId || item.product || item._id;
+        if (!pId) continue;
+
+        const isApplicableProduct =
+          (applicableProductIds.length === 0 && promo.storeWide) ||
+          applicableProductIds.includes(pId.toString()) ||
+          (promo.storeWide && promo.vendor && promo.vendor.toString() === String(item.vendorId));
+
+        if (!isApplicableProduct) continue;
+
+        const qty = parseInt(item.quantity, 10) || 0;
+        const itemPrice = Number(item.price) || 0;
+
+        if (qty >= bundleSize) {
+          const numBundles = Math.floor(qty / bundleSize);
+          const freeUnits = numBundles * getQty;
+          const dealDiscount = Math.round(freeUnits * itemPrice * (discountPct / 100));
+
+          if (dealDiscount > 0) {
+            totalBogoDiscount += dealDiscount;
+            totalFreeUnits += freeUnits;
+            appliedDeals.push({
+              promoId: promo._id,
+              code: promo.code,
+              title: promo.title,
+              promotionType: promo.promotionType,
+              fundingSource: promo.fundingSource,
+              vendorId: promo.vendor,
+              productId: pId,
+              productTitle: item.title || 'Eligible Item',
+              bundlesQualified: numBundles,
+              freeUnits,
+              discountPercentage: discountPct,
+              discountAmount: dealDiscount,
+              savingsText:
+                discountPct === 100
+                  ? `Buy ${buyQty} Get ${getQty} FREE (${freeUnits} Free Units)`
+                  : `Buy ${buyQty} Get ${getQty} at ${discountPct}% OFF`,
+            });
+          }
+        }
+      }
+    }
+
+    const summaryText =
+      appliedDeals.length > 0
+        ? `Buy 1 Get 1: ${totalFreeUnits} items free ($${totalBogoDiscount} saved)`
+        : 'No BOGO applied';
+
+    res.status(200).json({
+      success: true,
+      bogoApplied: appliedDeals.length > 0,
+      totalBogoDiscount,
+      bogoSavings: totalBogoDiscount,
+      freeUnitsCount: totalFreeUnits,
+      dealCount: appliedDeals.length,
+      deals: appliedDeals,
+      summaryText,
+      savingsSummary:
+        appliedDeals.length > 0
+          ? `🎉 BOGO Deals Active! Saved ₹${totalBogoDiscount.toLocaleString('en-IN')} across ${appliedDeals.length} item(s).`
+          : 'No BOGO promotions applicable to current cart items.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Active Storefront Promo Banners & Badges for a Vendor Store
+// @route   GET /api/promotions/store/:vendorId
+exports.getStorefrontPromotions = async (req, res, next) => {
+  try {
+    const { vendorId } = req.params;
+
+    // Resolve vendor profile
+    let vendor;
+    if (vendorId.match(/^[0-9a-fA-F]{24}$/)) {
+      vendor = await VendorProfile.findById(vendorId);
+    } else {
+      vendor = await VendorProfile.findOne({ storeSlug: vendorId });
+    }
+
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor store not found' });
+    }
+
+    const activePromos = await Coupon.find({
+      vendor: vendor._id,
+      fundingSource: 'VENDOR',
+      isActive: true,
+      $or: [{ expiryDate: null }, { expiryDate: { $gt: new Date() } }],
+    }).populate('bogoConfig.applicableProducts', 'title sku sellingPrice thumbnail');
+
+    const banners = activePromos
+      .filter((p) => p.bannerBadge && p.bannerBadge.enabled)
+      .map((p) => ({
+        id: p._id,
+        code: p.code,
+        title: p.title,
+        badgeText: p.bannerBadge.badgeText,
+        badgeColor: p.bannerBadge.badgeColor,
+        bannerMessage: p.bannerBadge.bannerMessage,
+        promotionType: p.promotionType,
+        bogoConfig: p.bogoConfig,
+      }));
+
+    res.status(200).json({
+      success: true,
+      storeName: vendor.storeName,
+      activePromosCount: activePromos.length,
+      count: activePromos.length,
+      promotions: activePromos,
+      banners,
+      displayBanners: banners,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Platform-Wide Vendor-Funded Promotions (Super Admin)
+// @route   GET /api/admin/promotions/vendor-funded
+exports.getAdminVendorFundedPromotions = async (req, res, next) => {
+  try {
+    const promotions = await Coupon.find({ fundingSource: 'VENDOR' })
+      .populate('vendor', 'storeName phone status')
+      .populate('bogoConfig.applicableProducts', 'title sku sellingPrice')
+      .sort({ createdAt: -1 });
+
+    const totalFunded = promotions.reduce((acc, p) => acc + (p.totalDiscountGiven || 0), 0);
+    const totalOrders = promotions.reduce((acc, p) => acc + (p.ordersDrivenCount || 0), 0);
+
+    res.status(200).json({
+      success: true,
+      count: promotions.length,
+      telemetry: {
+        totalVendorFundedDeals: promotions.length,
+        vendorFundedCount: promotions.length,
+        totalActive: promotions.filter((p) => p.isActive).length,
+        totalFundedDiscountAmount: totalFunded,
+        totalOrdersDriven: totalOrders,
+      },
+      promotions,
+      data: promotions,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

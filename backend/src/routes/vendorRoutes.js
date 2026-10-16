@@ -39,6 +39,13 @@ const {
 } = require('../controllers/vendorController');
 const { getVendorTaxReport, exportVendorTaxReportCSV } = require('../controllers/taxController');
 const { getSplitPackingSlips, getThermalReceipt } = require('../controllers/orderController');
+const {
+  getVendorPromotions,
+  createVendorPromotion,
+  updateVendorPromotion,
+  toggleVendorPromotion,
+  deleteVendorPromotion,
+} = require('../controllers/couponController');
 const { protect, authorize, requireVendorPermission } = require('../middlewares/auth');
 
 // Point 58: Public Storefront Vendor Showcase (Accessible by any customer/visitor)
@@ -80,6 +87,13 @@ router.get('/inventory/low-stock', getLowStockInventory);
 router.put('/inventory/thresholds', updateInventoryThresholds);
 router.post('/inventory/trigger-restock-alert', triggerRestockAlert);
 router.patch('/inventory/quick-restock', quickRestockInventory);
+
+// Point 11: Vendor-Funded Custom Promotions & BOGO Engine
+router.get('/promotions', getVendorPromotions);
+router.post('/promotions', createVendorPromotion);
+router.put('/promotions/:id', updateVendorPromotion);
+router.patch('/promotions/:id/toggle', toggleVendorPromotion);
+router.delete('/promotions/:id', deleteVendorPromotion);
 
 router.post('/ai-generator/product-copy', generateProductCopy);
 router.post('/ai-generator/seo-meta', generateSeoMeta);

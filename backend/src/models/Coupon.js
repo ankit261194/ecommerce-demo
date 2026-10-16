@@ -72,8 +72,57 @@ const couponSchema = new mongoose.Schema(
         ref: 'Category',
       },
     ],
+    // Point 11: Vendor-Funded Custom Promotions & BOGO Engine
+    fundingSource: {
+      type: String,
+      enum: ['PLATFORM', 'VENDOR'],
+      default: 'PLATFORM',
+    },
+    vendor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'VendorProfile',
+      default: null,
+    },
+    promotionType: {
+      type: String,
+      enum: ['DISCOUNT_CODE', 'BOGO', 'BUY_X_GET_Y', 'STORE_VOUCHER'],
+      default: 'DISCOUNT_CODE',
+    },
+    bogoConfig: {
+      buyQty: { type: Number, default: 1, min: 1 },
+      getQty: { type: Number, default: 1, min: 1 },
+      discountPercentage: { type: Number, default: 100, min: 0, max: 100 },
+      applicableProducts: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Product',
+        },
+      ],
+    },
+    storeWide: {
+      type: Boolean,
+      default: false,
+    },
+    totalDiscountGiven: {
+      type: Number,
+      default: 0,
+    },
+    ordersDrivenCount: {
+      type: Number,
+      default: 0,
+    },
+    bannerBadge: {
+      enabled: { type: Boolean, default: false },
+      badgeText: { type: String, default: '' },
+      badgeColor: { type: String, default: '#DC2626' },
+      bannerMessage: { type: String, default: '' },
+    },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
+
+couponSchema.virtual('discountAmount').get(function () {
+  return this.discountValue;
+});
 
 module.exports = mongoose.model('Coupon', couponSchema);

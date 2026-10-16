@@ -66,6 +66,7 @@ import WhatsAppOrderBotModal from '../components/WhatsAppOrderBotModal';
 import RtoRiskOtpModal from '../components/RtoRiskOtpModal';
 import FaqSection from '../components/FaqSection';
 import VoiceShoppingAssistantModal from '../components/VoiceShoppingAssistantModal';
+import WebPushOptInBanner from '../components/WebPushOptInBanner';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useLocalization } from '../context/LocalizationContext';
@@ -3297,6 +3298,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           AI
         </span>
       </button>
+
+      {/* Point 15: True Native Web Push Notifications Opt-In & Floating Status Bell */}
+      <WebPushOptInBanner customerEmail={user?.email || ''} />
     </div>
   );
 };

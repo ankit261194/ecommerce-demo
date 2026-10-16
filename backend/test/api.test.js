@@ -14094,6 +14094,200 @@ const runTests = async () => {
       assert.ok(tablet);
     });
 
+    // --- POINT 15: TRUE NATIVE WEB PUSH NOTIFICATIONS ENGINE ---
+    console.log('\n--- POINT 15: TRUE NATIVE WEB PUSH NOTIFICATIONS ENGINE ---');
+
+    let p15Endpoint = 'https://fcm.googleapis.com/fcm/send/mock_sub_endpoint_' + Date.now();
+    let p15Keys = {
+      p256dh: 'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QT9AcUbVYOSTxGen0KURrh6JrhClnGhHUlcfstGQqZ29J1-8',
+      auth: 'tBHItJI5svbpez7KI4CCXg',
+    };
+    let p15CampaignId;
+
+    await test('Point 15: GET /api/push-notifications/vapid-public-key returns VAPID key for browser client subscription', async () => {
+      const res = await fetch(`${baseUrl}/push-notifications/vapid-public-key`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(typeof body.publicKey === 'string');
+      assert.ok(body.publicKey.length > 20);
+    });
+
+    await test('Point 15: POST /api/push-notifications/subscribe validates missing endpoint or keys (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/push-notifications/subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: '' }),
+      });
+      assert.strictEqual(res.status, 400);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+      assert.ok(body.message.includes('required'));
+    });
+
+    await test('Point 15: POST /api/push-notifications/subscribe registers new subscriber device with telemetry tags', async () => {
+      const res = await fetch(`${baseUrl}/push-notifications/subscribe`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36',
+        },
+        body: JSON.stringify({
+          endpoint: p15Endpoint,
+          keys: p15Keys,
+          customerEmail: 'push.tester@example.com',
+          tags: ['deals', 'orders', 'festive_flash'],
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data);
+      assert.strictEqual(body.data.endpoint, p15Endpoint);
+      assert.strictEqual(body.data.deviceType, 'mobile');
+      assert.strictEqual(body.data.isActive, true);
+      assert.ok(body.data.tags.includes('festive_flash'));
+    });
+
+    await test('Point 15: POST /api/push-notifications/subscribe is idempotent and updates existing subscription', async () => {
+      const res = await fetch(`${baseUrl}/push-notifications/subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: p15Endpoint,
+          keys: p15Keys,
+          customerEmail: 'push.tester.updated@example.com',
+          tags: ['exclusive_vip'],
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.customerEmail, 'push.tester.updated@example.com');
+      assert.ok(body.data.tags.includes('exclusive_vip'));
+    });
+
+    await test('Point 15: GET /api/push-notifications/admin/subscribers provides subscriber lists & telemetry stats', async () => {
+      const res = await fetch(`${baseUrl}/push-notifications/admin/subscribers`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(Array.isArray(body.data));
+      assert.ok(body.telemetry);
+      assert.ok(body.telemetry.totalSubscribers >= 1);
+      assert.ok(body.telemetry.activeSubscribers >= 1);
+      assert.ok(typeof body.telemetry.mobileCount === 'number');
+      assert.ok(typeof body.telemetry.desktopCount === 'number');
+    });
+
+    await test('Point 15: POST /api/push-notifications/admin/broadcast dispatches notification to targeted segment', async () => {
+      const res = await fetch(`${baseUrl}/push-notifications/admin/broadcast`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: '🔥 Midnight Mega Flash Sale 60% OFF',
+          body: 'Huge discounts on premium electronics and apparel. Tap to view deals now.',
+          targetUrl: '/category/deals',
+          targetAudience: 'all',
+          image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600',
+          actions: [
+            { action: 'shop', title: 'Shop Now' },
+            { action: 'dismiss', title: 'Dismiss' },
+          ],
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.campaign);
+      assert.strictEqual(body.campaign.title, '🔥 Midnight Mega Flash Sale 60% OFF');
+      assert.ok(body.telemetry.sentCount >= 1);
+      assert.ok(body.telemetry.successCount >= 1);
+      p15CampaignId = body.campaign._id;
+    });
+
+    await test('Point 15: POST /api/push-notifications/track-click/:campaignId increments campaign click-through telemetry', async () => {
+      assert.ok(p15CampaignId);
+      const res = await fetch(`${baseUrl}/push-notifications/track-click/${p15CampaignId}`, {
+        method: 'POST',
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+    });
+
+    await test('Point 15: GET /api/push-notifications/admin/campaigns provides broadcast history and CTR performance', async () => {
+      const res = await fetch(`${baseUrl}/push-notifications/admin/campaigns`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(Array.isArray(body.data));
+      assert.ok(body.summary);
+      assert.ok(body.summary.totalCampaigns >= 1);
+      assert.ok(body.summary.totalDelivered >= 1);
+      assert.ok(body.summary.totalClicks >= 1);
+      assert.ok(typeof body.summary.overallCtr === 'number');
+
+      const foundCamp = body.data.find(c => c._id === p15CampaignId);
+      assert.ok(foundCamp);
+      assert.strictEqual(foundCamp.clickCount >= 1, true);
+    });
+
+    await test('Point 15: POST /api/push-notifications/admin/test sends instant test push to subscriber device', async () => {
+      const res = await fetch(`${baseUrl}/push-notifications/admin/test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ endpoint: p15Endpoint }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.message.includes('successfully'));
+    });
+
+    await test('Point 15: POST /api/push-notifications/unsubscribe successfully removes device subscription', async () => {
+      const res = await fetch(`${baseUrl}/push-notifications/unsubscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: p15Endpoint }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+    });
+
+    await test('Point 15: Role Security: Customer cannot broadcast, view subscribers or inspect campaigns (403 Forbidden)', async () => {
+      const resBroadcast = await fetch(`${baseUrl}/push-notifications/admin/broadcast`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ title: 'Hack', body: 'Spam' }),
+      });
+      assert.strictEqual(resBroadcast.status, 403);
+
+      const resSubscribers = await fetch(`${baseUrl}/push-notifications/admin/subscribers`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resSubscribers.status, 403);
+
+      const resCampaigns = await fetch(`${baseUrl}/push-notifications/admin/campaigns`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCampaigns.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

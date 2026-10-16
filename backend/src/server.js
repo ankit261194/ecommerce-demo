@@ -50,6 +50,7 @@ const taxRoutes = require('./routes/taxRoutes');
 const courierRoutes = require('./routes/courierRoutes');
 const globalSettingsRoutes = require('./routes/globalSettingsRoutes');
 const auditLogRoutes = require('./routes/auditLogRoutes');
+const pushNotificationRoutes = require('./routes/pushNotificationRoutes');
 
 const app = express();
 
@@ -167,6 +168,7 @@ app.use('/api/admin/courier', courierRoutes);
 app.use('/api/global-settings', globalSettingsRoutes);
 app.use('/api/admin/global-settings', globalSettingsRoutes);
 app.use('/api/admin/audit-logs', auditLogRoutes);
+app.use('/api/push-notifications', pushNotificationRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

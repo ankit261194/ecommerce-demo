@@ -26,6 +26,12 @@ if not js_file or not css_file:
 shutil.copy2(os.path.join(dist_assets_dir, js_file), os.path.join(demo_assets_dir, js_file))
 shutil.copy2(os.path.join(dist_assets_dir, css_file), os.path.join(demo_assets_dir, css_file))
 
+sw_src = os.path.join(root_dir, 'frontend', 'public', 'sw.js')
+if os.path.exists(sw_src):
+    shutil.copy2(sw_src, os.path.join(demo_dir, 'sw.js'))
+    os.makedirs(os.path.join(root_dir, 'frontend', 'dist'), exist_ok=True)
+    shutil.copy2(sw_src, os.path.join(root_dir, 'frontend', 'dist', 'sw.js'))
+
 with open(os.path.join(dist_assets_dir, js_file), 'r', encoding='utf-8') as f:
     js_content = f.read()
 

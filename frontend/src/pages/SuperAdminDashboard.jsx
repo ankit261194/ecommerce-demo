@@ -116,6 +116,7 @@ import AiSmartProductListingStudio from '../components/AiSmartProductListingStud
 import AdminWhatsAppShoppingBotHub from '../components/AdminWhatsAppShoppingBotHub';
 import AdminGroupBuyingManager from '../components/AdminGroupBuyingManager';
 import AdminLiveVideoShoppingManager from '../components/AdminLiveVideoShoppingManager';
+import AdminSmartRtoPredictorHub from '../components/AdminSmartRtoPredictorHub';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1747,6 +1748,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('rto-predictor')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'rto-predictor'
+                ? 'bg-rose-700 text-white shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4 text-rose-400" />
+            <span>Smart RTO Fraud Predictor</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-rose-500/30 text-rose-200 ml-1">
+              Point #28
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveDashboardTab('cms-pages')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
               activeDashboardTab === 'cms-pages'
@@ -2778,6 +2794,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'video-shopping' && (
         <AdminLiveVideoShoppingManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB: 🛡️ SMART RTO FRAUD PREDICTOR & FAKE COD BLOCKER (Point #28) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'rto-predictor' && (
+        <AdminSmartRtoPredictorHub />
       )}
 
       {/* ========================================================================= */}

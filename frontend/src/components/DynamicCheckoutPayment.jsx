@@ -25,6 +25,7 @@ export default function DynamicCheckoutPayment({
   user = {},
   onPaymentDetailsChange,
   paymentDetails = {},
+  rtoAssessment = null,
 }) {
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [upiUtr, setUpiUtr] = useState(paymentDetails?.upiUtr || '');
@@ -134,24 +135,36 @@ export default function DynamicCheckoutPayment({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {validGateways.map((gw) => {
           const isSelected = activeGateway === gw.id;
+          const isCodAndBlocked = gw.id === 'COD' && rtoAssessment?.isCodBlocked;
           return (
             <button
               key={gw.id}
               type="button"
-              onClick={() => onChangeGateway(gw.id)}
+              disabled={isCodAndBlocked}
+              onClick={() => {
+                if (!isCodAndBlocked) onChangeGateway(gw.id);
+              }}
               className={`p-3 rounded-2xl border text-left transition-all ${
-                isSelected
+                isCodAndBlocked
+                  ? 'border-red-200 bg-red-50/60 opacity-60 cursor-not-allowed text-slate-400'
+                  : isSelected
                   ? 'border-amber-500 bg-amber-50/70 text-slate-950 ring-2 ring-amber-400/30 shadow-xs'
                   : 'border-slate-200 text-slate-600 bg-white hover:border-slate-300'
               }`}
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-black text-slate-900">{gw.name}</span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
-                  {gw.badge}
+                <span
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                    isCodAndBlocked ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  {isCodAndBlocked ? '🚫 Blocked (RTO Risk)' : gw.badge}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 line-clamp-1">{gw.subtext}</p>
+              <p className="text-[11px] text-slate-500 line-clamp-1">
+                {isCodAndBlocked ? 'High return risk detected. Prepaid only.' : gw.subtext}
+              </p>
             </button>
           );
         })}
@@ -390,26 +403,53 @@ export default function DynamicCheckoutPayment({
 
       {/* 4. Cash on Delivery (COD) */}
       {activeGateway === 'COD' && (
-        <div className="p-4 rounded-2xl bg-gradient-to-b from-emerald-50/70 to-emerald-100/30 border border-emerald-200 text-emerald-950 space-y-2 animate-fade-in shadow-2xs">
-          <div className="flex items-center justify-between pb-1.5 border-b border-emerald-200/60">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-xs">
+        rtoAssessment?.isCodBlocked ? (
+          <div className="p-4 rounded-2xl bg-gradient-to-b from-red-50/80 to-rose-100/40 border border-red-200 text-red-950 space-y-2 animate-fade-in shadow-2xs">
+            <div className="flex items-center gap-2 pb-1.5 border-b border-red-200/60">
+              <div className="w-8 h-8 rounded-xl bg-red-600 text-white flex items-center justify-center font-black text-xs shadow-xs">
                 COD
               </div>
               <div>
-                <h4 className="text-xs font-black text-emerald-950">Cash on Delivery</h4>
-                <p className="text-[10px] text-emerald-700">Pay at Doorstep with Cash or any UPI App</p>
+                <h4 className="text-xs font-black text-red-950">Cash on Delivery Restricted</h4>
+                <p className="text-[10px] text-red-700">Automated Risk Protection & High RTO Signal</p>
               </div>
             </div>
-            <span className="text-[10px] font-black uppercase text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
-              DOORSTEP OTP VERIFIED
-            </span>
+            <p className="text-xs text-red-900 leading-relaxed font-medium">
+              Due to automated risk scoring (pincode, high-value order or return history), Cash on Delivery is disabled for this order. Please choose <strong>Direct UPI</strong>, <strong>Razorpay</strong>, or <strong>Card</strong> to proceed securely.
+            </p>
+            {rtoAssessment?.reasons?.length > 0 && (
+              <div className="text-[10px] text-red-800 bg-red-100/70 p-2 rounded-lg space-y-0.5">
+                {rtoAssessment.reasons.map((r, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
+                    <span>{r}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
+        ) : (
+          <div className="p-4 rounded-2xl bg-gradient-to-b from-emerald-50/70 to-emerald-100/30 border border-emerald-200 text-emerald-950 space-y-2 animate-fade-in shadow-2xs">
+            <div className="flex items-center justify-between pb-1.5 border-b border-emerald-200/60">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-xs">
+                  COD
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-emerald-950">Cash on Delivery</h4>
+                  <p className="text-[10px] text-emerald-700">Pay at Doorstep with Cash or any UPI App</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-black uppercase text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
+                DOORSTEP OTP VERIFIED
+              </span>
+            </div>
 
-          <p className="text-xs text-emerald-900 leading-relaxed font-medium">
-            A secret 4-digit verification OTP will be issued immediately upon booking. Hand over this OTP to your courier partner only after physically verifying your parcel.
-          </p>
-        </div>
+            <p className="text-xs text-emerald-900 leading-relaxed font-medium">
+              A secret 4-digit verification OTP will be issued immediately upon booking. Hand over this OTP to your courier partner only after physically verifying your parcel.
+            </p>
+          </div>
+        )
       )}
     </div>
   );

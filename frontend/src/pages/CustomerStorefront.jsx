@@ -696,6 +696,44 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     }
   }, [validGateways, paymentMethod]);
 
+  // Point #28: Smart RTO Fraud Predictor & Fake COD Blocker Pre-Checkout State
+  const [rtoAssessment, setRtoAssessment] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const evaluateRto = async () => {
+      if (!address?.pincode && !address?.phone) return;
+      try {
+        const res = await api.post('/rto-fraud/predict', {
+          shippingAddress: {
+            recipientName: address.recipientName,
+            phone: address.phone,
+            street: address.street,
+            city: address.city,
+            pincode: address.pincode,
+          },
+          totalAmount: grandTotalPayable || 0,
+          paymentMethod,
+        });
+        if (isMounted && res.data?.success) {
+          const data = res.data.data || res.data;
+          setRtoAssessment(data);
+          if (data?.isCodBlocked && paymentMethod === 'COD') {
+            const nextGw = validGateways.find(g => g.id !== 'COD')?.id || 'UPI';
+            setPaymentMethod(nextGw);
+          }
+        }
+      } catch (_) {
+        // Safe fallback
+      }
+    };
+    const timer = setTimeout(evaluateRto, 400);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [address?.pincode, address?.phone, address?.street, grandTotalPayable, paymentMethod, validGateways]);
+
   // Rich Product Catalog with Variants, Vendors & Hierarchical Subcategories (Point #4, Point #14)
   const [products, setProducts] = useState([
     {
@@ -2877,6 +2915,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   user={user}
                   onPaymentDetailsChange={setPaymentDetails}
                   paymentDetails={paymentDetails}
+                  rtoAssessment={rtoAssessment}
                 />
 
                 {/* Point #22: Real Promo Code / Coupon Engine at Checkout */}

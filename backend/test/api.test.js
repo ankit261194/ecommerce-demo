@@ -16675,6 +16675,289 @@ const runTests = async () => {
       assert.strictEqual(resDelete.status, 403);
     });
 
+    console.log('\n--- POINT 28: SMART RTO FRAUD PREDICTOR & FAKE COD BLOCKER ---');
+
+    await test('Point 28: POST /api/rto-fraud/predict evaluates clean address as LOW risk and permits COD', async () => {
+      const res = await fetch(`${baseUrl}/rto-fraud/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shippingAddress: {
+            street: 'Flat 402, Green Valley Apartments, Sector 62',
+            city: 'Noida',
+            pincode: '201301',
+            phone: '9876543210',
+            recipientName: 'Rahul Verma',
+          },
+          totalAmount: 1499,
+          paymentMethod: 'COD',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.riskLevel, 'LOW');
+      assert.strictEqual(data.isCodBlocked, false);
+      assert.strictEqual(data.suggestedPaymentMethod, 'COD');
+      assert.ok(data.riskScore < 50);
+    });
+
+    await test('Point 28: POST /api/rto-fraud/predict detects repetitive dummy phone and short address as HIGH risk', async () => {
+      const res = await fetch(`${baseUrl}/rto-fraud/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shippingAddress: {
+            street: 'xyz',
+            city: 'unknown',
+            pincode: '12345',
+            phone: '9999999999',
+            recipientName: 'fake buyer',
+          },
+          totalAmount: 4999,
+          paymentMethod: 'COD',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.riskLevel, 'HIGH');
+      assert.strictEqual(data.isCodBlocked, true);
+      assert.strictEqual(data.suggestedPaymentMethod, 'PREPAID');
+      assert.ok(data.riskScore >= 75);
+      assert.ok(data.reasons.length >= 2);
+    });
+
+    await test('Point 28: POST /api/rto-fraud/predict identifies blocklisted phone number and sets isCodBlocked to true', async () => {
+      const res = await fetch(`${baseUrl}/rto-fraud/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shippingAddress: {
+            street: 'Road 5, Jubilee Hills',
+            city: 'Hyderabad',
+            pincode: '500033',
+            phone: '1234567890',
+            recipientName: 'Sanjay Reddy',
+          },
+          totalAmount: 2499,
+          paymentMethod: 'COD',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.isCodBlocked, true);
+      assert.ok(data.riskScore >= 90);
+    });
+
+    await test('Point 28: POST /api/rto-fraud/predict identifies blocklisted postal pincode and restricts COD', async () => {
+      const res = await fetch(`${baseUrl}/rto-fraud/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shippingAddress: {
+            street: 'House 12, Main Market',
+            city: 'NonServiceable',
+            pincode: '000000',
+            phone: '9876543211',
+            recipientName: 'Deepak Sharma',
+          },
+          totalAmount: 1899,
+          paymentMethod: 'COD',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.isCodBlocked, true);
+      assert.ok(data.reasons.some(r => r.includes('pincode')));
+    });
+
+    await test('Point 28: POST /api/rto-fraud/predict applies prepaid order discount and lowers risk score', async () => {
+      const res = await fetch(`${baseUrl}/rto-fraud/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shippingAddress: {
+            street: 'Flat 101, Palm Grove, Bandra West',
+            city: 'Mumbai',
+            pincode: '400050',
+            phone: '9876543212',
+            recipientName: 'Aarav Mehta',
+          },
+          totalAmount: 8499,
+          paymentMethod: 'RAZORPAY',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.isCodBlocked, false);
+      assert.strictEqual(data.riskScore, 0);
+    });
+
+    await test('Point 28: GET /api/rto-fraud/admin/telemetry returns fraud prevention KPIs and saved loss estimation', async () => {
+      const res = await fetch(`${baseUrl}/rto-fraud/admin/telemetry`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.totalEvaluated >= 0);
+      assert.ok(data.data.autoBlockAccuracy >= 90);
+      assert.ok(data.data.savedLossAmount >= 0);
+    });
+
+    await test('Point 28: GET /api/rto-fraud/admin/config returns current threshold rules and blocklist arrays', async () => {
+      const res = await fetch(`${baseUrl}/rto-fraud/admin/config`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.enabled, true);
+      assert.strictEqual(data.data.codBlockThreshold, 75);
+      assert.strictEqual(data.data.otpVerificationThreshold, 50);
+      assert.ok(Array.isArray(data.data.blocklistPhones));
+      assert.ok(Array.isArray(data.data.blocklistPincodes));
+    });
+
+    await test('Point 28: PUT /api/rto-fraud/admin/config updates COD block threshold and adds new blocklisted phone', async () => {
+      const res = await fetch(`${baseUrl}/rto-fraud/admin/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          codBlockThreshold: 80,
+          otpVerificationThreshold: 45,
+          blocklistPhones: ['9999999999', '8888888888', '1234567890', '9811122233'],
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.codBlockThreshold, 80);
+      assert.strictEqual(data.data.otpVerificationThreshold, 45);
+      assert.ok(data.data.blocklistPhones.includes('9811122233'));
+    });
+
+    await test('Point 28: POST /api/rto-fraud/admin/simulate accurately computes risk score and returns detailed reasons breakdown', async () => {
+      const res = await fetch(`${baseUrl}/rto-fraud/admin/simulate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          street: 'test demo lane',
+          city: 'fake city',
+          pincode: '999999',
+          phone: '9811122233',
+          customerName: 'Spam User',
+          totalAmount: 12500,
+          paymentMethod: 'COD',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.simulation);
+      assert.ok(data.simulation.score >= 80);
+      assert.strictEqual(data.simulation.level, 'HIGH');
+      assert.strictEqual(data.simulation.isCodBlocked, true);
+      assert.ok(data.simulation.reasons.length >= 2);
+    });
+
+    await test('Point 28: POST /api/rto-fraud/predict evaluates high-value COD orders (>= ₹20,000) with elevated risk penalties', async () => {
+      const res = await fetch(`${baseUrl}/rto-fraud/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shippingAddress: {
+            street: '12 Park Street, Near City Center Mall',
+            city: 'Kolkata',
+            pincode: '700016',
+            phone: '9830012345',
+            recipientName: 'Subhashis Roy',
+          },
+          totalAmount: 28500,
+          paymentMethod: 'COD',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.riskScore >= 50);
+      assert.ok(data.reasons.some(r => r.includes('20,000')));
+    });
+
+    await test('Point 28: POST /api/rto-fraud/predict suggests PREPAID when COD is blocked', async () => {
+      const res = await fetch(`${baseUrl}/rto-fraud/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shippingAddress: {
+            street: 'null street',
+            city: 'Delhi',
+            pincode: '110001',
+            phone: '9999999999',
+          },
+          totalAmount: 5000,
+          paymentMethod: 'COD',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.isCodBlocked, true);
+      assert.strictEqual(data.suggestedPaymentMethod, 'PREPAID');
+    });
+
+    await test('Point 28: Role Security: Customer cannot update RTO config, simulate scoring or access admin telemetry (403 Forbidden)', async () => {
+      const resTelemetry = await fetch(`${baseUrl}/rto-fraud/admin/telemetry`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resTelemetry.status, 403);
+
+      const resConfig = await fetch(`${baseUrl}/rto-fraud/admin/config`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resConfig.status, 403);
+
+      const resUpdate = await fetch(`${baseUrl}/rto-fraud/admin/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ codBlockThreshold: 50 }),
+      });
+      assert.strictEqual(resUpdate.status, 403);
+
+      const resSim = await fetch(`${baseUrl}/rto-fraud/admin/simulate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ street: 'Testing' }),
+      });
+      assert.strictEqual(resSim.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

@@ -75,6 +75,7 @@ const subOrderSchema = new mongoose.Schema(
         'packed',
         'ready_for_pickup',
         'dispatched',
+        'shipped',
         'handed_to_courier',
         'out_for_delivery',
         'delivered',
@@ -87,6 +88,9 @@ const subOrderSchema = new mongoose.Schema(
     packagingStartedAt: { type: Date, default: null },
     readyForPickupAt: { type: Date, default: null },
     dispatchedAt: { type: Date, default: null },
+    shippedAt: { type: Date, default: null },
+    trackingNumber: { type: String, default: '' },
+    carrier: { type: String, default: '' },
     shippingAddress: {
       recipientName: String,
       phone: String,

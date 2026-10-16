@@ -94,6 +94,7 @@ import PaymentGatewayManager from '../components/PaymentGatewayManager';
 import SmsWhatsAppSettingsManager from '../components/SmsWhatsAppSettingsManager';
 import EmailTemplateManager from '../components/EmailTemplateManager';
 import StorageConfigManager from '../components/StorageConfigManager';
+import CourierAggregatorManager from '../components/CourierAggregatorManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -2567,7 +2568,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </div>
 
           {/* Sub-Tabs for Services */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
             <button
               onClick={() => setIntegrationSubTab('payments')}
               className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-black transition-all ${
@@ -2615,6 +2616,18 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
               <HardDrive className="w-4 h-4 text-amber-600" />
               <span>☁️ Multi-Cloud & S3 CDN</span>
             </button>
+
+            <button
+              onClick={() => setIntegrationSubTab('courier')}
+              className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-black transition-all ${
+                integrationSubTab === 'courier'
+                  ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Truck className="w-4 h-4 text-purple-600" />
+              <span>🚚 Courier Aggregators</span>
+            </button>
           </div>
 
           {/* ------------------------------------------------------------- */}
@@ -2645,6 +2658,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           {/* ------------------------------------------------------------- */}
           {integrationSubTab === 'storage' && (
             <StorageConfigManager />
+          )}
+
+          {/* ------------------------------------------------------------- */}
+          {/* 5. DIRECT COURIER AGGREGATOR API INTEGRATION (Point 5) */}
+          {/* ------------------------------------------------------------- */}
+          {integrationSubTab === 'courier' && (
+            <CourierAggregatorManager />
           )}
         </div>
       )}

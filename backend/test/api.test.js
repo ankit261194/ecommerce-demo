@@ -11698,6 +11698,205 @@ const runTests = async () => {
       assert.strictEqual(resTest.status, 403);
     });
 
+    // =========================================================================
+    // POINT 5 (28 MASTER SPRINT): DIRECT COURIER AGGREGATOR API INTEGRATION
+    // =========================================================================
+
+    let point5AwbCode = '';
+    let point5SubOrderId = null;
+
+    await test('Point 5: GET /api/admin/courier/settings returns Shiprocket, Delhivery & masked tokens', async () => {
+      const res = await fetch(`${baseUrl}/admin/courier/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data);
+      assert.ok(data.data.shiprocket);
+      assert.ok(data.data.delhivery);
+      assert.strictEqual(data.data.shiprocket.enabled, true);
+      assert.strictEqual(data.data.delhivery.enabled, true);
+
+      // Verify secrets are properly masked
+      assert.ok(data.data.shiprocket.passwordMasked.includes('••••'));
+      assert.ok(data.data.delhivery.apiTokenMasked.includes('••••'));
+    });
+
+    await test('Point 5: PUT /api/admin/courier/settings updates routing preferences and preserves masked secrets', async () => {
+      const res = await fetch(`${baseUrl}/admin/courier/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          defaultCourier: 'DELHIVERY',
+          autoGenerateAwb: true,
+          shiprocket: {
+            mode: 'sandbox',
+            email: 'dispatch@auramarket.com',
+            password: '••••••••', // preserve secret
+          },
+          delhivery: {
+            mode: 'sandbox',
+            clientName: 'AURAMARKET_EXPRESS',
+            apiToken: '••••••••', // preserve secret
+          },
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.defaultCourier, 'DELHIVERY');
+      assert.strictEqual(data.data.autoGenerateAwb, true);
+      assert.ok(data.data.shiprocket.passwordMasked.includes('••••'));
+    });
+
+    await test('Point 5: POST /api/admin/courier/test-connection verifies live API handshake with Shiprocket & Delhivery', async () => {
+      // 1. Shiprocket test handshake
+      const resSR = await fetch(`${baseUrl}/admin/courier/test-connection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ courier: 'SHIPROCKET' }),
+      });
+      assert.strictEqual(resSR.status, 200);
+      const dataSR = await resSR.json();
+      assert.strictEqual(dataSR.success, true);
+      assert.strictEqual(dataSR.courier, 'SHIPROCKET');
+      assert.strictEqual(dataSR.status, 'CONNECTED');
+      assert.ok(dataSR.latencyMs >= 0);
+      assert.ok(dataSR.verifiedWarehouse);
+
+      // 2. Delhivery test handshake
+      const resDEL = await fetch(`${baseUrl}/admin/courier/test-connection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ courier: 'DELHIVERY' }),
+      });
+      assert.strictEqual(resDEL.status, 200);
+      const dataDEL = await resDEL.json();
+      assert.strictEqual(dataDEL.success, true);
+      assert.strictEqual(dataDEL.courier, 'DELHIVERY');
+      assert.strictEqual(dataDEL.status, 'CONNECTED');
+      assert.ok(dataDEL.latencyMs >= 0);
+    });
+
+    await test('Point 5: POST /api/courier/generate-awb/:subOrderId creates electronic manifest & assigns AWB code', async () => {
+      // Retrieve or create suborder
+      let subOrder = await SubOrder.findOne();
+      if (!subOrder) {
+        subOrder = await SubOrder.create({
+          status: 'confirmed',
+          subTotal: 1999,
+          vendor: adminUser._id,
+          customer: customerUser._id,
+        });
+      }
+      point5SubOrderId = subOrder._id;
+
+      const res = await fetch(`${baseUrl}/courier/generate-awb/${subOrder._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ courierPartner: 'SHIPROCKET' }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.awbCode);
+      assert.ok(data.awbCode.startsWith('SR-'));
+      assert.strictEqual(data.shipment.shipmentStatus, 'AWB_ASSIGNED');
+      assert.ok(data.labelUrl.includes(data.awbCode));
+
+      point5AwbCode = data.awbCode;
+
+      // Verify SubOrder was updated
+      const updatedSub = await SubOrder.findById(subOrder._id);
+      assert.strictEqual(updatedSub.trackingNumber, point5AwbCode);
+      assert.strictEqual(updatedSub.carrier, 'SHIPROCKET');
+      assert.strictEqual(updatedSub.status, 'shipped');
+    });
+
+    await test('Point 5: POST /api/courier/schedule-pickup/:subOrderId schedules rider pickup van handover', async () => {
+      const res = await fetch(`${baseUrl}/courier/schedule-pickup/${point5SubOrderId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          pickupTimeSlot: '11:00 - 15:00',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.shipment.shipmentStatus, 'PICKUP_SCHEDULED');
+      assert.ok(data.shipment.trackingHistory.length >= 3);
+    });
+
+    await test('Point 5: GET /api/courier/track/:awb returns live multi-carrier tracking milestones', async () => {
+      const res = await fetch(`${baseUrl}/courier/track/${point5AwbCode}`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.tracking);
+      assert.strictEqual(data.tracking.awbCode, point5AwbCode);
+      assert.strictEqual(data.tracking.courierPartner, 'SHIPROCKET');
+      assert.strictEqual(data.tracking.status, 'PICKUP_SCHEDULED');
+      assert.ok(data.tracking.progressPercent > 0);
+      assert.ok(Array.isArray(data.tracking.history));
+      assert.ok(data.tracking.history.length >= 3);
+    });
+
+    await test('Point 5: GET /api/courier/label/:awbCode generates printable 4x6 thermal shipping barcode label', async () => {
+      const res = await fetch(`${baseUrl}/courier/label/${point5AwbCode}`);
+      assert.strictEqual(res.status, 200);
+      assert.ok(res.headers.get('content-type').includes('text/html'));
+      const text = await res.text();
+      assert.ok(text.includes(point5AwbCode));
+      assert.ok(text.includes('AURAMARKET EXPRESS'));
+      assert.ok(text.includes('SHIP TO:'));
+    });
+
+    await test('Point 5: GET /api/admin/courier/shipments lists electronic dispatch manifests', async () => {
+      const res = await fetch(`${baseUrl}/admin/courier/shipments`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.shipments));
+      assert.ok(data.shipments.length >= 1);
+      assert.ok(data.shipments.some(s => s.awbCode === point5AwbCode));
+    });
+
+    await test('Point 5: Role Security: Customer cannot modify courier credentials or trigger pings (403 Forbidden)', async () => {
+      const resSettings = await fetch(`${baseUrl}/admin/courier/settings`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resSettings.status, 403);
+
+      const resTest = await fetch(`${baseUrl}/admin/courier/test-connection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ courier: 'SHIPROCKET' }),
+      });
+      assert.strictEqual(resTest.status, 403);
+    });
+
 
   } finally {
     if (server) {

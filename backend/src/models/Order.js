@@ -136,6 +136,29 @@ const orderSchema = new mongoose.Schema(
       type: String,
       default: '4821',
     },
+    // Point 21: Digital Proof of Delivery (POD) Customer Signature & Timestamp
+    proofOfDelivery: {
+      hasSignature: { type: Boolean, default: false },
+      signature: { type: String, default: null },
+      signerName: { type: String, default: null },
+      signerRelation: {
+        type: String,
+        enum: ['Self', 'Family Member', 'Colleague', 'Neighbor', 'Security / Reception', 'Other'],
+        default: 'Self',
+      },
+      gpsLocation: {
+        latitude: { type: Number, default: null },
+        longitude: { type: Number, default: null },
+        accuracy: { type: Number, default: null },
+      },
+      deviceInfo: { type: String, default: '' },
+      signedAt: { type: Date, default: null },
+      ipAddress: { type: String, default: '' },
+      verificationCode: { type: String, default: null },
+      deliveredBy: { type: String, default: 'AuraMarket Express Courier' },
+      riderPhone: { type: String, default: '+919876543210' },
+      podNotes: { type: String, default: '' },
+    },
     // Point #28: 1-Click Self-Cancel Order Reason & Audit
     cancellationReason: {
       type: String,

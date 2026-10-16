@@ -25,12 +25,14 @@ import {
   Printer,
   MessageSquare,
   Gift,
+  FileCheck,
 } from 'lucide-react';
 import ReturnRefundModal from './ReturnRefundModal';
 import TaxInvoiceModal from './TaxInvoiceModal';
 import WhatsAppOrderBotModal from './WhatsAppOrderBotModal';
 import ScratchCardModal from './ScratchCardModal';
 import LiveGpsTrackingMap from './LiveGpsTrackingMap';
+import ProofOfDeliveryModal from './ProofOfDeliveryModal';
 
 export default function LiveOrderTrackerModal({
   isOpen,
@@ -65,6 +67,9 @@ export default function LiveOrderTrackerModal({
 
   // Point #72: Post-Purchase Scratch Card State
   const [showScratchCard, setShowScratchCard] = useState(false);
+
+  // Point #21: Digital Proof of Delivery (POD) Signature & Slip State
+  const [showPodModal, setShowPodModal] = useState(false);
 
   const cancellationReasons = [
     'Ordered by mistake',
@@ -359,6 +364,21 @@ export default function LiveOrderTrackerModal({
                   >
                     <Printer className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                     Tax Invoice
+                  </button>
+
+                  {/* Point #21: Digital Proof of Delivery (POD) Signature & Slip */}
+                  <button
+                    type="button"
+                    onClick={() => setShowPodModal(true)}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-sm active:scale-95 ${
+                      orderData?.proofOfDelivery?.hasSignature
+                        ? 'bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700'
+                        : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                    }`}
+                    title={orderData?.proofOfDelivery?.hasSignature ? 'View Official Proof of Delivery (POD) Slip' : 'Capture Digital Proof of Delivery Handover Signature'}
+                  >
+                    <FileCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    <span>{orderData?.proofOfDelivery?.hasSignature ? 'View POD Slip' : 'Sign POD'}</span>
                   </button>
 
                   {/* Point #71: 1-Click WhatsApp Order Bot Assistant */}
@@ -947,6 +967,23 @@ export default function LiveOrderTrackerModal({
         orderId={orderData?.orderId || orderData?.rawOrderId}
         apiUrl={apiUrl}
       />
+
+      {/* Point #21: Digital Proof of Delivery (POD) Customer Signature Modal */}
+      {showPodModal && orderData && (
+        <ProofOfDeliveryModal
+          isOpen={showPodModal}
+          onClose={() => setShowPodModal(false)}
+          order={orderData}
+          apiUrl={apiUrl}
+          onSuccess={(updatedPod) => {
+            setOrderData(prev => prev ? {
+              ...prev,
+              proofOfDelivery: updatedPod?.proofOfDelivery || updatedPod,
+              status: 'DELIVERED',
+            } : prev);
+          }}
+        />
+      )}
 
       {/* Point #71: 1-Click WhatsApp Order Confirmation & Bot Modal */}
       {showWhatsAppBot && orderData && (

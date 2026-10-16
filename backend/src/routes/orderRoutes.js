@@ -12,12 +12,16 @@ const {
   verifyRtoRisk,
   resendRtoOtp,
   getThermalReceipt,
+  saveOrderPodSignature,
+  getOrderPod,
+  getOrderPodSlip,
 } = require('../controllers/orderController');
 const { protect } = require('../middlewares/auth');
 
-// Public live order tracking and 1-click tax invoice download
+// Public live order tracking, 1-click tax invoice and POD slip
 router.get('/track/:identifier', trackOrder);
 router.get('/:id/invoice', getTaxInvoice);
+router.get('/:id/pod-slip', getOrderPodSlip);
 router.get('/:id/split-packing-slips', protect, getSplitPackingSlips);
 router.get('/:id/thermal-receipt', protect, getThermalReceipt);
 
@@ -26,6 +30,8 @@ router.use(protect);
 router.post('/', createOrder);
 router.get('/my', getMyOrders);
 router.get('/:id', getOrderById);
+router.get('/:id/pod', getOrderPod);
+router.post('/:id/pod-signature', saveOrderPodSignature);
 router.post('/:id/cancel', cancelOrder);
 router.post('/:id/advance-step', simulateOrderStep);
 router.post('/:id/verify-rto-risk', verifyRtoRisk);

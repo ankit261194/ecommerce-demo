@@ -15200,6 +15200,181 @@ const runTests = async () => {
       assert.strictEqual(res.status, 403);
     });
 
+    // ==========================================
+    // POINT 21: DIGITAL PROOF OF DELIVERY (POD)
+    // ==========================================
+    let testPodOrder = null;
+    let otherCustomerToken = null;
+
+    await test('Point 21 Setup: Create test order and secondary customer for POD testing', async () => {
+      // Create secondary customer
+      const otherCustEmail = `othercust_${Date.now()}@example.com`;
+      const resReg = await fetch(`${baseUrl}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Other Customer',
+          email: otherCustEmail,
+          password: 'Password123!',
+          phone: '9988776655',
+        }),
+      });
+      const dataReg = await resReg.json();
+      otherCustomerToken = dataReg.token;
+
+      // Create test order
+      const resOrder = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [
+            {
+              productId: testSwatchProduct._id,
+              quantity: 1,
+              price: 1599,
+            },
+          ],
+          shippingAddress: {
+            recipientName: 'Kavita Verma',
+            phone: '9876543210',
+            street: '42 Lotus Boulevard, Tower 4, Flat 902',
+            city: 'Noida',
+            state: 'Uttar Pradesh',
+            pincode: '201301',
+          },
+          paymentMethod: 'COD',
+        }),
+      });
+
+      assert.strictEqual(resOrder.status, 201);
+      const dataOrder = await resOrder.json();
+      assert.strictEqual(dataOrder.success, true);
+      testPodOrder = dataOrder.data;
+      assert.ok(testPodOrder._id);
+    });
+
+    await test('Point 21: POST /api/orders/:id/pod-signature validates missing signature (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/orders/${testPodOrder._id}/pod-signature`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          signerName: 'Kavita Verma',
+          signerRelation: 'Self',
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('signature image'));
+    });
+
+    await test('Point 21: POST /api/orders/:id/pod-signature records customer signature, signer name, relation, and GPS location', async () => {
+      const sampleSignature = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const res = await fetch(`${baseUrl}/orders/${testPodOrder._id}/pod-signature`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          signature: sampleSignature,
+          signerName: 'Kavita Verma',
+          signerRelation: 'Self',
+          gpsLocation: {
+            latitude: 28.535517,
+            longitude: 77.391029,
+            accuracy: 4.5,
+          },
+          deviceInfo: 'Android Chrome Handheld Scanner',
+          riderPhone: '+919876543210',
+          podNotes: 'Handed over directly to consignee at front door.',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'DELIVERED');
+      assert.strictEqual(data.data.proofOfDelivery.hasSignature, true);
+      assert.strictEqual(data.data.proofOfDelivery.signerName, 'Kavita Verma');
+      assert.strictEqual(data.data.proofOfDelivery.signerRelation, 'Self');
+      assert.strictEqual(data.data.proofOfDelivery.gpsLocation.latitude, 28.535517);
+      assert.ok(data.data.proofOfDelivery.verificationCode.startsWith('POD-'));
+    });
+
+    await test('Point 21: POST /api/orders/:id/pod-signature cascades DELIVERED status and tracking note to subOrders', async () => {
+      const SubOrder = require('../src/models/SubOrder');
+      const subOrders = await SubOrder.find({ parentOrder: testPodOrder._id });
+      assert.ok(subOrders.length > 0);
+      for (const sub of subOrders) {
+        assert.strictEqual(sub.status, 'delivered');
+        assert.strictEqual(sub.proofOfDelivery.hasSignature, true);
+        assert.ok(sub.trackingHistory.some(h => h.note && h.note.includes('Proof of Delivery')));
+      }
+    });
+
+    await test('Point 21: GET /api/orders/:id/pod returns verifiable POD details, signature base64, and verification code', async () => {
+      const res = await fetch(`${baseUrl}/orders/${testPodOrder._id}/pod`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.hasSignature, true);
+      assert.strictEqual(data.data.verifiableStatus, 'VERIFIED_DIGITAL_POD');
+      assert.ok(data.data.proofOfDelivery.signature.startsWith('data:image/png;base64'));
+      assert.ok(data.data.proofOfDelivery.verificationCode);
+    });
+
+    await test('Point 21: GET /api/orders/:id/pod-slip returns official printable HTML POD slip with signature and GPS', async () => {
+      const res = await fetch(`${baseUrl}/orders/${testPodOrder._id}/pod-slip`);
+      assert.strictEqual(res.status, 200);
+      assert.ok(res.headers.get('content-type').includes('text/html'));
+      const html = await res.text();
+      assert.ok(html.includes('Official Digital Proof of Delivery (POD)'));
+      assert.ok(html.includes('Kavita Verma'));
+      assert.ok(html.includes('data:image/png;base64'));
+      assert.ok(html.includes('GPS Stamp:'));
+    });
+
+    await test('Point 21: GET /api/orders/track/:id includes proofOfDelivery data in live order tracking', async () => {
+      const res = await fetch(`${baseUrl}/orders/track/${testPodOrder._id}`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.proofOfDelivery.hasSignature, true);
+      assert.strictEqual(data.data.proofOfDelivery.signerName, 'Kavita Verma');
+    });
+
+    await test('Point 21: Role Security: Customer cannot sign POD for another customer order (403 Forbidden)', async () => {
+      const sampleSignature = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const res = await fetch(`${baseUrl}/orders/${testPodOrder._id}/pod-signature`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${otherCustomerToken}`,
+        },
+        body: JSON.stringify({
+          signature: sampleSignature,
+          signerName: 'Intruder',
+          signerRelation: 'Other',
+        }),
+      });
+
+      assert.strictEqual(res.status, 403);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Unauthorized'));
+    });
+
   } finally {
     if (server) {
       server.close();

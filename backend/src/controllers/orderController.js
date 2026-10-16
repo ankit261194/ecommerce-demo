@@ -941,6 +941,7 @@ exports.trackOrder = async (req, res, next) => {
         canSelfCancel,
         cancellationReason: order.cancellationReason || null,
         cancelledAt: order.cancelledAt || null,
+        proofOfDelivery: order.proofOfDelivery || { hasSignature: false },
         subOrders: subOrdersTracking,
       },
     });
@@ -1790,6 +1791,347 @@ exports.getThermalReceipt = async (req, res, next) => {
     next(error);
   }
 };
+
+// ==========================================
+// POINT 21: DIGITAL PROOF OF DELIVERY (POD)
+// ==========================================
+
+// @desc    Save Customer Digital Proof of Delivery (POD) Signature & Mark Delivered (Point 21)
+// @route   POST /api/orders/:id/pod-signature
+exports.saveOrderPodSignature = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const {
+      signature,
+      signerName,
+      signerRelation,
+      gpsLocation,
+      deviceInfo,
+      riderPhone,
+      podNotes,
+    } = req.body;
+
+    if (!signature || typeof signature !== 'string' || !signature.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Customer digital signature image (base64 data URL) is required for Proof of Delivery.',
+      });
+    }
+
+    const mongoose = require('mongoose');
+    let order = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      order = await Order.findById(id).populate('subOrders');
+    }
+    if (!order) {
+      order = await Order.findOne({ orderNumber: id }).populate('subOrders');
+    }
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found for POD signature capture' });
+    }
+
+    if (order.status === 'CANCELLED') {
+      return res.status(400).json({ success: false, message: 'Cannot attach POD signature to a cancelled order.' });
+    }
+
+    // Role check: Customer can only sign their own order unless superadmin/delivery/vendor
+    if (
+      req.user.role === 'customer' &&
+      order.customer &&
+      order.customer.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({ success: false, message: 'Unauthorized to sign POD for another customer order.' });
+    }
+
+    const resolvedSigner = (signerName && signerName.trim()) || order.shippingAddress?.recipientName || 'Customer';
+    const resolvedRelation = (signerRelation && signerRelation.trim()) || 'Self';
+    const now = new Date();
+    const verificationCode = `POD-${order.orderNumber || order._id.toString().slice(-8).toUpperCase()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+    const podData = {
+      hasSignature: true,
+      signature: signature.trim(),
+      signerName: resolvedSigner,
+      signerRelation: resolvedRelation,
+      gpsLocation: {
+        latitude: gpsLocation?.latitude || null,
+        longitude: gpsLocation?.longitude || null,
+        accuracy: gpsLocation?.accuracy || null,
+      },
+      deviceInfo: (deviceInfo && deviceInfo.trim()) || req.headers['user-agent'] || 'Mobile Handheld',
+      signedAt: now,
+      ipAddress: req.ip || '',
+      verificationCode,
+      deliveredBy: req.user.role === 'delivery' ? (req.user.name || 'Express Rider') : 'AuraMarket Express Courier',
+      riderPhone: (riderPhone && riderPhone.trim()) || (req.user.role === 'delivery' ? req.user.phone : '+919876543210'),
+      podNotes: (podNotes && podNotes.trim()) || '',
+    };
+
+    order.proofOfDelivery = podData;
+    order.status = 'DELIVERED';
+    await order.save();
+
+    // Cascade to subOrders
+    if (order.subOrders && order.subOrders.length > 0) {
+      for (const sub of order.subOrders) {
+        sub.status = 'delivered';
+        sub.proofOfDelivery = podData;
+        sub.trackingHistory.push({
+          status: 'delivered',
+          timestamp: now,
+          note: `Digital Proof of Delivery (POD) signature captured from ${resolvedSigner} (${resolvedRelation}) [Code: ${verificationCode}]`,
+        });
+        await sub.save();
+
+        // Also update DeliveryTask if one exists
+        const DeliveryTask = mongoose.models.DeliveryTask || require('../models/DeliveryTask');
+        if (DeliveryTask) {
+          const task = await DeliveryTask.findOne({ subOrder: sub._id });
+          if (task) {
+            task.customerSignature = signature.trim();
+            task.signatureDetails = {
+              signerName: resolvedSigner,
+              signerRelation: resolvedRelation,
+              signedAt: now,
+              ipAddress: req.ip || '',
+            };
+            task.status = 'DELIVERED';
+            task.deliveredAt = now;
+            await task.save();
+          }
+        }
+      }
+    }
+
+    // Log to AuditLog
+    const AuditLog = require('../models/AuditLog');
+    await AuditLog.create({
+      user: req.user._id,
+      action: 'ORDER_POD_SIGNATURE_CAPTURED',
+      entity: 'Order',
+      entityId: order._id,
+      details: {
+        orderNumber: order.orderNumber,
+        signerName: resolvedSigner,
+        signerRelation: resolvedRelation,
+        verificationCode,
+        gpsLocation: podData.gpsLocation,
+      },
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: 'Proof of Delivery (POD) signature recorded and order marked delivered successfully.',
+      data: {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        proofOfDelivery: order.proofOfDelivery,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Order Proof of Delivery (POD) Data & Verification Code (Point 21)
+// @route   GET /api/orders/:id/pod
+exports.getOrderPod = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const mongoose = require('mongoose');
+    let order = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      order = await Order.findById(id).populate([
+        { path: 'customer', select: 'name email phone' },
+        { path: 'subOrders', populate: { path: 'vendor', select: 'storeName phone' } },
+      ]);
+    }
+    if (!order) {
+      order = await Order.findOne({ orderNumber: id }).populate([
+        { path: 'customer', select: 'name email phone' },
+        { path: 'subOrders', populate: { path: 'vendor', select: 'storeName phone' } },
+      ]);
+    }
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found for POD verification' });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        createdAt: order.createdAt,
+        totalAmount: order.totalAmount,
+        shippingAddress: order.shippingAddress,
+        items: order.items,
+        hasSignature: Boolean(order.proofOfDelivery?.hasSignature),
+        proofOfDelivery: order.proofOfDelivery || { hasSignature: false },
+        verifiableStatus: order.proofOfDelivery?.hasSignature ? 'VERIFIED_DIGITAL_POD' : 'PENDING_DELIVERY_SIGNATURE',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Generate Printable 4x6 / A4 Official Proof of Delivery (POD) Slip (Point 21)
+// @route   GET /api/orders/:id/pod-slip
+exports.getOrderPodSlip = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const mongoose = require('mongoose');
+    let order = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      order = await Order.findById(id).populate([
+        { path: 'customer', select: 'name email phone' },
+        { path: 'subOrders', populate: { path: 'vendor', select: 'storeName phone pickupAddress' } },
+      ]);
+    }
+    if (!order) {
+      order = await Order.findOne({ orderNumber: id }).populate([
+        { path: 'customer', select: 'name email phone' },
+        { path: 'subOrders', populate: { path: 'vendor', select: 'storeName phone pickupAddress' } },
+      ]);
+    }
+
+    if (!order) {
+      return res.status(404).send('<h3>Proof of Delivery Slip: Order not found</h3>');
+    }
+
+    const pod = order.proofOfDelivery || {};
+    const hasSig = Boolean(pod.hasSignature && pod.signature);
+    const orderNum = order.orderNumber || order._id.toString().slice(-8).toUpperCase();
+    const formattedDate = pod.signedAt
+      ? new Date(pod.signedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+      : new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    const gpsCoord = pod.gpsLocation?.latitude && pod.gpsLocation?.longitude
+      ? `${Number(pod.gpsLocation.latitude).toFixed(6)}° N, ${Number(pod.gpsLocation.longitude).toFixed(6)}° E (±${pod.gpsLocation.accuracy || 10}m)`
+      : 'Captured via Handheld Geolocation (Standard Doorstep Accuracy)';
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Proof of Delivery (POD) - ${orderNum}</title>
+  <style>
+    @page { size: A4; margin: 15mm; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .no-print { display: none !important; }
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #0f172a; margin: 0; padding: 20px; background: #f8fafc; }
+    .slip-container { max-width: 800px; margin: 0 auto; background: #ffffff; border: 2px solid #e2e8f0; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); position: relative; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px; }
+    .brand-title { font-size: 24px; font-weight: 900; color: #0f172a; letter-spacing: -0.5px; }
+    .brand-sub { font-size: 11px; text-transform: uppercase; font-weight: 800; color: #d97706; letter-spacing: 1px; }
+    .badge { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; padding: 6px 12px; border-radius: 9999px; font-size: 12px; font-weight: 800; text-transform: uppercase; display: inline-flex; align-items: center; gap: 4px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; }
+    .box-title { font-size: 11px; text-transform: uppercase; font-weight: 800; color: #64748b; margin-bottom: 6px; letter-spacing: 0.5px; }
+    .box-val { font-size: 13px; font-weight: 700; color: #0f172a; line-height: 1.4; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; }
+    th { background: #0f172a; color: #ffffff; text-align: left; padding: 10px 12px; font-weight: 700; }
+    th:first-child { border-top-left-radius: 8px; }
+    th:last-child { border-top-right-radius: 8px; text-align: right; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+    td:last-child { text-align: right; font-weight: 700; }
+    .sig-section { border: 2px dashed #cbd5e1; border-radius: 14px; padding: 20px; background: #ffffff; margin-bottom: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center; }
+    .sig-box { text-align: center; }
+    .sig-img { max-height: 120px; max-width: 100%; object-fit: contain; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafafa; padding: 8px; }
+    .legal-notice { font-size: 11px; color: #64748b; line-height: 1.5; border-top: 1px solid #e2e8f0; padding-top: 12px; text-align: center; }
+    .print-btn { background: #0f172a; color: white; border: none; padding: 10px 20px; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; gap: 8px; }
+  </style>
+</head>
+<body>
+  <div class="slip-container">
+    <div class="header">
+      <div>
+        <div class="brand-title">AuraMarket Express</div>
+        <div class="brand-sub">Official Digital Proof of Delivery (POD)</div>
+      </div>
+      <div>
+        <div class="badge">✓ Doorstep Verified Handover</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="box">
+        <div class="box-title">Order Information</div>
+        <div class="box-val">Order ID: <strong>#${orderNum}</strong></div>
+        <div class="box-val">Verification Code: <strong>${pod.verificationCode || 'POD-PENDING'}</strong></div>
+        <div class="box-val">Handover Timestamp: ${formattedDate}</div>
+        <div class="box-val">Payment Method: ${order.paymentMethod} (${order.paymentStatus})</div>
+      </div>
+      <div class="box">
+        <div class="box-title">Delivery Destination</div>
+        <div class="box-val">Recipient: <strong>${order.shippingAddress?.recipientName}</strong></div>
+        <div class="box-val">Phone: ${order.shippingAddress?.phone}</div>
+        <div class="box-val">${order.shippingAddress?.street}, ${order.shippingAddress?.city}, ${order.shippingAddress?.state} - ${order.shippingAddress?.pincode}</div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Item Description</th>
+          <th style="text-align: center;">Qty</th>
+          <th>Price</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${(order.items || []).map(item => `
+          <tr>
+            <td><strong>${item.title}</strong>${item.variantName ? `<br><small style="color: #64748b;">Variant: ${item.variantName}</small>` : ''}</td>
+            <td style="text-align: center;">${item.quantity}</td>
+            <td>₹${item.price?.toLocaleString('en-IN')}</td>
+            <td>₹${((item.price || 0) * (item.quantity || 1)).toLocaleString('en-IN')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+
+    <div class="sig-section">
+      <div class="sig-box">
+        <div class="box-title">Customer Digital Signature</div>
+        ${hasSig ? `<img src="${pod.signature}" alt="Customer Signature" class="sig-img" />` : '<div style="padding: 30px; color: #94a3b8; font-style: italic;">[No Signature Captured]</div>'}
+        <div style="font-size: 12px; font-weight: 800; margin-top: 6px;">Signer: ${pod.signerName || order.shippingAddress?.recipientName}</div>
+        <div style="font-size: 11px; color: #64748b;">Relationship: ${pod.signerRelation || 'Self'}</div>
+      </div>
+      <div>
+        <div class="box-title">Handover & Geolocation Telemetry</div>
+        <div style="font-size: 12px; margin-bottom: 6px;"><strong>GPS Stamp:</strong> ${gpsCoord}</div>
+        <div style="font-size: 12px; margin-bottom: 6px;"><strong>Delivered By:</strong> ${pod.deliveredBy || 'Express Courier Agent'}</div>
+        <div style="font-size: 12px; margin-bottom: 6px;"><strong>Courier Phone:</strong> ${pod.riderPhone || '+91 9876543210'}</div>
+        <div style="font-size: 12px; margin-bottom: 6px;"><strong>Client Device:</strong> ${pod.deviceInfo || 'Standard Web Client'}</div>
+        ${pod.podNotes ? `<div style="font-size: 12px; margin-top: 6px; padding: 6px 10px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px; color: #92400e;"><strong>Rider Note:</strong> ${pod.podNotes}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="legal-notice">
+      This document certifies the successful physical handover of items listed above under AuraMarket Express verified doorstep protocol. The digital signature and timestamp above constitute legally binding proof of receipt under Indian Information Technology Act, 2000.
+    </div>
+
+    <div class="no-print" style="margin-top: 24px; text-align: center;">
+      <button class="print-btn" onclick="window.print()">🖨️ Print Proof of Delivery (POD)</button>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    res.status(200).send(html);
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 
 

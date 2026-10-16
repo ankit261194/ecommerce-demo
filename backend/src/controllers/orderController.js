@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const jwt = require('jsonwebtoken');
 const Product = require('../models/Product');
 const VendorProfile = require('../models/VendorProfile');
 const Order = require('../models/Order');
@@ -10,6 +11,11 @@ const WalletTransaction = require('../models/WalletTransaction');
 const GiftWrapConfig = require('../models/GiftWrapConfig');
 const smsService = require('../services/smsService');
 const mailService = require('../services/mailService');
+
+const generateToken = (id) =>
+  jwt.sign({ id }, process.env.JWT_SECRET || 'fallback_secret_auramarket_jwt_2026', {
+    expiresIn: '30d',
+  });
 
 // @desc    Checkout and Create Multi-Vendor Split Orders
 // @route   POST /api/orders
@@ -23,6 +29,62 @@ exports.createOrder = async (req, res, next) => {
 
     if (!shippingAddress || !shippingAddress.street || !shippingAddress.city || !shippingAddress.pincode) {
       return res.status(400).json({ success: false, message: 'Complete shipping address is required' });
+    }
+
+    // Point 4: Guest Checkout with Instant Background Account Creation & SMS credentials
+    let accountCreated = false;
+    let tempPassword = '';
+    const rawPhone = shippingAddress.phone || req.body.guestInfo?.phone;
+
+    if (!req.user) {
+      if (!rawPhone) {
+        return res.status(400).json({ success: false, message: 'Valid mobile number is required for checkout' });
+      }
+      const cleanPhone = String(rawPhone).replace(/\D/g, '').slice(-10);
+      if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide a valid 10-digit Indian mobile number for order notifications and account credentials',
+        });
+      }
+
+      const recipientName = (shippingAddress.recipientName || req.body.guestInfo?.name || `Shopper ${cleanPhone.slice(-4)}`).trim();
+      const cleanEmail = (shippingAddress.email || req.body.guestInfo?.email || `${cleanPhone}@guest.auramarket.com`).toLowerCase().trim();
+
+      let guestUser = await User.findOne({
+        $or: [{ phone: cleanPhone }, { email: cleanEmail }],
+      });
+
+      if (!guestUser) {
+        tempPassword = `Aura#${Math.floor(1000 + Math.random() * 9000)}!`;
+        guestUser = await User.create({
+          name: recipientName,
+          phone: cleanPhone,
+          email: cleanEmail,
+          password: tempPassword,
+          authProvider: 'GUEST_CHECKOUT',
+          isGuestCreated: true,
+          isVerified: true,
+          role: 'customer',
+          walletBalance: 250,
+          walletCoins: 500,
+          addresses: [
+            {
+              recipientName,
+              phone: cleanPhone,
+              street: shippingAddress.street,
+              landmark: shippingAddress.landmark || '',
+              city: shippingAddress.city,
+              state: shippingAddress.state || 'Delhi',
+              pincode: shippingAddress.pincode,
+              type: 'HOME',
+              isDefault: true,
+            },
+          ],
+        });
+        accountCreated = true;
+      }
+      req.user = guestUser;
     }
 
     // Step 1: Validate all items exist and have sufficient stock before decrementing
@@ -422,6 +484,11 @@ exports.createOrder = async (req, res, next) => {
       rtoVerificationOtp: rtoOtp,
       rtoVerificationOtpExpires: rtoOtpExpires,
       flaggedForRtoRisk: rtoAssessment.isHighRisk,
+      // Point 4: Guest Checkout Metadata
+      isGuestOrder: Boolean(accountCreated || req.user.isGuestCreated || req.body.isGuestCheckout),
+      guestCredentialsSent: Boolean(accountCreated),
+      guestPhone: shippingAddress.phone || req.user.phone || '',
+      guestEmail: shippingAddress.email || req.user.email || '',
     });
 
     if (rtoAssessment.verificationRequired && shippingAddress?.phone) {
@@ -657,15 +724,53 @@ exports.createOrder = async (req, res, next) => {
       console.warn('[AbandonedCart] Auto-recovery link warning:', abandonedErr.message);
     }
 
+    // Point 4: Dispatch instant SMS credentials for background created guest accounts
+    if (accountCreated && tempPassword) {
+      const credSms = `Welcome to AuraMarket! Your Order #${populatedOrder.orderNumber} is confirmed. A customer account was created for you! Phone: +91${customerPhone}, Temp Password: ${tempPassword}. Track your delivery: https://shribalajikripadham.online/ecommerce-demo/#track/${populatedOrder.orderNumber}`;
+      smsService
+        .sendSMS({ to: customerPhone, message: credSms })
+        .catch(err => console.log('[SMS Warning] Could not dispatch guest credentials SMS:', err.message));
+    }
+
+    const token = req.user ? generateToken(req.user._id) : null;
+
     res.status(201).json({
       success: true,
-      message: 'Order placed successfully! Sub-orders generated for vendors.',
+      message: accountCreated
+        ? 'Guest order placed successfully! Shopper account created and login credentials dispatched via SMS.'
+        : 'Order placed successfully! Sub-orders generated for vendors.',
       data: populatedOrder,
+      accountCreated,
+      guestCredentials: accountCreated
+        ? {
+            phone: customerPhone,
+            tempPassword,
+            smsDispatched: true,
+          }
+        : null,
+      token,
+      user: req.user
+        ? {
+            id: req.user._id,
+            name: req.user.name,
+            email: req.user.email,
+            phone: req.user.phone,
+            role: req.user.role,
+            isGuestCreated: req.user.isGuestCreated,
+            authProvider: req.user.authProvider,
+            walletBalance: req.user.walletBalance,
+            walletCoins: req.user.walletCoins,
+          }
+        : null,
     });
   } catch (error) {
     next(error);
   }
 };
+
+// Point 4: Guest Checkout with Instant Background Account Creation & SMS credentials
+// @route   POST /api/orders/guest-checkout
+exports.guestCheckout = exports.createOrder;
 
 // @desc    Get Customer's Order History
 // @route   GET /api/orders/my

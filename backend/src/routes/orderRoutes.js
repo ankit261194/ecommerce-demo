@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
   createOrder,
+  guestCheckout,
   getMyOrders,
   getOrderById,
   cancelOrder,
@@ -24,6 +25,9 @@ router.get('/:id/invoice', getTaxInvoice);
 router.get('/:id/pod-slip', getOrderPodSlip);
 router.get('/:id/split-packing-slips', protect, getSplitPackingSlips);
 router.get('/:id/thermal-receipt', protect, getThermalReceipt);
+
+// Point 4: Guest Checkout with Instant Background Account Creation & SMS credentials
+router.post('/guest-checkout', guestCheckout);
 
 router.use(protect);
 

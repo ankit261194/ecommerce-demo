@@ -1384,7 +1384,10 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     });
 
     try {
-      const res = await api.post('/orders', {
+      const isGuestCheckout = !localStorage.getItem('token');
+      const orderEndpoint = isGuestCheckout ? '/orders/guest-checkout' : '/orders';
+
+      const res = await api.post(orderEndpoint, {
         items: cartItems.map(item => ({
           productId: item.productId,
           variantSku: item.variantSku,
@@ -1404,6 +1407,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         deliveryInstructions: deliveryInstructions || undefined,
         coinsToRedeem: redeemedCoins > 0 ? redeemedCoins : undefined,
         giftWrap: giftOptions.isGift ? giftOptions : undefined,
+        isGuestCheckout,
         hyperlocalDelivery: hyperlocalService?.isDeliverable ? {
           darkStoreId: hyperlocalService.darkStore?._id,
           hubCode: hyperlocalService.darkStore?.hubCode,
@@ -1418,6 +1422,17 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         const order = res.data.data;
         const placedOrderId = order.orderNumber || order._id;
         localStorage.setItem('last_placed_order_id', placedOrderId);
+
+        // Point 4: Auto-authenticate session if guest account was created
+        if (res.data.token && !localStorage.getItem('token')) {
+          try {
+            localStorage.setItem('token', res.data.token);
+            if (res.data.user) {
+              localStorage.setItem('user', JSON.stringify(res.data.user));
+            }
+          } catch (_) {}
+        }
+
         setActiveOrderConfirmation({
           orderId: placedOrderId,
           subOrders: (order.subOrders || []).map(so => ({
@@ -1441,6 +1456,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           rtoRiskScore: order.rtoRiskScore,
           rtoRiskReasons: order.rtoRiskReasons,
           rawOrder: order,
+          guestCredentials: res.data.guestCredentials || null,
+          accountCreated: Boolean(res.data.accountCreated),
         });
 
         if (order.rtoVerificationRequired && order.rtoVerificationStatus === 'PENDING') {
@@ -3135,6 +3152,36 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                 Master Order ID: <strong className="text-slate-900">{activeOrderConfirmation.orderId}</strong>
               </p>
             </div>
+
+            {/* Point 4: Guest Checkout Background Account Creation Banner */}
+            {activeOrderConfirmation.guestCredentials && (
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-300 text-left space-y-2 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-emerald-800 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                    Shopper Account Created Automatically!
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 text-white font-bold">
+                    SMS Sent 📱
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                  You checked out as a guest. We created your permanent shopper account so you can track orders, manage returns and enjoy welcome rewards!
+                </p>
+                <div className="p-2.5 rounded-xl bg-white/90 border border-emerald-200 flex items-center justify-between font-mono text-xs text-slate-800">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-sans font-bold">LOGIN PHONE:</span>
+                    <strong className="text-emerald-700">+91 {activeOrderConfirmation.guestCredentials.phone}</strong>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-400 block font-sans font-bold">TEMP PASSWORD:</span>
+                    <strong className="text-slate-900 bg-emerald-100 px-2 py-0.5 rounded font-mono">
+                      {activeOrderConfirmation.guestCredentials.tempPassword}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Secret Delivery OTP Display Box */}
             <div className="p-5 rounded-2xl bg-amber-50 border border-amber-300 text-center space-y-2 shadow-sm">

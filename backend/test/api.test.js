@@ -17279,6 +17279,126 @@ const runTests = async () => {
       assert.strictEqual(data.success, false);
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 4: GUEST CHECKOUT WITH INSTANT BACKGROUND ACCOUNT CREATION
+    // =========================================================================
+    let guestTargetProduct = await Product.findOne({ isPublished: true, stock: { $gte: 3 } });
+    if (!guestTargetProduct) {
+      guestTargetProduct = headphonesProduct;
+    }
+
+    const uniqueGuestPhone = '9845' + Math.floor(100000 + Math.random() * 900000);
+    let guestCreatedToken = '';
+    let guestPlacedOrderId = '';
+
+    await test('Point 4: POST /api/orders/guest-checkout creates background account, issues JWT & returns temporary credentials', async () => {
+      const res = await fetch(`${baseUrl}/orders/guest-checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [
+            {
+              productId: guestTargetProduct._id,
+              quantity: 1,
+            },
+          ],
+          shippingAddress: {
+            recipientName: 'Arjun Guest Shopper',
+            phone: uniqueGuestPhone,
+            email: `arjun.guest.${uniqueGuestPhone}@example.com`,
+            street: '104 Lotus Boulevard',
+            city: 'Noida',
+            state: 'Uttar Pradesh',
+            pincode: '201301',
+          },
+          paymentMethod: 'COD',
+          deliveryInstructions: 'Call on arrival at security gate',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.accountCreated, true);
+      assert.ok(data.guestCredentials);
+      assert.strictEqual(data.guestCredentials.phone, uniqueGuestPhone);
+      assert.ok(data.guestCredentials.tempPassword.startsWith('Aura#'));
+      assert.strictEqual(data.guestCredentials.smsDispatched, true);
+      assert.ok(data.token);
+      assert.strictEqual(data.user.phone, uniqueGuestPhone);
+      assert.strictEqual(data.user.authProvider, 'GUEST_CHECKOUT');
+      assert.strictEqual(data.user.isGuestCreated, true);
+      assert.strictEqual(data.data.isGuestOrder, true);
+      guestCreatedToken = data.token;
+      guestPlacedOrderId = data.data._id;
+    });
+
+    await test('Point 4: Newly created background guest account can authenticate and access protected endpoints', async () => {
+      const res = await fetch(`${baseUrl}/auth/me`, {
+        headers: { Authorization: `Bearer ${guestCreatedToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.user.phone, uniqueGuestPhone);
+      assert.strictEqual(data.user.role, 'customer');
+      assert.strictEqual(data.user.walletBalance, 250);
+      assert.ok(data.user.walletCoins >= 500, 'User should have at least 500 welcome coins + order cashback');
+    });
+
+    await test('Point 4: Existing user checkout as guest links order to existing account without duplicating users', async () => {
+      const res = await fetch(`${baseUrl}/orders/guest-checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [
+            {
+              productId: guestTargetProduct._id,
+              quantity: 1,
+            },
+          ],
+          shippingAddress: {
+            recipientName: 'Arjun Returning Customer',
+            phone: uniqueGuestPhone,
+            street: '104 Lotus Boulevard Phase 2',
+            city: 'Noida',
+            state: 'Uttar Pradesh',
+            pincode: '201301',
+          },
+          paymentMethod: 'COD',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.accountCreated, false);
+      assert.strictEqual(data.user.phone, uniqueGuestPhone);
+      assert.ok(data.token);
+    });
+
+    await test('Point 4: POST /api/orders/guest-checkout validates required mobile phone number (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/orders/guest-checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [{ productId: guestTargetProduct._id, quantity: 1 }],
+          shippingAddress: {
+            recipientName: 'No Phone Shopper',
+            street: '104 Lotus Boulevard',
+            city: 'Noida',
+            pincode: '201301',
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('mobile number is required'));
+    });
+
   } finally {
     if (server) {
       server.close();

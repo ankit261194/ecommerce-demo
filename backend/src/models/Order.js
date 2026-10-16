@@ -159,6 +159,23 @@ const orderSchema = new mongoose.Schema(
       riderPhone: { type: String, default: '+919876543210' },
       podNotes: { type: String, default: '' },
     },
+    // Point 4: Guest Checkout with Instant Background Account Creation
+    isGuestOrder: {
+      type: Boolean,
+      default: false,
+    },
+    guestCredentialsSent: {
+      type: Boolean,
+      default: false,
+    },
+    guestPhone: {
+      type: String,
+      default: '',
+    },
+    guestEmail: {
+      type: String,
+      default: '',
+    },
     // Point #28: 1-Click Self-Cancel Order Reason & Audit
     cancellationReason: {
       type: String,

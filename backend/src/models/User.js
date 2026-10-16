@@ -30,10 +30,14 @@ const userSchema = new mongoose.Schema(
     },
     authProvider: {
       type: String,
-      enum: ['LOCAL', 'GOOGLE', 'APPLE', 'PHONE_OTP', 'WHATSAPP', 'WEB_OTP'],
+      enum: ['LOCAL', 'GOOGLE', 'APPLE', 'PHONE_OTP', 'WHATSAPP', 'WEB_OTP', 'GUEST_CHECKOUT'],
       default: 'LOCAL',
     },
     webOtpVerified: {
+      type: Boolean,
+      default: false,
+    },
+    isGuestCreated: {
       type: Boolean,
       default: false,
     },

@@ -15593,6 +15593,202 @@ const runTests = async () => {
       assert.strictEqual(res.status, 403);
     });
 
+    // =========================================================================
+    // POINT 23: RIDER COD CASH COLLECTION HANDOVER & ADMIN RECONCILIATION VAULT
+    // =========================================================================
+    console.log('\n--- POINT 23: RIDER COD CASH COLLECTION HANDOVER & RECONCILIATION VAULT ---');
+
+    let testSettlementId = null;
+    let testHandoverOtp = null;
+    let testShortageSettlementId = null;
+
+    await test('Point 23: GET /api/cod-vault/summary returns vault telemetry (cash in vault, transit, shortages)', async () => {
+      const res = await fetch(`${baseUrl}/cod-vault/summary`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data);
+      assert.strictEqual(typeof data.data.cashInVault, 'number');
+      assert.strictEqual(typeof data.data.cashInTransit, 'number');
+      assert.strictEqual(typeof data.data.totalSettledToday, 'number');
+      assert.strictEqual(typeof data.data.totalShortages, 'number');
+      assert.strictEqual(typeof data.data.totalDepositedToBank, 'number');
+      assert.strictEqual(typeof data.data.pendingHandoversCount, 'number');
+    });
+
+    await test('Point 23: GET /api/cod-vault/riders-pending-cash aggregates unhanded COD deliveries for active riders', async () => {
+      const res = await fetch(`${baseUrl}/cod-vault/riders-pending-cash`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+    });
+
+    await test('Point 23: POST /api/cod-vault/handover/initiate calculates denomination total and generates 4-digit handoverOtp', async () => {
+      // Create a test handover: 4x500 (2000) + 5x200 (1000) + 4x100 (400) + 10x50 (500) + coins (100) = 4000
+      const res = await fetch(`${baseUrl}/cod-vault/handover/initiate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          denominations: {
+            d500: 4,
+            d200: 5,
+            d100: 4,
+            d50: 10,
+            coins: 100,
+          },
+          depositMethod: 'HUB_CASH_DESK',
+          depositSlipNumber: 'SLIP-BLR-001',
+          notes: 'Shift Evening COD Collection Handover',
+          hubCode: 'BLR-KOR-01',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.totalCounted, 4000, '4*500 + 5*200 + 4*100 + 10*50 + 100 = 4000');
+      assert.ok(data.data.reconciliationId);
+      assert.ok(data.data.handoverOtp);
+      assert.strictEqual(data.data.handoverOtp.length, 4, 'Handover OTP must be 4 digits');
+      assert.strictEqual(data.data.status, 'SUBMITTED');
+
+      testSettlementId = data.data.reconciliationId;
+      testHandoverOtp = data.data.handoverOtp;
+    });
+
+    await test('Point 23: POST /api/cod-vault/handover/initiate accurately records cash discrepancy (shortage)', async () => {
+      // 1x500 = 500 counted with 0 expected tasks -> discrepancy = +500
+      const res = await fetch(`${baseUrl}/cod-vault/handover/initiate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          denominations: {
+            d500: 1,
+            d100: 2,
+          },
+          depositMethod: 'HUB_CASH_DESK',
+          notes: 'Partial shift handover test',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.totalCounted, 700);
+      assert.ok(data.data.reconciliationId);
+      testShortageSettlementId = data.data.reconciliationId;
+    });
+
+    await test('Point 23: POST /api/cod-vault/handover/verify-otp validates incorrect OTP (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/cod-vault/handover/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          reconciliationId: testSettlementId,
+          otp: '9999', // wrong OTP
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Invalid Handover OTP'));
+    });
+
+    await test('Point 23: POST /api/cod-vault/handover/verify-otp approves settlement with correct OTP and transfers cash to Vault', async () => {
+      const res = await fetch(`${baseUrl}/cod-vault/handover/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          reconciliationId: testSettlementId,
+          otp: testHandoverOtp,
+          adminRemarks: 'Cash counted & verified by Vault In-charge',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'VERIFIED');
+      assert.ok(data.data.verifiedAt);
+    });
+
+    await test('Point 23: POST /api/cod-vault/bank-deposit/:id records company bank deposit with UTR reference', async () => {
+      // Find the document ID for testSettlementId
+      const CodReconciliation = require('../src/models/CodReconciliation');
+      const recDoc = await CodReconciliation.findOne({ reconciliationId: testSettlementId });
+      assert.ok(recDoc);
+
+      const res = await fetch(`${baseUrl}/cod-vault/bank-deposit/${recDoc._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          bankName: 'HDFC Bank - Commercial Current A/C',
+          accountNumber: '50200012345678',
+          transactionReference: 'UTR-' + Date.now(),
+          notes: 'Cash in vault deposited to branch',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'DEPOSITED_TO_BANK');
+      assert.strictEqual(data.data.bankDeposit.isDeposited, true);
+      assert.strictEqual(data.data.bankDeposit.bankName, 'HDFC Bank - Commercial Current A/C');
+    });
+
+    await test('Point 23: GET /api/cod-vault/slip/:id returns official printable 4x6 / A4 cash settlement receipt with denominations', async () => {
+      const res = await fetch(`${baseUrl}/cod-vault/slip/${testSettlementId}`);
+      assert.strictEqual(res.status, 200);
+      const text = await res.text();
+      assert.ok(text.includes('AuraMarket • Cash Reconciliation Slip'));
+      assert.ok(text.includes('Currency Denomination Count'));
+      assert.ok(text.includes(testSettlementId));
+    });
+
+    await test('Point 23: Role Security: Customer cannot view vault summary, verify OTP or record bank deposit (403 Forbidden)', async () => {
+      const resSummary = await fetch(`${baseUrl}/cod-vault/summary`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resSummary.status, 403);
+
+      const resVerify = await fetch(`${baseUrl}/cod-vault/handover/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          reconciliationId: testSettlementId,
+          otp: '1234',
+        }),
+      });
+      assert.strictEqual(resVerify.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

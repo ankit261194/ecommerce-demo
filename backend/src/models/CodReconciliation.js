@@ -30,6 +30,7 @@ const codReconciliationSchema = new mongoose.Schema(
       d50: { type: Number, default: 0 },
       d20: { type: Number, default: 0 },
       d10: { type: Number, default: 0 },
+      coins: { type: Number, default: 0 },
     },
     totalExpected: {
       type: Number,
@@ -42,8 +43,12 @@ const codReconciliationSchema = new mongoose.Schema(
       default: 0,
     },
     discrepancy: {
-      type: Number, // totalCounted - totalExpected
+      type: Number, // totalCounted - totalExpected (negative = shortage, positive = excess)
       default: 0,
+    },
+    handoverOtp: {
+      type: String,
+      default: () => Math.floor(1000 + Math.random() * 9000).toString(),
     },
     depositMethod: {
       type: String,
@@ -64,7 +69,7 @@ const codReconciliationSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['PENDING', 'SUBMITTED', 'VERIFIED', 'REJECTED'],
+      enum: ['PENDING', 'SUBMITTED', 'VERIFIED', 'REJECTED', 'DEPOSITED_TO_BANK'],
       default: 'SUBMITTED',
     },
     verifiedBy: {
@@ -78,6 +83,27 @@ const codReconciliationSchema = new mongoose.Schema(
     adminRemarks: {
       type: String,
       default: '',
+    },
+    bankDeposit: {
+      isDeposited: { type: Boolean, default: false },
+      bankName: { type: String, default: '' },
+      accountNumber: { type: String, default: '' },
+      transactionReference: { type: String, default: '' },
+      depositedAt: { type: Date, default: null },
+      depositedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    },
+    ordersAudit: [
+      {
+        orderNumber: { type: String, default: '' },
+        subOrderNumber: { type: String, default: '' },
+        amount: { type: Number, default: 0 },
+        customerName: { type: String, default: '' },
+        deliveredAt: { type: Date, default: Date.now },
+      },
+    ],
+    hubCode: {
+      type: String,
+      default: 'CENTRAL-VAULT',
     },
   },
   { timestamps: true }

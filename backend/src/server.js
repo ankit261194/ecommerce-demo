@@ -55,6 +55,7 @@ const emiRoutes = require('./routes/emiRoutes');
 const socialShareRoutes = require('./routes/socialShareRoutes');
 const giftWrapRoutes = require('./routes/giftWrapRoutes');
 const hyperlocalRoutes = require('./routes/hyperlocalRoutes');
+const codVaultRoutes = require('./routes/codVaultRoutes');
 
 const app = express();
 
@@ -181,6 +182,7 @@ app.get('/p/:id', renderOpenGraphHtml);
 app.get('/api/p/:id', renderOpenGraphHtml);
 app.use('/api/gift-wrap', giftWrapRoutes);
 app.use('/api/hyperlocal', hyperlocalRoutes);
+app.use('/api/cod-vault', codVaultRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

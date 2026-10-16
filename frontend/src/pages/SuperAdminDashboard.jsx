@@ -66,6 +66,7 @@ import {
   Gift,
   MapPin,
   Navigation,
+  Coins,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -109,6 +110,7 @@ import AdminEmiManager from '../components/AdminEmiManager';
 import AdminSocialShareHub from '../components/AdminSocialShareHub';
 import { AdminGiftWrapManager } from '../components/AdminGiftWrapManager';
 import HyperlocalGeofenceManager from '../components/HyperlocalGeofenceManager';
+import AdminCodReconciliationVault from '../components/AdminCodReconciliationVault';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1665,6 +1667,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('cod-vault')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'cod-vault'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Coins className="w-4 h-4 text-amber-400" />
+            <span>Rider COD Cash Vault</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-200 ml-1">
+              Point #23
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveDashboardTab('cms-pages')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
               activeDashboardTab === 'cms-pages'
@@ -2661,6 +2678,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'hyperlocal' && (
         <HyperlocalGeofenceManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB: 💰 RIDER COD CASH COLLECTION HANDOVER & ADMIN VAULT (Point #23) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'cod-vault' && (
+        <AdminCodReconciliationVault />
       )}
 
       {/* ========================================================================= */}

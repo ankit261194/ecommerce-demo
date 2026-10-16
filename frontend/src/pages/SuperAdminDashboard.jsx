@@ -103,6 +103,7 @@ import InventoryAlertsModal from '../components/InventoryAlertsModal';
 import AdminPushNotificationHub from '../components/AdminPushNotificationHub';
 import AdminWalletVault from '../components/AdminWalletVault';
 import AdminEmiManager from '../components/AdminEmiManager';
+import AdminSocialShareHub from '../components/AdminSocialShareHub';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1614,6 +1615,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('social-og')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'social-og'
+                ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Share2 className="w-4 h-4 text-amber-400" />
+            <span>Social & OpenGraph Cards</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-200 ml-1">
+              Point #18
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveDashboardTab('cms-pages')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
               activeDashboardTab === 'cms-pages'
@@ -2589,6 +2605,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'emi-engine' && (
         <AdminEmiManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB: 📢 DYNAMIC OPENGRAPH SOCIAL SHARING PREVIEW STUDIO (Point #18) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'social-og' && (
+        <AdminSocialShareHub />
       )}
 
       {/* ========================================================================= */}

@@ -52,6 +52,7 @@ const globalSettingsRoutes = require('./routes/globalSettingsRoutes');
 const auditLogRoutes = require('./routes/auditLogRoutes');
 const pushNotificationRoutes = require('./routes/pushNotificationRoutes');
 const emiRoutes = require('./routes/emiRoutes');
+const socialShareRoutes = require('./routes/socialShareRoutes');
 
 const app = express();
 
@@ -172,6 +173,10 @@ app.use('/api/admin/audit-logs', auditLogRoutes);
 app.use('/api/push-notifications', pushNotificationRoutes);
 app.use('/api/emi', emiRoutes);
 app.use('/api/admin/emi', emiRoutes);
+app.use('/api/share', socialShareRoutes);
+const { renderOpenGraphHtml } = require('./controllers/socialShareController');
+app.get('/p/:id', renderOpenGraphHtml);
+app.get('/api/p/:id', renderOpenGraphHtml);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

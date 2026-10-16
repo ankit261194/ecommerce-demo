@@ -35,6 +35,7 @@ import SizeGuideModal from './SizeGuideModal';
 import PriceDropAlertModal from './PriceDropAlertModal';
 import CustomerVendorChatModal from './CustomerVendorChatModal';
 import EmiBreakdownModal from './EmiBreakdownModal';
+import SocialShareModal from './SocialShareModal';
 import { useLocalization } from '../context/LocalizationContext';
 
 export const ProductDetailModal = ({
@@ -82,6 +83,9 @@ export const ProductDetailModal = ({
 
   // Real-Time EMI & BNPL Modal state (Point #17)
   const [isEmiModalOpen, setIsEmiModalOpen] = useState(false);
+
+  // Dynamic OpenGraph Social Share Modal state (Point #18)
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   // Hover zoom coordinates
   const [zoomStyle, setZoomStyle] = useState({ display: 'none' });
@@ -196,18 +200,7 @@ export const ProductDetailModal = ({
     : null;
 
   const handleShare = () => {
-    const url = window.location.href;
-    if (navigator.share) {
-      navigator.share({
-        title: product.title,
-        text: `Check out ${product.title} for ₹${currentSellingPrice}!`,
-        url,
-      }).catch(() => {});
-    } else {
-      navigator.clipboard.writeText(url);
-      setCopiedShare(true);
-      setTimeout(() => setCopiedShare(false), 2000);
-    }
+    setIsShareModalOpen(true);
   };
 
   const handleMouseMove = e => {
@@ -1066,6 +1059,13 @@ export const ProductDetailModal = ({
         price={currentSellingPrice}
         productTitle={product.title}
         productImage={images[0]}
+      />
+
+      {/* Point 18: Dynamic OpenGraph Social Sharing Preview Modal */}
+      <SocialShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        product={product}
       />
     </div>
   );

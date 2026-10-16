@@ -14732,6 +14732,141 @@ const runTests = async () => {
       assert.strictEqual(resPut.status, 403);
     });
 
+    console.log('\n--- POINT 18: DYNAMIC OPENGRAPH SOCIAL SHARING PREVIEW CARDS ---');
+
+    let testShareProduct = null;
+    await test('Point 18 Setup: Find an existing product for OpenGraph testing', async () => {
+      testShareProduct = await Product.findOne({ stock: { $gt: 0 } });
+      assert.ok(testShareProduct, 'Existing active product must exist for OpenGraph sharing test');
+    });
+
+    await test('Point 18: GET /api/share/product/:id/meta returns rich OpenGraph, Twitter and JSON-LD microdata', async () => {
+      const res = await fetch(`${baseUrl}/share/product/${testShareProduct._id}/meta`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.productId, testShareProduct._id.toString());
+      assert.strictEqual(body.productTitle, testShareProduct.title);
+      assert.ok(body.metaTags.openGraph['og:title'].includes(testShareProduct.title));
+      assert.ok(body.metaTags.openGraph['og:image'].includes('.svg'));
+      assert.strictEqual(body.metaTags.openGraph['og:type'], 'product');
+      assert.strictEqual(body.metaTags.openGraph['product:price:amount'], (testShareProduct.price ?? 0).toString());
+      assert.strictEqual(body.metaTags.twitter['twitter:card'], 'summary_large_image');
+      assert.strictEqual(body.jsonLd['@type'], 'Product');
+      assert.ok(body.sharingChannels.whatsapp.shareUrl.includes('api.whatsapp.com'));
+      assert.ok(body.sharingChannels.telegram.shareUrl.includes('t.me'));
+      assert.ok(body.sharingChannels.twitter.shareUrl.includes('twitter.com'));
+    });
+
+    await test('Point 18: GET /api/share/product/invalid_id/meta returns 404 Not Found', async () => {
+      const res = await fetch(`${baseUrl}/share/product/000000000000000000000000/meta`);
+      assert.strictEqual(res.status, 404);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+    });
+
+    await test('Point 18: GET /api/share/product/:id renders crawler semantic HTML with OpenGraph tags', async () => {
+      const res = await fetch(`${baseUrl}/share/product/${testShareProduct._id}`);
+      assert.strictEqual(res.status, 200);
+      const html = await res.text();
+      assert.ok(html.includes('<meta property="og:title"'), 'HTML must contain og:title');
+      assert.ok(html.includes('<meta property="og:image"'), 'HTML must contain og:image');
+      assert.ok(html.includes('<meta name="twitter:card" content="summary_large_image">'), 'HTML must contain twitter:card');
+      assert.ok(html.includes('window.location.replace'), 'HTML must contain instant client redirection');
+    });
+
+    await test('Point 18: GET /api/share/product/:id/card.svg returns 1200x630 vector social card', async () => {
+      const res = await fetch(`${baseUrl}/share/product/${testShareProduct._id}/card.svg`);
+      assert.strictEqual(res.status, 200);
+      const contentType = res.headers.get('content-type');
+      assert.ok(contentType.includes('image/svg+xml'), 'Content-Type must be image/svg+xml');
+      const svg = await res.text();
+      assert.ok(svg.includes('<svg width="1200" height="630"'), 'SVG must have 1200x630 dimensions');
+      assert.ok(svg.includes('AuraMarket'), 'SVG must brand with AuraMarket');
+    });
+
+    await test('Point 18: GET /p/:id shortlink router resolves to OpenGraph HTML', async () => {
+      const rootUrl = baseUrl.replace(/\/api$/, '');
+      const res = await fetch(`${rootUrl}/p/${testShareProduct._id}`);
+      assert.strictEqual(res.status, 200);
+      const html = await res.text();
+      assert.ok(html.includes('AuraMarket'));
+      assert.ok(html.includes('<meta property="og:title"'));
+    });
+
+    await test('Point 18: GET /api/share/admin/config returns platform social sharing settings to Super Admin', async () => {
+      const res = await fetch(`${baseUrl}/share/admin/config`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.siteName, 'AuraMarket');
+      assert.strictEqual(body.data.twitterHandle, '@AuraMarket');
+    });
+
+    await test('Point 18: PUT /api/share/admin/config updates social sharing settings and logs AuditLog', async () => {
+      const res = await fetch(`${baseUrl}/share/admin/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          siteName: 'AuraMarket India',
+          brandTagline: 'India\'s Premier Verified Multi-Vendor Marketplace',
+          twitterHandle: '@AuraMarketIN',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.siteName, 'AuraMarket India');
+      assert.strictEqual(body.data.twitterHandle, '@AuraMarketIN');
+
+      // Verify immutable audit log
+      const audit = await AuditLog.findOne({
+        targetType: 'SocialShareConfig',
+      }).sort({ createdAt: -1 });
+      assert.ok(audit);
+      assert.strictEqual(audit.module, 'SETTINGS');
+      assert.ok(audit.description.toLowerCase().includes('social sharing rules'));
+    });
+
+    await test('Point 18: POST /api/share/admin/test-url allows Super Admin to preview OpenGraph metadata', async () => {
+      const res = await fetch(`${baseUrl}/share/admin/test-url`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          productId: testShareProduct._id,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.testResult.ogImageUrl.includes('.svg'));
+    });
+
+    await test('Point 18: Role Security: Customer cannot access Admin Social Share routes (403 Forbidden)', async () => {
+      const resGet = await fetch(`${baseUrl}/share/admin/config`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resGet.status, 403);
+
+      const resPut = await fetch(`${baseUrl}/share/admin/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ siteName: 'Hacked Store' }),
+      });
+      assert.strictEqual(resPut.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

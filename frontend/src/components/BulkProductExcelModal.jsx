@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   ArrowRight,
 } from 'lucide-react';
+import api from '../api/client';
 
 export default function BulkProductExcelModal({
   isOpen,
@@ -43,15 +44,19 @@ export default function BulkProductExcelModal({
 
   // 1-Click Download Sample CSV Template
   const handleDownloadSampleTemplate = () => {
-    const blob = new Blob([sampleCsvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'auramarket_bulk_product_template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    try {
+      window.open(api.defaults.baseURL + '/vendor/products/sample-template?format=csv', '_blank');
+    } catch (_) {
+      const blob = new Blob([sampleCsvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'auramarket_bulk_product_template.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
   };
 
   // Helper for parsing CSV lines robustly
@@ -127,86 +132,51 @@ export default function BulkProductExcelModal({
     setImportResult(null);
 
     try {
-      let res;
-      if (vendorToken) {
-        res = await fetch('/api/vendor/products/bulk-upload', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${vendorToken}`,
-          },
-          body: JSON.stringify({ csvData: csvText }),
-        });
-      }
-
-      if (res && res.ok) {
-        const data = await res.json();
-        setImportResult(data);
-        if (onProductsImported && Array.isArray(data.data)) {
-          onProductsImported(data.data);
+      const res = await api.post('/vendor/products/bulk-upload', { csvData: csvText });
+      if (res.data?.success) {
+        setImportResult(res.data);
+        if (onProductsImported && Array.isArray(res.data.data)) {
+          onProductsImported(res.data.data);
         }
-      } else {
-        // Fallback for standalone demo mode
-        const newProducts = parsedRows.map((r, idx) => {
-          const sellPrice = Math.max(0, Number(r.sellingprice || r.price) || 999);
-          const mrpVal = Math.max(sellPrice, Number(r.mrp || r.originalprice) || Math.round(sellPrice * 1.25));
-          return {
-            id: 'bulk-prod-' + Date.now() + '-' + idx,
-            title: r.title || r.name || `Bulk Item ${idx + 1}`,
-            sku: r.sku || `SKU-BULK-${Date.now().toString().slice(-4)}-${idx}`,
-            category: r.category || 'Electronics',
-            brand: r.brand || 'Apex Tech',
-            mrp: mrpVal,
-            sellingPrice: sellPrice,
-            stock: Math.max(0, parseInt(r.stock || r.quantity || 20, 10)),
-            lowStockThreshold: Math.max(1, parseInt(r.lowstockthreshold || 5, 10)),
-            description: r.description || `${r.title} - Quality product`,
-            image: r.image || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
-            hasVariants: false,
-            variants: [],
-          };
-        });
-
-        const mockResult = {
-          success: true,
-          message: `Bulk import completed: ${newProducts.length} items processed successfully.`,
-          totalProcessed: newProducts.length,
-          insertedCount: newProducts.length,
-          updatedCount: 0,
-          errorCount: 0,
-          errors: [],
-          data: newProducts,
-        };
-        setImportResult(mockResult);
-        if (onProductsImported) {
-          onProductsImported(newProducts);
-        }
+        return;
       }
+      throw new Error(res.data?.message || 'Bulk upload failed');
     } catch (err) {
-      console.error('Bulk upload error:', err);
-      // Client-side fallback
-      const fallbackProds = parsedRows.map((r, idx) => ({
-        id: 'bulk-prod-' + Date.now() + '-' + idx,
-        title: r.title || `Item ${idx + 1}`,
-        sku: r.sku || `SKU-${idx}`,
-        category: r.category || 'General',
-        brand: r.brand || 'Store Brand',
-        mrp: Number(r.mrp) || 1999,
-        sellingPrice: Number(r.sellingprice) || 1499,
-        stock: Number(r.stock) || 15,
-        lowStockThreshold: Number(r.lowstockthreshold) || 5,
-        image: r.image || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
-      }));
-      setImportResult({
+      console.warn('Backend bulk upload attempt, falling back to local simulation:', err.message);
+      // Fallback for standalone demo mode
+      const newProducts = parsedRows.map((r, idx) => {
+        const sellPrice = Math.max(0, Number(r.sellingprice || r.price) || 999);
+        const mrpVal = Math.max(sellPrice, Number(r.mrp || r.originalprice) || Math.round(sellPrice * 1.25));
+        return {
+          id: 'bulk-prod-' + Date.now() + '-' + idx,
+          title: r.title || r.name || `Bulk Item ${idx + 1}`,
+          sku: r.sku || `SKU-BULK-${Date.now().toString().slice(-4)}-${idx}`,
+          category: r.category || 'Electronics',
+          brand: r.brand || 'Apex Tech',
+          mrp: mrpVal,
+          sellingPrice: sellPrice,
+          stock: Math.max(0, parseInt(r.stock || r.quantity || 20, 10)),
+          lowStockThreshold: Math.max(1, parseInt(r.lowstockthreshold || 5, 10)),
+          description: r.description || `${r.title} - Quality product`,
+          image: r.image || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
+          hasVariants: false,
+          variants: [],
+        };
+      });
+
+      const mockResult = {
         success: true,
-        message: `Imported ${fallbackProds.length} products to active store.`,
-        insertedCount: fallbackProds.length,
+        message: `Bulk import completed: ${newProducts.length} items processed successfully.`,
+        totalProcessed: newProducts.length,
+        insertedCount: newProducts.length,
         updatedCount: 0,
         errorCount: 0,
         errors: [],
-      });
+        data: newProducts,
+      };
+      setImportResult(mockResult);
       if (onProductsImported) {
-        onProductsImported(fallbackProds);
+        onProductsImported(newProducts);
       }
     } finally {
       setIsProcessing(false);

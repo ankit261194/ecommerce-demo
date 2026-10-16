@@ -871,12 +871,105 @@ function parseCSV(csvString) {
   return rows;
 }
 
-// @desc    Bulk Upload / Upsert Products via CSV or JSON (Point #55)
+// @desc    Download Sample CSV Template for Bulk Product Upload (Point #8)
+// @route   GET /api/vendor/products/sample-template
+exports.getProductSampleTemplate = async (req, res, next) => {
+  try {
+    const headers = [
+      'Title',
+      'SKU',
+      'Category',
+      'Brand',
+      'MRP',
+      'SellingPrice',
+      'Stock',
+      'LowStockThreshold',
+      'Description',
+      'Image',
+      'Tags',
+    ];
+
+    const sampleRows = [
+      [
+        '"Aura Stealth Pro Wireless Mechanical Keyboard"',
+        'APX-KB-PRO-01',
+        '"Electronics"',
+        '"Apex Tech"',
+        '6999',
+        '4499',
+        '50',
+        '5',
+        '"RGB hot-swappable mechanical keyboard with 2.4GHz wireless and Bluetooth 5.3"',
+        '"https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=500"',
+        '"keyboard,gaming,wireless,rgb"',
+      ],
+      [
+        '"Aura Glide Ultra Lightweight Gaming Mouse"',
+        'APX-MSE-ULT-02',
+        '"Electronics"',
+        '"Apex Tech"',
+        '3999',
+        '2199',
+        '80',
+        '10',
+        '"62g ultra-lightweight ergonomic mouse with 26000 DPI optical sensor"',
+        '"https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=500"',
+        '"mouse,gaming,ultra-light"',
+      ],
+      [
+        '"Aura Studio Dual Monitor Aluminum Arm Stand"',
+        'APX-STND-DUAL-03',
+        '"Electronics"',
+        '"Apex Studio"',
+        '4999',
+        '2999',
+        '35',
+        '5',
+        '"Heavy-duty gas spring dual monitor mount for up to 32-inch screens"',
+        '"https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=500"',
+        '"monitor-arm,desk-setup,ergonomic"',
+      ],
+    ];
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...sampleRows.map((r) => r.join(','))].join('\r\n');
+    const filename = 'auramarket_bulk_product_sample_template.csv';
+
+    if (req.query.format === 'csv' || req.headers.accept?.includes('text/csv')) {
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.status(200).send(csvContent);
+    }
+
+    res.status(200).json({
+      success: true,
+      filename,
+      headers,
+      sampleRows,
+      sampleRowsCount: sampleRows.length,
+      csv: csvContent,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Bulk Upload / Upsert Products via CSV or JSON (Point #8 / Point #55)
 // @route   POST /api/vendor/products/bulk-upload
 exports.bulkUploadProducts = async (req, res, next) => {
   try {
-    const vendor = await VendorProfile.findOne({ user: req.user._id });
-    if (!vendor || vendor.status !== 'approved') {
+    let vendor;
+    if (req.user && (req.user.role === 'superadmin' || req.user.role === 'admin')) {
+      const targetVendorId = req.body.vendorId || req.query.vendorId;
+      if (targetVendorId) {
+        vendor = await VendorProfile.findById(targetVendorId);
+      } else {
+        vendor = (await VendorProfile.findOne({ status: 'approved' })) || (await VendorProfile.findOne({}));
+      }
+    } else {
+      vendor = await VendorProfile.findOne({ user: req.user._id });
+    }
+
+    if (!vendor || (req.user.role !== 'superadmin' && req.user.role !== 'admin' && vendor.status !== 'approved')) {
       return res.status(403).json({
         success: false,
         message: 'Your store must be approved by SuperAdmin to publish products.',
@@ -924,7 +1017,25 @@ exports.bulkUploadProducts = async (req, res, next) => {
 
       const title = (raw.title || raw.productname || raw.name || '').trim();
       if (!title) {
-        errors.push({ row: rowNum, error: 'Product title is required' });
+        errors.push({ row: rowNum, field: 'title', error: 'Product title is required' });
+        continue;
+      }
+
+      const rawPrice = raw.sellingprice !== undefined ? raw.sellingprice : (raw.price !== undefined ? raw.price : raw.sellprice);
+      if (rawPrice !== undefined && Number(rawPrice) < 0) {
+        errors.push({ row: rowNum, field: 'sellingPrice', value: rawPrice, error: 'Selling price cannot be negative' });
+        continue;
+      }
+
+      const rawMrp = raw.mrp !== undefined ? raw.mrp : raw.originalprice;
+      if (rawMrp !== undefined && Number(rawMrp) < 0) {
+        errors.push({ row: rowNum, field: 'mrp', value: rawMrp, error: 'MRP cannot be negative' });
+        continue;
+      }
+
+      const rawStock = raw.stock !== undefined ? raw.stock : (raw.quantity !== undefined ? raw.quantity : raw.qty);
+      if (rawStock !== undefined && parseInt(rawStock, 10) < 0) {
+        errors.push({ row: rowNum, field: 'stock', value: rawStock, error: 'Stock count cannot be negative' });
         continue;
       }
 
@@ -933,15 +1044,15 @@ exports.bulkUploadProducts = async (req, res, next) => {
         sku = `SKU-BULK-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
       }
 
-      const sellPrice = Math.max(0, Number(raw.sellingprice || raw.price || raw.sellprice) || 0);
-      let mrpVal = Number(raw.mrp || raw.originalprice) || Math.round(sellPrice * 1.25);
+      const sellPrice = Math.max(0, Number(rawPrice) || 0);
+      let mrpVal = Number(rawMrp) || Math.round(sellPrice * 1.25);
       if (mrpVal < sellPrice) {
         mrpVal = sellPrice;
       }
       const savings = Math.max(0, mrpVal - sellPrice);
       const discPct = mrpVal > 0 ? Math.round((savings / mrpVal) * 100) : 0;
 
-      const stockVal = Math.max(0, parseInt(raw.stock || raw.quantity || raw.qty, 10) || 0);
+      const stockVal = Math.max(0, parseInt(rawStock, 10) || 0);
       const lowStockThresh = Math.max(1, parseInt(raw.lowstockthreshold || raw.threshold || raw.lowstock, 10) || 5);
       const description = (raw.description || raw.desc || `${title} - Quality product from ${vendor.storeName}`).trim();
       const image = (raw.image || raw.imageurl || raw.thumbnail || defaultImg).trim();
@@ -961,7 +1072,7 @@ exports.bulkUploadProducts = async (req, res, next) => {
         }
       }
 
-      // Check for existing SKU for this vendor
+      // Check for existing SKU for this vendor (UPSERT logic)
       let existingProduct = await Product.findOne({ vendor: vendor._id, sku: sku });
       if (existingProduct) {
         existingProduct.title = title;
@@ -984,7 +1095,12 @@ exports.bulkUploadProducts = async (req, res, next) => {
         updatedCount++;
         processedProducts.push(existingProduct);
       } else {
-        const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString().slice(-4) + '-' + Math.floor(Math.random() * 1000);
+        const slug =
+          title.toLowerCase().replace(/[^a-z0-9]+/g, '-') +
+          '-' +
+          Date.now().toString().slice(-4) +
+          '-' +
+          Math.floor(Math.random() * 1000);
         const newProd = await Product.create({
           vendor: vendor._id,
           title,
@@ -1011,6 +1127,16 @@ exports.bulkUploadProducts = async (req, res, next) => {
       }
     }
 
+    await recordAuditLog({
+      action: 'BULK_PRODUCT_IMPORT',
+      module: 'PRODUCTS',
+      req,
+      description: `Bulk product import: ${insertedCount} added, ${updatedCount} updated, ${errors.length} errors for '${vendor.storeName}'`,
+      targetType: 'Product',
+      details: { insertedCount, updatedCount, errorCount: errors.length, totalRows: items.length },
+      severity: errors.length > 0 ? 'MEDIUM' : 'LOW',
+    });
+
     res.status(200).json({
       success: true,
       message: `Bulk import completed: ${insertedCount} added, ${updatedCount} updated, ${errors.length} errors`,
@@ -1019,6 +1145,7 @@ exports.bulkUploadProducts = async (req, res, next) => {
       updatedCount,
       errorCount: errors.length,
       errors,
+      products: processedProducts,
       data: processedProducts,
     });
   } catch (error) {
@@ -1026,11 +1153,22 @@ exports.bulkUploadProducts = async (req, res, next) => {
   }
 };
 
-// @desc    Export Vendor Catalog as CSV (Point #55)
+// @desc    Export Vendor Catalog as CSV (Point #8 / Point #55)
 // @route   GET /api/vendor/products/export-csv
 exports.exportProductsCSV = async (req, res, next) => {
   try {
-    const vendor = await VendorProfile.findOne({ user: req.user._id });
+    let vendor;
+    if (req.user && (req.user.role === 'superadmin' || req.user.role === 'admin')) {
+      const targetVendorId = req.query.vendorId;
+      if (targetVendorId) {
+        vendor = await VendorProfile.findById(targetVendorId);
+      } else {
+        vendor = (await VendorProfile.findOne({ status: 'approved' })) || (await VendorProfile.findOne({}));
+      }
+    } else {
+      vendor = await VendorProfile.findOne({ user: req.user._id });
+    }
+
     if (!vendor) {
       return res.status(404).json({ success: false, message: 'Vendor profile not found' });
     }
@@ -1084,7 +1222,7 @@ exports.exportProductsCSV = async (req, res, next) => {
       ].join(',');
     });
 
-    const csvContent = [headers.join(','), ...rows].join('\r\n');
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
     const filename = `auramarket_catalog_${vendor.storeSlug || 'export'}_${new Date().toISOString().slice(0, 10)}.csv`;
 
     if (req.query.format === 'csv' || req.headers.accept?.includes('text/csv')) {

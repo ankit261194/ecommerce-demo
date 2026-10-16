@@ -12220,6 +12220,192 @@ const runTests = async () => {
       assert.strictEqual(resPrune.status, 403);
     });
 
+    // =========================================================================
+    // POINT 8: BULK CSV / EXCEL PRODUCT IMPORT & EXPORT TESTS
+    // =========================================================================
+
+    let point8VendorToken = null;
+
+    await test('Point 8: Setup: Obtain fresh vendor authentication token', async () => {
+      const apexUser = await User.findOne({ email: 'apex@auramarket.com' });
+      if (apexUser) {
+        await VendorProfile.findOneAndUpdate(
+          { user: apexUser._id },
+          { status: 'approved', storeName: 'Apex Tech Hub' },
+          { upsert: true }
+        );
+      }
+      const res = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'apex@auramarket.com', password: 'vendor123456' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token);
+      point8VendorToken = data.token;
+    });
+
+    await test('Point 8: GET /api/vendor/products/sample-template returns JSON with headers and sample rows', async () => {
+      const res = await fetch(`${baseUrl}/vendor/products/sample-template`, {
+        headers: { Authorization: `Bearer ${point8VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(Array.isArray(body.headers));
+      assert.ok(body.headers.includes('Title'));
+      assert.ok(body.headers.includes('SKU'));
+      assert.ok(body.headers.includes('SellingPrice'));
+      assert.ok(Array.isArray(body.sampleRows));
+      assert.ok(body.sampleRows.length >= 1);
+    });
+
+    await test('Point 8: GET /api/vendor/products/sample-template?format=csv returns downloadable UTF-8 CSV with BOM', async () => {
+      const res = await fetch(`${baseUrl}/vendor/products/sample-template?format=csv`, {
+        headers: { Authorization: `Bearer ${point8VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      assert.ok(res.headers.get('content-type').includes('text/csv'));
+      assert.ok(res.headers.get('content-disposition').includes('auramarket_bulk_product_sample_template.csv'));
+      const text = await res.text();
+      assert.ok(text.includes('Title'));
+      assert.ok(text.includes('SKU'));
+    });
+
+    await test('Point 8: POST /api/vendor/products/bulk-upload imports products from raw CSV string with auto SKU & savings', async () => {
+      const csvData = [
+        'Title,SKU,Category,Brand,MRP,SellingPrice,Stock,LowStockThreshold,Description',
+        '"Aura Stealth Pro T8 Earbuds",P8-EARBUD-01,"Electronics","AuraTech",2999,1499,80,10,"High fidelity ANC earbuds"',
+        '"Aura Horizon 4K Ultra Webcam",P8-CAM-02,"Electronics","AuraTech",5999,3499,40,5,"Crystal clear 4K streaming webcam"',
+      ].join('\n');
+
+      const res = await fetch(`${baseUrl}/vendor/products/bulk-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point8VendorToken}`,
+        },
+        body: JSON.stringify({ csvData }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.insertedCount >= 2);
+      assert.strictEqual(body.errors.length, 0);
+      assert.ok(Array.isArray(body.products));
+    });
+
+    await test('Point 8: POST /api/vendor/products/bulk-upload UPSERT updates existing product SKU instead of creating duplicates', async () => {
+      const upsertCsv = [
+        'Title,SKU,Category,Brand,MRP,SellingPrice,Stock,LowStockThreshold,Description',
+        '"Aura Stealth Pro T8 Earbuds (V2 Updated)",P8-EARBUD-01,"Electronics","AuraTech",3199,1599,120,15,"Updated ANC earbuds v2"',
+      ].join('\n');
+
+      const res = await fetch(`${baseUrl}/vendor/products/bulk-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point8VendorToken}`,
+        },
+        body: JSON.stringify({ csvData: upsertCsv }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.updatedCount >= 1);
+    });
+
+    await test('Point 8: POST /api/vendor/products/bulk-upload detects line-by-line validation errors (missing title, negative price, negative stock)', async () => {
+      const invalidCsv = [
+        'Title,SKU,Category,MRP,SellingPrice,Stock',
+        ',P8-INV-01,Electronics,1000,500,10',
+        '"Item with Negative Price",P8-INV-02,Electronics,1000,-150,10',
+        '"Item with Negative Stock",P8-INV-03,Electronics,1000,500,-20',
+      ].join('\n');
+
+      const res = await fetch(`${baseUrl}/vendor/products/bulk-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point8VendorToken}`,
+        },
+        body: JSON.stringify({ csvData: invalidCsv }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.errors.length >= 3);
+      assert.ok(body.errors.some(e => e.row === 2 && e.field === 'title'));
+      assert.ok(body.errors.some(e => e.row === 3 && e.field === 'sellingPrice'));
+      assert.ok(body.errors.some(e => e.row === 4 && e.field === 'stock'));
+    });
+
+    await test('Point 8: GET /api/vendor/products/export-csv exports vendor catalog as JSON with metadata', async () => {
+      const res = await fetch(`${baseUrl}/vendor/products/export-csv`, {
+        headers: { Authorization: `Bearer ${point8VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(typeof body.count === 'number');
+      assert.ok(body.count >= 1);
+      assert.ok(typeof body.csv === 'string');
+      assert.ok(body.csv.includes('Title'));
+      assert.ok(body.csv.includes('SKU'));
+    });
+
+    await test('Point 8: GET /api/vendor/products/export-csv?format=csv streams downloadable CSV attachment with BOM', async () => {
+      const res = await fetch(`${baseUrl}/vendor/products/export-csv?format=csv`, {
+        headers: { Authorization: `Bearer ${point8VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      assert.ok(res.headers.get('content-type').includes('text/csv'));
+      assert.ok(res.headers.get('content-disposition').includes('auramarket_catalog_'));
+      const text = await res.text();
+      assert.ok(text.includes('Title'));
+      assert.ok(text.includes('SKU'));
+    });
+
+    await test('Point 8: Super Admin bulk upload, template & export routes (/api/admin/products/...)', async () => {
+      const resTemplate = await fetch(`${baseUrl}/admin/products/sample-template`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resTemplate.status, 200);
+      const bodyTemplate = await resTemplate.json();
+      assert.strictEqual(bodyTemplate.success, true);
+
+      const resExport = await fetch(`${baseUrl}/admin/products/export-csv`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resExport.status, 200);
+      const bodyExport = await resExport.json();
+      assert.strictEqual(bodyExport.success, true);
+    });
+
+    await test('Point 8: Role Security: Customer cannot call bulk-upload, export-csv or sample-template on vendor routes (403 Forbidden)', async () => {
+      const resTmpl = await fetch(`${baseUrl}/vendor/products/sample-template`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resTmpl.status, 403);
+
+      const resUpload = await fetch(`${baseUrl}/vendor/products/bulk-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ csvData: 'Title\nTest' }),
+      });
+      assert.strictEqual(resUpload.status, 403);
+
+      const resExp = await fetch(`${baseUrl}/vendor/products/export-csv`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resExp.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

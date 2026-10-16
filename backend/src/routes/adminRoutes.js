@@ -46,6 +46,11 @@ const {
   overrideRtoGuard,
   getThermalReceipt,
 } = require('../controllers/orderController');
+const {
+  bulkUploadProducts,
+  exportProductsCSV,
+  getProductSampleTemplate,
+} = require('../controllers/vendorController');
 const { protect, authorize, requirePermission } = require('../middlewares/auth');
 
 // All admin routes require Super Admin or Sub-Admin authorization
@@ -63,6 +68,11 @@ router.put('/vendors/:id/kyc', updateVendorKYC);
 router.patch('/vendors/:id/kyc', updateVendorKYC);
 router.put('/vendors/:id/commission', updateVendorCommission);
 router.patch('/vendors/:id/commission', updateVendorCommission);
+
+// Bulk Products Operations (Point #8)
+router.post('/products/bulk-upload', bulkUploadProducts);
+router.get('/products/export-csv', exportProductsCSV);
+router.get('/products/sample-template', getProductSampleTemplate);
 
 // Vendor Withdrawal / Payout Approval Hub (Point #45)
 router.get('/payouts', getAllPayouts);

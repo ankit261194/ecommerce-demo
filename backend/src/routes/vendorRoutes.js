@@ -9,6 +9,7 @@ const {
   updateProductStock,
   bulkUploadProducts,
   exportProductsCSV,
+  getProductSampleTemplate,
   deleteProduct,
   getVendorOrders,
   updateSubOrderStatus,
@@ -67,6 +68,7 @@ router.get('/products', getVendorProducts);
 router.post('/products', createProduct);
 router.post('/products/bulk-upload', bulkUploadProducts);
 router.get('/products/export-csv', exportProductsCSV);
+router.get('/products/sample-template', getProductSampleTemplate);
 router.post('/ai-generator/product-copy', generateProductCopy);
 router.post('/ai-generator/seo-meta', generateSeoMeta);
 router.put('/products/:id', updateProduct);

@@ -137,6 +137,53 @@ const vendorProfileSchema = new mongoose.Schema(
       type: Number,
       default: 4.8,
     },
+    // Point 12: Seller Health & SLA Performance Scorecard
+    slaMetrics: {
+      score: { type: Number, default: 100, min: 0, max: 100 },
+      badgeTier: {
+        type: String,
+        enum: ['PLATINUM', 'GOLD', 'SILVER', 'AT_RISK', 'PROBATION', 'SUSPENDED'],
+        default: 'SILVER',
+      },
+      lateShipmentRate: { type: Number, default: 0 },
+      cancellationRate: { type: Number, default: 0 },
+      returnRate: { type: Number, default: 0 },
+      onTimeDeliveryRate: { type: Number, default: 100 },
+      averageRating: { type: Number, default: 4.8 },
+      totalOrdersEvaluated: { type: Number, default: 0 },
+      lateOrdersCount: { type: Number, default: 0 },
+      cancelledOrdersCount: { type: Number, default: 0 },
+      returnedOrdersCount: { type: Number, default: 0 },
+      dailyOrderCap: { type: Number, default: null },
+      payoutHoldDays: { type: Number, default: 0 },
+      penaltyStatus: {
+        type: String,
+        enum: ['GOOD_STANDING', 'WARNING', 'RESTRICTED', 'PROBATION', 'SUSPENDED'],
+        default: 'GOOD_STANDING',
+      },
+      commissionDiscountPercent: { type: Number, default: 0 },
+      searchRankBoost: { type: Number, default: 1.0 },
+      warningNotes: { type: String, default: '' },
+      isManualOverride: { type: Boolean, default: false },
+      overrideReason: { type: String, default: '' },
+      lastCalculatedAt: { type: Date, default: Date.now },
+    },
+    slaAppeals: [
+      {
+        reason: { type: String, required: true },
+        actionPlan: { type: String, required: true },
+        metricContested: { type: String, default: 'OVERALL_SCORE' },
+        status: {
+          type: String,
+          enum: ['PENDING', 'APPROVED', 'REJECTED'],
+          default: 'PENDING',
+        },
+        submittedAt: { type: Date, default: Date.now },
+        reviewedAt: { type: Date },
+        reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        adminFeedback: { type: String, default: '' },
+      },
+    ],
   },
   { timestamps: true }
 );

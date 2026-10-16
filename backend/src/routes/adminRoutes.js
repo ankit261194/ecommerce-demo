@@ -57,6 +57,11 @@ const {
   quickRestockInventory,
 } = require('../controllers/vendorController');
 const { getAdminVendorFundedPromotions } = require('../controllers/couponController');
+const {
+  getAdminVendorHealthRadar,
+  overrideVendorHealthTier,
+  reviewSlaAppeal,
+} = require('../controllers/vendorHealthController');
 const { protect, authorize, requirePermission } = require('../middlewares/auth');
 
 // All admin routes require Super Admin or Sub-Admin authorization
@@ -88,6 +93,11 @@ router.patch('/inventory/quick-restock', quickRestockInventory);
 
 // Point 11: Vendor-Funded Custom Promotions & BOGO Overview
 router.get('/promotions/vendor-funded', getAdminVendorFundedPromotions);
+
+// Point 12: Seller Health & SLA Performance Scorecard Radar
+router.get('/vendor-health', getAdminVendorHealthRadar);
+router.put('/vendor-health/:vendorId/override', overrideVendorHealthTier);
+router.patch('/vendor-health/appeals/:appealId', reviewSlaAppeal);
 
 // Vendor Withdrawal / Payout Approval Hub (Point #45)
 router.get('/payouts', getAllPayouts);

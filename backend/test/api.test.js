@@ -13386,6 +13386,207 @@ const runTests = async () => {
       assert.ok(audit, 'Audit log must record VENDOR_PROMOTION_DELETED');
     });
 
+    // =========================================================================
+    // Point 12: Seller Health & SLA Performance Scorecard
+    // =========================================================================
+    let slaAppealId;
+
+    await test('Point 12: GET /api/vendor/health returns scorecard, benchmark targets, and privileges', async () => {
+      const res = await fetch(`${baseUrl}/vendor/health`, {
+        headers: { Authorization: `Bearer ${point10VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.scorecard, 'Scorecard object must exist');
+      assert.ok(typeof body.scorecard.score === 'number');
+      assert.ok(body.scorecard.badgeTier);
+      assert.ok(typeof body.scorecard.lateShipmentRate === 'number');
+      assert.ok(typeof body.scorecard.cancellationRate === 'number');
+      assert.ok(typeof body.scorecard.returnRate === 'number');
+      assert.ok(body.privileges, 'Privileges object must exist');
+      assert.ok(body.policyBenchmarks, 'Policy benchmarks must exist');
+      assert.strictEqual(body.policyBenchmarks.lateShipmentTarget, 2.0);
+      assert.strictEqual(body.policyBenchmarks.cancellationTarget, 1.0);
+      assert.strictEqual(body.policyBenchmarks.returnTarget, 2.5);
+    });
+
+    await test('Point 12: POST /api/vendor/health/recalculate forces real-time recalculation of SLA score', async () => {
+      const res = await fetch(`${baseUrl}/vendor/health/recalculate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${point10VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.scorecard);
+      assert.ok(typeof body.scorecard.score === 'number');
+      assert.ok(body.scorecard.score >= 0 && body.scorecard.score <= 100);
+    });
+
+    await test('Point 12: POST /api/vendor/health/appeal validates reason and action plan lengths (min 10 chars)', async () => {
+      // Missing / short reason
+      const resShort = await fetch(`${baseUrl}/vendor/health/appeal`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point10VendorToken}`,
+        },
+        body: JSON.stringify({
+          reason: 'Too short',
+          actionPlan: 'We will fix it soon',
+        }),
+      });
+      assert.strictEqual(resShort.status, 400);
+
+      // Short action plan
+      const resShortPlan = await fetch(`${baseUrl}/vendor/health/appeal`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point10VendorToken}`,
+        },
+        body: JSON.stringify({
+          reason: 'Valid detailed reason explaining flood in warehouse',
+          actionPlan: 'Fixing',
+        }),
+      });
+      assert.strictEqual(resShortPlan.status, 400);
+    });
+
+    await test('Point 12: POST /api/vendor/health/appeal submits SLA appeal with audit log', async () => {
+      const res = await fetch(`${baseUrl}/vendor/health/appeal`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point10VendorToken}`,
+        },
+        body: JSON.stringify({
+          metricContested: 'LATE_SHIPMENT_RATE',
+          reason: 'Local courier hub went on an unannounced 48-hour strike resulting in transit handover delays',
+          actionPlan: 'Onboarded secondary backup carrier (Delhivery Express) to prevent single point of carrier failure',
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.appeal);
+      assert.strictEqual(body.appeal.metricContested, 'LATE_SHIPMENT_RATE');
+      assert.strictEqual(body.appeal.status, 'PENDING');
+
+      slaAppealId = body.appeal._id;
+      assert.ok(slaAppealId);
+
+      // Verify audit log
+      const AuditLog = require('../src/models/AuditLog');
+      const audit = await AuditLog.findOne({ action: 'VENDOR_SLA_APPEAL_SUBMITTED' });
+      assert.ok(audit, 'Audit log must record VENDOR_SLA_APPEAL_SUBMITTED');
+    });
+
+    await test('Point 12: GET /api/admin/vendor-health allows Super Admin to monitor multi-vendor SLA radar', async () => {
+      const res = await fetch(`${baseUrl}/admin/vendor-health`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.telemetry);
+      assert.ok(body.telemetry.totalVendors >= 1);
+      assert.ok(typeof body.telemetry.averageHealthScore === 'number');
+      assert.ok(body.telemetry.tierCounts);
+      assert.ok(Array.isArray(body.vendors));
+      assert.ok(body.vendors.some(v => v._id.toString() === point10Vendor._id.toString()));
+    });
+
+    await test('Point 12: PUT /api/admin/vendor-health/:vendorId/override allows Super Admin to manually override badge tier', async () => {
+      const res = await fetch(`${baseUrl}/admin/vendor-health/${point10Vendor._id}/override`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          badgeTier: 'PLATINUM',
+          dailyOrderCap: 500,
+          payoutHoldDays: 0,
+          overrideReason: 'Super Admin Excellence Recognition for festive season',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.scorecard.badgeTier, 'PLATINUM');
+      assert.strictEqual(body.scorecard.commissionDiscountPercent, 2);
+      assert.strictEqual(body.scorecard.isManualOverride, true);
+
+      // Verify audit log
+      const AuditLog = require('../src/models/AuditLog');
+      const audit = await AuditLog.findOne({ action: 'VENDOR_SLA_OVERRIDDEN', targetId: point10Vendor._id.toString() });
+      assert.ok(audit, 'Audit log must record VENDOR_SLA_OVERRIDDEN');
+    });
+
+    await test('Point 12: PATCH /api/admin/vendor-health/appeals/:appealId reviews and approves vendor SLA appeal', async () => {
+      const res = await fetch(`${baseUrl}/admin/vendor-health/appeals/${slaAppealId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          decision: 'APPROVED',
+          adminFeedback: 'Strike verified via courier bulletin. Performance metrics restored to Good Standing.',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.appeal.status, 'APPROVED');
+      assert.strictEqual(body.scorecard.penaltyStatus, 'GOOD_STANDING');
+
+      // Verify audit log
+      const AuditLog = require('../src/models/AuditLog');
+      const audit = await AuditLog.findOne({ action: 'VENDOR_SLA_APPEAL_REVIEWED' });
+      assert.ok(audit, 'Audit log must record VENDOR_SLA_APPEAL_REVIEWED');
+    });
+
+    await test('Point 12: Role Security: Customer cannot access vendor health or admin radar routes (403 Forbidden)', async () => {
+      const resGetHealth = await fetch(`${baseUrl}/vendor/health`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resGetHealth.status, 403);
+
+      const resRecalc = await fetch(`${baseUrl}/vendor/health/recalculate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resRecalc.status, 403);
+
+      const resAppeal = await fetch(`${baseUrl}/vendor/health/appeal`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ reason: 'Unauthorized customer test appeal reason here', actionPlan: 'Unauthorized customer action plan here' }),
+      });
+      assert.strictEqual(resAppeal.status, 403);
+
+      const resAdminRadar = await fetch(`${baseUrl}/admin/vendor-health`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resAdminRadar.status, 403);
+
+      const resOverride = await fetch(`${baseUrl}/admin/vendor-health/${point10Vendor._id}/override`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ badgeTier: 'PLATINUM' }),
+      });
+      assert.strictEqual(resOverride.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

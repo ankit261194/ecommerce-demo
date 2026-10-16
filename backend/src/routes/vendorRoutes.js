@@ -46,6 +46,11 @@ const {
   toggleVendorPromotion,
   deleteVendorPromotion,
 } = require('../controllers/couponController');
+const {
+  getVendorHealth,
+  recalculateVendorHealth,
+  submitSlaAppeal,
+} = require('../controllers/vendorHealthController');
 const { protect, authorize, requireVendorPermission } = require('../middlewares/auth');
 
 // Point 58: Public Storefront Vendor Showcase (Accessible by any customer/visitor)
@@ -94,6 +99,11 @@ router.post('/promotions', createVendorPromotion);
 router.put('/promotions/:id', updateVendorPromotion);
 router.patch('/promotions/:id/toggle', toggleVendorPromotion);
 router.delete('/promotions/:id', deleteVendorPromotion);
+
+// Point 12: Seller Health & SLA Performance Scorecard
+router.get('/health', getVendorHealth);
+router.post('/health/recalculate', recalculateVendorHealth);
+router.post('/health/appeal', submitSlaAppeal);
 
 router.post('/ai-generator/product-copy', generateProductCopy);
 router.post('/ai-generator/seo-meta', generateSeoMeta);

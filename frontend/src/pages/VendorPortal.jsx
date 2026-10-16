@@ -49,6 +49,7 @@ import VendorTaxReportModal from '../components/VendorTaxReportModal';
 import PosCounterScreen from '../components/PosCounterScreen';
 import InventoryAlertsModal from '../components/InventoryAlertsModal';
 import VendorPromotionsManager from '../components/VendorPromotionsManager';
+import VendorHealthScorecard from '../components/VendorHealthScorecard';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -185,6 +186,7 @@ export const VendorPortal = () => {
   const [isPosModalOpen, setIsPosModalOpen] = useState(false); // Point #18: Offline POS Counter Billing Screen
   const [isInventoryAlertsModalOpen, setIsInventoryAlertsModalOpen] = useState(false); // Point 10: Inventory Low-Stock Threshold & Auto-Restock Studio
   const [isPromotionsModalOpen, setIsPromotionsModalOpen] = useState(false); // Point 11: Vendor-Funded Custom Promotions & BOGO Studio
+  const [isHealthModalOpen, setIsHealthModalOpen] = useState(false); // Point 12: Seller Health & SLA Performance Scorecard
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
 
@@ -677,6 +679,19 @@ export const VendorPortal = () => {
             <span>BOGO & Promos</span>
             <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-amber-400">
               #11
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsHealthModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-black shadow-lg shadow-emerald-500/20 transition-all"
+            title="Point 12: Seller Health & SLA Performance Scorecard (Late Shipment, Cancellation, Return Rates & Badges)"
+          >
+            <ShieldCheck className="w-4 h-4 text-white" />
+            <span>Seller Health & SLA</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-white text-emerald-800">
+              #12
             </span>
           </button>
 
@@ -1983,6 +1998,14 @@ export const VendorPortal = () => {
         storeProducts={products}
         onPromoUpdated={fetchVendorData}
       />
+
+      {/* Point 12: Seller Health & SLA Performance Scorecard */}
+      {isHealthModalOpen && (
+        <VendorHealthScorecard
+          token={localStorage.getItem('vendorToken') || localStorage.getItem('token')}
+          onClose={() => setIsHealthModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

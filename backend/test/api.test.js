@@ -14,6 +14,7 @@ const Ledger = require('../src/models/Ledger');
 const CodReconciliation = require('../src/models/CodReconciliation');
 const WalletTransaction = require('../src/models/WalletTransaction');
 const ScratchCardReward = require('../src/models/ScratchCardReward');
+const PayoutSplit = require('../src/models/PayoutSplit');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -10301,6 +10302,222 @@ const runTests = async () => {
         body: JSON.stringify({ couponCode: 'RECOVER10' }),
       });
       assert.strictEqual(res.status, 401);
+    });
+
+    // =========================================================================
+    // POINT 22: AUTOMATED INSTANT VENDOR PAYOUT SPLIT (KILLER & UNIQUE WEAPON)
+    // =========================================================================
+    await test('Point 22: POST /api/payout-splits/simulate calculates instant escrow gross, platform fee & vendor net payout', async () => {
+      const res = await fetch(`${baseUrl}/payout-splits/simulate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: 5000,
+          commissionRate: 12,
+          category: 'Consumer Electronics',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.category, 'Consumer Electronics');
+      assert.strictEqual(data.grossAmount, 5000);
+      assert.strictEqual(data.commissionRate, 12);
+      assert.strictEqual(data.adminCommission, 600);
+      assert.strictEqual(data.vendorNetPayout, 4400);
+      assert.strictEqual(data.breakdown.grossTotal, 5000);
+      assert.strictEqual(data.breakdown.platformCommission, 600);
+      assert.strictEqual(data.breakdown.netCreditedToVendor, 4400);
+      assert.strictEqual(data.breakdown.instantSettlementFee, 0);
+    });
+
+    let point22VendorToken = null;
+
+    await test('Point 22: Setup: Obtain fresh vendor authentication token', async () => {
+      const res = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'apex@auramarket.com', password: 'vendor123456' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token);
+      point22VendorToken = data.token;
+    });
+
+    await test('Point 22: GET /api/payout-splits/vendor retrieves authenticated vendor payout history and telemetry stats', async () => {
+      const res = await fetch(`${baseUrl}/payout-splits/vendor`, {
+        headers: { Authorization: `Bearer ${point22VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.stats);
+      assert.strictEqual(typeof data.stats.totalSettlements, 'number');
+      assert.strictEqual(typeof data.stats.totalGrossSales, 'number');
+      assert.strictEqual(typeof data.stats.totalCommissionDeducted, 'number');
+      assert.strictEqual(typeof data.stats.totalNetCredited, 'number');
+      assert.strictEqual(typeof data.stats.currentWalletBalance, 'number');
+    });
+
+    await test('Point 22: GET /api/payout-splits/admin retrieves platform-wide automated settlement metrics for Super Admin', async () => {
+      const res = await fetch(`${baseUrl}/payout-splits/admin`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.platformStats);
+      assert.strictEqual(typeof data.platformStats.totalSettlements, 'number');
+      assert.strictEqual(typeof data.platformStats.platformTotalGross, 'number');
+      assert.strictEqual(typeof data.platformStats.platformCommissionRevenue, 'number');
+      assert.strictEqual(typeof data.platformStats.vendorDisbursements, 'number');
+    });
+
+    let point22SubOrderId = null;
+    let point22VendorInitialWallet = 0;
+    let point22TargetVendor = null;
+
+    await test('Point 22: Setup: Create parent order and suborder for instant escrow split settlement', async () => {
+      point22TargetVendor = (await VendorProfile.findOne({ email: 'apex@auramarket.com' })) || (await VendorProfile.findOne());
+      assert.ok(point22TargetVendor, 'Target vendor profile must exist');
+      point22VendorInitialWallet = point22TargetVendor.walletBalance || 0;
+
+      const customerUser = await User.findOne({ email: 'customer@auramarket.com' });
+      assert.ok(customerUser, 'Customer user must exist');
+
+      const testOrder = await Order.create({
+        orderNumber: `ORD-TEST-SPLIT-${Date.now()}`,
+        customer: customerUser._id,
+        items: [
+          {
+            product: headphonesProduct._id,
+            vendor: point22TargetVendor._id,
+            title: 'Aura Wireless Headphones',
+            quantity: 1,
+            price: 2500,
+            totalPrice: 2500,
+          },
+        ],
+        subtotal: 2500,
+        totalAmount: 2500,
+        shippingAddress: {
+          recipientName: 'Aarav Mehta',
+          phone: '9876543210',
+          street: '42 MG Road',
+          city: 'Bangalore',
+          state: 'Karnataka',
+          pincode: '560001',
+        },
+      });
+
+      const testSubOrder = await SubOrder.create({
+        parentOrder: testOrder._id,
+        vendor: point22TargetVendor._id,
+        customer: customerUser._id,
+        subOrderId: `SUB-${Date.now().toString().slice(-6)}`,
+        subTotal: 2500,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 250,
+        vendorEarning: 2250,
+        status: 'delivered',
+        shippingAddress: testOrder.shippingAddress,
+        items: [
+          {
+            product: headphonesProduct._id,
+            title: 'Aura Wireless Headphones',
+            quantity: 1,
+            price: 2500,
+            totalPrice: 2500,
+          },
+        ],
+      });
+
+      testOrder.subOrders.push(testSubOrder._id);
+      await testOrder.save();
+      point22SubOrderId = testSubOrder._id;
+    });
+
+    await test('Point 22: POST /api/payout-splits/admin/settle/:subOrderId executes instant escrow split, credits vendor wallet & creates immutable record', async () => {
+      const res = await fetch(`${baseUrl}/payout-splits/admin/settle/${point22SubOrderId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          notes: 'Automated test escrow instant payout split trigger',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.alreadySettled, false);
+      assert.ok(data.payoutSplit);
+      assert.strictEqual(data.payoutSplit.grossAmount, 2500);
+      assert.strictEqual(data.payoutSplit.commissionRate, 10);
+      assert.strictEqual(data.payoutSplit.adminCommission, 250);
+      assert.strictEqual(data.payoutSplit.vendorNetPayout, 2250);
+      assert.strictEqual(data.payoutSplit.status, 'SETTLED');
+      assert.strictEqual(data.payoutSplit.settlementMethod, 'INSTANT_WALLET_ESCROW_RELEASE');
+
+      // Verify vendor wallet balance incremented by vendorNetPayout (2250)
+      const refreshedVendor = await VendorProfile.findById(point22TargetVendor._id);
+      assert.strictEqual(refreshedVendor.walletBalance, point22VendorInitialWallet + 2250);
+    });
+
+    await test('Point 22: Idempotency Protection: Re-triggering settle on same suborder does NOT double-credit and flags alreadySettled: true', async () => {
+      const res = await fetch(`${baseUrl}/payout-splits/admin/settle/${point22SubOrderId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.alreadySettled, true);
+      assert.strictEqual(data.message, 'Payout split already settled for this suborder');
+
+      // Verify wallet balance did not increase twice
+      const refreshedVendor = await VendorProfile.findById(point22TargetVendor._id);
+      assert.strictEqual(refreshedVendor.walletBalance, point22VendorInitialWallet + 2250);
+    });
+
+    await test('Point 22: POST /api/payout-splits/admin/settle/:subOrderId rejects non-existent suborder with 400', async () => {
+      const res = await fetch(`${baseUrl}/payout-splits/admin/settle/507f1f77bcf86cd799439011`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('not found'));
+    });
+
+    await test('Point 22: Role Security: Customer cannot access vendor or admin payout split endpoints (403 Forbidden)', async () => {
+      const resVendor = await fetch(`${baseUrl}/payout-splits/vendor`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resVendor.status, 403);
+
+      const resAdmin = await fetch(`${baseUrl}/payout-splits/admin`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resAdmin.status, 403);
+
+      const resSettle = await fetch(`${baseUrl}/payout-splits/admin/settle/${point22SubOrderId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resSettle.status, 403);
     });
 
   } finally {

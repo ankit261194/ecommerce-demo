@@ -4,6 +4,7 @@ const Order = require('../models/Order');
 const CodReconciliation = require('../models/CodReconciliation');
 const smsService = require('../services/smsService');
 const mailService = require('../services/mailService');
+const { executeVendorPayoutSplit } = require('../services/payoutSplitService');
 
 // @desc    Get All Tasks assigned to Logged-in Courier Rider (or all tasks for Super Admin)
 // @route   GET /api/delivery/tasks
@@ -225,12 +226,24 @@ exports.verifyOtpAndCompleteDelivery = async (req, res, next) => {
       }
     }
 
+    // Point #22: Automated Instant Vendor Payout Split upon Delivery Verification
+    let payoutSplitResult = null;
+    try {
+      payoutSplitResult = await executeVendorPayoutSplit(subOrder._id, {
+        notes: `Automated instant payout split upon delivery OTP verification (Task #${task._id}).`,
+      });
+    } catch (splitErr) {
+      console.warn('Automated payout split trigger error:', splitErr.message);
+    }
+
     res.status(200).json({
       success: true,
       message: 'OTP verified successfully! Order marked as DELIVERED.',
       data: {
         task,
         subOrder,
+        payoutSplit: payoutSplitResult?.payoutSplit || null,
+        payoutSplitStatus: payoutSplitResult?.success ? 'SETTLED' : 'PENDING',
       },
     });
   } catch (error) {

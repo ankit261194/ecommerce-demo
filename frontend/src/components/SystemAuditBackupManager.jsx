@@ -31,8 +31,10 @@ import {
   Sliders,
 } from 'lucide-react';
 import api from '../api/client';
+import AuditTrailManager from './AuditTrailManager';
 
 export default function SystemAuditBackupManager() {
+  const [activeSection, setActiveSection] = useState('audit-trail');
   const [auditLogs, setAuditLogs] = useState([]);
   const [metrics, setMetrics] = useState({
     totalAllEvents: 0,
@@ -249,8 +251,41 @@ export default function SystemAuditBackupManager() {
 
   return (
     <div className="space-y-6">
-      {/* Top Banner & 1-Click Backup Export */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 p-6 rounded-2xl border border-indigo-500/20 shadow-xl text-white">
+      {/* Module Navigation Switcher */}
+      <div className="flex items-center gap-3 p-1.5 bg-slate-100 dark:bg-slate-800 rounded-2xl w-fit">
+        <button
+          onClick={() => setActiveSection('audit-trail')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
+            activeSection === 'audit-trail'
+              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-md'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4 text-indigo-500" />
+          <span>🛡️ Activity & Security Audit Trail (Point #7)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSection('backups')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
+            activeSection === 'backups'
+              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-md'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          <Database className="w-4 h-4 text-emerald-500" />
+          <span>💾 Database Backups & Cloud Sync</span>
+        </button>
+      </div>
+
+      {activeSection === 'audit-trail' && (
+        <AuditTrailManager />
+      )}
+
+      {activeSection === 'backups' && (
+        <>
+          {/* Top Banner & 1-Click Backup Export */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 p-6 rounded-2xl border border-indigo-500/20 shadow-xl text-white">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/30 text-indigo-300 border border-indigo-400/30">
@@ -791,6 +826,8 @@ export default function SystemAuditBackupManager() {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

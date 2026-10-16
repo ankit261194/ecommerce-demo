@@ -151,6 +151,10 @@ exports.updateVendorStatus = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Vendor not found' });
     }
 
+    const prevStatus = vendor.status;
+    const prevKyc = vendor.kycStatus;
+    const prevCommission = vendor.commissionRate;
+
     if (status) {
       vendor.status = status.toLowerCase();
       if (status.toLowerCase() === 'approved') {
@@ -174,6 +178,19 @@ exports.updateVendorStatus = async (req, res, next) => {
     if (adminNotes !== undefined) vendor.adminNotes = adminNotes;
 
     await vendor.save();
+
+    await recordAuditLog({
+      action: 'CHANGE_VENDOR_STATUS',
+      module: 'VENDORS',
+      req,
+      description: `Vendor '${vendor.storeName}' status updated to '${vendor.status}'`,
+      targetType: 'VendorProfile',
+      targetId: String(vendor._id),
+      previousValue: { status: prevStatus, kycStatus: prevKyc, commissionRate: prevCommission },
+      newValue: { status: vendor.status, kycStatus: vendor.kycStatus, commissionRate: vendor.commissionRate },
+      changeSummary: `Status changed from '${prevStatus}' to '${vendor.status}'`,
+      severity: vendor.status === 'rejected' ? 'HIGH' : 'MEDIUM',
+    });
 
     res.status(200).json({
       success: true,
@@ -1628,72 +1645,11 @@ exports.deleteStaff = async (req, res, next) => {
 };
 
 // ==========================================
-// Point #50: System Audit Activity Log & 1-Click Database Backup
+// Point #7 / Point #50: System Audit Activity Log & 1-Click Database Backup
 // ==========================================
 
-// @desc    Get activity audit logs with filters and summary stats
-// @route   GET /api/admin/audit-logs
-exports.getAuditLogs = async (req, res, next) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 25;
-    const skip = (page - 1) * limit;
-
-    const { module, status, search, action } = req.query;
-    let query = {};
-
-    if (module && module !== 'ALL') {
-      query.module = module;
-    }
-    if (status && status !== 'ALL') {
-      query.status = status;
-    }
-    if (action) {
-      query.action = action;
-    }
-    if (search) {
-      query.$or = [
-        { description: { $regex: search, $options: 'i' } },
-        { userName: { $regex: search, $options: 'i' } },
-        { userEmail: { $regex: search, $options: 'i' } },
-        { action: { $regex: search, $options: 'i' } },
-        { targetId: { $regex: search, $options: 'i' } },
-      ];
-    }
-
-    const [logs, total, totalAllEvents, warningEvents] = await Promise.all([
-      AuditLog.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
-      AuditLog.countDocuments(query),
-      AuditLog.countDocuments(),
-      AuditLog.countDocuments({ status: { $in: ['WARNING', 'FAILED'] } }),
-    ]);
-
-    // Calculate today's events count
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const todayEvents = await AuditLog.countDocuments({ createdAt: { $gte: startOfToday } });
-
-    res.status(200).json({
-      success: true,
-      data: {
-        logs,
-        pagination: {
-          total,
-          page,
-          pages: Math.ceil(total / limit) || 1,
-          limit,
-        },
-        metrics: {
-          totalAllEvents,
-          todayEvents,
-          warningEvents,
-        },
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+const { getAuditLogs } = require('./auditLogController');
+exports.getAuditLogs = getAuditLogs;
 
 // @desc    Get Database Collection counts and health status
 // @route   GET /api/admin/backup/stats

@@ -12063,6 +12063,163 @@ const runTests = async () => {
       assert.strictEqual(resMaintenance.status, 403);
     });
 
+    // =========================================================================
+    // POINT 7: ADMIN ACTIVITY & SECURITY AUDIT TRAIL LOGS TESTS
+    // =========================================================================
+
+    await test('Point 7: GET /api/admin/audit-logs retrieves paginated audit logs with telemetry', async () => {
+      const res = await fetch(`${baseUrl}/admin/audit-logs`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data);
+      assert.ok(Array.isArray(body.data.logs));
+      assert.ok(body.data.pagination);
+      assert.ok(body.data.metrics);
+      assert.ok(typeof body.data.metrics.totalAllEvents === 'number');
+    });
+
+    await test('Point 7: POST /api/admin/audit-logs/log-custom-event records an administrative security event', async () => {
+      const customPayload = {
+        action: 'SECURITY_INSPECTION_NOTE',
+        module: 'SECURITY',
+        description: 'Super Admin executed high-priority system credential rotation check',
+        changeSummary: 'Admin checked credential expiry status across payment gateways',
+        previousValue: { lastCheckDaysAgo: 45 },
+        newValue: { lastCheckDaysAgo: 0 },
+        severity: 'HIGH',
+        status: 'SUCCESS',
+      };
+
+      const res = await fetch(`${baseUrl}/admin/audit-logs/log-custom-event`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify(customPayload),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.log.action, 'SECURITY_INSPECTION_NOTE');
+      assert.strictEqual(body.log.severity, 'HIGH');
+      assert.strictEqual(body.log.changeSummary, 'Admin checked credential expiry status across payment gateways');
+      assert.ok(body.log.ipAddress);
+    });
+
+    await test('Point 7: Automatic Audit: Verify TOGGLE_MAINTENANCE event recorded with CRITICAL severity', async () => {
+      const res = await fetch(`${baseUrl}/admin/audit-logs?action=TOGGLE_MAINTENANCE`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(Array.isArray(body.data.logs));
+      assert.ok(body.data.logs.length >= 1);
+      const maintenanceLog = body.data.logs[0];
+      assert.strictEqual(maintenanceLog.severity, 'CRITICAL');
+      assert.ok(maintenanceLog.description.includes('Maintenance Mode'));
+      assert.ok(maintenanceLog.ipAddress);
+    });
+
+    await test('Point 7: Automatic Audit: Verify UPDATE_GLOBAL_SETTINGS event recorded with HIGH severity and diffs', async () => {
+      const res = await fetch(`${baseUrl}/admin/audit-logs?action=UPDATE_GLOBAL_SETTINGS`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.logs.length >= 1);
+      const settingsLog = body.data.logs[0];
+      assert.strictEqual(settingsLog.severity, 'HIGH');
+      assert.ok(settingsLog.previousValue);
+      assert.ok(settingsLog.newValue);
+    });
+
+    await test('Point 7: GET /api/admin/audit-logs/stats returns security event counts and breakdown', async () => {
+      const res = await fetch(`${baseUrl}/admin/audit-logs/stats`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.stats);
+      assert.ok(typeof body.stats.totalEvents === 'number');
+      assert.ok(typeof body.stats.criticalEvents === 'number');
+      assert.ok(typeof body.stats.highEvents === 'number');
+      assert.ok(Array.isArray(body.stats.breakdownByModule));
+      assert.ok(Array.isArray(body.stats.topActions));
+    });
+
+    await test('Point 7: GET /api/admin/audit-logs/export generates downloadable UTF-8 CSV with compliant headers', async () => {
+      const res = await fetch(`${baseUrl}/admin/audit-logs/export`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      assert.ok(res.headers.get('content-type').includes('text/csv'));
+      assert.ok(res.headers.get('content-disposition').includes('AuraMarket_Security_Audit_Trail_'));
+      const csv = await res.text();
+      assert.ok(csv.includes('Log ID'));
+      assert.ok(csv.includes('Performer Name'));
+      assert.ok(csv.includes('Severity'));
+      assert.ok(csv.includes('IP Address'));
+    });
+
+    await test('Point 7: DELETE /api/admin/audit-logs/prune enforces minimum 30 days compliance retention', async () => {
+      const resIllegal = await fetch(`${baseUrl}/admin/audit-logs/prune`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ retentionDays: 10 }), // Less than 30 days
+      });
+      assert.strictEqual(resIllegal.status, 400);
+      const bodyIllegal = await resIllegal.json();
+      assert.strictEqual(bodyIllegal.success, false);
+      assert.ok(bodyIllegal.message.includes('retention cannot be set to less than 30 days'));
+
+      // Valid prune with 90 days retention
+      const resValid = await fetch(`${baseUrl}/admin/audit-logs/prune`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ retentionDays: 90 }),
+      });
+      assert.strictEqual(resValid.status, 200);
+      const bodyValid = await resValid.json();
+      assert.strictEqual(bodyValid.success, true);
+      assert.ok(typeof bodyValid.deletedCount === 'number');
+    });
+
+    await test('Point 7: Role Security: Customer cannot view, export or prune audit logs (403 Forbidden)', async () => {
+      const resLogs = await fetch(`${baseUrl}/admin/audit-logs`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resLogs.status, 403);
+
+      const resExport = await fetch(`${baseUrl}/admin/audit-logs/export`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resExport.status, 403);
+
+      const resPrune = await fetch(`${baseUrl}/admin/audit-logs/prune`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ retentionDays: 90 }),
+      });
+      assert.strictEqual(resPrune.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

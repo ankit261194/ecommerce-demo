@@ -6,6 +6,7 @@ const Ledger = require('../models/Ledger');
 const DeliveryTask = require('../models/DeliveryTask');
 const Category = require('../models/Category');
 const Review = require('../models/Review');
+const { recordAuditLog } = require('../utils/auditLogger');
 
 // @desc    Get Vendor Dashboard metrics
 // @route   GET /api/vendor/dashboard
@@ -209,6 +210,22 @@ exports.updateProduct = async (req, res, next) => {
       const { checkAndTriggerPriceDropAlerts } = require('./priceDropAlertController');
       checkAndTriggerPriceDropAlerts(product._id, oldSelling, Number(req.body.sellingPrice)).catch(console.error);
     }
+
+    const priceChanged = req.body.sellingPrice !== undefined && Number(req.body.sellingPrice) !== oldSelling;
+    await recordAuditLog({
+      action: priceChanged ? 'UPDATE_PRICE' : 'UPDATE_PRODUCT',
+      module: 'PRODUCTS',
+      req,
+      description: priceChanged
+        ? `Product '${product.title}' price changed from ₹${oldSelling} to ₹${product.sellingPrice}`
+        : `Product '${product.title}' details updated`,
+      targetType: 'Product',
+      targetId: String(product._id),
+      previousValue: { sellingPrice: oldSelling, stock: product.stock },
+      newValue: { sellingPrice: product.sellingPrice, stock: product.stock },
+      changeSummary: priceChanged ? `Price changed: ₹${oldSelling} -> ₹${product.sellingPrice}` : 'Attributes updated',
+      severity: priceChanged ? 'HIGH' : 'LOW',
+    });
 
     res.status(200).json({ success: true, message: 'Product updated successfully', data: product });
   } catch (error) {

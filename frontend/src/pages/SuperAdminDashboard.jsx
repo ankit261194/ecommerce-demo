@@ -96,6 +96,7 @@ import EmailTemplateManager from '../components/EmailTemplateManager';
 import StorageConfigManager from '../components/StorageConfigManager';
 import CourierAggregatorManager from '../components/CourierAggregatorManager';
 import GlobalSettingsManager from '../components/GlobalSettingsManager';
+import AuditTrailManager from '../components/AuditTrailManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1533,6 +1534,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('audit-trail')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'audit-trail'
+                ? 'bg-indigo-600 text-white shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4 text-indigo-300" />
+            <span>Activity & Security Audit Trail</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 ml-1">
+              Point #7
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveDashboardTab('cms-pages')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
               activeDashboardTab === 'cms-pages'
@@ -2458,6 +2474,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
             }
           }}
         />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB: 🛡️ ADMIN ACTIVITY & SECURITY AUDIT TRAIL LOGS (Point #7) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'audit-trail' && (
+        <AuditTrailManager />
       )}
 
       {/* ========================================================================= */}

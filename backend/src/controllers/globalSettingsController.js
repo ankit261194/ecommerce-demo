@@ -1,5 +1,6 @@
 const UIConfig = require('../models/UIConfig');
 const LocalizationConfig = require('../models/LocalizationConfig');
+const { recordAuditLog } = require('../utils/auditLogger');
 
 // Helper to get or create UIConfig singleton
 const getOrCreateUIConfig = async () => {
@@ -136,6 +137,9 @@ exports.updateGlobalSettings = async (req, res, next) => {
       supportEmail,
     } = req.body;
 
+    const prevStoreName = ui.storeName;
+    const prevLogoUrl = ui.logoUrl;
+
     if (storeName) ui.storeName = storeName.trim();
     if (tagline !== undefined) ui.tagline = tagline.trim();
     if (logoUrl) ui.logoUrl = logoUrl.trim();
@@ -150,6 +154,18 @@ exports.updateGlobalSettings = async (req, res, next) => {
     if (supportEmail) ui.supportEmail = supportEmail.trim();
 
     await ui.save();
+
+    await recordAuditLog({
+      action: 'UPDATE_GLOBAL_SETTINGS',
+      module: 'SETTINGS',
+      req,
+      description: `Updated platform branding to '${ui.storeName}'`,
+      targetType: 'UIConfig',
+      targetId: String(ui._id),
+      previousValue: { storeName: prevStoreName, logoUrl: prevLogoUrl },
+      newValue: { storeName: ui.storeName, logoUrl: ui.logoUrl },
+      severity: 'HIGH',
+    });
 
     res.status(200).json({
       success: true,
@@ -173,6 +189,7 @@ exports.updateGlobalSettings = async (req, res, next) => {
 exports.toggleMaintenanceMode = async (req, res, next) => {
   try {
     const ui = await getOrCreateUIConfig();
+    const prevMaintenanceStatus = Boolean(ui.maintenanceMode?.enabled);
     const {
       enabled,
       title,
@@ -192,6 +209,18 @@ exports.toggleMaintenanceMode = async (req, res, next) => {
     await ui.save();
 
     const statusText = ui.maintenanceMode.enabled ? 'ACTIVATED (Storefront Locked)' : 'DEACTIVATED (Storefront Live)';
+
+    await recordAuditLog({
+      action: 'TOGGLE_MAINTENANCE',
+      module: 'SECURITY',
+      req,
+      description: `Site Maintenance Mode has been ${statusText}`,
+      targetType: 'UIConfig',
+      targetId: String(ui._id),
+      previousValue: { enabled: prevMaintenanceStatus },
+      newValue: { enabled: ui.maintenanceMode.enabled, title: ui.maintenanceMode.title },
+      severity: 'CRITICAL',
+    });
 
     res.status(200).json({
       success: true,

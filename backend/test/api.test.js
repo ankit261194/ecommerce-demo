@@ -15789,6 +15789,206 @@ const runTests = async () => {
       assert.strictEqual(resVerify.status, 403);
     });
 
+    // =========================================================================
+    // POINT 24: AI SMART PRODUCT LISTING & SEO DESCRIPTION GENERATOR
+    // =========================================================================
+    console.log('\n--- POINT 24: AI SMART PRODUCT LISTING & SEO DESCRIPTION GENERATOR ---');
+
+    await test('Point 24: GET /api/ai-product/presets returns tones, audiences, languages & sample benchmark prompts', async () => {
+      const res = await fetch(`${baseUrl}/ai-product/presets`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data.tones));
+      assert.ok(data.data.tones.some(t => t.id === 'persuasive' || t.id === 'luxury'));
+      assert.ok(Array.isArray(data.data.benchmarks));
+      assert.ok(data.data.benchmarks.length >= 4);
+      assert.ok(Array.isArray(data.data.languages));
+    });
+
+    await test('Point 24: POST /api/ai-product/generate generates complete listing (titles, summary, description, bullets, SEO meta, SERP preview, HSN)', async () => {
+      const res = await fetch(`${baseUrl}/ai-product/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: 'AcousticPro ANC Wireless Headphones',
+          prompt: '40mm drivers, 60-hour battery, active noise cancellation, low latency gaming mode',
+          category: 'Electronics',
+          tone: 'persuasive',
+          targetAudience: 'Professionals & Gamers',
+          language: 'en',
+          brand: 'SoundCraft',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.seoTitle);
+      assert.ok(Array.isArray(data.data.titleVariations));
+      assert.strictEqual(data.data.titleVariations.length, 3);
+      assert.ok(data.data.shortSummary);
+      assert.ok(data.data.detailedDescription.includes('Key Architectural Highlights'));
+      assert.ok(Array.isArray(data.data.bulletPoints));
+      assert.ok(data.data.bulletPoints.length >= 5);
+      assert.ok(data.data.seoMeta.metaTitle.length <= 60);
+      assert.ok(data.data.seoMeta.metaDescription.length <= 155);
+      assert.ok(data.data.seoMeta.serpPreview.url.includes('shribalajikripadham.online'));
+      assert.strictEqual(data.data.suggestedHsnCode, '85183000');
+      assert.strictEqual(data.data.suggestedGstRate, 18);
+      assert.ok(Array.isArray(data.data.marketingBadges));
+      assert.ok(Array.isArray(data.data.faqs));
+      assert.strictEqual(data.data.faqs.length, 3);
+    });
+
+    await test('Point 24: POST /api/ai-product/generate supports luxury tone with sophisticated copywriting', async () => {
+      const resLogin = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'apex@auramarket.com', password: 'vendor123456' }),
+      });
+      const dataLogin = await resLogin.json();
+      const point24VendorToken = dataLogin.token;
+
+      const res = await fetch(`${baseUrl}/ai-product/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point24VendorToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Royal Chrono Titanium Tourbillon Watch',
+          category: 'Watches',
+          tone: 'luxury',
+          targetAudience: 'Watch Collectors',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.suggestedHsnCode, '91021100');
+      assert.ok(data.data.detailedDescription.includes('artisanal finesse') || data.data.detailedDescription.includes('luxury'));
+    });
+
+    await test('Point 24: POST /api/ai-product/generate supports Hindi / Hinglish conversion copywriting', async () => {
+      const res = await fetch(`${baseUrl}/ai-product/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Smart Fitness Tracker Band',
+          category: 'Electronics',
+          language: 'hi',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.languageUsed, 'hi');
+      assert.ok(data.data.detailedDescription.includes('AuraMarket Trust Promise'));
+    });
+
+    await test('Point 24: POST /api/ai-product/suggest-hsn maps electronics, apparel, and watches to statutory HSN codes and GST rates', async () => {
+      const resElectronics = await fetch(`${baseUrl}/ai-product/suggest-hsn`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ category: 'Electronics', title: 'Earbuds' }),
+      });
+      const dataElec = await resElectronics.json();
+      assert.strictEqual(dataElec.data.hsnCode, '85183000');
+      assert.strictEqual(dataElec.data.gstRatePercent, 18);
+
+      const resApparel = await fetch(`${baseUrl}/ai-product/suggest-hsn`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ category: 'Fashion', title: 'Cotton T-Shirt' }),
+      });
+      const dataApparel = await resApparel.json();
+      assert.strictEqual(dataApparel.data.hsnCode, '61091000');
+      assert.strictEqual(dataApparel.data.gstRatePercent, 12);
+    });
+
+    await test('Point 24: POST /api/ai-product/optimize-existing/:id enhances existing catalog product with AI copy & saves to database', async () => {
+      // Find an existing product
+      let targetProd = await Product.findOne();
+      if (!targetProd) {
+        targetProd = await Product.create({
+          title: 'AI Test Wireless Charger Pad',
+          sellingPrice: 1499,
+          mrp: 2499,
+          stock: 10,
+          sku: 'AI-CHRG-' + Date.now(),
+          category: 'Electronics',
+          categoryLabel: 'Electronics',
+        });
+      }
+
+      const res = await fetch(`${baseUrl}/ai-product/optimize-existing/${targetProd._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          tone: 'persuasive',
+          applyToDatabase: true,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.appliedToDatabase, true);
+      assert.ok(data.data.aiGenerated.seoTitle);
+
+      // Verify updated product in database
+      const reloaded = await Product.findById(targetProd._id);
+      assert.ok(reloaded.description.includes('Key Architectural Highlights'));
+      assert.ok(reloaded.seoTitle);
+      assert.ok(reloaded.seoDescription);
+    });
+
+    await test('Point 24: POST /api/ai-product/generate validates missing title and prompt (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/ai-product/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('required'));
+    });
+
+    await test('Point 24: Role Security: Unauthenticated request cannot generate AI copy (401 Unauthorized)', async () => {
+      const res = await fetch(`${baseUrl}/ai-product/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ title: 'Unauthenticated Test' }),
+      });
+
+      assert.strictEqual(res.status, 401);
+    });
+
   } finally {
     if (server) {
       server.close();

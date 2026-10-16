@@ -158,6 +158,21 @@ const productSchema = new mongoose.Schema(
       default: 85,
     },
     tags: [String],
+    seoTitle: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    seoDescription: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    seoKeywords: {
+      type: String,
+      default: '',
+      trim: true,
+    },
   },
   {
     timestamps: true,

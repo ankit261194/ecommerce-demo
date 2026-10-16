@@ -1149,7 +1149,11 @@ exports.compareProducts = async (req, res, next) => {
 
     orderedProducts.forEach(prod => {
       if (prod.specifications) {
-        if (prod.specifications instanceof Map) {
+        if (Array.isArray(prod.specifications)) {
+          prod.specifications.forEach(spec => {
+            if (spec && spec.key) specKeysSet.add(spec.key);
+          });
+        } else if (prod.specifications instanceof Map) {
           for (let key of prod.specifications.keys()) specKeysSet.add(key);
         } else if (typeof prod.specifications === 'object') {
           Object.keys(prod.specifications).forEach(k => specKeysSet.add(k));
@@ -1171,8 +1175,14 @@ exports.compareProducts = async (req, res, next) => {
 
         let val = null;
         if (prod.specifications) {
-          if (prod.specifications instanceof Map) val = prod.specifications.get(key);
-          else val = prod.specifications[key];
+          if (Array.isArray(prod.specifications)) {
+            const found = prod.specifications.find(s => s && (s.key === key || s.name === key));
+            if (found) val = found.value;
+          } else if (prod.specifications instanceof Map) {
+            val = prod.specifications.get(key);
+          } else if (typeof prod.specifications === 'object') {
+            val = prod.specifications[key];
+          }
         }
         return val || '—';
       });

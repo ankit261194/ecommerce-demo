@@ -17889,6 +17889,95 @@ const runTests = async () => {
       assert.ok(data.message.includes('Image payload is required'));
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 9: SIDE-BY-SIDE PRODUCT COMPARISON MATRIX
+    // =========================================================================
+    console.log('\n--- PILLAR 1 - POINT 9: SIDE-BY-SIDE PRODUCT COMPARISON MATRIX ---');
+
+    await test('Point 9: POST /api/products/compare side-by-side compares products with accurate specsMatrix', async () => {
+      const prods = await Product.find({ isPublished: true }).limit(3);
+      assert.ok(prods.length >= 2, 'Requires at least 2 products');
+      const res = await fetch(`${baseUrl}/products/compare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productIds: [prods[0]._id, prods[1]._id] }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.count, 2);
+      assert.strictEqual(data.products.length, 2);
+      assert.ok(Array.isArray(data.specsMatrix));
+      assert.ok(data.specsMatrix.length >= 5);
+      data.specsMatrix.forEach(row => {
+        assert.strictEqual(row.values.length, 2);
+        assert.ok(typeof row.isDifferent === 'boolean');
+      });
+    });
+
+    await test('Point 9: POST /api/products/compare extracts custom array specifications and evaluates differences', async () => {
+      const prods = await Product.find({ isPublished: true }).limit(2);
+      const res = await fetch(`${baseUrl}/products/compare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productIds: [prods[0]._id, prods[1]._id] }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      const brandRow = data.specsMatrix.find(m => m.attribute === 'Brand');
+      assert.ok(brandRow, 'Brand must be present in specsMatrix');
+      assert.strictEqual(brandRow.values[0], prods[0].brand || 'AuraMarket Direct');
+      assert.strictEqual(brandRow.values[1], prods[1].brand || 'AuraMarket Direct');
+    });
+
+    await test('Point 9: POST /api/products/compare rejects comparison with single product (400 Bad Request)', async () => {
+      const prod = await Product.findOne({ isPublished: true });
+      const res = await fetch(`${baseUrl}/products/compare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productIds: [prod._id] }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('at least 2 product IDs'));
+    });
+
+    await test('Point 9: POST /api/products/compare rejects comparison exceeding 4 products (400 Bad Request)', async () => {
+      const dummyIds = [
+        '64b8a1c8f1a2b3c4d5e6f7a1',
+        '64b8a1c8f1a2b3c4d5e6f7a2',
+        '64b8a1c8f1a2b3c4d5e6f7a3',
+        '64b8a1c8f1a2b3c4d5e6f7a4',
+        '64b8a1c8f1a2b3c4d5e6f7a5',
+      ];
+      const res = await fetch(`${baseUrl}/products/compare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productIds: dummyIds }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('up to 4 products'));
+    });
+
+    await test('Point 9: POST /api/products/compare returns 404 if fewer than 2 valid products exist', async () => {
+      const nonExistentIds = [
+        '64b8a1c8f1a2b3c4d5e6f7a1',
+        '64b8a1c8f1a2b3c4d5e6f7a2',
+      ];
+      const res = await fetch(`${baseUrl}/products/compare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productIds: nonExistentIds }),
+      });
+      assert.strictEqual(res.status, 404);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
   } finally {
     if (server) {
       server.close();

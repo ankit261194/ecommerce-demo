@@ -67,6 +67,7 @@ import RtoRiskOtpModal from '../components/RtoRiskOtpModal';
 import FaqSection from '../components/FaqSection';
 import VoiceShoppingAssistantModal from '../components/VoiceShoppingAssistantModal';
 import WebPushOptInBanner from '../components/WebPushOptInBanner';
+import { GiftOptionsModal } from '../components/GiftOptionsModal';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useLocalization } from '../context/LocalizationContext';
@@ -519,6 +520,20 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('COD');
 
+  // Point #19: Gift Wrapping & Greeting Card State
+  const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
+  const [giftOptions, setGiftOptions] = useState({
+    isGift: false,
+    wrapId: 'wrap-gold',
+    wrapName: 'Royal Gold Velvet',
+    wrapPrice: 49,
+    cardTheme: 'Best Wishes',
+    recipientName: '',
+    senderName: '',
+    message: '',
+    hideInvoicePrice: false,
+  });
+
   // Point #77: Storefront Abandoned Cart Tracking & Sync Engine
   useEffect(() => {
     if (!cartItems || cartItems.length === 0) return;
@@ -555,8 +570,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     const activeShipFee = isFree ? 0 : defaultShipFee;
     const couponDiscount = appliedCoupon?.discountAmount || 0;
     const coinDiscount = Number(redeemedCoins || 0);
-    return Math.max(0, cartTotal - couponDiscount + activeShipFee - coinDiscount);
-  }, [cartTotal, appliedCoupon, uiConfig, redeemedCoins]);
+    const wrapPrice = giftOptions.isGift ? (cartTotal >= 1999 ? 0 : Number(giftOptions.wrapPrice || 49)) : 0;
+    return Math.max(0, cartTotal - couponDiscount + activeShipFee - coinDiscount + wrapPrice);
+  }, [cartTotal, appliedCoupon, uiConfig, redeemedCoins, giftOptions]);
 
   // Dynamic Payment Gateways from Super Admin Integrations Hub
   const paymentSettings = uiConfig?.integrations?.payments || {
@@ -1288,6 +1304,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         couponCode: appliedCoupon?.code || undefined,
         deliveryInstructions: deliveryInstructions || undefined,
         coinsToRedeem: redeemedCoins > 0 ? redeemedCoins : undefined,
+        giftWrap: giftOptions.isGift ? giftOptions : undefined,
       });
 
       if (res.data?.success && res.data?.data) {
@@ -1327,6 +1344,17 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         setAppliedCoupon(null);
         setRedeemedCoins(0);
         setDeliveryInstructions('');
+        setGiftOptions({
+          isGift: false,
+          wrapId: 'wrap-gold',
+          wrapName: 'Royal Gold Velvet',
+          wrapPrice: 49,
+          cardTheme: 'Best Wishes',
+          recipientName: '',
+          senderName: '',
+          message: '',
+          hideInvoicePrice: false,
+        });
         setIsCartOpen(false);
 
         // Sync fresh wallet balance & coins after order
@@ -2775,6 +2803,37 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   </div>
                 )}
 
+                {/* Point #19: Gift Wrapping & Greeting Card Trigger Card */}
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-slate-50 border border-amber-500/30 flex items-center justify-between gap-3 shadow-sm">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-600 flex items-center justify-center font-bold text-lg shrink-0">
+                      🎁
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                        <span>Send as a Gift</span>
+                        {giftOptions.isGift && (
+                          <span className="text-[10px] bg-amber-500/20 text-amber-800 font-bold px-1.5 py-0.5 rounded-full border border-amber-500/30 truncate">
+                            {giftOptions.wrapName || 'Wrapped'}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[10px] text-slate-500 truncate">
+                        {giftOptions.isGift
+                          ? `To: ${giftOptions.recipientName || 'Special Someone'} • ${giftOptions.cardTheme || 'Best Wishes'}`
+                          : 'Designer wrap paper, greeting card & concealed prices'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsGiftModalOpen(true)}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-sm transition-all flex items-center gap-1 shrink-0"
+                  >
+                    <span>{giftOptions.isGift ? 'Edit Gift' : '+ Add Wrap'}</span>
+                  </button>
+                </div>
+
                 {/* Point #19 & Point #22 & Point #31: Dynamic Bill Breakdown & Grand Total */}
                 {(() => {
                   const freeThresh = uiConfig?.shipping?.freeShippingThreshold ?? 999;
@@ -2783,7 +2842,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   const activeShipFee = isFree ? 0 : defaultShipFee;
                   const couponDiscount = appliedCoupon?.discountAmount || 0;
                   const coinDiscount = Number(redeemedCoins || 0);
-                  const grandTotalPayable = Math.max(0, cartTotal - couponDiscount + activeShipFee - coinDiscount);
+                  const wrapFee = giftOptions.isGift ? (cartTotal >= 1999 ? 0 : Number(giftOptions.wrapPrice || 49)) : 0;
+                  const grandTotalPayable = Math.max(0, cartTotal - couponDiscount + activeShipFee - coinDiscount + wrapFee);
 
                   return (
                     <div className="pt-4 border-t border-slate-200 space-y-2.5">
@@ -2791,6 +2851,21 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                         <span>{t('subtotal', 'Items Subtotal')}:</span>
                         <span className="font-black text-slate-900">{formatPrice(cartTotal)}</span>
                       </div>
+
+                      {giftOptions.isGift && (
+                        <div className="flex items-center justify-between text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1.5 rounded-xl border border-amber-200">
+                          <span className="flex items-center gap-1.5">
+                            <span>🎁 Designer Gift Wrap ({giftOptions.wrapName || 'Custom Wrap'}):</span>
+                          </span>
+                          <span className="font-black">
+                            {cartTotal >= 1999 ? (
+                              <span className="text-emerald-700">FREE 🎉</span>
+                            ) : (
+                              formatPrice(wrapFee)
+                            )}
+                          </span>
+                        </div>
+                      )}
 
                       {appliedCoupon && (
                         <div className="flex items-center justify-between text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-200">
@@ -3298,6 +3373,15 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           AI
         </span>
       </button>
+
+      {/* Point #19: Gift Wrap & Greeting Card Selection Modal */}
+      <GiftOptionsModal
+        isOpen={isGiftModalOpen}
+        onClose={() => setIsGiftModalOpen(false)}
+        giftOptions={giftOptions}
+        setGiftOptions={setGiftOptions}
+        subtotal={cartTotal}
+      />
 
       {/* Point 15: True Native Web Push Notifications Opt-In & Floating Status Bell */}
       <WebPushOptInBanner customerEmail={user?.email || ''} />

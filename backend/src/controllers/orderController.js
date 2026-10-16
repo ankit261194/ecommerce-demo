@@ -7,6 +7,7 @@ const DeliveryTask = require('../models/DeliveryTask');
 const Ledger = require('../models/Ledger');
 const User = require('../models/User');
 const WalletTransaction = require('../models/WalletTransaction');
+const GiftWrapConfig = require('../models/GiftWrapConfig');
 const smsService = require('../services/smsService');
 const mailService = require('../services/mailService');
 
@@ -14,7 +15,7 @@ const mailService = require('../services/mailService');
 // @route   POST /api/orders
 exports.createOrder = async (req, res, next) => {
   try {
-    const { items, shippingAddress, paymentMethod, couponCode, deliveryInstructions, paymentDetails } = req.body;
+    const { items, shippingAddress, paymentMethod, couponCode, deliveryInstructions, paymentDetails, giftWrap } = req.body;
 
     if (!items || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Cart items are required to place an order' });
@@ -31,7 +32,8 @@ exports.createOrder = async (req, res, next) => {
     const productsToDecrement = [];
 
     for (const item of items) {
-      if (!item.productId) {
+      const rawProductId = item.productId || item.product;
+      if (!rawProductId) {
         return res.status(400).json({ success: false, message: 'Product ID is required for each cart item' });
       }
       const qty = Number(item.quantity);
@@ -39,9 +41,9 @@ exports.createOrder = async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'Valid positive quantity is required' });
       }
 
-      const product = await Product.findById(item.productId).populate('vendor').populate('category');
+      const product = await Product.findById(rawProductId).populate('vendor').populate('category');
       if (!product || !product.isPublished) {
-        return res.status(404).json({ success: false, message: `Product '${item.title || item.productId}' is no longer available` });
+        return res.status(404).json({ success: false, message: `Product '${item.title || rawProductId}' is no longer available` });
       }
 
       // Point 59: Vacation Mode Protection
@@ -283,10 +285,26 @@ exports.createOrder = async (req, res, next) => {
       coinDiscount = Math.min(coinsToRedeem, maxRedeemable);
     }
 
+    // Point #19: Gift Wrapping & Personalized Greeting Card calculation
+    let giftWrapPrice = 0;
+    const isGift = Boolean(giftWrap?.isGift);
+
+    if (isGift) {
+      let wrapConfigDoc = null;
+      try {
+        wrapConfigDoc = await GiftWrapConfig.findOne().lean();
+      } catch (_) {}
+      const freeGiftThreshold = wrapConfigDoc?.freeThreshold ?? 1999;
+      const configuredBasePrice = wrapConfigDoc?.basePrice ?? 49;
+      const requestedWrapPrice = Number(giftWrap?.wrapPrice ?? configuredBasePrice);
+      // Free gift wrap if order subtotal >= free threshold
+      giftWrapPrice = totalOrderAmount >= freeGiftThreshold ? 0 : requestedWrapPrice;
+    }
+
     const netTaxAdd = calculationMode === 'EXCLUSIVE' ? taxAmount : 0;
     const finalTotalAmount = Math.max(
       0,
-      totalOrderAmount + netTaxAdd - couponDiscountAmount + shippingFee - coinDiscount
+      totalOrderAmount + netTaxAdd + giftWrapPrice - couponDiscountAmount + shippingFee - coinDiscount
     );
 
     // Point #26 & #31: Resolve Payment Gateway & Verification
@@ -360,6 +378,29 @@ exports.createOrder = async (req, res, next) => {
       shippingFee,
       taxAmount,
       taxDetails,
+      giftWrap: isGift
+        ? {
+            isGift: true,
+            wrapId: giftWrap?.wrapId || 'wrap-gold',
+            wrapName: giftWrap?.wrapName || 'Royal Gold & Satin Ribbon',
+            wrapPrice: giftWrapPrice,
+            cardTheme: giftWrap?.cardTheme || 'Best Wishes',
+            recipientName: giftWrap?.recipientName || '',
+            senderName: giftWrap?.senderName || '',
+            message: giftWrap?.message || '',
+            hideInvoicePrice: Boolean(giftWrap?.hideInvoicePrice),
+          }
+        : {
+            isGift: false,
+            wrapId: null,
+            wrapName: '',
+            wrapPrice: 0,
+            cardTheme: '',
+            recipientName: '',
+            senderName: '',
+            message: '',
+            hideInvoicePrice: false,
+          },
       shippingAddress,
       deliveryInstructions: deliveryInstructions || '',
       deliveryOtp: req.body.deliveryOtp || '4821',

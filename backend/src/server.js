@@ -53,6 +53,7 @@ const auditLogRoutes = require('./routes/auditLogRoutes');
 const pushNotificationRoutes = require('./routes/pushNotificationRoutes');
 const emiRoutes = require('./routes/emiRoutes');
 const socialShareRoutes = require('./routes/socialShareRoutes');
+const giftWrapRoutes = require('./routes/giftWrapRoutes');
 
 const app = express();
 
@@ -177,6 +178,7 @@ app.use('/api/share', socialShareRoutes);
 const { renderOpenGraphHtml } = require('./controllers/socialShareController');
 app.get('/p/:id', renderOpenGraphHtml);
 app.get('/api/p/:id', renderOpenGraphHtml);
+app.use('/api/gift-wrap', giftWrapRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

@@ -14867,6 +14867,174 @@ const runTests = async () => {
       assert.strictEqual(resPut.status, 403);
     });
 
+    // =========================================================================
+    // Point 19: Gift Wrapping, Gift Card & Personalized Message at Checkout
+    // =========================================================================
+    let giftOrderId;
+    await test('Point 19: GET /api/gift-wrap/config returns active wrap designs and card themes', async () => {
+      const res = await fetch(`${baseUrl}/gift-wrap/config`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(typeof body.data.basePrice, 'number');
+      assert.strictEqual(typeof body.data.freeThreshold, 'number');
+      assert.ok(Array.isArray(body.data.designs));
+      assert.ok(body.data.designs.length > 0);
+      assert.ok(Array.isArray(body.data.cardThemes));
+      assert.ok(body.data.cardThemes.length > 0);
+      assert.ok(body.data.designs.some(d => d.id === 'wrap-gold'));
+    });
+
+    await test('Point 19: POST /api/orders creates order with custom gift wrap, card theme and message', async () => {
+      const prod = await Product.findOne({ isPublished: { $ne: false }, stock: { $gt: 5 } });
+      assert.ok(prod, 'Sample product must exist for gift order test');
+
+      const res = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: prod._id, quantity: 1 }],
+          shippingAddress: {
+            recipientName: 'Priya Sharma',
+            phone: '9876543210',
+            street: '742 Evergreen Terrace',
+            city: 'Bengaluru',
+            state: 'Karnataka',
+            pincode: '560001',
+          },
+          paymentMethod: 'COD',
+          giftWrap: {
+            isGift: true,
+            wrapId: 'wrap-gold',
+            wrapName: 'Royal Gold Velvet',
+            wrapPrice: 49,
+            cardTheme: 'Birthday',
+            recipientName: 'Priya Sharma',
+            senderName: 'Aditya Verma',
+            message: 'Wishing you a very Happy Birthday Priya! Hope you love this surprise gift.',
+            hideInvoicePrice: true,
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      const createdOrder = body.data || body.order;
+      assert.ok(createdOrder);
+      assert.strictEqual(createdOrder.giftWrap.isGift, true);
+      assert.strictEqual(createdOrder.giftWrap.wrapId, 'wrap-gold');
+      assert.strictEqual(createdOrder.giftWrap.cardTheme, 'Birthday');
+      assert.strictEqual(createdOrder.giftWrap.recipientName, 'Priya Sharma');
+      assert.strictEqual(createdOrder.giftWrap.senderName, 'Aditya Verma');
+      assert.strictEqual(createdOrder.giftWrap.hideInvoicePrice, true);
+      giftOrderId = createdOrder._id;
+    });
+
+    await test('Point 19: Free Gift Wrapping threshold applied when subtotal >= freeThreshold', async () => {
+      let prod = await Product.findOne({ isPublished: { $ne: false }, sellingPrice: { $gte: 2000 }, stock: { $gt: 2 } });
+      if (!prod) {
+        prod = await Product.findOne({ isPublished: { $ne: false } });
+        prod.sellingPrice = 2500;
+        prod.stock = 50;
+        await prod.save();
+      }
+
+      const res = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: prod._id, quantity: 1 }],
+          shippingAddress: {
+            recipientName: 'Amit Patel',
+            phone: '9876543211',
+            street: '12 Marine Drive',
+            city: 'Mumbai',
+            state: 'Maharashtra',
+            pincode: '400020',
+          },
+          paymentMethod: 'COD',
+          giftWrap: {
+            isGift: true,
+            wrapId: 'wrap-ruby',
+            wrapName: 'Festive Celebration Ruby',
+            wrapPrice: 49,
+            cardTheme: 'Festive / Diwali',
+            recipientName: 'Amit Patel',
+            senderName: 'Vikram',
+            message: 'Happy Diwali and prosperous New Year!',
+            hideInvoicePrice: false,
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      const freeOrder = body.data || body.order;
+      assert.strictEqual(freeOrder.giftWrap.isGift, true);
+      assert.strictEqual(freeOrder.giftWrap.wrapPrice, 0, 'Wrap price should be waived (0) when subtotal >= 1999');
+    });
+
+    await test('Point 19: GET /api/gift-wrap/orders/:id/gift-slip generates printable 4x6 slip with concealed price', async () => {
+      assert.ok(giftOrderId, 'giftOrderId must be set');
+      const res = await fetch(`${baseUrl}/gift-wrap/orders/${giftOrderId}/gift-slip`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const html = await res.text();
+      assert.ok(html.includes('Priya Sharma'));
+      assert.ok(html.includes('Aditya Verma'));
+      assert.ok(html.includes('Happy Birthday Priya'));
+      assert.ok(html.includes('Gift Item - Value Protected') || html.includes('CONFIDENTIAL'));
+    });
+
+    await test('Point 19: PUT /api/gift-wrap/admin/config updates settings and logs AuditLog', async () => {
+      const res = await fetch(`${baseUrl}/gift-wrap/admin/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          basePrice: 59,
+          freeThreshold: 2499,
+          allowHidePrice: true,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.basePrice, 59);
+      assert.strictEqual(body.data.freeThreshold, 2499);
+
+      // Verify immutable AuditLog
+      const audit = await AuditLog.findOne({
+        targetType: 'GiftWrapConfig',
+      }).sort({ createdAt: -1 });
+      assert.ok(audit);
+      assert.strictEqual(audit.module, 'SETTINGS');
+      assert.ok(audit.description.toLowerCase().includes('gift wrap'));
+    });
+
+    await test('Point 19: Role Security: Customer cannot update gift wrap config (403 Forbidden)', async () => {
+      const res = await fetch(`${baseUrl}/gift-wrap/admin/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ basePrice: 0 }),
+      });
+      assert.strictEqual(res.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

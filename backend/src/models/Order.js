@@ -79,6 +79,17 @@ const orderSchema = new mongoose.Schema(
       sgst: { type: Number, default: 0 },
       igst: { type: Number, default: 0 },
     },
+    giftWrap: {
+      isGift: { type: Boolean, default: false },
+      wrapId: { type: String, default: null },
+      wrapName: { type: String, default: null },
+      wrapPrice: { type: Number, default: 0 },
+      cardTheme: { type: String, default: null },
+      recipientName: { type: String, default: null },
+      senderName: { type: String, default: null },
+      message: { type: String, default: null },
+      hideInvoicePrice: { type: Boolean, default: false },
+    },
     shippingAddress: {
       recipientName: { type: String, required: true },
       phone: { type: String, required: true },

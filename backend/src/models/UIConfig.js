@@ -232,6 +232,26 @@ const uiConfigSchema = new mongoose.Schema(
       type: String,
       default: 'The Next-Gen Multi-Vendor Commerce Platform',
     },
+    logoUrl: {
+      type: String,
+      default: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=200&h=200&fit=crop',
+    },
+    faviconUrl: {
+      type: String,
+      default: '/favicon.ico',
+    },
+    copyrightText: {
+      type: String,
+      default: '© 2026 AuraMarket — Enterprise Multi-Vendor Marketplace Platform. All rights reserved.',
+    },
+    maintenanceMode: {
+      enabled: { type: Boolean, default: false },
+      title: { type: String, default: 'Scheduled System Maintenance' },
+      message: { type: String, default: 'We are currently performing scheduled platform enhancements. We will be back online shortly!' },
+      expectedEndTime: { type: Date, default: null },
+      secretBypassKey: { type: String, default: 'auramarket_admin_bypass_2026' },
+      allowedIps: { type: [String], default: ['127.0.0.1'] },
+    },
     primaryColor: {
       type: String,
       default: '#F59E0B', // High-Contrast Electric Amber

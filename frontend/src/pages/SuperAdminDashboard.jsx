@@ -95,6 +95,7 @@ import SmsWhatsAppSettingsManager from '../components/SmsWhatsAppSettingsManager
 import EmailTemplateManager from '../components/EmailTemplateManager';
 import StorageConfigManager from '../components/StorageConfigManager';
 import CourierAggregatorManager from '../components/CourierAggregatorManager';
+import GlobalSettingsManager from '../components/GlobalSettingsManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1517,6 +1518,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('global-settings')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'global-settings'
+                ? 'bg-emerald-600 text-white shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Sliders className="w-4 h-4 text-emerald-300" />
+            <span>Site Maintenance & Global Settings</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-200 ml-1">
+              Point #6
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveDashboardTab('cms-pages')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
               activeDashboardTab === 'cms-pages'
@@ -2432,6 +2448,19 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       )}
 
       {/* ========================================================================= */}
+      {/* TAB: ⚙️ SITE MAINTENANCE, MULTI-CURRENCY & GLOBAL SETTINGS (Point #6) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'global-settings' && (
+        <GlobalSettingsManager
+          onConfigSaved={(updated) => {
+            if (setUiConfig) {
+              setUiConfig((prev) => ({ ...prev, ...updated }));
+            }
+          }}
+        />
+      )}
+
+      {/* ========================================================================= */}
       {/* TAB 18: FULL DYNAMIC CMS & LEGAL POLICY PAGES BUILDER (Point #7) */}
       {/* ========================================================================= */}
       {activeDashboardTab === 'cms-pages' && (
@@ -2628,6 +2657,18 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
               <Truck className="w-4 h-4 text-purple-600" />
               <span>🚚 Courier Aggregators</span>
             </button>
+
+            <button
+              onClick={() => setIntegrationSubTab('global-settings')}
+              className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-black transition-all ${
+                integrationSubTab === 'global-settings'
+                  ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Sliders className="w-4 h-4 text-emerald-600" />
+              <span>⚙️ Maintenance & Branding</span>
+            </button>
           </div>
 
           {/* ------------------------------------------------------------- */}
@@ -2665,6 +2706,19 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           {/* ------------------------------------------------------------- */}
           {integrationSubTab === 'courier' && (
             <CourierAggregatorManager />
+          )}
+
+          {/* ------------------------------------------------------------- */}
+          {/* 6. SITE MAINTENANCE & GLOBAL BRANDING SETTINGS (Point 6) */}
+          {/* ------------------------------------------------------------- */}
+          {integrationSubTab === 'global-settings' && (
+            <GlobalSettingsManager
+              onConfigSaved={(updated) => {
+                if (setUiConfig) {
+                  setUiConfig((prev) => ({ ...prev, ...updated }));
+                }
+              }}
+            />
           )}
         </div>
       )}

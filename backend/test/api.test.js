@@ -11897,6 +11897,171 @@ const runTests = async () => {
       assert.strictEqual(resTest.status, 403);
     });
 
+    // =========================================================================
+    // POINT 6: SITE MAINTENANCE MODE, MULTI-CURRENCY & GLOBAL SETTINGS TESTS
+    // =========================================================================
+
+    await test('Point 6: GET /api/global-settings returns public store branding & maintenance status', async () => {
+      const res = await fetch(`${baseUrl}/global-settings`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data);
+      assert.ok(body.data.storeName);
+      assert.ok(body.data.logoUrl);
+      assert.ok(body.data.copyrightText);
+      assert.strictEqual(typeof body.data.maintenanceMode.enabled, 'boolean');
+      assert.ok(Array.isArray(body.data.localization.currencies));
+    });
+
+    await test('Point 6: GET /api/admin/global-settings/settings returns full admin config with bypass key', async () => {
+      const res = await fetch(`${baseUrl}/admin/global-settings/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.branding);
+      assert.ok(body.data.maintenanceMode);
+      assert.ok(body.data.maintenanceMode.secretBypassKey);
+      assert.ok(Array.isArray(body.data.maintenanceMode.allowedIps));
+    });
+
+    await test('Point 6: PUT /api/admin/global-settings/settings updates store branding and logo/favicon', async () => {
+      const updatePayload = {
+        storeName: 'AuraMarket Prime Enterprise',
+        tagline: 'India’s Next-Gen Multi-Vendor Commerce Cloud',
+        logoUrl: 'https://images.unsplash.com/photo-custom-logo-2026.png',
+        faviconUrl: '/custom-favicon.ico',
+        copyrightText: '© 2026 AuraMarket Prime. All rights reserved Worldwide.',
+      };
+
+      const res = await fetch(`${baseUrl}/admin/global-settings/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify(updatePayload),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.storeName, 'AuraMarket Prime Enterprise');
+      assert.strictEqual(body.data.logoUrl, 'https://images.unsplash.com/photo-custom-logo-2026.png');
+      assert.strictEqual(body.data.faviconUrl, '/custom-favicon.ico');
+    });
+
+    await test('Point 6: PATCH /api/admin/global-settings/maintenance activates 1-click site lock', async () => {
+      const res = await fetch(`${baseUrl}/admin/global-settings/maintenance`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          enabled: true,
+          title: 'Scheduled Cloud Infrastructure Upgrade',
+          message: 'Our platform is upgrading to Enterprise v3.0. We will be back online in 15 minutes!',
+          secretBypassKey: 'auramarket_super_secret_bypass_999',
+          allowedIps: ['127.0.0.1', '192.168.1.100'],
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.maintenanceMode.enabled, true);
+      assert.strictEqual(body.maintenanceMode.title, 'Scheduled Cloud Infrastructure Upgrade');
+      assert.strictEqual(body.maintenanceMode.secretBypassKey, 'auramarket_super_secret_bypass_999');
+
+      // Verify public storefront endpoint reflects maintenance mode active
+      const resPublic = await fetch(`${baseUrl}/global-settings`);
+      const bodyPublic = await resPublic.json();
+      assert.strictEqual(bodyPublic.data.maintenanceMode.enabled, true);
+      assert.strictEqual(bodyPublic.data.maintenanceMode.title, 'Scheduled Cloud Infrastructure Upgrade');
+    });
+
+    await test('Point 6: POST /api/admin/global-settings/sync-currency-rates synchronizes live forex rates', async () => {
+      const res = await fetch(`${baseUrl}/admin/global-settings/sync-currency-rates`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.message.includes('Forex multi-currency exchange rates synchronized'));
+      assert.ok(Array.isArray(body.currencies));
+      assert.ok(body.currencies.length >= 3);
+      assert.ok(body.lastRatesUpdated);
+    });
+
+    await test('Point 6: PUT /api/admin/global-settings/currencies updates active currencies matrix', async () => {
+      const updatedCurrencies = [
+        { code: 'INR', name: 'Indian Rupee', symbol: '₹', flag: '🇮🇳', rate: 1.0, decimals: 0, position: 'before', isActive: true },
+        { code: 'USD', name: 'US Dollar', symbol: '$', flag: '🇺🇸', rate: 0.01202, decimals: 2, position: 'before', isActive: true },
+        { code: 'EUR', name: 'Euro', symbol: '€', flag: '🇪🇺', rate: 0.01108, decimals: 2, position: 'before', isActive: true },
+        { code: 'AED', name: 'UAE Dirham', symbol: 'AED ', flag: '🇦🇪', rate: 0.04415, decimals: 2, position: 'before', isActive: true },
+        { code: 'JPY', name: 'Japanese Yen', symbol: '¥', flag: '🇯🇵', rate: 1.825, decimals: 0, position: 'before', isActive: true },
+      ];
+
+      const res = await fetch(`${baseUrl}/admin/global-settings/currencies`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          baseCurrency: 'INR',
+          currencies: updatedCurrencies,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.currencies.length, 5);
+      assert.ok(body.currencies.some(c => c.code === 'JPY'));
+    });
+
+    await test('Point 6: Deactivate maintenance mode restore storefront to live', async () => {
+      const res = await fetch(`${baseUrl}/admin/global-settings/maintenance`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ enabled: false }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.maintenanceMode.enabled, false);
+
+      const resPublic = await fetch(`${baseUrl}/global-settings`);
+      const bodyPublic = await resPublic.json();
+      assert.strictEqual(bodyPublic.data.maintenanceMode.enabled, false);
+    });
+
+    await test('Point 6: Role Security: Customer cannot modify global settings or toggle maintenance (403 Forbidden)', async () => {
+      const resSettings = await fetch(`${baseUrl}/admin/global-settings/settings`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resSettings.status, 403);
+
+      const resMaintenance = await fetch(`${baseUrl}/admin/global-settings/maintenance`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ enabled: true }),
+      });
+      assert.strictEqual(resMaintenance.status, 403);
+    });
 
   } finally {
     if (server) {

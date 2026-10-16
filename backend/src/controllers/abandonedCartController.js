@@ -3,6 +3,7 @@ const Coupon = require('../models/Coupon');
 const smsService = require('../services/smsService');
 const mailService = require('../services/mailService');
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 
 // @desc    Get All Abandoned Carts with Recovery Analytics for Super Admin
 // @route   GET /api/admin/abandoned-carts
@@ -337,6 +338,169 @@ exports.deleteAbandonedCart = async (req, res, next) => {
       success: true,
       message: 'Abandoned cart record removed',
       deletedId: req.params.id,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Generate 1-Click WhatsApp Direct Cart Recovery Link with Auto-Checkout & Discount (Point #21)
+// @route   POST /api/abandoned-carts/admin/:id/whatsapp-link
+// @access  Private (Super Admin / Vendor)
+exports.generateWhatsAppRecoveryLink = async (req, res, next) => {
+  try {
+    const { couponCode = 'RECOVER10', customNote = '' } = req.body;
+
+    const cart = await AbandonedCart.findById(req.params.id);
+    if (!cart) {
+      return res.status(404).json({
+        success: false,
+        message: 'Abandoned cart record not found',
+      });
+    }
+
+    // Generate or maintain unique recovery token
+    if (!cart.recoveryToken) {
+      cart.recoveryToken = `rec_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+    }
+
+    // Ensure active recovery discount voucher exists in DB
+    const activeCouponCode = await ensureRecoveryCoupon(couponCode, 10);
+    cart.recoveryCoupon = activeCouponCode;
+
+    // Direct auto-checkout link with pre-filled recovery token
+    const demoBaseUrl = process.env.DEMO_URL || 'https://shribalajikripadham.online/ecommerce-demo';
+    const checkoutLink = `${demoBaseUrl}/#recover-cart?token=${cart.recoveryToken}`;
+
+    // Format clean phone number
+    let cleanPhone = (cart.customerPhone || '').replace(/[^0-9]/g, '');
+    if (cleanPhone.length === 10) {
+      cleanPhone = `91${cleanPhone}`;
+    }
+
+    const itemsSummary = cart.items
+      .map((i) => `${i.quantity}x ${i.title}`)
+      .slice(0, 2)
+      .join(', ');
+
+    // Personalized high-converting bilingual WhatsApp message
+    const messageLines = [
+      `🛒 *AuraMarket Cart Recovery Alert*`,
+      ``,
+      `Namaste *${cart.customerName}*! Aapke cart me *${cart.items.length} items* (${itemsSummary}...) total ₹${cart.cartTotal.toLocaleString('en-IN')} aapka wait kar rahe hain.`,
+      ``,
+      `🎁 *Special Privilege Offer:* Humne aapke liye exclusive coupon *${activeCouponCode}* activate kar diya hai! Isse aapko instant extra 10% discount milega.`,
+      customNote ? `💬 Note: ${customNote}` : null,
+      ``,
+      `👉 *1-Click Direct Auto-Checkout Link:*`,
+      `${checkoutLink}`,
+      ``,
+      `⚡ *Note:* Yeh exclusive link aur discount agle 24 ghante tak valid hai. Instant safe & secure checkout!`,
+    ].filter(Boolean);
+
+    const messageText = messageLines.join('\n');
+    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(messageText)}`;
+
+    // Update cart telemetry
+    cart.whatsappSentCount = (cart.whatsappSentCount || 0) + 1;
+    cart.lastWhatsappSentAt = new Date();
+    cart.status = 'REMINDER_SENT';
+    await cart.save();
+
+    res.status(200).json({
+      success: true,
+      message: '1-Click WhatsApp direct cart recovery link generated successfully!',
+      whatsappUrl,
+      messageText,
+      recoveryToken: cart.recoveryToken,
+      checkoutLink,
+      couponCode: activeCouponCode,
+      cart: {
+        _id: cart._id,
+        customerName: cart.customerName,
+        customerPhone: cart.customerPhone,
+        cartTotal: cart.cartTotal,
+        itemsCount: cart.items.length,
+        status: cart.status,
+        whatsappSentCount: cart.whatsappSentCount,
+        lastWhatsappSentAt: cart.lastWhatsappSentAt,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Abandoned Cart by Recovery Token for Auto-Restoration (Point #21)
+// @route   GET /api/abandoned-carts/recover/:token
+// @access  Public / Guest
+exports.getCartByRecoveryToken = async (req, res, next) => {
+  try {
+    const { token } = req.params;
+
+    if (!token || !token.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Recovery token is required',
+      });
+    }
+
+    const cart = await AbandonedCart.findOne({ recoveryToken: token.trim() });
+    if (!cart) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid or expired cart recovery token',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Abandoned cart successfully retrieved for 1-click checkout recovery',
+      cart: {
+        _id: cart._id,
+        customerName: cart.customerName,
+        customerEmail: cart.customerEmail,
+        customerPhone: cart.customerPhone,
+        items: cart.items,
+        cartTotal: cart.cartTotal,
+        recoveryCoupon: cart.recoveryCoupon || 'RECOVER10',
+        recoveryToken: cart.recoveryToken,
+        status: cart.status,
+      },
+      autoApplyCoupon: cart.recoveryCoupon || 'RECOVER10',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Complete Cart Recovery via Auto-Checkout (Point #21)
+// @route   POST /api/abandoned-carts/recover/:token/complete
+// @access  Public / Authenticated
+exports.completeCartRecovery = async (req, res, next) => {
+  try {
+    const { token } = req.params;
+    const { orderId } = req.body;
+
+    const cart = await AbandonedCart.findOne({ recoveryToken: token });
+    if (!cart) {
+      return res.status(404).json({
+        success: false,
+        message: 'Recovery cart record not found',
+      });
+    }
+
+    cart.status = 'RECOVERED';
+    if (orderId && mongoose.Types.ObjectId.isValid(orderId)) {
+      cart.recoveredOrder = orderId;
+    }
+    await cart.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Cart marked as successfully recovered via WhatsApp 1-Click checkout!',
+      cartId: cart._id,
+      status: cart.status,
     });
   } catch (error) {
     next(error);

@@ -10205,6 +10205,104 @@ const runTests = async () => {
       assert.strictEqual(data.action, 'OPEN_CART_DRAWER');
     });
 
+    // =========================================================================
+    // POINT 21: 1-CLICK WHATSAPP DIRECT CART RECOVERY WITH AUTO-CHECKOUT LINK
+    // =========================================================================
+    let point21CartId = null;
+    let point21RecoveryToken = null;
+
+    await test('Point 21: Setup: Create an abandoned cart for WhatsApp recovery testing', async () => {
+      const syncRes = await fetch(`${baseUrl}/abandoned-carts/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName: 'Rohit Khandelwal',
+          customerEmail: 'rohit.khandelwal@example.com',
+          customerPhone: '9876543219',
+          cartTotal: 6998,
+          items: [
+            {
+              productId: 'prod_test_rec_1',
+              title: 'Aura Studio Wireless Speaker',
+              price: 6998,
+              quantity: 1,
+              image: 'https://images.unsplash.com/photo-1545454675-3531b543be5d?w=200',
+            },
+          ],
+        }),
+      });
+      assert.strictEqual(syncRes.status, 200);
+      const syncData = await syncRes.json();
+      assert.strictEqual(syncData.success, true);
+      assert.ok(syncData.data._id);
+      point21CartId = syncData.data._id;
+    });
+
+    await test('Point 21: POST /api/abandoned-carts/admin/:id/whatsapp-link generates 1-click wa.me recovery link', async () => {
+      const res = await fetch(`${baseUrl}/abandoned-carts/admin/${point21CartId}/whatsapp-link`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          couponCode: 'RECOVER10',
+          customNote: 'Limited festive flash deal',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.whatsappUrl);
+      assert.ok(data.whatsappUrl.startsWith('https://wa.me/919876543219?text='));
+      assert.ok(data.recoveryToken);
+      assert.ok(data.checkoutLink.includes(data.recoveryToken));
+      assert.strictEqual(data.couponCode, 'RECOVER10');
+      assert.strictEqual(data.cart.whatsappSentCount, 1);
+      assert.strictEqual(data.cart.status, 'REMINDER_SENT');
+      point21RecoveryToken = data.recoveryToken;
+    });
+
+    await test('Point 21: GET /api/abandoned-carts/recover/:token retrieves cart payload for storefront auto-restoration', async () => {
+      const res = await fetch(`${baseUrl}/abandoned-carts/recover/${point21RecoveryToken}`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.cart.customerName, 'Rohit Khandelwal');
+      assert.strictEqual(data.cart.cartTotal, 6998);
+      assert.strictEqual(data.autoApplyCoupon, 'RECOVER10');
+      assert.strictEqual(data.cart.items.length, 1);
+      assert.strictEqual(data.cart.items[0].title, 'Aura Studio Wireless Speaker');
+    });
+
+    await test('Point 21: GET /api/abandoned-carts/recover/:token rejects invalid token with 404', async () => {
+      const res = await fetch(`${baseUrl}/abandoned-carts/recover/invalid_token_99999`);
+      assert.strictEqual(res.status, 404);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 21: POST /api/abandoned-carts/recover/:token/complete marks cart as RECOVERED', async () => {
+      const res = await fetch(`${baseUrl}/abandoned-carts/recover/${point21RecoveryToken}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: '507f1f77bcf86cd799439011' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.status, 'RECOVERED');
+    });
+
+    await test('Point 21: Auth Security: Unauthenticated request to /api/abandoned-carts/admin/:id/whatsapp-link is rejected with 401', async () => {
+      const res = await fetch(`${baseUrl}/abandoned-carts/admin/${point21CartId}/whatsapp-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ couponCode: 'RECOVER10' }),
+      });
+      assert.strictEqual(res.status, 401);
+    });
+
   } finally {
     if (server) {
       server.close();

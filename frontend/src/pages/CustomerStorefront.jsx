@@ -256,6 +256,80 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       .catch(() => {});
   }, []);
 
+  // Point #21: 1-Click WhatsApp Direct Cart Recovery Auto-Restoration Engine
+  useEffect(() => {
+    const handleCheckRecoveryToken = async () => {
+      const hash = window.location.hash || '';
+      const search = window.location.search || '';
+      let recoveryToken = null;
+
+      if (hash.includes('recover-cart')) {
+        const match = hash.match(/token=([a-zA-Z0-9_-]+)/);
+        if (match) recoveryToken = match[1];
+      } else if (search.includes('token') || search.includes('recover_token')) {
+        const urlParams = new URLSearchParams(search);
+        recoveryToken = urlParams.get('token') || urlParams.get('recover_token');
+      }
+
+      if (recoveryToken) {
+        try {
+          const res = await api.get(`/abandoned-carts/recover/${recoveryToken}`);
+          if (res.data?.success && res.data.cart) {
+            const restoredCart = res.data.cart;
+            clearCart();
+            if (Array.isArray(restoredCart.items)) {
+              restoredCart.items.forEach((item) => {
+                addToCart(
+                  {
+                    _id: item.productId || item.product || `rec_${Math.random()}`,
+                    title: item.title,
+                    price: item.price,
+                    sellingPrice: item.price,
+                    thumbnail: item.image || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=200',
+                  },
+                  item.variant || null,
+                  item.quantity || 1
+                );
+              });
+            }
+
+            const couponToApply = res.data.autoApplyCoupon || restoredCart.recoveryCoupon || 'RECOVER10';
+            try {
+              const valRes = await api.post('/coupons/validate', {
+                code: couponToApply,
+                cartTotal: restoredCart.cartTotal,
+              });
+              if (valRes.data?.success && valRes.data.coupon) {
+                setAppliedCoupon(valRes.data.coupon);
+              }
+            } catch (_) {
+              setAppliedCoupon({
+                code: couponToApply,
+                discountType: 'PERCENTAGE',
+                discountValue: 10,
+                title: 'WhatsApp Exclusive 10% OFF',
+              });
+            }
+
+            setIsCartOpen(true);
+            setToastMessage(`🎉 1-Click Cart Restored with exclusive discount ("${couponToApply}")!`);
+            setTimeout(() => setToastMessage(null), 4500);
+
+            if (window.history?.replaceState) {
+              window.history.replaceState(null, '', window.location.pathname);
+            }
+          }
+        } catch (err) {
+          console.warn('Could not restore abandoned cart via token:', err);
+        }
+      }
+    };
+
+    handleCheckRecoveryToken();
+    window.addEventListener('hashchange', handleCheckRecoveryToken);
+    return () => window.removeEventListener('hashchange', handleCheckRecoveryToken);
+  }, []);
+
   const toggleWishlist = (product, e) => {
     if (e) e.stopPropagation();
     const prodId = product._id || product.id;

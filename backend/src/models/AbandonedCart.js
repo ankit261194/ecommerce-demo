@@ -84,6 +84,20 @@ const abandonedCartSchema = new mongoose.Schema(
       default: 'RECOVER10',
       trim: true,
     },
+    recoveryToken: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
+    whatsappSentCount: {
+      type: Number,
+      default: 0,
+    },
+    lastWhatsappSentAt: {
+      type: Date,
+      default: null,
+    },
     recoveredOrder: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Order',

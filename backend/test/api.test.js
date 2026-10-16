@@ -17539,6 +17539,186 @@ const runTests = async () => {
       assert.strictEqual(data.data.shippingAddress.coordinates.lng, 77.2167);
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 6: MULTI-ADDRESS BOOK MANAGER WITH HOME/OFFICE TAGS & DEFAULT SWITCHER
+    // =========================================================================
+    console.log('\n--- PILLAR 1 - POINT 6: MULTI-ADDRESS BOOK & DEFAULT SWITCHER ---');
+
+    let point6Addr1Id = '';
+    let point6Addr2Id = '';
+
+    await test('Point 6: GET /api/auth/addresses returns user address book list (Protected)', async () => {
+      const res = await fetch(`${baseUrl}/auth/addresses`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.addresses));
+      assert.ok(Array.isArray(data.data));
+    });
+
+    await test('Point 6: POST /api/auth/addresses creates new HOME address with coordinates and tags', async () => {
+      const res = await fetch(`${baseUrl}/auth/addresses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          recipientName: 'Kavita Verma',
+          phone: '9876500001',
+          alternatePhone: '9876500002',
+          street: 'Tower 4, Flat 1201, Express Zenith',
+          landmark: 'Sector 77 Metro',
+          city: 'Noida',
+          state: 'Uttar Pradesh',
+          pincode: '201301',
+          type: 'HOME',
+          isDefault: true,
+          coordinates: { lat: 28.5708, lng: 77.3261 },
+          formattedAddress: 'Tower 4, Flat 1201, Express Zenith, Sector 77, Noida, Uttar Pradesh - 201301',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data._id);
+      assert.strictEqual(data.data.recipientName, 'Kavita Verma');
+      assert.strictEqual(data.data.type, 'HOME');
+      assert.strictEqual(data.data.isDefault, true);
+      assert.strictEqual(data.data.coordinates.lat, 28.5708);
+      point6Addr1Id = data.data._id;
+    });
+
+    await test('Point 6: POST /api/auth/addresses creates second address with WORK tag', async () => {
+      const res = await fetch(`${baseUrl}/auth/addresses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          recipientName: 'Kavita Verma (Office)',
+          phone: '9876500003',
+          street: 'Floor 14, Tower B, Unitech Cyber Park',
+          landmark: 'Near Huda City Centre',
+          city: 'Gurugram',
+          state: 'Haryana',
+          pincode: '122003',
+          type: 'WORK',
+          isDefault: false,
+          coordinates: { lat: 28.4595, lng: 77.0266 },
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data._id);
+      assert.strictEqual(data.data.type, 'WORK');
+      assert.strictEqual(data.data.isDefault, false);
+      point6Addr2Id = data.data._id;
+    });
+
+    await test('Point 6: PATCH /api/auth/addresses/:id/default atomically marks target address default and unsets others', async () => {
+      const res = await fetch(`${baseUrl}/auth/addresses/${point6Addr2Id}/default`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.defaultAddress._id, point6Addr2Id);
+      assert.strictEqual(data.defaultAddress.isDefault, true);
+
+      // Verify via GET addresses that addr1 is now isDefault: false and addr2 is isDefault: true
+      const resVerify = await fetch(`${baseUrl}/auth/addresses`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      const dataVerify = await resVerify.json();
+      const addr1 = dataVerify.addresses.find((a) => a._id === point6Addr1Id);
+      const addr2 = dataVerify.addresses.find((a) => a._id === point6Addr2Id);
+      assert.strictEqual(addr1.isDefault, false);
+      assert.strictEqual(addr2.isDefault, true);
+    });
+
+    await test('Point 6: PATCH /api/auth/addresses/:id/tag updates address tag to OTHER', async () => {
+      const res = await fetch(`${baseUrl}/auth/addresses/${point6Addr1Id}/tag`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ type: 'OTHER' }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.address.type, 'OTHER');
+    });
+
+    await test('Point 6: PATCH /api/auth/addresses/:id/tag rejects invalid tag values (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/auth/addresses/${point6Addr1Id}/tag`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ type: 'VACATION_VILLA' }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Allowed values'));
+    });
+
+    await test('Point 6: PUT /api/auth/addresses/:id updates recipient name, phone, and landmark', async () => {
+      const res = await fetch(`${baseUrl}/auth/addresses/${point6Addr1Id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          recipientName: 'Kavita V. Sharma',
+          phone: '9876599999',
+          landmark: 'Opposite Supertech Capetown',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.recipientName, 'Kavita V. Sharma');
+      assert.strictEqual(data.data.phone, '9876599999');
+      assert.strictEqual(data.data.landmark, 'Opposite Supertech Capetown');
+    });
+
+    await test('Point 6: DELETE /api/auth/addresses/:id removes address from user address book', async () => {
+      const res = await fetch(`${baseUrl}/auth/addresses/${point6Addr1Id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      const found = data.addresses.some((a) => a._id === point6Addr1Id);
+      assert.strictEqual(found, false);
+    });
+
+    await test('Point 6: Unauthenticated request to /api/auth/addresses is rejected (401 Unauthorized)', async () => {
+      const res = await fetch(`${baseUrl}/auth/addresses`);
+      assert.strictEqual(res.status, 401);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
   } finally {
     if (server) {
       server.close();

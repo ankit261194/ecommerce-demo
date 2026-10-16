@@ -10,6 +10,7 @@ const {
   updateAddress,
   deleteAddress,
   setDefaultAddress,
+  updateAddressTag,
   requestOtp,
   verifyOtp,
   googleOneTapLogin,
@@ -52,5 +53,6 @@ router.post('/addresses', protect, addAddress);
 router.put('/addresses/:id', protect, updateAddress);
 router.delete('/addresses/:id', protect, deleteAddress);
 router.patch('/addresses/:id/default', protect, setDefaultAddress);
+router.patch('/addresses/:id/tag', protect, updateAddressTag);
 
 module.exports = router;

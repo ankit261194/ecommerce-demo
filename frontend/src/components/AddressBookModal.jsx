@@ -15,8 +15,12 @@ import {
   AlertCircle,
   Loader2,
   ArrowLeft,
+  Search,
+  Navigation,
+  Tag,
 } from 'lucide-react';
 import api from '../api/client';
+import MapAddressPickerModal from './MapAddressPickerModal';
 
 export default function AddressBookModal({
   isOpen,
@@ -29,6 +33,9 @@ export default function AddressBookModal({
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'add' | 'edit'
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [filterType, setFilterType] = useState('ALL'); // 'ALL' | 'HOME' | 'WORK' | 'OTHER'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
 
   // Form State
   const initialFormState = {
@@ -43,6 +50,8 @@ export default function AddressBookModal({
     pincode: '',
     type: 'HOME',
     isDefault: false,
+    coordinates: { lat: 28.6139, lng: 77.2090 },
+    formattedAddress: '',
   };
   const [formData, setFormData] = useState(initialFormState);
   const [formError, setFormError] = useState('');
@@ -138,6 +147,8 @@ export default function AddressBookModal({
       pincode: addr.pincode || '',
       type: addr.type || 'HOME',
       isDefault: Boolean(addr.isDefault),
+      coordinates: addr.coordinates || { lat: 28.6139, lng: 77.2090 },
+      formattedAddress: addr.formattedAddress || '',
     });
     setFormError('');
     setViewMode('edit');
@@ -191,6 +202,8 @@ export default function AddressBookModal({
           state: formData.state || 'Delhi',
           pincode: formData.pincode,
           isDefault: formData.isDefault,
+          coordinates: formData.coordinates,
+          formattedAddress: formData.formattedAddress,
         };
 
         const res = await api.post('/auth/addresses', payload);
@@ -224,6 +237,8 @@ export default function AddressBookModal({
           state: formData.state || 'Delhi',
           pincode: formData.pincode,
           isDefault: formData.isDefault,
+          coordinates: formData.coordinates,
+          formattedAddress: formData.formattedAddress,
         };
 
         const res = await api.put(`/auth/addresses/${formData._id}`, payload);
@@ -248,6 +263,29 @@ export default function AddressBookModal({
       setFormError(err.response?.data?.message || 'Failed to save address. Please try again.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleToggleTag = async (addrId, currentTag) => {
+    const tagOrder = ['HOME', 'WORK', 'OTHER'];
+    const nextIdx = (tagOrder.indexOf(currentTag || 'HOME') + 1) % tagOrder.length;
+    const newTag = tagOrder[nextIdx];
+
+    try {
+      const res = await api.patch(`/auth/addresses/${addrId}/tag`, { type: newTag });
+      if (res.data?.success && res.data.addresses) {
+        setAddresses(res.data.addresses);
+      } else {
+        setAddresses((prev) =>
+          prev.map((a) => (a._id === addrId ? { ...a, type: newTag } : a))
+        );
+      }
+      showToast(`Address tag changed to ${newTag} 🏷️`);
+    } catch (_) {
+      setAddresses((prev) =>
+        prev.map((a) => (a._id === addrId ? { ...a, type: newTag } : a))
+      );
+      showToast(`Address tag changed to ${newTag} 🏷️`);
     }
   };
 
@@ -323,6 +361,20 @@ export default function AddressBookModal({
         );
     }
   };
+
+  const filteredAddresses = addresses.filter((addr) => {
+    const matchesFilter = filterType === 'ALL' || (addr.type || 'HOME') === filterType;
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return matchesFilter;
+    return (
+      matchesFilter &&
+      ((addr.recipientName && addr.recipientName.toLowerCase().includes(q)) ||
+        (addr.street && addr.street.toLowerCase().includes(q)) ||
+        (addr.city && addr.city.toLowerCase().includes(q)) ||
+        (addr.pincode && addr.pincode.includes(q)) ||
+        (addr.landmark && addr.landmark.toLowerCase().includes(q)))
+    );
+  });
 
   if (!isOpen) return null;
 
@@ -412,28 +464,85 @@ export default function AddressBookModal({
                 <span>+ Add New Address (Home / Work / Other)</span>
               </button>
 
+              {/* Point 6: Search & Tag Filter Pills */}
+              <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between pb-1">
+                <div className="relative flex-1">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by recipient, street, city, or pincode..."
+                    className="w-full pl-8 pr-7 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-400 focus:bg-white transition-all"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Tabs */}
+                <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+                  {[
+                    { key: 'ALL', label: 'All', count: addresses.length },
+                    { key: 'HOME', label: 'Home', count: addresses.filter((a) => (a.type || 'HOME') === 'HOME').length },
+                    { key: 'WORK', label: 'Work', count: addresses.filter((a) => a.type === 'WORK').length },
+                    { key: 'OTHER', label: 'Other', count: addresses.filter((a) => a.type === 'OTHER').length },
+                  ].map(({ key, label, count }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setFilterType(key)}
+                      className={`px-2.5 py-1.5 rounded-xl text-[11px] font-black transition-all flex items-center gap-1 whitespace-nowrap ${
+                        filterType === key
+                          ? 'bg-amber-400 text-slate-950 shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+                      }`}
+                    >
+                      <span>{label}</span>
+                      <span className={`px-1.5 py-0.2 rounded-full text-[9px] ${filterType === key ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-200 text-slate-700'}`}>
+                        {count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {isLoading ? (
                 <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
                   <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
                   <span className="text-xs font-bold">Loading your saved addresses...</span>
                 </div>
-              ) : addresses.length === 0 ? (
+              ) : filteredAddresses.length === 0 ? (
                 <div className="py-12 text-center space-y-3">
                   <div className="w-16 h-16 rounded-3xl bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
                     <MapPin className="w-8 h-8" />
                   </div>
-                  <p className="text-sm font-bold text-slate-700">No addresses saved yet</p>
+                  <p className="text-sm font-bold text-slate-700">
+                    {searchQuery || filterType !== 'ALL'
+                      ? 'No addresses match your filter criteria'
+                      : 'No addresses saved yet'}
+                  </p>
                   <button
                     type="button"
-                    onClick={handleOpenAdd}
+                    onClick={() => {
+                      setSearchQuery('');
+                      setFilterType('ALL');
+                      if (addresses.length === 0) handleOpenAdd();
+                    }}
                     className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 font-black text-xs"
                   >
-                    Add Your First Address
+                    {addresses.length === 0 ? 'Add Your First Address' : 'Clear Filters'}
                   </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  {addresses.map((addr) => {
+                  {filteredAddresses.map((addr) => {
                     const isSelected = selectedAddressId === addr._id;
                     return (
                       <div
@@ -448,11 +557,23 @@ export default function AddressBookModal({
                           {/* Badges Bar */}
                           <div className="flex items-center justify-between gap-2 mb-2">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              {getTypeBadge(addr.type)}
+                              <button
+                                type="button"
+                                onClick={() => handleToggleTag(addr._id, addr.type || 'HOME')}
+                                title="Click to cycle tag: Home -> Work -> Other"
+                                className="hover:opacity-80 transition-opacity"
+                              >
+                                {getTypeBadge(addr.type)}
+                              </button>
                               {addr.isDefault && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-200">
                                   <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
                                   DEFAULT
+                                </span>
+                              )}
+                              {addr.coordinates && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  📍 GPS
                                 </span>
                               )}
                             </div>
@@ -626,6 +747,27 @@ export default function AddressBookModal({
                 </div>
               </div>
 
+              {/* Map Pin-Drop Quick Filler */}
+              <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                    <MapPin className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-emerald-950">Pin on Interactive Map</div>
+                    <div className="text-[11px] text-emerald-700">Auto-fill street, city, landmark, and pincode with GPS precision</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMapPickerOpen(true)}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 transition-all shadow-xs flex items-center gap-1.5 active:scale-95"
+                >
+                  <Navigation className="w-3.5 h-3.5" />
+                  <span>Open Map</span>
+                </button>
+              </div>
+
               {/* Street Address */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -751,6 +893,27 @@ export default function AddressBookModal({
           )}
         </div>
       </div>
+
+      {/* Point 5 & 6: Interactive Google Maps Pin-Drop Address Picker */}
+      <MapAddressPickerModal
+        isOpen={isMapPickerOpen}
+        onClose={() => setIsMapPickerOpen(false)}
+        initialCoordinates={formData.coordinates || { lat: 28.6139, lng: 77.2090 }}
+        onSelectAddress={(picked) => {
+          setFormData((prev) => ({
+            ...prev,
+            street: picked.street || prev.street,
+            landmark: picked.landmark || prev.landmark,
+            city: picked.city || prev.city,
+            state: picked.state || prev.state,
+            pincode: picked.pincode || prev.pincode,
+            coordinates: picked.coordinates,
+            formattedAddress: picked.formattedAddress,
+            type: picked.tag ? picked.tag.toUpperCase() : prev.type,
+          }));
+          showToast('Address details auto-filled from Map Pin! 📍');
+        }}
+      />
     </div>
   );
 }

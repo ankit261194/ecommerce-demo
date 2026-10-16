@@ -163,6 +163,7 @@ exports.getAddresses = async (req, res, next) => {
       success: true,
       count: user.addresses.length,
       data: user.addresses,
+      addresses: user.addresses,
     });
   } catch (error) {
     next(error);
@@ -172,7 +173,7 @@ exports.getAddresses = async (req, res, next) => {
 // @route   POST /api/auth/addresses
 exports.addAddress = async (req, res, next) => {
   try {
-    const { recipientName, phone, alternatePhone, street, landmark, city, state, pincode, type = 'HOME', isDefault = false } = req.body;
+    const { recipientName, phone, alternatePhone, street, landmark, city, state, pincode, type = 'HOME', isDefault = false, coordinates, formattedAddress, placeId } = req.body;
 
     if (!recipientName || !phone || !street || !city || !pincode) {
       return res.status(400).json({
@@ -201,6 +202,9 @@ exports.addAddress = async (req, res, next) => {
       pincode,
       type: ['HOME', 'WORK', 'OTHER'].includes(type) ? type : 'HOME',
       isDefault: shouldBeDefault,
+      coordinates: coordinates || { lat: 28.6139, lng: 77.2090 },
+      formattedAddress: formattedAddress || `${street}, ${city}, ${state || 'Delhi'} - ${pincode}`,
+      placeId: placeId || '',
     };
 
     user.addresses.push(newAddress);
@@ -232,7 +236,7 @@ exports.updateAddress = async (req, res, next) => {
       });
     }
 
-    const { recipientName, phone, alternatePhone, street, landmark, city, state, pincode, type, isDefault } = req.body;
+    const { recipientName, phone, alternatePhone, street, landmark, city, state, pincode, type, isDefault, coordinates, formattedAddress, placeId } = req.body;
 
     if (recipientName) address.recipientName = recipientName;
     if (phone) address.phone = phone;
@@ -243,6 +247,9 @@ exports.updateAddress = async (req, res, next) => {
     if (state) address.state = state;
     if (pincode) address.pincode = pincode;
     if (type && ['HOME', 'WORK', 'OTHER'].includes(type)) address.type = type;
+    if (coordinates) address.coordinates = coordinates;
+    if (formattedAddress) address.formattedAddress = formattedAddress;
+    if (placeId) address.placeId = placeId;
 
     if (isDefault) {
       user.addresses.forEach(a => { a.isDefault = false; });
@@ -317,6 +324,43 @@ exports.setDefaultAddress = async (req, res, next) => {
       success: true,
       message: 'Default address updated successfully',
       defaultAddress: address,
+      addresses: user.addresses,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @route   PATCH /api/auth/addresses/:id/tag
+exports.updateAddressTag = async (req, res, next) => {
+  try {
+    const { type, tag } = req.body;
+    const requestedTag = (type || tag || '').toUpperCase();
+    if (!['HOME', 'WORK', 'OTHER'].includes(requestedTag)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid address tag. Allowed values: HOME, WORK, OTHER',
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+    const address = user.addresses.id(req.params.id);
+
+    if (!address) {
+      return res.status(404).json({
+        success: false,
+        message: 'Address not found',
+      });
+    }
+
+    address.type = requestedTag;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Address tag updated to ${requestedTag}`,
+      address,
+      data: address,
       addresses: user.addresses,
     });
   } catch (error) {

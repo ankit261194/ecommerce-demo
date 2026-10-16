@@ -15,8 +15,10 @@ import {
   MicOff,
   Volume2,
   AlertCircle,
+  Camera,
 } from 'lucide-react';
 import api from '../api/client';
+import VisualSearchModal from './VisualSearchModal';
 
 export default function LiveSearchAutocomplete({
   searchQuery = '',
@@ -29,9 +31,16 @@ export default function LiveSearchAutocomplete({
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isVisualSearchOpen, setIsVisualSearchOpen] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [voiceError, setVoiceError] = useState(null);
   const recognitionRef = useRef(null);
+
+  useEffect(() => {
+    const handleOpenVisualSearch = () => setIsVisualSearchOpen(true);
+    window.addEventListener('auramarket_open_visual_search', handleOpenVisualSearch);
+    return () => window.removeEventListener('auramarket_open_visual_search', handleOpenVisualSearch);
+  }, []);
 
   const [suggestions, setSuggestions] = useState({
     products: [],
@@ -286,6 +295,16 @@ export default function LiveSearchAutocomplete({
           ) : (
             <Mic className="w-4 h-4" />
           )}
+        </button>
+
+        {/* Point 8: Visual Image Search Camera Button */}
+        <button
+          type="button"
+          onClick={() => setIsVisualSearchOpen(true)}
+          className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg flex items-center justify-center cursor-pointer transition-all mr-1"
+          title="Visual Image Search (Upload photo or screenshot)"
+        >
+          <Camera className="w-4 h-4" />
         </button>
 
         {/* Search Submit Button */}
@@ -606,6 +625,13 @@ export default function LiveSearchAutocomplete({
           </div>
         </div>
       )}
+
+      {/* Point 8: Visual Image Search Modal */}
+      <VisualSearchModal
+        isOpen={isVisualSearchOpen}
+        onClose={() => setIsVisualSearchOpen(false)}
+        onSelectProduct={onSelectProduct}
+      />
     </div>
   );
 }

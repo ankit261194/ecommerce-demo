@@ -2,6 +2,7 @@ const Product = require('../models/Product');
 const Category = require('../models/Category');
 const Brand = require('../models/Brand');
 const fuzzySearchService = require('../services/fuzzySearchService');
+const visualSearchService = require('../services/visualSearchService');
 
 // Point #12: Stock Urgency Level calculation helper
 const calculateStockUrgency = (stock) => {
@@ -774,6 +775,62 @@ exports.fuzzySearchProducts = async (req, res, next) => {
     res.status(200).json({
       success: true,
       ...searchOutput,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Visual Image Search ("Upload photo/screenshot to find similar products") (Point 8)
+// @route   POST /api/products/search/visual
+exports.visualSearchProducts = async (req, res, next) => {
+  try {
+    const { image, categoryFilter, minConfidence, limit } = req.body;
+
+    if (!image || typeof image !== 'string' || image.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Image payload is required (Base64 data URI, image URL, or sample preset ID)',
+      });
+    }
+
+    // 1. Extract visual characteristics (dominant colors, detected category, visual tags)
+    const detectedFeatures = visualSearchService.extractVisualFeatures(image, {
+      category: categoryFilter,
+    });
+
+    // 2. Fetch published products
+    const products = await Product.find({ isPublished: true })
+      .populate('category', 'name slug')
+      .populate('vendor', 'storeName storeLogo rating');
+
+    // 3. Score and rank visual similarity
+    const matchedProducts = visualSearchService.searchSimilarProducts(detectedFeatures, products, {
+      minConfidence: minConfidence !== undefined ? Number(minConfidence) : 0.30,
+      categoryFilter,
+      limit: limit ? Number(limit) : 20,
+    });
+
+    res.status(200).json({
+      success: true,
+      count: matchedProducts.length,
+      detectedFeatures,
+      products: matchedProducts,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Curated Visual Search Samples & Presets (Point 8)
+// @route   GET /api/products/search/visual/samples
+exports.getVisualSearchSamples = async (req, res, next) => {
+  try {
+    const samples = visualSearchService.getSampleVisualQueries();
+    res.status(200).json({
+      success: true,
+      count: samples.length,
+      samples,
     });
   } catch (error) {
     next(error);

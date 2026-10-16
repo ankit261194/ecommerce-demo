@@ -8,6 +8,8 @@ const {
   getBrands,
   getSearchSuggestions,
   fuzzySearchProducts,
+  visualSearchProducts,
+  getVisualSearchSamples,
   getFlashDeals,
   getSocialProofActivities,
   compareProducts,
@@ -25,6 +27,8 @@ router.post('/compare', compareProducts);
 router.get('/flash-deals', getFlashDeals);
 router.get('/social-proof/recent-activities', getSocialProofActivities);
 router.get('/search/fuzzy', fuzzySearchProducts);
+router.post('/search/visual', visualSearchProducts);
+router.get('/search/visual/samples', getVisualSearchSamples);
 router.get('/search/suggestions', getSearchSuggestions);
 router.get('/brands', getBrands);
 router.get('/categories/tree', getCategoryTree);

@@ -17784,6 +17784,111 @@ const runTests = async () => {
       assert.strictEqual(data.totalCount, 0);
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 8: VISUAL IMAGE SEARCH ENGINE
+    // =========================================================================
+    console.log('\n--- PILLAR 1 - POINT 8: VISUAL IMAGE SEARCH ---');
+
+    await test('Point 8: GET /api/products/search/visual/samples returns curated presets with visual features', async () => {
+      const res = await fetch(`${baseUrl}/products/search/visual/samples`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.samples));
+      assert.ok(data.samples.length >= 3);
+      assert.ok(data.samples[0].id);
+      assert.ok(data.samples[0].sampleImage);
+      assert.ok(Array.isArray(data.samples[0].dominantColors));
+    });
+
+    await test('Point 8: POST /api/products/search/visual with sample ID returns matched products and confidence', async () => {
+      const res = await fetch(`${baseUrl}/products/search/visual`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: 'sample_headphones',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.products));
+      assert.ok(data.products.length >= 1);
+      assert.ok(data.detectedFeatures);
+      assert.strictEqual(data.detectedFeatures.category, 'electronics');
+      assert.ok(data.products[0].visualSimilarity);
+      assert.ok(typeof data.products[0].visualSimilarity.matchPercentage === 'number');
+      assert.ok(data.products[0].visualSimilarity.matchPercentage >= 35);
+    });
+
+    await test('Point 8: POST /api/products/search/visual with base64 data URI extracts features and ranks results', async () => {
+      const dummyBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const res = await fetch(`${baseUrl}/products/search/visual`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: dummyBase64,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.detectedFeatures);
+      assert.strictEqual(data.detectedFeatures.source, 'base64_upload');
+      assert.ok(Array.isArray(data.detectedFeatures.dominantColors));
+      assert.ok(Array.isArray(data.products));
+    });
+
+    await test('Point 8: POST /api/products/search/visual with category filter restricts matching products', async () => {
+      const res = await fetch(`${baseUrl}/products/search/visual`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: 'sample_blazer',
+          categoryFilter: 'fashion',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.products));
+      assert.ok(data.products.length >= 1);
+      assert.strictEqual(data.products[0].category.slug || data.products[0].category.name || 'fashion', 'fashion');
+    });
+
+    await test('Point 8: POST /api/products/search/visual sorts results in descending order of visual match score', async () => {
+      const res = await fetch(`${baseUrl}/products/search/visual`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: 'sample_smartwatch',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      if (data.products.length >= 2) {
+        assert.ok(
+          data.products[0].visualSimilarity.score >= data.products[1].visualSimilarity.score,
+          'Top visual match score must be greater than or equal to second match'
+        );
+      }
+    });
+
+    await test('Point 8: POST /api/products/search/visual rejects empty or invalid image payload (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/products/search/visual`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: '',
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Image payload is required'));
+    });
+
   } finally {
     if (server) {
       server.close();

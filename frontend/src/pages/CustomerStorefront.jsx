@@ -702,10 +702,26 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       subtext: `Pay using your in-app cash balance (Available: ₹${customerWallet.balance || 0})`,
     });
 
+    // Point 12: Split Payment Engine (Part-Wallet + Part-UPI/Card)
+    active.push({
+      id: 'SPLIT_WALLET_ONLINE',
+      name: 'Split Payment (Wallet + Online)',
+      badge: '⚖️ Split & Save',
+      subtext: `Combine ₹${customerWallet.balance || 0} wallet balance + pay remainder via UPI/Card`,
+    });
+
+    // Point 12: Partial Advance for COD
+    active.push({
+      id: 'PARTIAL_COD',
+      name: 'Partial COD (Advance Commitment)',
+      badge: '🛡️ Verified COD',
+      subtext: 'Pay small advance commitment now + balance at doorstep',
+    });
+
     return active.length > 0
       ? active
       : [{ id: 'COD', name: 'Cash on Delivery (COD)', badge: '💵 Doorstep Cash', subtext: 'Pay upon delivery' }];
-  }, [paymentSettings]);
+  }, [paymentSettings, customerWallet.balance]);
 
   useEffect(() => {
     if (!validGateways.some(g => g.id === paymentMethod)) {
@@ -1423,6 +1439,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         },
         paymentMethod,
         paymentDetails,
+        splitPayment: paymentDetails?.splitPayment,
         couponCode: appliedCoupon?.code || undefined,
         deliveryInstructions: deliveryInstructions || undefined,
         coinsToRedeem: redeemedCoins > 0 ? redeemedCoins : undefined,
@@ -1469,6 +1486,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           address,
           paymentMethod,
           paymentDetails: order.paymentDetails || paymentDetails,
+          splitPayment: order.splitPayment || paymentDetails?.splitPayment || null,
           paymentStatus: order.paymentStatus || (paymentMethod === 'COD' ? 'PENDING' : 'PAID'),
           deliveryInstructions: order.deliveryInstructions || deliveryInstructions,
           rtoVerificationRequired: order.rtoVerificationRequired,
@@ -3005,6 +3023,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   paymentSettings={paymentSettings}
                   amountPayable={grandTotalPayable}
                   user={user}
+                  walletBalance={customerWallet.balance || 0}
                   onPaymentDetailsChange={setPaymentDetails}
                   paymentDetails={paymentDetails}
                   rtoAssessment={rtoAssessment}
@@ -3303,34 +3322,72 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               </div>
             )}
 
-            {/* Point #26: Payment Method & Transaction Reference in Confirmation */}
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
-              <div>
-                <span className="text-[10px] font-black uppercase text-slate-400 block">Payment Mode</span>
-                <span className="font-black text-slate-900">{activeOrderConfirmation.paymentMethod}</span>
-                {activeOrderConfirmation.paymentDetails?.transactionId && (
-                  <span className="text-[10px] font-mono text-slate-500 block truncate max-w-[200px]">
-                    Ref: {activeOrderConfirmation.paymentDetails.transactionId}
+            {/* Point #26 & Point 12: Payment Method & Split/Partial COD Details in Confirmation */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-slate-400 block">Payment Mode</span>
+                  <span className="font-black text-slate-900">{activeOrderConfirmation.paymentMethod}</span>
+                  {activeOrderConfirmation.paymentDetails?.transactionId && (
+                    <span className="text-[10px] font-mono text-slate-500 block truncate max-w-[200px]">
+                      Ref: {activeOrderConfirmation.paymentDetails.transactionId}
+                    </span>
+                  )}
+                  {activeOrderConfirmation.paymentDetails?.upiUtr && (
+                    <span className="text-[10px] font-mono text-purple-700 font-bold block">
+                      UTR: {activeOrderConfirmation.paymentDetails.upiUtr}
+                    </span>
+                  )}
+                </div>
+                <div className="text-right">
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                    activeOrderConfirmation.paymentStatus === 'PAID'
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      : activeOrderConfirmation.paymentStatus === 'PARTIALLY_PAID'
+                      ? 'bg-teal-100 text-teal-800 border border-teal-200'
+                      : 'bg-amber-100 text-amber-800 border border-amber-200'
+                  }`}>
+                    {activeOrderConfirmation.paymentStatus === 'PAID'
+                      ? '✓ PAID PREPAID'
+                      : activeOrderConfirmation.paymentStatus === 'PARTIALLY_PAID'
+                      ? '⚡ PARTIALLY PAID'
+                      : '💵 COD PAY AT DOOR'}
                   </span>
-                )}
-                {activeOrderConfirmation.paymentDetails?.upiUtr && (
-                  <span className="text-[10px] font-mono text-purple-700 font-bold block">
-                    UTR: {activeOrderConfirmation.paymentDetails.upiUtr}
+                  <span className="block text-slate-900 font-black text-sm mt-0.5">
+                    {formatPrice(activeOrderConfirmation.totalAmount)}
                   </span>
-                )}
+                </div>
               </div>
-              <div className="text-right">
-                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                  activeOrderConfirmation.paymentStatus === 'PAID'
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                    : 'bg-amber-100 text-amber-800 border border-amber-200'
-                }`}>
-                  {activeOrderConfirmation.paymentStatus === 'PAID' ? '✓ PAID PREPAID' : '💵 COD PAY AT DOOR'}
-                </span>
-                <span className="block text-slate-900 font-black text-sm mt-0.5">
-                  {formatPrice(activeOrderConfirmation.totalAmount)}
-                </span>
-              </div>
+
+              {/* Point 12: Split Payment Details Callout */}
+              {activeOrderConfirmation.splitPayment?.isSplit && (
+                <div className="pt-2 border-t border-slate-200 grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-900">
+                    <span className="font-bold block text-[10px] uppercase text-amber-700">Wallet Paid:</span>
+                    <strong className="font-black text-xs font-mono">{formatPrice(activeOrderConfirmation.splitPayment.walletAmount)}</strong>
+                  </div>
+                  <div className="p-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-900">
+                    <span className="font-bold block text-[10px] uppercase text-indigo-700">Online Paid ({activeOrderConfirmation.splitPayment.onlineMethod || 'UPI'}):</span>
+                    <strong className="font-black text-xs font-mono">{formatPrice(activeOrderConfirmation.splitPayment.onlineAmount)}</strong>
+                  </div>
+                </div>
+              )}
+
+              {/* Point 12: Partial COD Advance Callout */}
+              {activeOrderConfirmation.splitPayment?.advancePayment?.isPartialCod && (
+                <div className="pt-2 border-t border-slate-200 grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="p-2 rounded-lg bg-teal-50 border border-teal-200 text-teal-900">
+                    <span className="font-bold block text-[10px] uppercase text-teal-700">Advance Paid:</span>
+                    <strong className="font-black text-xs font-mono">{formatPrice(activeOrderConfirmation.splitPayment.advancePayment.advanceAmount)}</strong>
+                    <span className="text-[9px] text-teal-600 block">via {activeOrderConfirmation.splitPayment.advancePayment.advanceMethod || 'UPI'}</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-900">
+                    <span className="font-bold block text-[10px] uppercase text-amber-700">Due to Rider on Delivery:</span>
+                    <strong className="font-black text-xs font-mono">{formatPrice(activeOrderConfirmation.splitPayment.advancePayment.remainingCodDue)}</strong>
+                    <span className="text-[9px] text-amber-700 block">Cash / UPI at doorstep</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Point #31: Cashback Reward Notification */}

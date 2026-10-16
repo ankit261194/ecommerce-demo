@@ -106,13 +106,30 @@ const orderSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['COD', 'RAZORPAY', 'STRIPE', 'UPI', 'WALLET'],
+      enum: ['COD', 'RAZORPAY', 'STRIPE', 'UPI', 'WALLET', 'SPLIT_WALLET_ONLINE', 'PARTIAL_COD'],
       default: 'COD',
     },
     paymentStatus: {
       type: String,
-      enum: ['PENDING', 'PAID', 'FAILED', 'REFUNDED'],
+      enum: ['PENDING', 'PAID', 'PARTIALLY_PAID', 'FAILED', 'REFUNDED'],
       default: 'PENDING',
+    },
+    // Point 12: Split Payment Engine & Partial Advance for COD
+    splitPayment: {
+      isSplit: { type: Boolean, default: false },
+      walletAmount: { type: Number, default: 0 },
+      onlineAmount: { type: Number, default: 0 },
+      onlineMethod: { type: String, default: null },
+      onlinePaymentId: { type: String, default: null },
+      walletTransactionId: { type: String, default: null },
+      advancePayment: {
+        isPartialCod: { type: Boolean, default: false },
+        advanceAmount: { type: Number, default: 0 },
+        remainingCodDue: { type: Number, default: 0 },
+        advancePaidAt: { type: Date, default: null },
+        advancePaymentId: { type: String, default: null },
+        advanceMethod: { type: String, default: null },
+      },
     },
     status: {
       type: String,

@@ -369,11 +369,31 @@ exports.createOrder = async (req, res, next) => {
       totalOrderAmount + netTaxAdd + giftWrapPrice - couponDiscountAmount + shippingFee - coinDiscount
     );
 
-    // Point #26 & #31: Resolve Payment Gateway & Verification
-    const validMethods = ['COD', 'RAZORPAY', 'STRIPE', 'UPI', 'WALLET'];
+    // Point #26 & Point 12: Resolve Payment Gateway, Split Payment Engine & Verification
+    const validMethods = ['COD', 'RAZORPAY', 'STRIPE', 'UPI', 'WALLET', 'SPLIT_WALLET_ONLINE', 'PARTIAL_COD'];
     const activePaymentMethod = validMethods.includes(paymentMethod) ? paymentMethod : 'COD';
 
     let walletAmountDebited = 0;
+    const WalletTransaction = require('../models/WalletTransaction');
+    let walletTxnRecord = null;
+
+    const splitPaymentData = {
+      isSplit: false,
+      walletAmount: 0,
+      onlineAmount: 0,
+      onlineMethod: null,
+      onlinePaymentId: null,
+      walletTransactionId: null,
+      advancePayment: {
+        isPartialCod: false,
+        advanceAmount: 0,
+        remainingCodDue: 0,
+        advancePaidAt: null,
+        advancePaymentId: null,
+        advanceMethod: null,
+      },
+    };
+
     if (activePaymentMethod === 'WALLET' && customerUser) {
       if ((customerUser.walletBalance || 0) < finalTotalAmount) {
         return res.status(400).json({
@@ -383,6 +403,115 @@ exports.createOrder = async (req, res, next) => {
       }
       walletAmountDebited = finalTotalAmount;
       customerUser.walletBalance = Math.max(0, (customerUser.walletBalance || 0) - walletAmountDebited);
+    } else if (activePaymentMethod === 'SPLIT_WALLET_ONLINE' && customerUser) {
+      const splitReq = req.body.splitPayment || {};
+      const requestedWallet = Number(splitReq.walletAmount !== undefined ? splitReq.walletAmount : (req.body.walletAmount || 0));
+      const requestedOnline = Number(splitReq.onlineAmount !== undefined ? splitReq.onlineAmount : (req.body.onlineAmount || 0));
+
+      if (requestedWallet <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Wallet amount must be greater than ₹0 for split payment.',
+        });
+      }
+
+      if ((customerUser.walletBalance || 0) < requestedWallet) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient wallet balance for split payment. Available: ₹${customerUser.walletBalance || 0}, requested: ₹${requestedWallet}.`,
+        });
+      }
+
+      const effectiveOnline = requestedOnline > 0 ? requestedOnline : Math.max(0, finalTotalAmount - requestedWallet);
+      const totalSplitPaid = requestedWallet + effectiveOnline;
+      if (totalSplitPaid < finalTotalAmount) {
+        return res.status(400).json({
+          success: false,
+          message: `Split payment total (₹${totalSplitPaid}) does not cover final order amount of ₹${finalTotalAmount}.`,
+        });
+      }
+
+      walletAmountDebited = requestedWallet;
+      customerUser.walletBalance = Math.max(0, (customerUser.walletBalance || 0) - walletAmountDebited);
+
+      const splitOnlineMethod = splitReq.onlineMethod || req.body.onlineMethod || 'UPI';
+      const splitOnlinePaymentId = splitReq.onlinePaymentId || req.body.onlinePaymentId || `ONLINE-SPLIT-${Date.now()}`;
+      const splitWalletTxnId = `WTXN-SPLIT-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      splitPaymentData.isSplit = true;
+      splitPaymentData.walletAmount = requestedWallet;
+      splitPaymentData.onlineAmount = effectiveOnline;
+      splitPaymentData.onlineMethod = splitOnlineMethod;
+      splitPaymentData.onlinePaymentId = splitOnlinePaymentId;
+      splitPaymentData.walletTransactionId = splitWalletTxnId;
+
+      walletTxnRecord = {
+        user: customerUser._id,
+        type: 'DEBIT',
+        currency: 'INR',
+        amount: requestedWallet,
+        category: 'SPLIT_PAYMENT',
+        paymentMethod: 'SYSTEM',
+        transactionReference: splitWalletTxnId,
+        title: 'Split Wallet Payment for Order',
+        description: `Split payment: ₹${requestedWallet} from wallet + ₹${effectiveOnline} via ${splitOnlineMethod}`,
+        balanceAfter: customerUser.walletBalance,
+      };
+    } else if (activePaymentMethod === 'PARTIAL_COD') {
+      const advReq = req.body.splitPayment?.advancePayment || req.body.advancePayment || {};
+      const requestedAdvance = Number(advReq.advanceAmount !== undefined ? advReq.advanceAmount : (req.body.advanceAmount || Math.min(200, finalTotalAmount)));
+      const advanceMethod = advReq.advanceMethod || req.body.advanceMethod || 'UPI';
+
+      if (requestedAdvance <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Advance payment amount must be greater than ₹0 for partial COD.',
+        });
+      }
+
+      if (requestedAdvance >= finalTotalAmount) {
+        return res.status(400).json({
+          success: false,
+          message: `Advance payment (₹${requestedAdvance}) cannot be greater than or equal to total order amount (₹${finalTotalAmount}). Use prepaid payment instead.`,
+        });
+      }
+
+      let advanceTxnId = advReq.advancePaymentId || req.body.advancePaymentId || `ADV-COD-${Date.now()}`;
+
+      if (advanceMethod === 'WALLET' && customerUser) {
+        if ((customerUser.walletBalance || 0) < requestedAdvance) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient wallet balance to pay partial COD advance. Available: ₹${customerUser.walletBalance || 0}, required: ₹${requestedAdvance}.`,
+          });
+        }
+        walletAmountDebited = requestedAdvance;
+        customerUser.walletBalance = Math.max(0, (customerUser.walletBalance || 0) - requestedAdvance);
+        advanceTxnId = `WTXN-ADV-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+        walletTxnRecord = {
+          user: customerUser._id,
+          type: 'DEBIT',
+          currency: 'INR',
+          amount: requestedAdvance,
+          category: 'PARTIAL_COD_ADVANCE',
+          paymentMethod: 'SYSTEM',
+          transactionReference: advanceTxnId,
+          title: 'Partial COD Advance Payment',
+          description: `Advance commitment ₹${requestedAdvance} paid from wallet for COD order`,
+          balanceAfter: customerUser.walletBalance,
+        };
+      }
+
+      const remainingCodDue = finalTotalAmount - requestedAdvance;
+      splitPaymentData.advancePayment = {
+        isPartialCod: true,
+        advanceAmount: requestedAdvance,
+        remainingCodDue,
+        advancePaidAt: new Date(),
+        advancePaymentId: advanceTxnId,
+        advanceMethod,
+      };
     }
 
     if (coinDiscount > 0 && customerUser) {
@@ -396,11 +525,19 @@ exports.createOrder = async (req, res, next) => {
       await customerUser.save();
     }
 
-    const isPrepaid = ['RAZORPAY', 'STRIPE', 'UPI', 'WALLET'].includes(activePaymentMethod);
-    const resolvedPaymentStatus = isPrepaid ? 'PAID' : 'PENDING';
+    const isPrepaid = ['RAZORPAY', 'STRIPE', 'UPI', 'WALLET', 'SPLIT_WALLET_ONLINE'].includes(activePaymentMethod);
+    let resolvedPaymentStatus = 'PENDING';
+    if (isPrepaid) {
+      resolvedPaymentStatus = 'PAID';
+    } else if (activePaymentMethod === 'PARTIAL_COD') {
+      resolvedPaymentStatus = 'PARTIALLY_PAID';
+    }
+
     const resolvedPaymentId =
       paymentDetails?.transactionId ||
       paymentDetails?.upiUtr ||
+      splitPaymentData.onlinePaymentId ||
+      splitPaymentData.advancePayment?.advancePaymentId ||
       (isPrepaid ? `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}` : null);
 
     // Point #74: Fake / Spam Order Prevention (RTO Guard for high-risk COD)
@@ -489,7 +626,15 @@ exports.createOrder = async (req, res, next) => {
       guestCredentialsSent: Boolean(accountCreated),
       guestPhone: shippingAddress.phone || req.user.phone || '',
       guestEmail: shippingAddress.email || req.user.email || '',
+      // Point 12: Split Payment & Partial COD Advance Details
+      splitPayment: splitPaymentData,
     });
+
+    if (walletTxnRecord) {
+      walletTxnRecord.order = masterOrder._id;
+      walletTxnRecord.orderNumber = masterOrder.orderNumber;
+      await WalletTransaction.create(walletTxnRecord).catch(err => console.error('Failed to create WalletTransaction record:', err));
+    }
 
     if (rtoAssessment.verificationRequired && shippingAddress?.phone) {
       smsService
@@ -1042,6 +1187,7 @@ exports.trackOrder = async (req, res, next) => {
         paymentMethod: order.paymentMethod,
         paymentStatus: order.paymentStatus,
         paymentDetails: order.paymentDetails,
+        splitPayment: order.splitPayment || null,
         deliveryInstructions: order.deliveryInstructions,
         canSelfCancel,
         cancellationReason: order.cancellationReason || null,
@@ -2237,8 +2383,51 @@ exports.getOrderPodSlip = async (req, res, next) => {
   }
 };
 
+// @desc    Point 12: Calculate Split Payment & Partial COD Breakdown
+// @route   POST /api/orders/calculate-split
+exports.calculateSplitPayment = async (req, res, next) => {
+  try {
+    const totalAmount = Number(req.body.totalAmount || 0);
+    if (totalAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Valid totalAmount greater than 0 is required' });
+    }
 
+    const User = require('../models/User');
+    const user = await User.findById(req.user._id).select('walletBalance');
+    const walletBalance = user ? (user.walletBalance || 0) : 0;
 
+    const maxWalletApplicable = Math.min(walletBalance, totalAmount);
+    let selectedWallet = Number(req.body.walletAmount !== undefined ? req.body.walletAmount : maxWalletApplicable);
+    selectedWallet = Math.max(0, Math.min(selectedWallet, maxWalletApplicable));
 
+    const remainingOnlinePayable = Math.max(0, totalAmount - selectedWallet);
 
+    // Partial COD advance calculation
+    const advancePercentage = Number(req.body.advancePercentage || 15);
+    const calculatedAdvance = Math.max(100, Math.round((totalAmount * advancePercentage) / 100));
+    const customAdvance = req.body.customAdvanceAmount !== undefined ? Number(req.body.customAdvanceAmount) : calculatedAdvance;
+    const finalAdvance = Math.min(totalAmount - 1, Math.max(50, customAdvance));
+    const remainingCodDue = Math.max(0, totalAmount - finalAdvance);
 
+    return res.status(200).json({
+      success: true,
+      totalAmount,
+      walletBalance,
+      splitSummary: {
+        walletAmount: selectedWallet,
+        onlineAmount: remainingOnlinePayable,
+        isSplitFeasible: walletBalance > 0,
+        fullyCoveredByWallet: selectedWallet >= totalAmount,
+      },
+      partialCodSummary: {
+        eligible: totalAmount >= 300,
+        advanceAmount: finalAdvance,
+        remainingCodDue,
+        advancePercentage,
+        walletCanCoverAdvance: walletBalance >= finalAdvance,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};

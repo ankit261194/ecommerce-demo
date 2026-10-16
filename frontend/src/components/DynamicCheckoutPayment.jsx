@@ -14,6 +14,10 @@ import {
   HelpCircle,
   Sparkles,
   Zap,
+  Wallet,
+  Scale,
+  Banknote,
+  Sliders,
 } from 'lucide-react';
 
 export default function DynamicCheckoutPayment({
@@ -23,6 +27,7 @@ export default function DynamicCheckoutPayment({
   paymentSettings = {},
   amountPayable = 0,
   user = {},
+  walletBalance = 0,
   onPaymentDetailsChange,
   paymentDetails = {},
   rtoAssessment = null,
@@ -30,6 +35,18 @@ export default function DynamicCheckoutPayment({
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [upiUtr, setUpiUtr] = useState(paymentDetails?.upiUtr || '');
   const [utrError, setUtrError] = useState('');
+
+  // Point 12: Split Payment State
+  const initialWalletSplit = Math.min(walletBalance, amountPayable);
+  const [splitWalletAmount, setSplitWalletAmount] = useState(initialWalletSplit);
+  const [splitOnlineMethod, setSplitOnlineMethod] = useState('UPI');
+  const [splitUpiUtr, setSplitUpiUtr] = useState('');
+
+  // Point 12: Partial COD Advance State
+  const defaultAdvance = Math.max(100, Math.min(Math.max(1, amountPayable - 1), Math.round(amountPayable * 0.15)));
+  const [partialCodAdvance, setPartialCodAdvance] = useState(defaultAdvance);
+  const [partialCodMethod, setPartialCodMethod] = useState(walletBalance >= defaultAdvance ? 'WALLET' : 'UPI');
+  const [partialCodUpiUtr, setPartialCodUpiUtr] = useState('');
 
   // Stripe Card form states
   const [cardNumber, setCardNumber] = useState(paymentDetails?.cardNumber || '');
@@ -101,7 +118,7 @@ export default function DynamicCheckoutPayment({
     });
   };
 
-  // Sync Razorpay details upstream
+  // Sync Gateway details upstream
   useEffect(() => {
     if (activeGateway === 'RAZORPAY') {
       onPaymentDetailsChange?.({
@@ -115,8 +132,56 @@ export default function DynamicCheckoutPayment({
         transactionId: null,
         status: 'PENDING_DELIVERY',
       });
+    } else if (activeGateway === 'WALLET') {
+      onPaymentDetailsChange?.({
+        gateway: 'WALLET',
+        transactionId: `WALLET-${Date.now()}`,
+        status: 'PAID',
+      });
+    } else if (activeGateway === 'SPLIT_WALLET_ONLINE') {
+      const clampedWallet = Math.min(walletBalance, Math.max(0, splitWalletAmount));
+      const onlineAmt = Math.max(0, amountPayable - clampedWallet);
+      onPaymentDetailsChange?.({
+        gateway: 'SPLIT_WALLET_ONLINE',
+        transactionId: `SPLIT-${Date.now()}`,
+        status: 'PAID',
+        splitPayment: {
+          isSplit: true,
+          walletAmount: clampedWallet,
+          onlineAmount: onlineAmt,
+          onlineMethod: splitOnlineMethod,
+          onlinePaymentId: splitOnlineMethod === 'UPI' ? (splitUpiUtr ? `UPI-${splitUpiUtr}` : `UPI-SPLIT-${Date.now()}`) : `CARD-${Date.now()}`,
+        },
+      });
+    } else if (activeGateway === 'PARTIAL_COD') {
+      const advAmt = Math.min(Math.max(1, amountPayable - 1), Math.max(50, partialCodAdvance));
+      const remainingCodDue = Math.max(0, amountPayable - advAmt);
+      onPaymentDetailsChange?.({
+        gateway: 'PARTIAL_COD',
+        transactionId: `PCOD-${Date.now()}`,
+        status: 'PARTIALLY_PAID',
+        splitPayment: {
+          advancePayment: {
+            isPartialCod: true,
+            advanceAmount: advAmt,
+            remainingCodDue,
+            advanceMethod: partialCodMethod,
+            advancePaymentId: partialCodMethod === 'WALLET' ? `WTXN-ADV-${Date.now()}` : (partialCodUpiUtr ? `UPI-${partialCodUpiUtr}` : `ADV-${Date.now()}`),
+          },
+        },
+      });
     }
-  }, [activeGateway]);
+  }, [
+    activeGateway,
+    splitWalletAmount,
+    splitOnlineMethod,
+    splitUpiUtr,
+    partialCodAdvance,
+    partialCodMethod,
+    partialCodUpiUtr,
+    amountPayable,
+    walletBalance,
+  ]);
 
   return (
     <div className="space-y-3 pt-2">
@@ -450,6 +515,313 @@ export default function DynamicCheckoutPayment({
             </p>
           </div>
         )
+      )}
+
+      {/* 5. Full In-App Wallet */}
+      {activeGateway === 'WALLET' && (
+        <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-50/80 to-yellow-100/40 border border-amber-300 text-amber-950 space-y-3 animate-fade-in shadow-2xs">
+          <div className="flex items-center justify-between pb-2 border-b border-amber-200/80">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-xs shadow-xs">
+                <Wallet className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-slate-900">In-App Cash Wallet</h4>
+                <p className="text-[10px] text-amber-800">Instant 0% Gateway Fee • 1-Click Atomic Debit</p>
+              </div>
+            </div>
+            <span className="text-xs font-black font-mono text-slate-900 bg-white px-2 py-0.5 rounded-lg border border-amber-200">
+              ₹{walletBalance.toLocaleString('en-IN')} Available
+            </span>
+          </div>
+
+          {walletBalance >= amountPayable ? (
+            <div className="p-3 bg-white/90 rounded-xl border border-emerald-200 text-emerald-950 flex items-center gap-2 text-xs font-bold">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <span>
+                Your full order of <strong>₹{amountPayable.toLocaleString('en-IN')}</strong> will be debited from your wallet. Remaining balance after order: <strong>₹{(walletBalance - amountPayable).toLocaleString('en-IN')}</strong>.
+              </span>
+            </div>
+          ) : (
+            <div className="p-3 bg-white/90 rounded-xl border border-amber-300 text-amber-900 space-y-2 text-xs">
+              <div className="flex items-center gap-2 font-bold text-amber-950">
+                <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                <span>
+                  Wallet balance (₹{walletBalance}) is less than order total (₹{amountPayable}).
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600">
+                You can use our <strong>Split Payment Engine</strong> to use your entire ₹{walletBalance} wallet and pay the remaining ₹{Math.max(0, amountPayable - walletBalance)} via UPI or Card!
+              </p>
+              <button
+                type="button"
+                onClick={() => onChangeGateway('SPLIT_WALLET_ONLINE')}
+                className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition-all shadow-xs"
+              >
+                Switch to Split Payment ⚖️
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 6. Point 12: Split Payment Engine (Part-Wallet + Part-UPI/Card) */}
+      {activeGateway === 'SPLIT_WALLET_ONLINE' && (
+        <div className="p-4 rounded-2xl bg-gradient-to-b from-indigo-50/70 to-indigo-100/40 border border-indigo-200 text-indigo-950 space-y-3 animate-fade-in shadow-2xs">
+          <div className="flex items-center justify-between pb-2 border-b border-indigo-200/70">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-xs shadow-xs">
+                <Scale className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-indigo-950">Split Payment Engine (Point 12)</h4>
+                <p className="text-[10px] text-indigo-700">Combine Wallet Balance + Pay Remainder via Online UPI/Card</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold text-indigo-800 bg-white px-2 py-0.5 rounded-full border border-indigo-200">
+              ₹{walletBalance} Wallet Available
+            </span>
+          </div>
+
+          {/* Wallet Contribution Slider / Input */}
+          <div className="p-3 bg-white rounded-xl border border-indigo-200 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <label className="font-bold text-slate-700 flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Wallet Portion to Use:</span>
+              </label>
+              <span className="font-mono font-black text-indigo-900 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                ₹{Math.min(walletBalance, Math.max(0, splitWalletAmount))}
+              </span>
+            </div>
+
+            <input
+              type="range"
+              min={0}
+              max={Math.min(walletBalance, amountPayable)}
+              step={10}
+              value={Math.min(walletBalance, Math.max(0, splitWalletAmount))}
+              onChange={(e) => setSplitWalletAmount(Number(e.target.value))}
+              className="w-full accent-indigo-600 cursor-pointer"
+            />
+
+            <div className="flex items-center justify-between text-[10px] text-slate-500 font-medium">
+              <span>₹0</span>
+              <button
+                type="button"
+                onClick={() => setSplitWalletAmount(Math.min(walletBalance, amountPayable))}
+                className="text-indigo-600 font-bold hover:underline"
+              >
+                Use Max Wallet (₹{Math.min(walletBalance, amountPayable)})
+              </button>
+              <span>₹{Math.min(walletBalance, amountPayable)}</span>
+            </div>
+          </div>
+
+          {/* Split Breakdown Badges */}
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200">
+              <span className="text-[10px] uppercase font-bold text-amber-800 block">From Wallet</span>
+              <strong className="text-sm font-black text-amber-950 font-mono">
+                ₹{Math.min(walletBalance, Math.max(0, splitWalletAmount)).toLocaleString('en-IN')}
+              </strong>
+            </div>
+            <div className="p-2.5 rounded-xl bg-indigo-50 border border-indigo-200">
+              <span className="text-[10px] uppercase font-bold text-indigo-800 block">Pay Online Now</span>
+              <strong className="text-sm font-black text-indigo-950 font-mono">
+                ₹{Math.max(0, amountPayable - Math.min(walletBalance, Math.max(0, splitWalletAmount))).toLocaleString('en-IN')}
+              </strong>
+            </div>
+          </div>
+
+          {/* Online Payment Method Toggle */}
+          <div className="space-y-2 pt-1">
+            <label className="text-[10px] uppercase font-bold text-indigo-800 block">
+              Pay Remainder Online via:
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setSplitOnlineMethod('UPI')}
+                className={`p-2 rounded-xl border text-xs font-bold transition-all ${
+                  splitOnlineMethod === 'UPI'
+                    ? 'border-indigo-600 bg-indigo-600 text-white shadow-xs'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                ⚡ Instant UPI QR
+              </button>
+              <button
+                type="button"
+                onClick={() => setSplitOnlineMethod('CARD')}
+                className={`p-2 rounded-xl border text-xs font-bold transition-all ${
+                  splitOnlineMethod === 'CARD'
+                    ? 'border-indigo-600 bg-indigo-600 text-white shadow-xs'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                💳 Debit / Credit Card
+              </button>
+            </div>
+
+            {splitOnlineMethod === 'UPI' ? (
+              <div className="p-3 bg-white rounded-xl border border-indigo-200 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 font-medium">Scan QR or Pay UPI ID:</span>
+                  <span className="font-mono font-bold text-indigo-900">{upiId}</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Enter 12-digit UPI UTR number after payment"
+                  value={splitUpiUtr}
+                  onChange={(e) => setSplitUpiUtr(e.target.value.trim())}
+                  className="w-full px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-300 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+              </div>
+            ) : (
+              <div className="p-3 bg-white rounded-xl border border-indigo-200 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 font-medium">Test Visa Card:</span>
+                  <button
+                    type="button"
+                    onClick={handleFillTestCard}
+                    className="text-[10px] font-bold text-indigo-600 hover:underline"
+                  >
+                    Auto-Fill Test Card
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  placeholder="4242 •••• •••• 4242"
+                  value={cardNumber}
+                  onChange={handleCardNumberChange}
+                  className="w-full px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-300 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 7. Point 12: Partial Advance for COD */}
+      {activeGateway === 'PARTIAL_COD' && (
+        <div className="p-4 rounded-2xl bg-gradient-to-b from-teal-50/70 to-emerald-100/40 border border-teal-200 text-teal-950 space-y-3 animate-fade-in shadow-2xs">
+          <div className="flex items-center justify-between pb-2 border-b border-teal-200/70">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center font-black text-xs shadow-xs">
+                <Banknote className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-teal-950">Partial Advance for COD (Point 12)</h4>
+                <p className="text-[10px] text-teal-700">Small Advance Commitment Now • Balance at Doorstep</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
+              100% RTO Protection
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-700 leading-relaxed font-medium">
+            Pay a small advance commitment to lock in your order with zero risk of return cancellation. You pay the remaining balance to the delivery rider in cash or UPI upon package inspection.
+          </p>
+
+          {/* Quick Advance Selection */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] uppercase font-bold text-teal-800 block">
+              Choose Advance Commitment:
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: '10%', amount: Math.max(50, Math.round(amountPayable * 0.1)) },
+                { label: '15%', amount: Math.max(100, Math.round(amountPayable * 0.15)) },
+                { label: '₹200 Flat', amount: Math.min(Math.max(1, amountPayable - 1), 200) },
+              ].map((opt, i) => {
+                const isSelected = partialCodAdvance === opt.amount;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setPartialCodAdvance(opt.amount)}
+                    className={`p-2 rounded-xl border text-center transition-all ${
+                      isSelected
+                        ? 'border-teal-600 bg-teal-600 text-white font-black shadow-xs'
+                        : 'border-slate-200 bg-white text-slate-700 font-bold hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="block text-[10px] opacity-80">{opt.label}</span>
+                    <span className="text-xs font-mono font-black">₹{opt.amount}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Advance vs Due Breakdown */}
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="p-2.5 rounded-xl bg-teal-50 border border-teal-200">
+              <span className="text-[10px] uppercase font-bold text-teal-800 block">Pay Advance Now</span>
+              <strong className="text-sm font-black text-teal-950 font-mono">
+                ₹{partialCodAdvance.toLocaleString('en-IN')}
+              </strong>
+            </div>
+            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200">
+              <span className="text-[10px] uppercase font-bold text-amber-800 block">Remaining COD to Rider</span>
+              <strong className="text-sm font-black text-amber-950 font-mono">
+                ₹{Math.max(0, amountPayable - partialCodAdvance).toLocaleString('en-IN')}
+              </strong>
+            </div>
+          </div>
+
+          {/* Advance Payment Source */}
+          <div className="space-y-1.5 pt-1">
+            <label className="text-[10px] uppercase font-bold text-teal-800 block">
+              Pay Advance Via:
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={walletBalance < partialCodAdvance}
+                onClick={() => setPartialCodMethod('WALLET')}
+                className={`p-2 rounded-xl border text-xs font-bold transition-all ${
+                  partialCodMethod === 'WALLET'
+                    ? 'border-teal-600 bg-teal-600 text-white shadow-xs'
+                    : walletBalance < partialCodAdvance
+                    ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                🪙 Wallet (₹{walletBalance})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPartialCodMethod('UPI')}
+                className={`p-2 rounded-xl border text-xs font-bold transition-all ${
+                  partialCodMethod === 'UPI'
+                    ? 'border-teal-600 bg-teal-600 text-white shadow-xs'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                ⚡ UPI / QR Scan
+              </button>
+            </div>
+
+            {partialCodMethod === 'UPI' && (
+              <div className="p-2.5 bg-white rounded-xl border border-teal-200 space-y-1.5 text-xs">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-600">Scan & Pay to:</span>
+                  <span className="font-mono font-bold text-teal-900">{upiId}</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Enter 12-digit UTR after paying advance"
+                  value={partialCodUpiUtr}
+                  onChange={(e) => setPartialCodUpiUtr(e.target.value.trim())}
+                  className="w-full px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-300 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                />
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

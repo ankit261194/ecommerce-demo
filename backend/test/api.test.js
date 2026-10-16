@@ -18150,6 +18150,251 @@ const runTests = async () => {
       assert.strictEqual(data.success, false);
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 12: SPLIT PAYMENT ENGINE & PARTIAL ADVANCE FOR COD
+    // =========================================================================
+    console.log('\n--- PILLAR 1 - POINT 12: SPLIT PAYMENT ENGINE & PARTIAL ADVANCE FOR COD ---');
+
+    await test('Point 12: POST /api/orders/calculate-split returns accurate wallet contribution and remaining online amount', async () => {
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      assert.ok(sampleCustomer, 'Customer required');
+      sampleCustomer.walletBalance = 500;
+      await sampleCustomer.save();
+
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/orders/calculate-split`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+        body: JSON.stringify({
+          totalAmount: 1500,
+          walletAmount: 400,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.walletBalance, 500);
+      assert.strictEqual(data.totalAmount, 1500);
+      assert.strictEqual(data.splitSummary.walletAmount, 400);
+      assert.strictEqual(data.splitSummary.onlineAmount, 1100);
+      assert.strictEqual(data.splitSummary.isSplitFeasible, true);
+      assert.strictEqual(data.splitSummary.fullyCoveredByWallet, false);
+    });
+
+    await test('Point 12: POST /api/orders/calculate-split computes partial COD advance and remaining due', async () => {
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/orders/calculate-split`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+        body: JSON.stringify({
+          totalAmount: 2000,
+          advancePercentage: 15,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.partialCodSummary.eligible, true);
+      assert.strictEqual(data.partialCodSummary.advanceAmount, 300);
+      assert.strictEqual(data.partialCodSummary.remainingCodDue, 1700);
+    });
+
+    let point12OrderId = null;
+    let point12PartialCodOrderId = null;
+
+    await test('Point 12: POST /api/orders places order with SPLIT_WALLET_ONLINE and debits wallet atomically', async () => {
+      const sampleProd = await Product.findOne({ isPublished: true, stock: { $gte: 2 } });
+      assert.ok(sampleProd, 'Product required');
+
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      sampleCustomer.walletBalance = 800;
+      await sampleCustomer.save();
+
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: sampleProd._id, quantity: 1 }],
+          shippingAddress: {
+            recipientName: 'Aman Split Test',
+            phone: '9876543210',
+            street: '123 Split Lane',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'SPLIT_WALLET_ONLINE',
+          splitPayment: {
+            isSplit: true,
+            walletAmount: 200,
+            onlineMethod: 'UPI',
+            onlinePaymentId: 'UPI-TEST-123456',
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      const order = data.data;
+      point12OrderId = order._id;
+      assert.strictEqual(order.paymentMethod, 'SPLIT_WALLET_ONLINE');
+      assert.strictEqual(order.paymentStatus, 'PAID');
+      assert.strictEqual(order.splitPayment.isSplit, true);
+      assert.strictEqual(order.splitPayment.walletAmount, 200);
+      assert.strictEqual(order.splitPayment.onlineMethod, 'UPI');
+      assert.strictEqual(order.splitPayment.onlineAmount, order.totalAmount - 200);
+
+      // Verify wallet balance decremented
+      const updatedUser = await User.findById(sampleCustomer._id);
+      assert.strictEqual(updatedUser.walletBalance, 600);
+
+      // Verify WalletTransaction ledger record
+      const WalletTransaction = require('../src/models/WalletTransaction');
+      const wtxn = await WalletTransaction.findOne({ order: order._id });
+      assert.ok(wtxn, 'WalletTransaction must be recorded for split payment');
+      assert.strictEqual(wtxn.type, 'DEBIT');
+      assert.strictEqual(wtxn.category, 'SPLIT_PAYMENT');
+      assert.strictEqual(wtxn.amount, 200);
+    });
+
+    await test('Point 12: POST /api/orders rejects SPLIT_WALLET_ONLINE when requested wallet exceeds available balance', async () => {
+      const sampleProd = await Product.findOne({ isPublished: true, stock: { $gte: 2 } });
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+      sampleCustomer.walletBalance = 50;
+      await sampleCustomer.save();
+
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: sampleProd._id, quantity: 1 }],
+          shippingAddress: {
+            recipientName: 'Aman Overlimit Test',
+            phone: '9876543210',
+            street: '123 Overlimit Lane',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'SPLIT_WALLET_ONLINE',
+          splitPayment: {
+            isSplit: true,
+            walletAmount: 99999,
+            onlineAmount: 100,
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Insufficient wallet balance'));
+    });
+
+    await test('Point 12: POST /api/orders places order with PARTIAL_COD and records advance commitment', async () => {
+      const sampleProd = await Product.findOne({ isPublished: true, stock: { $gte: 2 } });
+      const sampleCustomer = await User.findOne({ role: 'customer' });
+
+      const custToken = jwt.sign(
+        { id: sampleCustomer._id, role: sampleCustomer.role },
+        process.env.JWT_SECRET || 'testsecretkeyforjwtauthentication12345',
+        { expiresIn: '1d' }
+      );
+
+      const res = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${custToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: sampleProd._id, quantity: 1 }],
+          shippingAddress: {
+            recipientName: 'Aman Partial COD Test',
+            phone: '9876543210',
+            street: '123 Partial COD Lane',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'PARTIAL_COD',
+          splitPayment: {
+            advancePayment: {
+              isPartialCod: true,
+              advanceAmount: 150,
+              advanceMethod: 'UPI',
+              advancePaymentId: 'UPI-ADV-998877',
+            },
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      const order = data.data;
+      point12PartialCodOrderId = order._id;
+      assert.strictEqual(order.paymentMethod, 'PARTIAL_COD');
+      assert.strictEqual(order.paymentStatus, 'PARTIALLY_PAID');
+      assert.strictEqual(order.splitPayment.advancePayment.isPartialCod, true);
+      assert.strictEqual(order.splitPayment.advancePayment.advanceAmount, 150);
+      assert.ok(order.splitPayment.advancePayment.remainingCodDue > 0);
+      assert.strictEqual(order.splitPayment.advancePayment.advanceMethod, 'UPI');
+    });
+
+    await test('Point 12: GET /api/orders/track/:identifier returns splitPayment and partial COD tracking metadata', async () => {
+      assert.ok(point12PartialCodOrderId, 'Partial COD order required');
+
+      const res = await fetch(`${baseUrl}/orders/track/${point12PartialCodOrderId}`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.paymentMethod, 'PARTIAL_COD');
+      assert.strictEqual(data.data.paymentStatus, 'PARTIALLY_PAID');
+      assert.ok(data.data.splitPayment);
+      assert.strictEqual(data.data.splitPayment.advancePayment.isPartialCod, true);
+      assert.strictEqual(data.data.splitPayment.advancePayment.advanceAmount, 150);
+      assert.ok(data.data.splitPayment.advancePayment.remainingCodDue > 0);
+    });
+
   } finally {
     if (server) {
       server.close();

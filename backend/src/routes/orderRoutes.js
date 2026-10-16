@@ -16,6 +16,7 @@ const {
   saveOrderPodSignature,
   getOrderPod,
   getOrderPodSlip,
+  calculateSplitPayment,
 } = require('../controllers/orderController');
 const { protect } = require('../middlewares/auth');
 
@@ -32,6 +33,7 @@ router.post('/guest-checkout', guestCheckout);
 router.use(protect);
 
 router.post('/', createOrder);
+router.post('/calculate-split', calculateSplitPayment);
 router.get('/my', getMyOrders);
 router.get('/:id', getOrderById);
 router.get('/:id/pod', getOrderPod);

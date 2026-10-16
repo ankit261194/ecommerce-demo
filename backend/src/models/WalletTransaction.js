@@ -36,6 +36,8 @@ const walletTransactionSchema = new mongoose.Schema(
         'ADMIN_CREDIT',
         'ADMIN_DEBIT',
         'ADJUSTMENT',
+        'SPLIT_PAYMENT',
+        'PARTIAL_COD_ADVANCE',
       ],
       default: 'COIN_REDEMPTION',
     },

@@ -351,7 +351,240 @@ exports.getProductBySlug = async (req, res, next) => {
       }));
     }
 
+    // Point #20: Interactive Color & Image Swatches with Dynamic SKU Switch
+    const requestedSku = req.query.sku ? req.query.sku.trim() : null;
+    let activeVariant = null;
+
+    if (Array.isArray(pObj.variants) && pObj.variants.length > 0) {
+      if (requestedSku) {
+        activeVariant = pObj.variants.find(v => v.sku.toLowerCase() === requestedSku.toLowerCase()) || null;
+      }
+      if (!activeVariant) {
+        activeVariant = pObj.variants[0];
+      }
+    }
+
+    if (activeVariant) {
+      pObj.activeSku = activeVariant.sku;
+      pObj.activeVariant = activeVariant;
+      pObj.activePrice = (pObj.sellingPrice || 0) + (activeVariant.additionalPrice || 0);
+      pObj.activeMrp = (pObj.mrp || Math.round((pObj.sellingPrice || 0) * 1.5)) + (activeVariant.additionalPrice || 0);
+      pObj.activeStock = activeVariant.stock;
+      pObj.activeImage = activeVariant.image || pObj.images?.[0] || '';
+      pObj.activeStockUrgency = calculateStockUrgency(activeVariant.stock);
+    } else {
+      pObj.activeSku = pObj.sku;
+      pObj.activeVariant = null;
+      pObj.activePrice = pObj.sellingPrice || 0;
+      pObj.activeMrp = pObj.mrp || Math.round((pObj.sellingPrice || 0) * 1.5);
+      pObj.activeStock = pObj.stock || 0;
+      pObj.activeImage = pObj.images?.[0] || '';
+      pObj.activeStockUrgency = calculateStockUrgency(pObj.stock);
+    }
+
+    // Color hex helper
+    const resolveColorHex = (colName, colCode) => {
+      if (colCode && colCode.startsWith('#')) return colCode;
+      const c = (colName || '').toLowerCase();
+      if (c.includes('black') || c.includes('obsidian') || c.includes('charcoal')) return '#0f172a';
+      if (c.includes('silver') || c.includes('grey') || c.includes('gray')) return '#94a3b8';
+      if (c.includes('white') || c.includes('ivory')) return '#f8fafc';
+      if (c.includes('red') || c.includes('crimson') || c.includes('ruby')) return '#ef4444';
+      if (c.includes('blue') || c.includes('navy') || c.includes('sapphire')) return '#3b82f6';
+      if (c.includes('green') || c.includes('olive') || c.includes('emerald')) return '#10b981';
+      if (c.includes('gold') || c.includes('yellow') || c.includes('amber')) return '#f59e0b';
+      if (c.includes('purple') || c.includes('violet')) return '#8b5cf6';
+      if (c.includes('pink') || c.includes('rose')) return '#ec4899';
+      return '#64748b';
+    };
+
+    // Extract structured Swatch Matrix
+    const colorSwatchesMap = new Map();
+    const sizeSwatchesMap = new Map();
+    const imageThumbnails = [];
+
+    if (Array.isArray(pObj.variants)) {
+      pObj.variants.forEach(v => {
+        const colorName = v.attributes?.color || (v.name && v.name.includes('/') ? v.name.split('/')[1]?.trim() : v.name);
+        if (colorName && !colorSwatchesMap.has(colorName.toLowerCase())) {
+          colorSwatchesMap.set(colorName.toLowerCase(), {
+            sku: v.sku,
+            name: colorName,
+            colorCode: resolveColorHex(colorName, v.colorCode || v.attributes?.colorCode),
+            image: v.image || pObj.images?.[0] || '',
+            additionalPrice: v.additionalPrice || 0,
+            sellingPrice: (pObj.sellingPrice || 0) + (v.additionalPrice || 0),
+            stock: v.stock,
+            isAvailable: v.stock > 0,
+            isSelected: activeVariant ? activeVariant.sku === v.sku : false,
+          });
+        }
+
+        const sizeName = v.attributes?.size || v.attributes?.storage;
+        if (sizeName && !sizeSwatchesMap.has(sizeName.toLowerCase())) {
+          sizeSwatchesMap.set(sizeName.toLowerCase(), {
+            sku: v.sku,
+            size: sizeName,
+            additionalPrice: v.additionalPrice || 0,
+            sellingPrice: (pObj.sellingPrice || 0) + (v.additionalPrice || 0),
+            stock: v.stock,
+            isAvailable: v.stock > 0,
+            isSelected: activeVariant ? activeVariant.sku === v.sku : false,
+          });
+        }
+
+        if (v.image) {
+          imageThumbnails.push({
+            sku: v.sku,
+            name: v.name,
+            image: v.image,
+            colorName: colorName || v.name,
+            colorCode: resolveColorHex(colorName || v.name, v.colorCode),
+            sellingPrice: (pObj.sellingPrice || 0) + (v.additionalPrice || 0),
+            stock: v.stock,
+            isAvailable: v.stock > 0,
+            isSelected: activeVariant ? activeVariant.sku === v.sku : false,
+          });
+        }
+      });
+    }
+
+    pObj.swatchMatrix = {
+      colors: Array.from(colorSwatchesMap.values()),
+      sizes: Array.from(sizeSwatchesMap.values()),
+      imageThumbnails,
+    };
+
     res.status(200).json({ success: true, data: pObj });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Product & Variant state by SKU (Global SKU Lookup)
+// @route   GET /api/products/sku/:sku
+exports.getProductBySku = async (req, res, next) => {
+  try {
+    const rawSku = req.params.sku ? req.params.sku.trim() : '';
+    if (!rawSku) {
+      return res.status(400).json({ success: false, message: 'SKU parameter is required' });
+    }
+
+    const skuRegex = new RegExp(`^${rawSku}$`, 'i');
+    const product = await Product.findOne({
+      $or: [{ sku: skuRegex }, { 'variants.sku': skuRegex }],
+      isPublished: true,
+    })
+      .populate('category', 'name slug')
+      .populate('vendor', 'storeName storeLogo rating');
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: `Product with SKU '${rawSku}' not found in catalog`,
+      });
+    }
+
+    const pObj = product.toObject ? product.toObject() : product;
+    let matchedVariant = null;
+    if (Array.isArray(pObj.variants)) {
+      matchedVariant = pObj.variants.find(v => v.sku.toLowerCase() === rawSku.toLowerCase()) || null;
+    }
+
+    const currentSellingPrice = matchedVariant
+      ? (pObj.sellingPrice || 0) + (matchedVariant.additionalPrice || 0)
+      : pObj.sellingPrice || 0;
+    const currentMrp = matchedVariant
+      ? (pObj.mrp || Math.round((pObj.sellingPrice || 0) * 1.5)) + (matchedVariant.additionalPrice || 0)
+      : pObj.mrp || Math.round((pObj.sellingPrice || 0) * 1.5);
+    const currentStock = matchedVariant ? matchedVariant.stock : pObj.stock;
+    const currentImage = (matchedVariant && matchedVariant.image) ? matchedVariant.image : (pObj.images?.[0] || '');
+    const stockUrgency = calculateStockUrgency(currentStock);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        product: pObj,
+        activeSku: rawSku,
+        isVariant: Boolean(matchedVariant),
+        matchedVariant,
+        currentSellingPrice,
+        currentMrp,
+        currentStock,
+        currentImage,
+        stockUrgency,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Add or Update Product Variants with Swatches (Color, Image, SKU)
+// @route   PUT /api/products/:id/variants
+exports.updateProductVariants = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { variants } = req.body;
+
+    if (!Array.isArray(variants) || variants.length === 0) {
+      return res.status(400).json({ success: false, message: 'Variants array is required' });
+    }
+
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    // Role check: Admin or product vendor owner
+    const isAdmin = ['superadmin', 'admin'].includes(req.user?.role);
+    const isVendorOwner = req.vendorProfile && product.vendor?.toString() === req.vendorProfile._id?.toString();
+    if (!isAdmin && !isVendorOwner) {
+      return res.status(403).json({ success: false, message: 'Not authorized to modify variants for this product' });
+    }
+
+    // Validate SKU uniqueness within the list
+    const seenSkus = new Set();
+    for (const v of variants) {
+      if (!v.sku || !v.name) {
+        return res.status(400).json({ success: false, message: 'Each variant must have a valid SKU and name' });
+      }
+      const lower = v.sku.trim().toLowerCase();
+      if (seenSkus.has(lower)) {
+        return res.status(400).json({ success: false, message: `Duplicate SKU '${v.sku}' found in variants` });
+      }
+      seenSkus.add(lower);
+    }
+
+    product.hasVariants = true;
+    product.variants = variants.map(v => ({
+      sku: v.sku.trim(),
+      name: v.name.trim(),
+      attributes: v.attributes || {
+        color: v.color || '',
+        size: v.size || '',
+        colorCode: v.colorCode || '#000000',
+      },
+      colorCode: v.colorCode || '#000000',
+      image: v.image || '',
+      additionalPrice: Number(v.additionalPrice || 0),
+      mrp: Number(v.mrp || 0),
+      sellingPrice: Number(v.sellingPrice || 0),
+      stock: Math.max(0, Number(v.stock || 0)),
+      lowStockThreshold: Number(v.lowStockThreshold || 5),
+    }));
+
+    // Update total product stock to be at least sum of variant stocks
+    const totalVariantStock = product.variants.reduce((sum, v) => sum + v.stock, 0);
+    product.stock = totalVariantStock;
+
+    await product.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully updated ${product.variants.length} variant swatches`,
+      data: product,
+    });
   } catch (error) {
     next(error);
   }

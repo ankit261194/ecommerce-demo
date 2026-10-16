@@ -15035,6 +15035,171 @@ const runTests = async () => {
       assert.strictEqual(res.status, 403);
     });
 
+    // =========================================================================
+    // Point 20: Interactive Color & Image Swatches with Dynamic SKU Switch
+    // =========================================================================
+    let testSwatchProduct;
+
+    await test('Point 20 Setup: Ensure product with multi-color & size variants exists', async () => {
+      testSwatchProduct = await Product.findOne({
+        isPublished: true,
+        hasVariants: true,
+        'variants.1': { $exists: true },
+      });
+
+      if (!testSwatchProduct) {
+        testSwatchProduct = await Product.findOne({ isPublished: true });
+        testSwatchProduct.hasVariants = true;
+        testSwatchProduct.variants = [
+          {
+            sku: 'SWATCH-TEST-BLK',
+            name: 'Color: Midnight Black / Size: M',
+            attributes: { color: 'Midnight Black', size: 'M', colorCode: '#0f172a' },
+            colorCode: '#0f172a',
+            image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
+            additionalPrice: 0,
+            sellingPrice: 1999,
+            mrp: 2999,
+            stock: 25,
+          },
+          {
+            sku: 'SWATCH-TEST-SLV',
+            name: 'Color: Lunar Silver / Size: L',
+            attributes: { color: 'Lunar Silver', size: 'L', colorCode: '#94a3b8' },
+            colorCode: '#94a3b8',
+            image: 'https://images.unsplash.com/photo-1484704849700-f032a568e944?w=500',
+            additionalPrice: 500,
+            sellingPrice: 2499,
+            mrp: 3499,
+            stock: 15,
+          },
+        ];
+        testSwatchProduct.stock = 40;
+        await testSwatchProduct.save();
+      }
+
+      assert.ok(testSwatchProduct, 'Product for swatch test must exist');
+      assert.ok(testSwatchProduct.variants.length >= 2, 'Must have at least 2 variants');
+    });
+
+    await test('Point 20: GET /api/products/:slug returns structured swatchMatrix (colors, sizes, imageThumbnails)', async () => {
+      const res = await fetch(`${baseUrl}/products/${testSwatchProduct.slug}`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.swatchMatrix, 'Must return swatchMatrix object');
+      assert.ok(Array.isArray(body.data.swatchMatrix.colors), 'Must have colors array');
+      assert.ok(body.data.swatchMatrix.colors.length > 0, 'Must have color swatches');
+      assert.ok(body.data.activeSku, 'Must provide default activeSku');
+      assert.ok(body.data.activePrice > 0, 'Must provide default activePrice');
+    });
+
+    await test('Point 20: GET /api/products/:slug?sku=SKU_CODE dynamically switches activeVariant, price, image and stock', async () => {
+      const targetVariant = testSwatchProduct.variants[1];
+      const res = await fetch(`${baseUrl}/products/${testSwatchProduct.slug}?sku=${targetVariant.sku}`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.activeSku, targetVariant.sku);
+      assert.strictEqual(body.data.activeStock, targetVariant.stock);
+      const expectedPrice = (body.data.sellingPrice || 0) + (targetVariant.additionalPrice || 0);
+      assert.strictEqual(body.data.activePrice, expectedPrice);
+      assert.ok(body.data.activeStockUrgency);
+    });
+
+    await test('Point 20: GET /api/products/sku/:sku returns global product and matched variant lookup', async () => {
+      const targetVariant = testSwatchProduct.variants[0];
+      const res = await fetch(`${baseUrl}/products/sku/${targetVariant.sku}`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.activeSku, targetVariant.sku);
+      assert.strictEqual(body.data.isVariant, true);
+      assert.strictEqual(body.data.matchedVariant.sku, targetVariant.sku);
+      assert.strictEqual(body.data.currentStock, targetVariant.stock);
+      assert.ok(body.data.stockUrgency);
+    });
+
+    await test('Point 20: GET /api/products/sku/INVALID_SKU returns 404 Not Found', async () => {
+      const res = await fetch(`${baseUrl}/products/sku/NON-EXISTENT-SKU-9999`);
+      assert.strictEqual(res.status, 404);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+      assert.ok(body.message.includes('not found'));
+    });
+
+    await test('Point 20: PUT /api/products/:id/variants allows Admin to update variant swatches with unique SKU and color codes', async () => {
+      const res = await fetch(`${baseUrl}/products/${testSwatchProduct._id}/variants`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          variants: [
+            {
+              sku: `TEST-VAR-A-${Date.now().toString().slice(-4)}`,
+              name: 'Space Grey / 128GB',
+              colorCode: '#374151',
+              image: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500',
+              additionalPrice: 0,
+              stock: 30,
+              attributes: { color: 'Space Grey', size: '128GB' },
+            },
+            {
+              sku: `TEST-VAR-B-${Date.now().toString().slice(-4)}`,
+              name: 'Rose Gold / 256GB',
+              colorCode: '#f43f5e',
+              image: 'https://images.unsplash.com/photo-1585060544812-6b45742d762f?w=500',
+              additionalPrice: 2000,
+              stock: 20,
+              attributes: { color: 'Rose Gold', size: '256GB' },
+            },
+          ],
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.variants.length, 2);
+    });
+
+    await test('Point 20: PUT /api/products/:id/variants rejects duplicate variant SKUs (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/products/${testSwatchProduct._id}/variants`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          variants: [
+            { sku: 'DUP-SKU-1', name: 'Variant A', stock: 10 },
+            { sku: 'DUP-SKU-1', name: 'Variant B', stock: 5 },
+          ],
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+      assert.ok(body.message.includes('Duplicate SKU'));
+    });
+
+    await test('Point 20: Role Security: Customer cannot update product variants (403 Forbidden)', async () => {
+      const res = await fetch(`${baseUrl}/products/${testSwatchProduct._id}/variants`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          variants: [{ sku: 'HACKED-SKU', name: 'Free Product', stock: 9999 }],
+        }),
+      });
+      assert.strictEqual(res.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

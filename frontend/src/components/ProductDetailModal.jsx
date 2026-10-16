@@ -36,6 +36,7 @@ import PriceDropAlertModal from './PriceDropAlertModal';
 import CustomerVendorChatModal from './CustomerVendorChatModal';
 import EmiBreakdownModal from './EmiBreakdownModal';
 import SocialShareModal from './SocialShareModal';
+import ProductVariantSwatches from './ProductVariantSwatches';
 import { useLocalization } from '../context/LocalizationContext';
 
 export const ProductDetailModal = ({
@@ -57,6 +58,7 @@ export const ProductDetailModal = ({
     ? product.images
     : [product.image || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800'];
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [activeVariantImage, setActiveVariantImage] = useState(null);
 
   // Active Variant State
   const [selectedVariant, setSelectedVariant] = useState(
@@ -90,78 +92,12 @@ export const ProductDetailModal = ({
   // Hover zoom coordinates
   const [zoomStyle, setZoomStyle] = useState({ display: 'none' });
 
-  // Multi-Attribute Matrix Extraction (Colors, Sizes, Attributes)
-  const availableColors = React.useMemo(() => {
-    if (!product.variants || product.variants.length === 0) return [];
-    const set = new Set();
-    product.variants.forEach(v => {
-      const c = v.attributes?.color;
-      if (c) set.add(c);
-      else if (v.name) {
-        const lower = v.name.toLowerCase();
-        if (lower.includes('black')) set.add('Black');
-        else if (lower.includes('silver')) set.add('Silver');
-        else if (lower.includes('white')) set.add('White');
-        else if (lower.includes('blue')) set.add('Blue');
-        else if (lower.includes('red')) set.add('Red');
-        else if (lower.includes('obsidian')) set.add('Obsidian');
-      }
-    });
-    return Array.from(set);
-  }, [product.variants]);
-
-  const availableSizes = React.useMemo(() => {
-    if (!product.variants || product.variants.length === 0) return [];
-    const set = new Set();
-    product.variants.forEach(v => {
-      const s = v.attributes?.size || v.attributes?.storage;
-      if (s) set.add(s);
-      else if (v.name) {
-        if (v.name.includes('Medium') || v.name.includes('/ M') || v.name.includes('M /')) set.add('M');
-        if (v.name.includes('Large') || v.name.includes('/ L') || v.name.includes('L /')) set.add('L');
-        if (v.name.includes('XL')) set.add('XL');
-        if (v.name.includes('Small') || v.name.includes('/ S') || v.name.includes('S /')) set.add('S');
-      }
-    });
-    return Array.from(set);
-  }, [product.variants]);
-
-  const getColorHex = colorName => {
-    const c = (colorName || '').toLowerCase();
-    if (c.includes('black') || c.includes('obsidian')) return '#0f172a';
-    if (c.includes('silver') || c.includes('grey') || c.includes('gray')) return '#94a3b8';
-    if (c.includes('white')) return '#f8fafc';
-    if (c.includes('red') || c.includes('crimson')) return '#ef4444';
-    if (c.includes('blue') || c.includes('navy')) return '#3b82f6';
-    if (c.includes('green') || c.includes('olive')) return '#10b981';
-    if (c.includes('gold') || c.includes('yellow')) return '#f59e0b';
-    return '#64748b';
-  };
-
-  const handleSelectColor = col => {
-    const currentSize = selectedVariant?.attributes?.size;
-    const match = product.variants.find(v => {
-      const vColor = v.attributes?.color || v.name;
-      const vSize = v.attributes?.size;
-      return vColor?.toLowerCase().includes(col.toLowerCase()) && (!currentSize || vSize === currentSize);
-    }) || product.variants.find(v => (v.attributes?.color || v.name)?.toLowerCase().includes(col.toLowerCase()));
-    if (match) setSelectedVariant(match);
-  };
-
-  const handleSelectSize = sz => {
-    const currentColor = selectedVariant?.attributes?.color;
-    const match = product.variants.find(v => {
-      const vColor = v.attributes?.color;
-      const vSize = v.attributes?.size || v.name;
-      return vSize?.includes(sz) && (!currentColor || vColor === currentColor);
-    }) || product.variants.find(v => (v.attributes?.size || v.name)?.includes(sz));
-    if (match) setSelectedVariant(match);
-  };
-
   // Reset states when product changes
   useEffect(() => {
     setActiveImageIndex(0);
-    setSelectedVariant(product.hasVariants && product.variants?.length > 0 ? product.variants[0] : null);
+    const initialVariant = product.hasVariants && product.variants?.length > 0 ? product.variants[0] : null;
+    setSelectedVariant(initialVariant);
+    setActiveVariantImage(initialVariant?.image || null);
     setQuantity(1);
     setActiveTab('overview');
   }, [product]);
@@ -333,7 +269,7 @@ export const ProductDetailModal = ({
                 onMouseLeave={handleMouseLeave}
               >
                 <img
-                  src={images[activeImageIndex]}
+                  src={activeVariantImage || images[activeImageIndex] || images[0]}
                   alt={product.title}
                   className="w-full h-full object-cover transition-transform duration-200"
                   style={zoomStyle.display === 'block' ? { transform: 'scale(1.5)', ...zoomStyle } : {}}
@@ -365,9 +301,12 @@ export const ProductDetailModal = ({
                   {images.map((img, idx) => (
                     <button
                       key={idx}
-                      onClick={() => setActiveImageIndex(idx)}
+                      onClick={() => {
+                        setActiveImageIndex(idx);
+                        setActiveVariantImage(null);
+                      }}
                       className={`relative w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 rounded-xl overflow-hidden border-2 transition-all ${
-                        activeImageIndex === idx
+                        !activeVariantImage && activeImageIndex === idx
                           ? 'border-amber-500 ring-2 ring-amber-400/30 scale-105 shadow-md'
                           : 'border-slate-200 opacity-70 hover:opacity-100 hover:border-slate-300'
                       }`}
@@ -511,132 +450,21 @@ export const ProductDetailModal = ({
                 <StockUrgencyBadge stock={currentStock} variant="detailed" />
               </div>
 
-              {/* Multi-Attribute Product Variants Matrix (Point #2) */}
+              {/* Multi-Attribute Product Variants Matrix with Swatches & Dynamic SKU (Point #2 & Point #20) */}
               {product.hasVariants && product.variants?.length > 0 && (
-                <div className="space-y-3.5 pt-1 p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200">
-                  
-                  {/* 1. Color Swatches Row (if colors present) */}
-                  {availableColors.length > 0 && (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-black uppercase tracking-wider text-slate-700">
-                          Color Swatch:
-                        </span>
-                        <span className="text-amber-600 font-extrabold">
-                          {selectedVariant?.attributes?.color || selectedVariant?.name || 'Selected'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {availableColors.map(col => {
-                          const isSelected = (selectedVariant?.attributes?.color || selectedVariant?.name || '').toLowerCase().includes(col.toLowerCase());
-                          const hex = getColorHex(col);
-                          return (
-                            <button
-                              key={col}
-                              type="button"
-                              onClick={() => handleSelectColor(col)}
-                              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
-                                isSelected
-                                  ? 'border-amber-500 bg-amber-50 text-slate-950 ring-2 ring-amber-400/40 shadow-sm scale-105'
-                                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                              }`}
-                            >
-                              <span
-                                className="w-3.5 h-3.5 rounded-full border border-slate-300 shadow-inner flex-shrink-0"
-                                style={{ backgroundColor: hex }}
-                              />
-                              <span>{col}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 2. Size / Capacity Chips Row (if sizes present) */}
-                  {availableSizes.length > 0 && (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="font-black uppercase tracking-wider text-slate-700">
-                            Size / Option:
-                          </span>
-                          <span className="text-amber-600 font-extrabold">
-                            {selectedVariant?.attributes?.size || 'Standard Fit'}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setIsSizeGuideOpen(true)}
-                          className="flex items-center gap-1.5 text-xs font-black text-amber-600 hover:text-amber-700 py-0.5 px-2 rounded-lg hover:bg-amber-50 border border-amber-200/60 shadow-xs transition-all active:scale-95"
-                          title="Open Interactive Apparel & Footwear Size Guide"
-                        >
-                          <Ruler className="w-3.5 h-3.5" />
-                          <span>Size Guide</span>
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {availableSizes.map(sz => {
-                          const isSelected = (selectedVariant?.attributes?.size || selectedVariant?.name || '').includes(sz);
-                          return (
-                            <button
-                              key={sz}
-                              type="button"
-                              onClick={() => handleSelectSize(sz)}
-                              className={`min-w-[48px] px-3.5 py-1.5 rounded-xl border text-xs font-black text-center transition-all ${
-                                isSelected
-                                  ? 'border-slate-900 bg-slate-900 text-amber-400 ring-2 ring-amber-400/30 shadow-md scale-105'
-                                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                              }`}
-                            >
-                              {sz}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 3. Comprehensive Variant Options Cards */}
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold">
-                      <span>All Available Combinations:</span>
-                      <span className="text-slate-700 font-black">Active SKU: {selectedVariant?.sku}</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {product.variants.map(variant => {
-                        const isSelected = selectedVariant?.sku === variant.sku;
-                        const varPrice = basePrice + (variant.additionalPrice || 0);
-                        const isOutOfStock = variant.stock <= 0;
-                        return (
-                          <button
-                            key={variant.sku}
-                            type="button"
-                            onClick={() => setSelectedVariant(variant)}
-                            disabled={isOutOfStock}
-                            className={`p-2.5 rounded-xl border text-left flex items-center justify-between text-xs font-bold transition-all ${
-                              isSelected
-                                ? 'border-amber-500 bg-white text-slate-950 ring-2 ring-amber-400/30 shadow-sm'
-                                : 'border-slate-200 bg-white/70 text-slate-700 hover:border-slate-300 hover:bg-white'
-                            } ${isOutOfStock ? 'opacity-40 cursor-not-allowed bg-slate-100' : ''}`}
-                          >
-                            <div className="min-w-0 pr-2">
-                              <span className="font-extrabold block truncate text-slate-900">{variant.name}</span>
-                              <div className="mt-0.5">
-                                <StockUrgencyBadge stock={variant.stock} variant="compact" showPulse={false} />
-                              </div>
-                            </div>
-                            <span className="font-black text-slate-900 flex-shrink-0">
-                              {formatPrice(varPrice)}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                </div>
+                <ProductVariantSwatches
+                  product={product}
+                  selectedVariant={selectedVariant}
+                  onSelectVariant={(variant) => {
+                    setSelectedVariant(variant);
+                    if (variant.image) setActiveVariantImage(variant.image);
+                  }}
+                  onSwitchImage={(imgUrl) => {
+                    setActiveVariantImage(imgUrl);
+                  }}
+                  onOpenSizeGuide={() => setIsSizeGuideOpen(true)}
+                  formatPrice={formatPrice}
+                />
               )}
 
               {/* Point 59: Vacation Mode Alert Banner */}

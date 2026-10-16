@@ -2357,6 +2357,38 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                       >
                         {product.title}
                       </h3>
+
+                      {/* Mini Swatches Preview (Point #20) */}
+                      {product.hasVariants && product.variants?.length > 0 && (
+                        <div className="flex items-center gap-1.5 pt-1.5 flex-wrap">
+                          {Array.from(new Set(product.variants.map(v => v.attributes?.color || (v.name && v.name.split('/')[1]?.trim())).filter(Boolean))).slice(0, 4).map((colName, cIdx) => (
+                            <span
+                              key={cIdx}
+                              title={colName}
+                              className="w-3.5 h-3.5 rounded-full border border-slate-300 shadow-2xs hover:scale-125 transition-transform cursor-pointer"
+                              style={{
+                                backgroundColor:
+                                  colName.toLowerCase().includes('black') || colName.toLowerCase().includes('obsidian') ? '#0f172a' :
+                                  colName.toLowerCase().includes('silver') || colName.toLowerCase().includes('slate') ? '#94a3b8' :
+                                  colName.toLowerCase().includes('white') ? '#f8fafc' :
+                                  colName.toLowerCase().includes('red') ? '#ef4444' :
+                                  colName.toLowerCase().includes('blue') ? '#2563eb' :
+                                  colName.toLowerCase().includes('green') ? '#10b981' :
+                                  colName.toLowerCase().includes('gold') ? '#f59e0b' : '#64748b'
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedProduct(product);
+                                const matchedVar = product.variants.find(v => (v.attributes?.color || v.name)?.toLowerCase().includes(colName.toLowerCase()));
+                                if (matchedVar) setSelectedVariant(matchedVar);
+                              }}
+                            />
+                          ))}
+                          {product.variants.length > 4 && (
+                            <span className="text-[10px] font-bold text-slate-400">+{product.variants.length - 4}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Price & Action */}

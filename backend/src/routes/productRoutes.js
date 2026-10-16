@@ -13,7 +13,10 @@ const {
   getProductBundle,
   getProductRecommendations,
   getProductFacets,
+  getProductBySku,
+  updateProductVariants,
 } = require('../controllers/productController');
+const { protect, authorize } = require('../middlewares/auth');
 
 router.get('/', getProducts);
 router.get('/facets', getProductFacets);
@@ -25,6 +28,8 @@ router.get('/brands', getBrands);
 router.get('/categories/tree', getCategoryTree);
 router.get('/categories', getCategories);
 router.get('/categories/all', getCategories);
+router.get('/sku/:sku', getProductBySku);
+router.put('/:id/variants', protect, authorize('superadmin', 'admin', 'vendor'), updateProductVariants);
 router.get('/:identifier/bundle', getProductBundle);
 router.get('/:identifier/recommendations', getProductRecommendations);
 router.get('/:slug', getProductBySlug);

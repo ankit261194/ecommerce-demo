@@ -110,8 +110,8 @@ const userSchema = new mongoose.Schema(
     },
     addresses: [
       {
-        recipientName: { type: String, required: true },
-        phone: { type: String, required: true },
+        recipientName: { type: String, default: 'Customer' },
+        phone: { type: String, default: '9876543210' },
         alternatePhone: { type: String, default: '' },
         street: { type: String, required: true },
         landmark: { type: String, default: '' },
@@ -120,10 +120,15 @@ const userSchema = new mongoose.Schema(
         pincode: { type: String, required: true },
         type: {
           type: String,
-          enum: ['HOME', 'WORK', 'OTHER'],
           default: 'HOME',
         },
         isDefault: { type: Boolean, default: false },
+        coordinates: {
+          lat: { type: Number, default: 28.6139 },
+          lng: { type: Number, default: 77.2090 },
+        },
+        formattedAddress: { type: String, default: '' },
+        placeId: { type: String, default: '' },
       },
     ],
     // Point #31: In-App Wallet Balance & Reward Coins

@@ -97,6 +97,12 @@ const orderSchema = new mongoose.Schema(
       city: { type: String, required: true },
       state: { type: String, required: true },
       pincode: { type: String, required: true },
+      coordinates: {
+        lat: { type: Number, default: 28.6139 },
+        lng: { type: Number, default: 77.2090 },
+      },
+      formattedAddress: { type: String, default: '' },
+      placeId: { type: String, default: '' },
     },
     paymentMethod: {
       type: String,

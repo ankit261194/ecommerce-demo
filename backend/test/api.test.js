@@ -17399,6 +17399,146 @@ const runTests = async () => {
       assert.ok(data.message.includes('mobile number is required'));
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 5: INTERACTIVE GOOGLE MAPS PIN-DROP ADDRESS PICKER
+    // =========================================================================
+    console.log('\n--- PILLAR 1 - POINT 5: GOOGLE MAPS PIN-DROP & REVERSE GEOCODING ---');
+
+    await test('Point 5: POST /api/maps/reverse-geocode returns structured address and postal components (Connaught Place)', async () => {
+      const res = await fetch(`${baseUrl}/maps/reverse-geocode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lat: 28.6315,
+          lng: 77.2167,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.address);
+      assert.strictEqual(data.address.city, 'New Delhi');
+      assert.strictEqual(data.address.state, 'Delhi');
+      assert.strictEqual(data.address.pincode, '110001');
+      assert.ok(data.address.formattedAddress);
+      assert.strictEqual(data.address.coordinates.lat, 28.6315);
+      assert.strictEqual(data.address.coordinates.lng, 77.2167);
+    });
+
+    await test('Point 5: GET /api/maps/reverse-geocode?lat=...&lng=... returns resolved address for Mumbai hub', async () => {
+      const res = await fetch(`${baseUrl}/maps/reverse-geocode?lat=19.0596&lng=72.8295`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.address);
+      assert.strictEqual(data.address.city, 'Mumbai');
+      assert.strictEqual(data.address.state, 'Maharashtra');
+      assert.strictEqual(data.address.pincode, '400050');
+      assert.ok(data.address.street);
+    });
+
+    await test('Point 5: POST /api/maps/reverse-geocode validates missing lat/lng (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/maps/reverse-geocode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('required'));
+    });
+
+    await test('Point 5: GET /api/maps/search-places finds places matching query text', async () => {
+      const res = await fetch(`${baseUrl}/maps/search-places?query=Indiranagar`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.results));
+      assert.ok(data.results.length > 0);
+      const first = data.results[0];
+      assert.strictEqual(first.city, 'Bengaluru');
+      assert.strictEqual(first.pincode, '560038');
+      assert.ok(first.coordinates.lat);
+      assert.ok(first.coordinates.lng);
+    });
+
+    await test('Point 5: GET /api/maps/config returns map defaults and predefined hub locations', async () => {
+      const res = await fetch(`${baseUrl}/maps/config`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.config);
+      assert.ok(data.config.defaultCenter);
+      assert.ok(Array.isArray(data.config.hubs));
+      assert.ok(data.config.hubs.length >= 5);
+    });
+
+    await test('Point 5: POST /api/maps/save-address adds pin-drop address with coordinates to user profile', async () => {
+      const res = await fetch(`${baseUrl}/maps/save-address`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          street: 'Apartment 901, Signature Tower, DLF Cyber City',
+          landmark: 'Opposite Cyber Hub',
+          city: 'Gurugram',
+          state: 'Haryana',
+          pincode: '122002',
+          country: 'India',
+          tag: 'Work',
+          isDefault: true,
+          coordinates: { lat: 28.4908, lng: 77.0894 },
+          formattedAddress: 'Building 10, DLF Cyber City, Gurugram, Haryana - 122002',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.savedAddress);
+      assert.strictEqual(data.savedAddress.city, 'Gurugram');
+      assert.strictEqual(data.savedAddress.coordinates.lat, 28.4908);
+      assert.strictEqual(data.savedAddress.coordinates.lng, 77.0894);
+      assert.strictEqual(data.savedAddress.isDefault, true);
+    });
+
+    await test('Point 5: POST /api/orders places order successfully with coordinates in shippingAddress', async () => {
+      const orderProd = await Product.findOne({ isPublished: true, stock: { $gte: 2 } });
+      const res = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: orderProd._id, quantity: 1 }],
+          shippingAddress: {
+            recipientName: 'Aman Sharma',
+            phone: '9876543210',
+            street: 'Flat 402, Green Valley Apartments',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+            coordinates: { lat: 28.6315, lng: 77.2167 },
+            formattedAddress: 'Connaught Place, New Delhi, Delhi - 110001, India',
+          },
+          paymentMethod: 'COD',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.shippingAddress.coordinates);
+      assert.strictEqual(data.data.shippingAddress.coordinates.lat, 28.6315);
+      assert.strictEqual(data.data.shippingAddress.coordinates.lng, 77.2167);
+    });
+
   } finally {
     if (server) {
       server.close();

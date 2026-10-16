@@ -60,6 +60,7 @@ import PromoCouponBox from '../components/PromoCouponBox';
 import StorefrontOffersHub from '../components/StorefrontOffersHub';
 import ScratchCardModal from '../components/ScratchCardModal';
 import AddressBookModal from '../components/AddressBookModal';
+import MapAddressPickerModal from '../components/MapAddressPickerModal';
 import DynamicCheckoutPayment from '../components/DynamicCheckoutPayment';
 import LiveOrderTrackerModal from '../components/LiveOrderTrackerModal';
 import TaxInvoiceModal from '../components/TaxInvoiceModal';
@@ -487,6 +488,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
   // Point #24: Checkout Address & Multi-Address Book State
   const [isAddressBookOpen, setIsAddressBookOpen] = useState(false);
+  const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [address, setAddress] = useState({
     recipientName: user?.name || 'Aman Sharma',
@@ -1397,9 +1399,12 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           recipientName: address.recipientName || 'Aman Sharma',
           phone: address.phone || '9876543214',
           street: address.street || 'Flat 402, Green Valley Apartments',
+          landmark: address.landmark || undefined,
           city: address.city || 'New Delhi',
           state: address.state || 'Delhi',
           pincode: address.pincode || '110001',
+          coordinates: address.coordinates || undefined,
+          formattedAddress: address.formattedAddress || undefined,
         },
         paymentMethod,
         paymentDetails,
@@ -2749,14 +2754,25 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">
                     Shipping Destination
                   </h3>
-                  <button
-                    type="button"
-                    onClick={() => setIsAddressBookOpen(true)}
-                    className="text-[11px] font-black text-amber-600 hover:text-amber-700 hover:underline flex items-center gap-1 transition-colors"
-                  >
-                    <MapPin className="w-3 h-3" />
-                    <span>Change / Address Book</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsMapPickerOpen(true)}
+                      className="text-[11px] font-black text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1 transition-colors"
+                    >
+                      <MapPin className="w-3 h-3 text-emerald-600" />
+                      <span>Pin on Map 📍</span>
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddressBookOpen(true)}
+                      className="text-[11px] font-black text-amber-600 hover:text-amber-700 hover:underline flex items-center gap-1 transition-colors"
+                    >
+                      <MapPin className="w-3 h-3" />
+                      <span>Address Book</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Selected Address Display Card */}
@@ -2789,14 +2805,31 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                     {address.city}, {address.state || 'Delhi'} - <span className="font-mono font-black text-slate-950">{address.pincode}</span>
                   </p>
 
-                  <button
-                    type="button"
-                    onClick={() => setIsAddressBookOpen(true)}
-                    className="mt-1.5 w-full py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 text-[11px] font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-98"
-                  >
-                    <MapPin className="w-3 h-3 text-amber-500" />
-                    <span>Select From Saved Addresses or Add New</span>
-                  </button>
+                  {address.coordinates && (
+                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-100/80 border border-emerald-200 text-emerald-800 text-[10px] font-semibold">
+                      <span>📍 GPS Pinned:</span>
+                      <span className="font-mono">{Number(address.coordinates.lat).toFixed(4)}°, {Number(address.coordinates.lng).toFixed(4)}°</span>
+                    </div>
+                  )}
+
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsMapPickerOpen(true)}
+                      className="py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200 text-emerald-800 text-[11px] font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-98"
+                    >
+                      <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Drop Pin on Map</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddressBookOpen(true)}
+                      className="py-2 px-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 text-[11px] font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-98"
+                    >
+                      <MapPin className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Saved Addresses</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Point #22: Hyperlocal Geofenced Quick Commerce Delivery Badge */}
@@ -3504,6 +3537,28 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           });
           setToastMessage(`Delivering to ${selected.recipientName} (${selected.type || 'HOME'}) 📍`);
           setTimeout(() => setToastMessage(null), 2200);
+        }}
+      />
+
+      {/* Point 5: Interactive Google Maps Pin-Drop Address Picker with Reverse Geocoding */}
+      <MapAddressPickerModal
+        isOpen={isMapPickerOpen}
+        onClose={() => setIsMapPickerOpen(false)}
+        initialCoordinates={address.coordinates || { lat: 28.6139, lng: 77.2090 }}
+        onSelectAddress={(picked) => {
+          setAddress((prev) => ({
+            ...prev,
+            street: picked.street || prev.street,
+            landmark: picked.landmark || prev.landmark,
+            city: picked.city || prev.city,
+            state: picked.state || prev.state,
+            pincode: picked.pincode || prev.pincode,
+            type: picked.tag ? picked.tag.toUpperCase() : 'HOME',
+            coordinates: picked.coordinates,
+            formattedAddress: picked.formattedAddress,
+          }));
+          setToastMessage(`📍 GPS Location Pinned: ${picked.street}, ${picked.city}`);
+          setTimeout(() => setToastMessage(null), 3000);
         }}
       />
 

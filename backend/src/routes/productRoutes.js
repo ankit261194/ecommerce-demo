@@ -18,6 +18,8 @@ const {
   getProductFacets,
   getProductBySku,
   updateProductVariants,
+  getProduct3DModel,
+  updateProduct3DModel,
 } = require('../controllers/productController');
 const { protect, authorize } = require('../middlewares/auth');
 
@@ -38,6 +40,8 @@ router.get('/sku/:sku', getProductBySku);
 router.put('/:id/variants', protect, authorize('superadmin', 'admin', 'vendor'), updateProductVariants);
 router.get('/:identifier/bundle', getProductBundle);
 router.get('/:identifier/recommendations', getProductRecommendations);
+router.get('/:identifier/3d-model', getProduct3DModel);
+router.put('/:id/3d-model', protect, authorize('superadmin', 'admin', 'vendor'), updateProduct3DModel);
 router.get('/:slug', getProductBySlug);
 
 module.exports = router;

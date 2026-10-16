@@ -837,6 +837,119 @@ exports.getVisualSearchSamples = async (req, res, next) => {
   }
 };
 
+// @desc    Get Product 3D Model & WebXR / AR configuration (Point 10)
+// @route   GET /api/products/:identifier/3d-model
+exports.getProduct3DModel = async (req, res, next) => {
+  try {
+    const mongoose = require('mongoose');
+    const isObjectId = mongoose.Types.ObjectId.isValid(req.params.identifier);
+    const query = isObjectId
+      ? { $or: [{ slug: req.params.identifier }, { _id: req.params.identifier }] }
+      : { slug: req.params.identifier };
+
+    const product = await Product.findOne(query)
+      .populate('category', 'name slug')
+      .populate('vendor', 'storeName rating');
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    const title = product.title || 'Product';
+    const catName = (product.category?.name || product.categoryLabel || '').toLowerCase();
+
+    // Determine intuitive default tryOnType based on category if not explicitly set
+    let defaultTryOn = 'generic_360';
+    if (catName.includes('watch') || title.toLowerCase().includes('watch')) {
+      defaultTryOn = 'wrist';
+    } else if (catName.includes('audio') || title.toLowerCase().includes('headphone')) {
+      defaultTryOn = 'head';
+    } else if (catName.includes('glass') || title.toLowerCase().includes('eyewear')) {
+      defaultTryOn = 'face';
+    } else if (catName.includes('furniture') || catName.includes('home') || title.toLowerCase().includes('lamp')) {
+      defaultTryOn = 'floor_plane';
+    }
+
+    const arConfig = product.ar3dModel || {};
+    const tryOnType = arConfig.tryOnType && arConfig.tryOnType !== 'generic_360' ? arConfig.tryOnType : defaultTryOn;
+    const glbUrl = arConfig.glbUrl || `https://modelviewer.dev/shared-assets/models/Astronaut.glb`;
+    const usdzUrl = arConfig.usdzUrl || '';
+
+    // Mobile WebXR Deep Links:
+    // Android Scene Viewer Intent
+    const sceneViewerIntent = `intent://arvr.google.com/scene-viewer/1.0?file=${encodeURIComponent(glbUrl)}&mode=ar_preferred&title=${encodeURIComponent(title)}#Intent;scheme=https;package=com.google.ar.core;action=android.intent.action.VIEW;S.browser_fallback_url=https://developers.google.com/ar;end;`;
+    
+    // WebXR universal launch QR link
+    const webxrViewerUrl = `https://shribalajikripadham.online/ecommerce-demo/#ar-view?id=${product._id}&type=${tryOnType}`;
+
+    res.status(200).json({
+      success: true,
+      productId: product._id,
+      title: product.title,
+      slug: product.slug,
+      brand: product.brand,
+      thumbnail: product.thumbnail || product.images?.[0] || '',
+      sellingPrice: product.sellingPrice,
+      mrp: product.mrp,
+      ar3dModel: {
+        enabled: arConfig.enabled !== false,
+        modelType: arConfig.modelType || 'procedural',
+        glbUrl,
+        usdzUrl,
+        tryOnType,
+        scale: arConfig.scale || 1.0,
+        dimensions: arConfig.dimensions || { widthCm: 15, heightCm: 18, depthCm: 8 },
+        features: {
+          supportsARQuickLook: true,
+          supportsSceneViewer: true,
+          supportsWebcamTryOn: true,
+        },
+        deepLinks: {
+          sceneViewerIntent,
+          webxrViewerUrl,
+          qrPayload: webxrViewerUrl,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update Product 3D Model Configuration (Point 10)
+// @route   PUT /api/products/:id/3d-model
+exports.updateProduct3DModel = async (req, res, next) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    const { enabled, modelType, glbUrl, usdzUrl, tryOnType, scale, dimensions } = req.body;
+
+    product.ar3dModel = {
+      ...(product.ar3dModel?.toObject ? product.ar3dModel.toObject() : product.ar3dModel),
+      ...(enabled !== undefined && { enabled: Boolean(enabled) }),
+      ...(modelType && { modelType }),
+      ...(glbUrl !== undefined && { glbUrl }),
+      ...(usdzUrl !== undefined && { usdzUrl }),
+      ...(tryOnType && { tryOnType }),
+      ...(scale !== undefined && { scale: Number(scale) }),
+      ...(dimensions && { dimensions }),
+    };
+
+    await product.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Product 3D/AR model settings updated successfully',
+      data: product.ar3dModel,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Live Search with Autocomplete suggestions (Products, Categories, Brands & Popular Searches) (Point #9 & Point 7)
 // @route   GET /api/products/search/suggestions
 exports.getSearchSuggestions = async (req, res, next) => {

@@ -44,12 +44,14 @@ import {
   Navigation,
   Zap,
   Video,
+  Rotate3d,
 } from 'lucide-react';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
 import WishlistDrawer from '../components/WishlistDrawer';
 import ProductCompareModal from '../components/ProductCompareModal';
 import ProductCompareDock from '../components/ProductCompareDock';
+import ArVirtualTryOnModal from '../components/ArVirtualTryOnModal';
 import FreeShippingMeter from '../components/FreeShippingMeter';
 import CategorySidebar from '../components/CategorySidebar';
 import FlashSaleSection from '../components/FlashSaleSection';
@@ -113,6 +115,19 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [rtoVerificationOrder, setRtoVerificationOrder] = useState(null); // Point #74: RTO Guard High-Risk Verification
   const [isVoiceAssistantOpen, setIsVoiceAssistantOpen] = useState(false); // Point #20: AI Voice Shopping Assistant
   const [isShoppableReelsOpen, setIsShoppableReelsOpen] = useState(false); // Point #27: Live Video Shopping & Shoppable Reels
+  const [isArModalOpen, setIsArModalOpen] = useState(false); // Point 10: 3D & AR Virtual Try-On
+  const [selectedArProduct, setSelectedArProduct] = useState(null);
+
+  useEffect(() => {
+    const handleOpenAr = (e) => {
+      if (e.detail) {
+        setSelectedArProduct(e.detail);
+        setIsArModalOpen(true);
+      }
+    };
+    window.addEventListener('auramarket_open_ar_tryon', handleOpenAr);
+    return () => window.removeEventListener('auramarket_open_ar_tryon', handleOpenAr);
+  }, []);
 
   // Point #31: In-App Wallet & Reward Coins State
   const [isWalletOpen, setIsWalletOpen] = useState(false);
@@ -2420,6 +2435,18 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                       >
                         <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                       </button>
+                      {/* Point 10: 3D & AR Virtual Try-On Button */}
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          setSelectedArProduct(product);
+                          setIsArModalOpen(true);
+                        }}
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-cyan-500/90 hover:bg-cyan-400 text-slate-950 flex items-center justify-center shadow-md backdrop-blur transition-all active:scale-90"
+                        title="3D & AR Virtual Try-On (WebXR / 360°)"
+                      >
+                        <Rotate3d className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+                      </button>
                       <button
                         onClick={e => toggleCompare(product, e)}
                         className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shadow-md backdrop-blur transition-all active:scale-90 ${
@@ -2662,6 +2689,21 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
           if (prod.hasVariants && prod.variants?.length > 0) {
             setSelectedVariant(prod.variants[0]);
           }
+        }}
+      />
+
+      {/* Point 10: 3D & AR Virtual Try-On Modal */}
+      <ArVirtualTryOnModal
+        isOpen={isArModalOpen}
+        onClose={() => {
+          setIsArModalOpen(false);
+          setSelectedArProduct(null);
+        }}
+        product={selectedArProduct}
+        onAddToCart={prod => {
+          addToCart(prod, 1);
+          setToastMessage(`Added "${prod.title}" to cart! 🛍️`);
+          setTimeout(() => setToastMessage(null), 2200);
         }}
       />
 

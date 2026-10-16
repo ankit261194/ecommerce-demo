@@ -181,6 +181,29 @@ const productSchema = new mongoose.Schema(
       durationHours: { type: Number, default: 24 },
       activePoolsCount: { type: Number, default: 0 },
     },
+    ar3dModel: {
+      enabled: { type: Boolean, default: true },
+      modelType: { type: String, enum: ['glb', 'gltf', 'usdz', 'procedural'], default: 'procedural' },
+      glbUrl: { type: String, default: '' },
+      usdzUrl: { type: String, default: '' },
+      tryOnType: {
+        type: String,
+        enum: ['wrist', 'head', 'face', 'floor_plane', 'table_top', 'generic_360'],
+        default: 'generic_360',
+      },
+      scale: { type: Number, default: 1.0 },
+      dimensions: {
+        widthCm: { type: Number, default: 15 },
+        heightCm: { type: Number, default: 18 },
+        depthCm: { type: Number, default: 8 },
+      },
+      previewPoster: { type: String, default: '' },
+      features: {
+        supportsARQuickLook: { type: Boolean, default: true },
+        supportsSceneViewer: { type: Boolean, default: true },
+        supportsWebcamTryOn: { type: Boolean, default: true },
+      },
+    },
   },
   {
     timestamps: true,

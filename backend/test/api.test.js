@@ -17978,6 +17978,104 @@ const runTests = async () => {
       assert.strictEqual(data.success, false);
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 10: AR & 3D VIRTUAL TRY-ON VIEWER
+    // =========================================================================
+    console.log('\n--- PILLAR 1 - POINT 10: AR & 3D VIRTUAL TRY-ON ---');
+
+    await test('Point 10: GET /api/products/:identifier/3d-model returns 3D/AR model metadata and WebXR deep links', async () => {
+      const sampleProd = await Product.findOne({ isPublished: true });
+      assert.ok(sampleProd, 'Product required for 3D model test');
+
+      const res = await fetch(`${baseUrl}/products/${sampleProd._id}/3d-model`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(String(data.productId), String(sampleProd._id));
+      assert.ok(data.ar3dModel);
+      assert.strictEqual(data.ar3dModel.enabled, true);
+      assert.ok(data.ar3dModel.dimensions);
+      assert.ok(typeof data.ar3dModel.dimensions.widthCm === 'number');
+      assert.ok(data.ar3dModel.deepLinks);
+      assert.ok(data.ar3dModel.deepLinks.sceneViewerIntent.includes('intent://arvr.google.com/scene-viewer'));
+      assert.ok(data.ar3dModel.deepLinks.webxrViewerUrl.includes('#ar-view'));
+    });
+
+    await test('Point 10: GET /api/products/:identifier/3d-model supports lookup via product slug', async () => {
+      const sampleProd = await Product.findOne({ isPublished: true, slug: { $exists: true, $ne: '' } });
+      assert.ok(sampleProd, 'Product with slug required');
+
+      const res = await fetch(`${baseUrl}/products/${sampleProd.slug}/3d-model`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.slug, sampleProd.slug);
+    });
+
+    await test('Point 10: PUT /api/products/:id/3d-model updates 3D model properties as authorized vendor', async () => {
+      const resLogin = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'apex@auramarket.com', password: 'vendor123456' }),
+      });
+      const dataLogin = await resLogin.json();
+      const currentVendorToken = dataLogin.token || adminToken;
+
+      const sampleProd = await Product.findOne({ isPublished: true });
+      const updatePayload = {
+        enabled: true,
+        tryOnType: 'wrist',
+        scale: 1.25,
+        dimensions: { widthCm: 16, heightCm: 20, depthCm: 9 },
+        glbUrl: 'https://modelviewer.dev/shared-assets/models/Astronaut.glb',
+      };
+
+      const res = await fetch(`${baseUrl}/products/${sampleProd._id}/3d-model`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${currentVendorToken}`,
+        },
+        body: JSON.stringify(updatePayload),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.tryOnType, 'wrist');
+      assert.strictEqual(data.data.scale, 1.25);
+      assert.strictEqual(data.data.dimensions.widthCm, 16);
+    });
+
+    await test('Point 10: PUT /api/products/:id/3d-model rejects unauthorized customer access (403 Forbidden)', async () => {
+      const sampleProd = await Product.findOne({ isPublished: true });
+      const res = await fetch(`${baseUrl}/products/${sampleProd._id}/3d-model`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ tryOnType: 'face' }),
+      });
+
+      assert.strictEqual(res.status, 403);
+    });
+
+    await test('Point 10: GET /api/products/:identifier/3d-model returns 404 for non-existent product', async () => {
+      const res = await fetch(`${baseUrl}/products/64b8a1c8f1a2b3c4d5e6f7a9/3d-model`);
+      assert.strictEqual(res.status, 404);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+    });
+
+    await test('Point 10: Deep link contains correctly URL-encoded product parameters', async () => {
+      const sampleProd = await Product.findOne({ isPublished: true });
+      const res = await fetch(`${baseUrl}/products/${sampleProd._id}/3d-model`);
+      const data = await res.json();
+      assert.ok(data.ar3dModel.deepLinks.sceneViewerIntent.includes('package=com.google.ar.core'));
+      assert.ok(data.ar3dModel.deepLinks.qrPayload.includes(`id=${sampleProd._id}`));
+    });
+
   } finally {
     if (server) {
       server.close();

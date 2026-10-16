@@ -5,6 +5,7 @@ const CodReconciliation = require('../models/CodReconciliation');
 const smsService = require('../services/smsService');
 const mailService = require('../services/mailService');
 const { executeVendorPayoutSplit } = require('../services/payoutSplitService');
+const ScratchCardReward = require('../models/ScratchCardReward');
 
 // @desc    Get All Tasks assigned to Logged-in Courier Rider (or all tasks for Super Admin)
 // @route   GET /api/delivery/tasks
@@ -236,6 +237,36 @@ exports.verifyOtpAndCompleteDelivery = async (req, res, next) => {
       console.warn('Automated payout split trigger error:', splitErr.message);
     }
 
+    // Point 16: Automated Post-Delivery Instant Scratch Card Reward Generation
+    let scratchCardReward = null;
+    try {
+      const orderRefId = subOrder.parentOrder || parentOrder?._id;
+      const customerId = subOrder.customer || parentOrder?.customer;
+      if (orderRefId && customerId) {
+        let existingCard = await ScratchCardReward.findOne({ order: orderRefId });
+        if (!existingCard) {
+          scratchCardReward = await ScratchCardReward.create({
+            user: customerId,
+            order: orderRefId,
+            orderNumber: subOrder.orderNumber || parentOrder?.orderNumber || `AUR-${Date.now().toString().slice(-6)}`,
+            rewardType: 'WALLET_CASH',
+            amount: 50,
+            badgeText: '₹50 CASHBACK',
+            title: '🎉 Doorstep Delivery Delight: ₹50 Wallet Cash!',
+            description: 'Order successfully delivered to your doorstep. Scratch & claim your cash reward!',
+            isScratched: false,
+            isClaimed: false,
+            deliveryTrigger: 'ORDER_DELIVERED',
+            celebrationTheme: 'GOLD',
+          });
+        } else {
+          scratchCardReward = existingCard;
+        }
+      }
+    } catch (rewardErr) {
+      console.warn('Post-delivery scratch card auto-generation note:', rewardErr.message);
+    }
+
     res.status(200).json({
       success: true,
       message: 'OTP verified successfully! Order marked as DELIVERED.',
@@ -244,6 +275,7 @@ exports.verifyOtpAndCompleteDelivery = async (req, res, next) => {
         subOrder,
         payoutSplit: payoutSplitResult?.payoutSplit || null,
         payoutSplitStatus: payoutSplitResult?.success ? 'SETTLED' : 'PENDING',
+        scratchCard: scratchCardReward,
       },
     });
   } catch (error) {

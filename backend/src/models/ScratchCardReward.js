@@ -61,6 +61,22 @@ const scratchCardRewardSchema = new mongoose.Schema(
       type: Date,
       default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days expiry
     },
+    scratchPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    deliveryTrigger: {
+      type: String,
+      enum: ['ORDER_DELIVERED', 'POST_PURCHASE', 'PROMOTIONAL', 'ADMIN_GIFT'],
+      default: 'ORDER_DELIVERED',
+    },
+    celebrationTheme: {
+      type: String,
+      enum: ['GOLD', 'NEON_PURPLE', 'FESTIVE_DIWALI', 'EMERALD'],
+      default: 'GOLD',
+    },
   },
   { timestamps: true }
 );

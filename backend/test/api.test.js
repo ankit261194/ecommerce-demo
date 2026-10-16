@@ -15,6 +15,7 @@ const CodReconciliation = require('../src/models/CodReconciliation');
 const WalletTransaction = require('../src/models/WalletTransaction');
 const ScratchCardReward = require('../src/models/ScratchCardReward');
 const PayoutSplit = require('../src/models/PayoutSplit');
+const AuditLog = require('../src/models/AuditLog');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -14286,6 +14287,265 @@ const runTests = async () => {
         headers: { Authorization: `Bearer ${customerToken}` },
       });
       assert.strictEqual(resCampaigns.status, 403);
+    });
+
+    // =========================================================================
+    // POINT 16: CUSTOMER WALLET TOP-UP & INSTANT SCRATCH CARD REWARDS ENGINE
+    // =========================================================================
+    console.log('\n--- POINT 16: CUSTOMER WALLET TOP-UP & INSTANT SCRATCH CARD REWARDS ---');
+    let p16ScratchCardId = null;
+    let initialBalance = 0;
+    let initialCoins = 0;
+
+    await test('Point 16: GET /api/wallet/topup/preset-packs returns active bonus recharge packs', async () => {
+      const res = await fetch(`${baseUrl}/wallet/topup/preset-packs`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(Array.isArray(body.data.packs));
+      assert.ok(body.data.packs.length >= 4);
+      assert.strictEqual(body.data.minTopup, 10);
+      assert.strictEqual(body.data.maxTopup, 50000);
+      assert.ok(body.data.activePromos.some(p => p.code === 'WALLET10'));
+    });
+
+    await test('Point 16: POST /api/wallet/topup validates minimum amount < 10 (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/wallet/topup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ amount: 5 }),
+      });
+      assert.strictEqual(res.status, 400);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+      assert.ok(body.message.includes('Minimum top-up'));
+    });
+
+    await test('Point 16: POST /api/wallet/topup recharges wallet via UPI with tier bonus (+₹25 cash, +50 coins on ₹500)', async () => {
+      // First get current wallet balance
+      const resBefore = await fetch(`${baseUrl}/wallet`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      const dataBefore = await resBefore.json();
+      initialBalance = dataBefore.data.walletBalance;
+      initialCoins = dataBefore.data.walletCoins;
+
+      const res = await fetch(`${baseUrl}/wallet/topup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          amount: 500,
+          paymentMethod: 'UPI',
+          transactionReference: `UPI_REF_${Date.now()}`,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.amountAdded, 500);
+      assert.strictEqual(body.data.bonusCash, 25); // 5% on 500
+      assert.strictEqual(body.data.bonusCoins, 50); // 50 coins on 500
+      assert.strictEqual(body.data.walletBalance, initialBalance + 525);
+      assert.strictEqual(body.data.walletCoins, initialCoins + 50);
+      assert.strictEqual(body.data.transaction.category, 'WALLET_TOPUP');
+      assert.strictEqual(body.data.transaction.paymentMethod, 'UPI');
+    });
+
+    await test('Point 16: POST /api/wallet/topup with promo code WALLET10 applies 10% extra bonus', async () => {
+      const res = await fetch(`${baseUrl}/wallet/topup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          amount: 1000,
+          paymentMethod: 'CARD',
+          promoCode: 'WALLET10',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      // Tier bonus: 7.5% on 1000 = 75, Promo bonus: 10% on 1000 = 100 => Total bonus = 175
+      assert.strictEqual(body.data.bonusCash, 175);
+      assert.strictEqual(body.data.transaction.promoCode, 'WALLET10');
+    });
+
+    await test('Point 16: GET /api/wallet returns updated balance, coins, and telemetry stats', async () => {
+      const res = await fetch(`${baseUrl}/wallet`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(typeof body.data.walletBalance === 'number');
+      assert.ok(typeof body.data.walletCoins === 'number');
+      assert.ok(typeof body.data.unclaimedScratchCardsCount === 'number');
+      assert.ok(body.data.totalLoaded >= 1500);
+      assert.ok(Array.isArray(body.data.transactions));
+      assert.ok(body.data.transactions.length >= 2);
+    });
+
+    await test('Point 16: POST /api/wallet/scratch-card/generate creates post-purchase mystery reward card', async () => {
+      const custUser = await User.findOne({ email: 'customer@auramarket.com' }) || await User.findOne({ role: 'customer' });
+      assert.ok(custUser);
+
+      // Find or create test order for customer
+      let testOrder = await Order.findOne({ customer: custUser._id });
+      if (!testOrder) {
+        testOrder = await Order.create({
+          customer: custUser._id,
+          orderNumber: `AUR-P16-${Date.now().toString().slice(-4)}`,
+          totalAmount: 1499,
+          paymentMethod: 'UPI',
+          paymentStatus: 'PAID',
+          status: 'DELIVERED',
+        });
+      }
+
+      const res = await fetch(`${baseUrl}/wallet/scratch-card/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          orderId: testOrder._id,
+          rewardType: 'WALLET_CASH',
+        }),
+      });
+      assert.strictEqual(res.status === 200 || res.status === 201, true);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.card);
+      assert.strictEqual(body.card.isScratched, false);
+      assert.strictEqual(body.card.isClaimed, false);
+      p16ScratchCardId = body.card._id;
+    });
+
+    await test('Point 16: POST /api/wallet/scratch-card/:id/scratch reveals reward with scratch percentage', async () => {
+      assert.ok(p16ScratchCardId);
+      const res = await fetch(`${baseUrl}/wallet/scratch-card/${p16ScratchCardId}/scratch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ scratchPercentage: 85 }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.card.isScratched, true);
+      assert.strictEqual(body.card.scratchPercentage, 85);
+      assert.ok(body.card.scratchedAt);
+    });
+
+    await test('Point 16: POST /api/wallet/scratch-card/:id/claim atomically credits reward cash/coins to wallet', async () => {
+      assert.ok(p16ScratchCardId);
+      const res = await fetch(`${baseUrl}/wallet/scratch-card/${p16ScratchCardId}/claim`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.card.isClaimed);
+      assert.ok(body.data.transaction);
+      assert.strictEqual(body.data.transaction.category, 'SCRATCH_CARD');
+    });
+
+    await test('Point 16: POST /api/wallet/scratch-card/:id/claim prevents double claiming (400 Bad Request)', async () => {
+      assert.ok(p16ScratchCardId);
+      const res = await fetch(`${baseUrl}/wallet/scratch-card/${p16ScratchCardId}/claim`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 400);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+      assert.ok(body.message.includes('already been claimed'));
+    });
+
+    await test('Point 16: GET /api/wallet/admin/overview returns platform liabilities and metrics', async () => {
+      const res = await fetch(`${baseUrl}/wallet/admin/overview`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.totalWalletLiability >= 0);
+      assert.ok(body.data.totalCoinsCirculation >= 0);
+      assert.ok(body.data.totalTopUpVolume >= 1500);
+      assert.ok(body.data.scratchStats);
+      assert.ok(Array.isArray(body.data.recentTransactions));
+    });
+
+    await test('Point 16: POST /api/wallet/admin/adjust credits customer wallet with audit log', async () => {
+      const custUser = await User.findOne({ email: 'customer@auramarket.com' }) || await User.findOne({ role: 'customer' });
+      assert.ok(custUser);
+
+      const res = await fetch(`${baseUrl}/wallet/admin/adjust`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          userId: custUser._id,
+          type: 'CREDIT',
+          currency: 'INR',
+          amount: 100,
+          reason: 'Customer goodwill compensation for delayed delivery',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.transaction.category, 'ADMIN_CREDIT');
+      assert.strictEqual(body.data.transaction.amount, 100);
+
+      // Verify audit log
+      const audit = await AuditLog.findOne({
+        targetType: 'CustomerWallet',
+        targetId: custUser._id.toString(),
+      }).sort({ createdAt: -1 });
+      assert.ok(audit);
+      assert.strictEqual(audit.details.adjustmentType, 'CREDIT');
+    });
+
+    await test('Point 16: Role Security: Customer cannot access admin wallet overview or adjustment (403 Forbidden)', async () => {
+      const custUser = await User.findOne({ email: 'customer@auramarket.com' }) || await User.findOne({ role: 'customer' });
+      assert.ok(custUser);
+
+      const resOverview = await fetch(`${baseUrl}/wallet/admin/overview`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resOverview.status, 403);
+
+      const resAdjust = await fetch(`${baseUrl}/wallet/admin/adjust`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          userId: custUser._id,
+          type: 'CREDIT',
+          amount: 5000,
+          reason: 'Self credit attempt',
+        }),
+      });
+      assert.strictEqual(resAdjust.status, 403);
     });
 
   } finally {

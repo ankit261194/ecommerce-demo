@@ -18,13 +18,15 @@ export const ScratchCardModal = ({
   isOpen,
   onClose,
   orderId,
+  cardData,
   onApplyCouponCode,
+  onRewardClaimed,
 }) => {
   const canvasRef = useRef(null);
-  const [reward, setReward] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [isScratched, setIsScratched] = useState(false);
-  const [isClaimed, setIsClaimed] = useState(false);
+  const [reward, setReward] = useState(cardData || null);
+  const [loading, setLoading] = useState(!cardData);
+  const [isScratched, setIsScratched] = useState(Boolean(cardData?.isScratched));
+  const [isClaimed, setIsClaimed] = useState(Boolean(cardData?.isClaimed));
   const [isClaiming, setIsClaiming] = useState(false);
   const [scratchPercent, setScratchPercent] = useState(0);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -35,12 +37,20 @@ export const ScratchCardModal = ({
   useEffect(() => {
     if (!isOpen) return;
 
+    if (cardData) {
+      setReward(cardData);
+      setIsScratched(Boolean(cardData.isScratched));
+      setIsClaimed(Boolean(cardData.isClaimed));
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setIsClaiming(false);
     setClaimSuccessMessage(null);
     setScratchPercent(0);
 
-    // If orderId is provided: Fetch or generate post-purchase scratch card (Point #72)
+    // If orderId is provided: Fetch or generate post-purchase scratch card (Point #72 & Point #16)
     if (orderId) {
       api
         .post('/wallet/scratch-card/generate', { orderId })
@@ -220,6 +230,10 @@ export const ScratchCardModal = ({
           try {
             localStorage.setItem('auramarket_wallet_sync', JSON.stringify(payload));
           } catch (_) {}
+
+          if (onRewardClaimed) {
+            onRewardClaimed(res.data.data);
+          }
         }
       }
     } catch (err) {

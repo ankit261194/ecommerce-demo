@@ -464,6 +464,27 @@ const uiConfigSchema = new mongoose.Schema(
         default: '07',
       },
     },
+    // Point 13: Customer Abandoned Cart Automated Recovery Sequences
+    exitIntentConfig: {
+      enabled: { type: Boolean, default: true },
+      headline: { type: String, default: "Wait! Don't leave your cart empty" },
+      subheadline: { type: String, default: 'Take an instant extra 10% OFF before you go' },
+      discountPercentage: { type: Number, default: 10 },
+      couponCode: { type: String, default: 'SAVE10NOW' },
+      countdownSeconds: { type: Number, default: 900 },
+    },
+    recoverySchedulerConfig: {
+      autoScheduleEnabled: { type: Boolean, default: true },
+      stage1DelayHours: { type: Number, default: 1 },
+      stage2DelayHours: { type: Number, default: 24 },
+      stage3DelayHours: { type: Number, default: 72 },
+      stage2DiscountPercent: { type: Number, default: 15 },
+      activeChannels: {
+        email: { type: Boolean, default: true },
+        sms: { type: Boolean, default: true },
+        whatsapp: { type: Boolean, default: true },
+      },
+    },
   },
   { timestamps: true }
 );

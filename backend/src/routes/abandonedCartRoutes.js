@@ -10,6 +10,11 @@ const {
   generateWhatsAppRecoveryLink,
   getCartByRecoveryToken,
   completeCartRecovery,
+  runRecoveryScheduler,
+  getExitIntentConfig,
+  updateExitIntentConfig,
+  recordExitIntentEvent,
+  getAbandonedRevenueAnalytics,
 } = require('../controllers/abandonedCartController');
 const { protect, authorize, optionalAuth } = require('../middlewares/auth');
 
@@ -20,8 +25,21 @@ router.post('/sync', optionalAuth, syncCartSession);
 router.get('/recover/:token', getCartByRecoveryToken);
 router.post('/recover/:token/complete', completeCartRecovery);
 
+// Point 13: Exit-Intent Popup & Sequence Tracking Endpoints (Public)
+router.get('/exit-intent-config', getExitIntentConfig);
+router.post('/exit-intent-event', recordExitIntentEvent);
+
 // Super Admin & Vendor Management routes
+router.get('/', protect, authorize('superadmin', 'admin'), getAdminAbandonedCarts);
+router.get('/all', protect, authorize('superadmin', 'admin'), getAdminAbandonedCarts);
 router.get('/admin/all', protect, authorize('superadmin', 'admin'), getAdminAbandonedCarts);
+router.get('/admin/analytics', protect, authorize('superadmin', 'admin'), getAbandonedRevenueAnalytics);
+router.get('/analytics', protect, authorize('superadmin', 'admin'), getAbandonedRevenueAnalytics);
+router.put('/admin/exit-intent-config', protect, authorize('superadmin', 'admin'), updateExitIntentConfig);
+router.put('/exit-intent-config', protect, authorize('superadmin', 'admin'), updateExitIntentConfig);
+router.post('/admin/run-scheduler', protect, authorize('superadmin', 'admin'), runRecoveryScheduler);
+router.post('/run-scheduler', protect, authorize('superadmin', 'admin'), runRecoveryScheduler);
+
 router.post('/admin/bulk-reminder', protect, authorize('superadmin', 'admin'), sendBulkReminders);
 router.post('/admin/:id/send-reminder', protect, authorize('superadmin', 'admin'), sendCartReminder);
 router.post('/admin/:id/whatsapp-link', protect, authorize('superadmin', 'admin', 'vendor'), generateWhatsAppRecoveryLink);

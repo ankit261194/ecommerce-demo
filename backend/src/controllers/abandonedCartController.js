@@ -1,7 +1,9 @@
 const AbandonedCart = require('../models/AbandonedCart');
 const Coupon = require('../models/Coupon');
+const UIConfig = require('../models/UIConfig');
 const smsService = require('../services/smsService');
 const mailService = require('../services/mailService');
+const { recordAuditLog } = require('../utils/auditLogger');
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 
@@ -271,9 +273,13 @@ exports.syncCartSession = async (req, res, next) => {
       if (customerName) cart.customerName = customerName;
       if (customerPhone) cart.customerPhone = customerPhone;
       if (req.user?._id) cart.user = req.user._id;
+      if (!cart.recoveryToken) {
+        cart.recoveryToken = `rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+      }
       cart.abandonedAt = new Date();
       await cart.save();
     } else {
+      const recoveryToken = `rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
       cart = await AbandonedCart.create({
         user: req.user?._id || null,
         customerName: customerName || 'Valued Customer',
@@ -282,6 +288,7 @@ exports.syncCartSession = async (req, res, next) => {
         items: formattedItems,
         cartTotal: calculatedTotal,
         status: 'ABANDONED',
+        recoveryToken,
         abandonedAt: new Date(),
       });
     }
@@ -506,3 +513,384 @@ exports.completeCartRecovery = async (req, res, next) => {
     next(error);
   }
 };
+
+// =========================================================================
+// Point 13: Customer Abandoned Cart Automated Recovery Sequences
+// =========================================================================
+
+// Helper: Generate dynamic single-use recovery coupon
+const generateDynamicRecoveryVoucher = async (cart, discountPct = 15) => {
+  const tokenSnippet = cart.recoveryToken
+    ? cart.recoveryToken.slice(-6).toUpperCase()
+    : crypto.randomBytes(3).toString('hex').toUpperCase();
+  const code = `CART${discountPct}_${tokenSnippet}`;
+
+  let coupon = await Coupon.findOne({ code });
+  if (!coupon) {
+    coupon = await Coupon.create({
+      code,
+      title: `Cart Recovery Exclusive (${discountPct}% OFF)`,
+      description: `Exclusive single-use dynamic incentive for ${cart.customerName}`,
+      discountType: 'PERCENTAGE',
+      discountValue: discountPct,
+      maxDiscountAmount: 1000,
+      minOrderAmount: Math.max(0, Math.round(cart.cartTotal * 0.5)),
+      usageLimit: 1,
+      perUserLimit: 1,
+      isActive: true,
+      expiryDate: new Date(Date.now() + 48 * 3600 * 1000), // 48 hours validity
+    });
+  }
+  return code;
+};
+
+// @desc    Execute Automated Recovery Sequence Scheduler (1-hour, 24-hour, 72-hour nudges)
+// @route   POST /api/abandoned-carts/run-scheduler
+// @access  Private (Super Admin / Cron)
+exports.runRecoveryScheduler = async (req, res, next) => {
+  try {
+    const { forceStage } = req.body || {}; // For testing or on-demand execution
+    const now = Date.now();
+
+    const activeCarts = await AbandonedCart.find({
+      status: { $in: ['ABANDONED', 'REMINDER_SENT'] },
+    });
+
+    let stage1Count = 0;
+    let stage2Count = 0;
+    let stage3Count = 0;
+
+    for (const cart of activeCarts) {
+      const elapsedMs = now - new Date(cart.abandonedAt).getTime();
+      const elapsedHours = elapsedMs / (3600 * 1000);
+
+      // Sequence 1: 1-Hour Gentle Nudge (Email / SMS)
+      if (cart.sequenceStage === 0 && (elapsedHours >= 1 || forceStage === 1)) {
+        if (!cart.recoveryToken) {
+          cart.recoveryToken = `rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+        }
+        const demoBaseUrl = process.env.DEMO_URL || 'https://shribalajikripadham.online/ecommerce-demo';
+        const restoreLink = `${demoBaseUrl}/#recover-cart?token=${cart.recoveryToken}`;
+
+        await mailService.sendMail({
+          to: cart.customerEmail,
+          subject: `Did you forget something, ${cart.customerName}? Your AuraMarket cart is waiting!`,
+          text: `Hi ${cart.customerName}, you left items in your cart! Complete your order here: ${restoreLink}`,
+          html: `<p>Hi ${cart.customerName}, your cart totaling ₹${cart.cartTotal} is reserved for you. <a href="${restoreLink}">Click here to restore your cart</a></p>`,
+        });
+
+        cart.sequenceStage = 1;
+        cart.status = 'REMINDER_SENT';
+        cart.reminderCount = (cart.reminderCount || 0) + 1;
+        cart.lastReminderSentAt = new Date();
+        cart.recoveryLogs.push({
+          stage: 1,
+          channel: 'EMAIL',
+          dispatchedAt: new Date(),
+          recipient: cart.customerEmail,
+          couponOffered: cart.recoveryCoupon || 'RECOVER10',
+          status: 'DELIVERED',
+        });
+        await cart.save();
+        stage1Count++;
+      }
+      // Sequence 2: 24-Hour Dynamic Incentive (15% Dynamic Voucher + WhatsApp/Email)
+      else if (cart.sequenceStage === 1 && (elapsedHours >= 24 || forceStage === 2)) {
+        const dynCoupon = await generateDynamicRecoveryVoucher(cart, 15);
+        const demoBaseUrl = process.env.DEMO_URL || 'https://shribalajikripadham.online/ecommerce-demo';
+        const restoreLink = `${demoBaseUrl}/#recover-cart?token=${cart.recoveryToken}&coupon=${dynCoupon}`;
+
+        await mailService.sendMail({
+          to: cart.customerEmail,
+          subject: `🎁 15% OFF Voucher: Complete your cart now, ${cart.customerName}!`,
+          text: `Hi ${cart.customerName}, take an extra 15% off with code ${dynCoupon}: ${restoreLink}`,
+          html: `<p>Special recovery deal! Use exclusive code <strong>${dynCoupon}</strong> to get 15% OFF: <a href="${restoreLink}">Complete Checkout</a></p>`,
+        });
+
+        if (cart.customerPhone) {
+          await smsService.sendSMS({
+            to: cart.customerPhone,
+            message: `AuraMarket: Hi ${cart.customerName}, 15% OFF voucher ${dynCoupon} unlocked for your cart: ${restoreLink}`,
+          });
+        }
+
+        cart.sequenceStage = 2;
+        cart.dynamicCoupon = dynCoupon;
+        cart.recoveryCoupon = dynCoupon;
+        cart.reminderCount = (cart.reminderCount || 0) + 1;
+        cart.lastReminderSentAt = new Date();
+        cart.recoveryLogs.push({
+          stage: 2,
+          channel: 'EMAIL',
+          dispatchedAt: new Date(),
+          recipient: cart.customerEmail,
+          couponOffered: dynCoupon,
+          status: 'DELIVERED',
+        });
+        await cart.save();
+        stage2Count++;
+      }
+      // Sequence 3: 72-Hour Final Warning (Last Chance Nudge)
+      else if (cart.sequenceStage === 2 && (elapsedHours >= 72 || forceStage === 3)) {
+        if (cart.customerPhone) {
+          await smsService.sendSMS({
+            to: cart.customerPhone,
+            message: `AuraMarket: Last call! Reserved items in your cart will be released back to inventory today: https://shribalajikripadham.online/ecommerce-demo/`,
+          });
+        }
+
+        cart.sequenceStage = 3;
+        cart.reminderCount = (cart.reminderCount || 0) + 1;
+        cart.lastReminderSentAt = new Date();
+        cart.recoveryLogs.push({
+          stage: 3,
+          channel: 'SMS',
+          dispatchedAt: new Date(),
+          recipient: cart.customerPhone || cart.customerEmail,
+          couponOffered: cart.recoveryCoupon,
+          status: 'DELIVERED',
+        });
+        await cart.save();
+        stage3Count++;
+      }
+    }
+
+    await recordAuditLog({
+      action: 'ABANDONED_CART_SCHEDULER_RUN',
+      module: 'MARKETING',
+      req,
+      description: `Automated cart recovery scheduler executed: ${stage1Count} stage-1, ${stage2Count} stage-2, ${stage3Count} stage-3 nudges dispatched`,
+      details: {
+        totalEvaluated: activeCarts.length,
+        stage1Count,
+        stage2Count,
+        stage3Count,
+      },
+      severity: 'LOW',
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Automated cart recovery sequence scheduler executed successfully',
+      telemetry: {
+        totalEvaluated: activeCarts.length,
+        stage1Count,
+        stage2Count,
+        stage3Count,
+        totalDispatched: stage1Count + stage2Count + stage3Count,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Exit-Intent Popup Configuration
+// @route   GET /api/abandoned-carts/exit-intent-config
+// @access  Public
+exports.getExitIntentConfig = async (req, res, next) => {
+  try {
+    let config = await UIConfig.findOne();
+    if (!config) {
+      config = await UIConfig.create({});
+    }
+
+    const exitIntent = config.exitIntentConfig || {
+      enabled: true,
+      headline: "Wait! Don't leave your cart empty",
+      subheadline: 'Take an instant extra 10% OFF before you go',
+      discountPercentage: 10,
+      couponCode: 'SAVE10NOW',
+      countdownSeconds: 900,
+    };
+
+    // Ensure coupon exists in DB
+    await ensureRecoveryCoupon(exitIntent.couponCode, exitIntent.discountPercentage);
+
+    res.status(200).json({
+      success: true,
+      exitIntent,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update Exit-Intent Popup Configuration (Super Admin)
+// @route   PUT /api/admin/abandoned-carts/exit-intent-config
+// @access  Private (Super Admin)
+exports.updateExitIntentConfig = async (req, res, next) => {
+  try {
+    let config = await UIConfig.findOne();
+    if (!config) {
+      config = await UIConfig.create({});
+    }
+
+    const {
+      enabled,
+      headline,
+      subheadline,
+      discountPercentage,
+      couponCode,
+      countdownSeconds,
+    } = req.body;
+
+    config.exitIntentConfig = config.exitIntentConfig || {};
+    if (enabled !== undefined) config.exitIntentConfig.enabled = Boolean(enabled);
+    if (headline) config.exitIntentConfig.headline = headline;
+    if (subheadline !== undefined) config.exitIntentConfig.subheadline = subheadline;
+    if (discountPercentage !== undefined) config.exitIntentConfig.discountPercentage = Number(discountPercentage);
+    if (couponCode) config.exitIntentConfig.couponCode = couponCode.trim().toUpperCase();
+    if (countdownSeconds !== undefined) config.exitIntentConfig.countdownSeconds = Number(countdownSeconds);
+
+    await config.save();
+
+    if (config.exitIntentConfig.couponCode) {
+      await ensureRecoveryCoupon(
+        config.exitIntentConfig.couponCode,
+        config.exitIntentConfig.discountPercentage || 10
+      );
+    }
+
+    await recordAuditLog({
+      action: 'UPDATE_EXIT_INTENT_CONFIG',
+      module: 'SETTINGS',
+      req,
+      description: 'Super Admin updated exit-intent cart recovery modal configuration',
+      details: config.exitIntentConfig,
+      severity: 'LOW',
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Exit-intent popup configuration updated successfully',
+      exitIntent: config.exitIntentConfig,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Record Exit-Intent Interaction / Conversion Event
+// @route   POST /api/abandoned-carts/exit-intent-event
+// @access  Public
+exports.recordExitIntentEvent = async (req, res, next) => {
+  try {
+    const { cartId, recoveryToken, event = 'TRIGGERED', couponCode = 'SAVE10NOW' } = req.body;
+
+    let cart;
+    if (cartId && mongoose.Types.ObjectId.isValid(cartId)) {
+      cart = await AbandonedCart.findById(cartId);
+    } else if (recoveryToken) {
+      cart = await AbandonedCart.findOne({ recoveryToken });
+    }
+
+    if (cart) {
+      if (event === 'TRIGGERED') {
+        cart.exitIntentTriggered = true;
+        cart.channelAttribution = 'EXIT_INTENT';
+      } else if (event === 'CONVERTED') {
+        cart.exitIntentConverted = true;
+        cart.status = 'RECOVERED';
+        cart.channelAttribution = 'EXIT_INTENT';
+      }
+      cart.recoveryCoupon = couponCode;
+      await cart.save();
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Exit-intent ${event.toLowerCase()} recorded successfully`,
+      attributed: !!cart,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Comprehensive Abandoned Revenue Analytics Dashboard (Super Admin)
+// @route   GET /api/admin/abandoned-carts/analytics
+// @access  Private (Super Admin)
+exports.getAbandonedRevenueAnalytics = async (req, res, next) => {
+  try {
+    const allCarts = await AbandonedCart.find();
+
+    const totalCartsCount = allCarts.length;
+    const recoveredCarts = allCarts.filter((c) => c.status === 'RECOVERED');
+    const recoveredCount = recoveredCarts.length;
+    const recoveryRate = totalCartsCount > 0 ? Math.round((recoveredCount / totalCartsCount) * 1000) / 10 : 0;
+
+    const totalAbandonedRevenue = allCarts.reduce((acc, c) => acc + (c.cartTotal || 0), 0);
+    const totalRecoveredRevenue = recoveredCarts.reduce((acc, c) => acc + (c.cartTotal || 0), 0);
+    const potentialLostRevenue = totalAbandonedRevenue - totalRecoveredRevenue;
+
+    // Channel Performance Attribution
+    const channelAttribution = {
+      EMAIL: { count: 0, revenue: 0 },
+      WHATSAPP: { count: 0, revenue: 0 },
+      SMS: { count: 0, revenue: 0 },
+      EXIT_INTENT: { count: 0, revenue: 0 },
+      DIRECT: { count: 0, revenue: 0 },
+      NONE: { count: 0, revenue: 0 },
+    };
+
+    recoveredCarts.forEach((c) => {
+      const ch = c.channelAttribution || (c.whatsappSentCount > 0 ? 'WHATSAPP' : c.reminderCount > 0 ? 'EMAIL' : 'DIRECT');
+      if (channelAttribution[ch]) {
+        channelAttribution[ch].count++;
+        channelAttribution[ch].revenue += c.cartTotal || 0;
+      }
+    });
+
+    // Sequence Funnel Progression
+    const sequenceFunnel = {
+      uncontacted: allCarts.filter((c) => c.sequenceStage === 0 && c.status !== 'RECOVERED').length,
+      stage1Sent: allCarts.filter((c) => c.sequenceStage >= 1).length,
+      stage2Sent: allCarts.filter((c) => c.sequenceStage >= 2).length,
+      stage3Sent: allCarts.filter((c) => c.sequenceStage >= 3).length,
+      recovered: recoveredCount,
+    };
+
+    // Top Abandoned Products Ranking
+    const productFrequencyMap = {};
+    allCarts.forEach((c) => {
+      (c.items || []).forEach((item) => {
+        const key = item.title || 'Unknown Product';
+        if (!productFrequencyMap[key]) {
+          productFrequencyMap[key] = {
+            title: key,
+            quantity: 0,
+            revenueLost: 0,
+            timesAbandoned: 0,
+            image: item.image || '',
+          };
+        }
+        productFrequencyMap[key].quantity += item.quantity || 1;
+        productFrequencyMap[key].revenueLost += (item.price || 0) * (item.quantity || 1);
+        productFrequencyMap[key].timesAbandoned += 1;
+      });
+    });
+
+    const topAbandonedProducts = Object.values(productFrequencyMap)
+      .sort((a, b) => b.revenueLost - a.revenueLost)
+      .slice(0, 5);
+
+    res.status(200).json({
+      success: true,
+      analytics: {
+        totalCartsCount,
+        recoveredCount,
+        recoveryRate,
+        totalAbandonedRevenue,
+        totalRecoveredRevenue,
+        potentialLostRevenue,
+        channelAttribution,
+        sequenceFunnel,
+        topAbandonedProducts,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

@@ -12,6 +12,7 @@ import { VendorPortal } from './pages/VendorPortal';
 import { CourierDashboard } from './pages/CourierDashboard';
 import { CmsPolicyViewerModal } from './components/CmsPolicyViewerModal';
 import { FaqSection } from './components/FaqSection';
+import { ExitIntentCartModal } from './components/ExitIntentCartModal';
 import { ShoppingBag, Flame, Layers, LayoutGrid, MessageCircle, Phone, BookOpen, ChevronUp } from 'lucide-react';
 import api from './api/client';
 
@@ -690,6 +691,9 @@ const MainLayout = () => {
       {isFaqModalOpen && (
         <FaqSection isModal={true} onClose={() => setIsFaqModalOpen(false)} />
       )}
+
+      {/* Point 13: Customer Abandoned Cart Exit-Intent Recovery Modal */}
+      <ExitIntentCartModal />
     </div>
   );
 };

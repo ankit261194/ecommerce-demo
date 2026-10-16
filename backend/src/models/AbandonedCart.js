@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 
 const abandonedCartItemSchema = new mongoose.Schema({
   product: {
@@ -103,8 +104,52 @@ const abandonedCartSchema = new mongoose.Schema(
       ref: 'Order',
       default: null,
     },
+    // Point 13: Customer Abandoned Cart Automated Recovery Sequences
+    sequenceStage: {
+      type: Number,
+      default: 0, // 0 = uncontacted, 1 = 1-hour nudge, 2 = 24-hour dynamic voucher, 3 = 72-hour final warning
+    },
+    dynamicCoupon: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    discountPercentage: {
+      type: Number,
+      default: 10,
+    },
+    exitIntentTriggered: {
+      type: Boolean,
+      default: false,
+    },
+    exitIntentConverted: {
+      type: Boolean,
+      default: false,
+    },
+    channelAttribution: {
+      type: String,
+      enum: ['EMAIL', 'WHATSAPP', 'SMS', 'EXIT_INTENT', 'DIRECT', 'NONE'],
+      default: 'NONE',
+    },
+    recoveryLogs: [
+      {
+        stage: Number,
+        channel: String, // 'EMAIL' | 'WHATSAPP' | 'SMS' | 'EXIT_INTENT'
+        dispatchedAt: { type: Date, default: Date.now },
+        recipient: String,
+        couponOffered: String,
+        status: { type: String, default: 'DELIVERED' },
+      },
+    ],
   },
   { timestamps: true }
 );
+
+abandonedCartSchema.pre('save', function (next) {
+  if (!this.recoveryToken) {
+    this.recoveryToken = `rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+  }
+  next();
+});
 
 module.exports = mongoose.model('AbandonedCart', abandonedCartSchema);

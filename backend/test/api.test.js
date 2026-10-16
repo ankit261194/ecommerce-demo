@@ -13587,6 +13587,239 @@ const runTests = async () => {
       assert.strictEqual(resOverride.status, 403);
     });
 
+    // =========================================================================
+    // Point 13: Customer Abandoned Cart Automated Recovery Sequences & Exit-Intent Nudge Radar
+    // =========================================================================
+    const AbandonedCartPoint13 = require('../src/models/AbandonedCart');
+    const CouponPoint13 = require('../src/models/Coupon');
+    const AuditLogPoint13 = require('../src/models/AuditLog');
+    let point13CartId;
+    let point13RecoveryToken;
+
+    await test('Point 13: GET /api/abandoned-carts/exit-intent-config returns public popup configuration', async () => {
+      const res = await fetch(`${baseUrl}/abandoned-carts/exit-intent-config`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.exitIntent);
+      assert.strictEqual(typeof data.exitIntent.enabled, 'boolean');
+      assert.strictEqual(typeof data.exitIntent.discountPercentage, 'number');
+      assert.ok(data.exitIntent.couponCode);
+      assert.ok(data.exitIntent.headline);
+    });
+
+    await test('Point 13: PUT /api/abandoned-carts/admin/exit-intent-config allows Super Admin to configure exit-intent modal & voucher with audit logging', async () => {
+      const res = await fetch(`${baseUrl}/abandoned-carts/admin/exit-intent-config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          enabled: true,
+          headline: 'Wait! Claim your exclusive 15% recovery offer!',
+          subheadline: 'Finish checkout now and save big before stock expires',
+          discountPercentage: 15,
+          couponCode: 'EXIT15NOW',
+          countdownSeconds: 600,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.exitIntent.headline, 'Wait! Claim your exclusive 15% recovery offer!');
+      assert.strictEqual(data.exitIntent.discountPercentage, 15);
+      assert.strictEqual(data.exitIntent.couponCode, 'EXIT15NOW');
+      assert.strictEqual(data.exitIntent.countdownSeconds, 600);
+
+      // Verify audit log
+      const auditLog = await AuditLogPoint13.findOne({ action: 'UPDATE_EXIT_INTENT_CONFIG' });
+      assert.ok(auditLog, 'Audit log for UPDATE_EXIT_INTENT_CONFIG should be recorded');
+      assert.strictEqual(auditLog.module, 'SETTINGS');
+    });
+
+    await test('Point 13: Customer syncs abandoned cart session and triggers exit-intent event telemetry', async () => {
+      // 1. Sync cart session
+      const resSync = await fetch(`${baseUrl}/abandoned-carts/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName: 'Pooja Verma',
+          customerEmail: 'pooja.verma@example.com',
+          customerPhone: '+919811223344',
+          items: [
+            {
+              product: headphonesProduct._id,
+              title: headphonesProduct.title,
+              price: 2499,
+              quantity: 2,
+            },
+          ],
+          cartTotal: 4998,
+        }),
+      });
+      assert.strictEqual(resSync.status, 200);
+      const dataSync = await resSync.json();
+      assert.strictEqual(dataSync.success, true);
+      point13CartId = dataSync.data._id;
+      point13RecoveryToken = dataSync.data.recoveryToken;
+      assert.ok(point13CartId);
+      assert.ok(point13RecoveryToken);
+
+      // 2. Record exit-intent TRIGGERED event
+      const resTrigger = await fetch(`${baseUrl}/abandoned-carts/exit-intent-event`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cartId: point13CartId,
+          event: 'TRIGGERED',
+          couponCode: 'EXIT15NOW',
+        }),
+      });
+      assert.strictEqual(resTrigger.status, 200);
+      const dataTrigger = await resTrigger.json();
+      assert.strictEqual(dataTrigger.success, true);
+      assert.strictEqual(dataTrigger.attributed, true);
+
+      // Verify cart updated with exitIntentTriggered
+      const cartAfterTrigger = await AbandonedCartPoint13.findById(point13CartId);
+      assert.strictEqual(cartAfterTrigger.exitIntentTriggered, true);
+      assert.strictEqual(cartAfterTrigger.channelAttribution, 'EXIT_INTENT');
+    });
+
+    await test('Point 13: POST /api/abandoned-carts/run-scheduler executes Stage 1 gentle nudge sequence', async () => {
+      const res = await fetch(`${baseUrl}/abandoned-carts/run-scheduler`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ forceStage: 1 }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.telemetry);
+      assert.ok(data.telemetry.stage1Count >= 1);
+
+      const updatedCart = await AbandonedCartPoint13.findById(point13CartId);
+      assert.strictEqual(updatedCart.sequenceStage, 1);
+      assert.strictEqual(updatedCart.status, 'REMINDER_SENT');
+      assert.ok(updatedCart.recoveryLogs.length >= 1);
+      assert.strictEqual(updatedCart.recoveryLogs[0].stage, 1);
+    });
+
+    await test('Point 13: POST /api/abandoned-carts/run-scheduler executes Stage 2 dynamic 15% coupon sequence', async () => {
+      const res = await fetch(`${baseUrl}/abandoned-carts/run-scheduler`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ forceStage: 2 }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.telemetry.stage2Count >= 1);
+
+      const updatedCart = await AbandonedCartPoint13.findById(point13CartId);
+      assert.strictEqual(updatedCart.sequenceStage, 2);
+      assert.ok(updatedCart.dynamicCoupon, 'Dynamic coupon code should be generated for stage 2');
+      assert.ok(updatedCart.dynamicCoupon.startsWith('CART15_'));
+
+      // Verify dynamic coupon is registered in Coupon database
+      const dynCouponDoc = await CouponPoint13.findOne({ code: updatedCart.dynamicCoupon });
+      assert.ok(dynCouponDoc, 'Dynamic coupon doc must be created in DB');
+      assert.strictEqual(dynCouponDoc.discountValue, 15);
+      assert.strictEqual(dynCouponDoc.isActive, true);
+    });
+
+    await test('Point 13: POST /api/abandoned-carts/run-scheduler executes Stage 3 final urgency nudge sequence', async () => {
+      const res = await fetch(`${baseUrl}/abandoned-carts/run-scheduler`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ forceStage: 3 }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.telemetry.stage3Count >= 1);
+
+      const updatedCart = await AbandonedCartPoint13.findById(point13CartId);
+      assert.strictEqual(updatedCart.sequenceStage, 3);
+      assert.strictEqual(updatedCart.reminderCount, 3);
+    });
+
+    await test('Point 13: Record exit-intent CONVERTED event marks cart RECOVERED with channel attribution', async () => {
+      const resConvert = await fetch(`${baseUrl}/abandoned-carts/exit-intent-event`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recoveryToken: point13RecoveryToken,
+          event: 'CONVERTED',
+          couponCode: 'EXIT15NOW',
+        }),
+      });
+      assert.strictEqual(resConvert.status, 200);
+      const dataConvert = await resConvert.json();
+      assert.strictEqual(dataConvert.success, true);
+      assert.strictEqual(dataConvert.attributed, true);
+
+      const recoveredCart = await AbandonedCartPoint13.findById(point13CartId);
+      assert.strictEqual(recoveredCart.status, 'RECOVERED');
+      assert.strictEqual(recoveredCart.exitIntentConverted, true);
+      assert.strictEqual(recoveredCart.channelAttribution, 'EXIT_INTENT');
+    });
+
+    await test('Point 13: GET /api/abandoned-carts/admin/analytics provides recovery revenue analytics & funnel progression', async () => {
+      const res = await fetch(`${baseUrl}/abandoned-carts/admin/analytics`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.analytics);
+      assert.ok(data.analytics.totalCartsCount >= 1);
+      assert.ok(data.analytics.totalAbandonedRevenue >= 4998);
+      assert.ok(data.analytics.totalRecoveredRevenue >= 4998);
+      assert.strictEqual(typeof data.analytics.recoveryRate, 'number');
+      assert.ok(data.analytics.channelAttribution.EXIT_INTENT.count >= 1);
+      assert.ok(data.analytics.channelAttribution.EXIT_INTENT.revenue >= 4998);
+      assert.ok(data.analytics.sequenceFunnel);
+      assert.ok(Array.isArray(data.analytics.topAbandonedProducts));
+    });
+
+    await test('Point 13: Role Security: Customer cannot update exit-intent config, run scheduler, or view analytics (403 Forbidden)', async () => {
+      const resUpdate = await fetch(`${baseUrl}/abandoned-carts/admin/exit-intent-config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ enabled: false }),
+      });
+      assert.strictEqual(resUpdate.status, 403);
+
+      const resRun = await fetch(`${baseUrl}/abandoned-carts/run-scheduler`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ forceStage: 1 }),
+      });
+      assert.strictEqual(resRun.status, 403);
+
+      const resAnalytics = await fetch(`${baseUrl}/abandoned-carts/admin/analytics`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resAnalytics.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

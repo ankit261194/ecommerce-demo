@@ -46,6 +46,7 @@ const messagingConfigRoutes = require('./routes/messagingConfigRoutes');
 const emailConfigRoutes = require('./routes/emailConfigRoutes');
 const storageConfigRoutes = require('./routes/storageConfigRoutes');
 const backupRoutes = require('./routes/backupRoutes');
+const taxRoutes = require('./routes/taxRoutes');
 
 const app = express();
 
@@ -154,6 +155,8 @@ app.use('/api/admin/messaging', messagingConfigRoutes);
 app.use('/api/admin/email', emailConfigRoutes);
 app.use('/api/admin/storage', storageConfigRoutes);
 app.use('/api/admin/backup', backupRoutes);
+app.use('/api/tax', taxRoutes);
+app.use('/api/admin/tax', taxRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

@@ -11503,6 +11503,202 @@ const runTests = async () => {
       assert.strictEqual(resCustList.status, 403);
     });
 
+    // =========================================================================
+    // POINT 4 (28 MASTER SPRINT): DYNAMIC TAX & GST SLAB MATRIX ENGINE
+    // =========================================================================
+
+    await test('Point 4: GET /api/admin/tax/settings returns 5 GST slabs, HSN mappings and business state', async () => {
+      const res = await fetch(`${baseUrl}/admin/tax/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data);
+      assert.strictEqual(data.data.isGstEnabled, true);
+      assert.ok(Array.isArray(data.data.slabs));
+      assert.strictEqual(data.data.slabs.length, 5);
+
+      // Verify all 5 slabs: 0, 5, 12, 18, 28
+      const rates = data.data.slabs.map(s => s.rate).sort((a, b) => a - b);
+      assert.deepStrictEqual(rates, [0, 5, 12, 18, 28]);
+
+      // Verify HSN mappings list
+      assert.ok(Array.isArray(data.data.hsnMappings));
+      assert.ok(data.data.hsnMappings.length >= 8);
+      assert.ok(data.data.adminGstin.length >= 10);
+    });
+
+    await test('Point 4: PUT /api/admin/tax/settings updates GST parameters and persists custom HSN mappings', async () => {
+      const res = await fetch(`${baseUrl}/admin/tax/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          calculationMode: 'INCLUSIVE',
+          adminBusinessState: 'Delhi',
+          adminGstin: '07AAAAA0000A1Z5',
+          hsnMappings: [
+            { hsnCode: '85183000', category: 'Electronics', description: 'Headphones and earbuds', gstRate: 18, cessRate: 0, isExempt: false },
+            { hsnCode: '85287219', category: 'TVs', description: 'Smart 4K LED Televisions', gstRate: 28, cessRate: 0, isExempt: false },
+            { hsnCode: '04090000', category: 'Organic', description: 'Natural Raw Forest Honey', gstRate: 0, cessRate: 0, isExempt: true },
+            { hsnCode: '84713010', category: 'Computers', description: 'Portable laptops under 10kg', gstRate: 18, cessRate: 0, isExempt: false },
+          ],
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.adminBusinessState, 'Delhi');
+      assert.strictEqual(data.data.adminStateCode, '07');
+    });
+
+    await test('Point 4: POST /api/tax/calculate accurately calculates Intra-State tax (CGST + SGST 50/50 split, IGST = 0)', async () => {
+      const res = await fetch(`${baseUrl}/tax/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [
+            { name: 'Aura Bass Wireless Headphones', price: 1000, quantity: 2, hsnCode: '85183000' },
+          ],
+          originState: 'Delhi',
+          destinationState: 'Delhi',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.summary.supplyType, 'INTRA_STATE');
+      assert.strictEqual(data.summary.sellerStateCode, '07');
+      assert.strictEqual(data.summary.buyerStateCode, '07');
+      assert.strictEqual(data.summary.subTotal, 2000);
+
+      // In INCLUSIVE mode: taxable + tax = 2000
+      assert.strictEqual(Math.round(data.summary.totalTaxableAmount + data.summary.totalTax), 2000);
+      assert.ok(data.summary.totalCgst > 0);
+      assert.ok(data.summary.totalSgst > 0);
+      assert.strictEqual(data.summary.totalCgst, data.summary.totalSgst);
+      assert.strictEqual(data.summary.totalIgst, 0);
+      assert.strictEqual(data.summary.totalCgst + data.summary.totalSgst, data.summary.totalTax);
+    });
+
+    await test('Point 4: POST /api/tax/calculate accurately calculates Inter-State tax (100% IGST, CGST = 0, SGST = 0)', async () => {
+      const res = await fetch(`${baseUrl}/tax/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [
+            { name: 'Aura Bass Wireless Headphones', price: 1000, quantity: 2, hsnCode: '85183000' },
+          ],
+          originState: 'Delhi',
+          destinationState: 'Maharashtra',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.summary.supplyType, 'INTER_STATE');
+      assert.strictEqual(data.summary.sellerStateCode, '07');
+      assert.strictEqual(data.summary.buyerStateCode, '27');
+      assert.strictEqual(data.summary.totalCgst, 0);
+      assert.strictEqual(data.summary.totalSgst, 0);
+      assert.ok(data.summary.totalIgst > 0);
+      assert.strictEqual(data.summary.totalIgst, data.summary.totalTax);
+    });
+
+    await test('Point 4: POST /api/tax/calculate respects HSN slab mapping (28% luxury vs 0% exempt)', async () => {
+      const res = await fetch(`${baseUrl}/tax/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [
+            { name: '55-inch 4K Smart TV', price: 50000, quantity: 1, hsnCode: '85287219' }, // 28%
+            { name: 'Organic Raw Forest Honey 500g', price: 500, quantity: 2, hsnCode: '04090000' }, // 0%
+          ],
+          originState: 'Delhi',
+          destinationState: 'Uttar Pradesh',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.itemized.length, 2);
+
+      // TV Item check
+      const tv = data.itemized[0];
+      assert.strictEqual(tv.hsnCode, '85287219');
+      assert.strictEqual(tv.gstRate, 28);
+      assert.ok(tv.totalTaxAmount > 0);
+
+      // Honey Item check
+      const honey = data.itemized[1];
+      assert.strictEqual(honey.hsnCode, '04090000');
+      assert.strictEqual(honey.gstRate, 0);
+      assert.strictEqual(honey.totalTaxAmount, 0);
+      assert.strictEqual(honey.taxableAmount, 1000);
+    });
+
+    await test('Point 4: GET /api/tax/hsn-directory returns public lookup for product catalog creation', async () => {
+      const res = await fetch(`${baseUrl}/tax/hsn-directory`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.data.length >= 4);
+      assert.ok(data.data.some(h => h.hsnCode === '85183000'));
+    });
+
+    await test('Point 4: POST /api/admin/tax/test-matrix simulates sandbox tax calculations for Super Admin', async () => {
+      const res = await fetch(`${baseUrl}/admin/tax/test-matrix`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          amount: 2500,
+          hsnCode: '85183000',
+          originState: 'Delhi',
+          destinationState: 'Karnataka',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.simulation);
+      assert.strictEqual(data.simulation.summary.supplyType, 'INTER_STATE');
+    });
+
+    await test('Point 4: Role Security: Customer cannot access tax settings or sandbox (403 Forbidden)', async () => {
+      const resSettings = await fetch(`${baseUrl}/admin/tax/settings`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resSettings.status, 403);
+
+      const resUpdate = await fetch(`${baseUrl}/admin/tax/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ isGstEnabled: false }),
+      });
+      assert.strictEqual(resUpdate.status, 403);
+
+      const resTest = await fetch(`${baseUrl}/admin/tax/test-matrix`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ amount: 100 }),
+      });
+      assert.strictEqual(resTest.status, 403);
+    });
+
+
   } finally {
     if (server) {
       server.close();

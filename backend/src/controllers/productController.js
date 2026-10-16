@@ -1,5 +1,7 @@
 const Product = require('../models/Product');
 const Category = require('../models/Category');
+const Brand = require('../models/Brand');
+const fuzzySearchService = require('../services/fuzzySearchService');
 
 // Point #12: Stock Urgency Level calculation helper
 const calculateStockUrgency = (stock) => {
@@ -738,7 +740,47 @@ exports.getBrands = async (req, res, next) => {
   }
 };
 
-// @desc    Live Search with Autocomplete suggestions (Products, Categories, Brands & Popular Searches) (Point #9)
+// @desc    Typo-Tolerant Instant Fuzzy Search Engine (Point 7)
+// @route   GET /api/products/search/fuzzy
+exports.fuzzySearchProducts = async (req, res, next) => {
+  try {
+    const rawQuery = (req.query.q || req.query.query || '').trim();
+    const limit = parseInt(req.query.limit, 10) || 20;
+    const categoryFilter = req.query.category || null;
+    const brandFilter = req.query.brand || null;
+
+    if (!rawQuery) {
+      return res.status(200).json({
+        success: true,
+        query: '',
+        correctedQuery: '',
+        hasCorrection: false,
+        didYouMean: null,
+        results: [],
+        totalCount: 0,
+      });
+    }
+
+    const searchOutput = await fuzzySearchService.performFuzzySearch({
+      query: rawQuery,
+      ProductModel: Product,
+      CategoryModel: Category,
+      BrandModel: Brand,
+      limit,
+      categoryFilter,
+      brandFilter,
+    });
+
+    res.status(200).json({
+      success: true,
+      ...searchOutput,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Live Search with Autocomplete suggestions (Products, Categories, Brands & Popular Searches) (Point #9 & Point 7)
 // @route   GET /api/products/search/suggestions
 exports.getSearchSuggestions = async (req, res, next) => {
   try {
@@ -761,6 +803,8 @@ exports.getSearchSuggestions = async (req, res, next) => {
         categories: [],
         brands: [],
         trendingSearches,
+        didYouMean: null,
+        correctedQuery: null,
       });
     }
 
@@ -775,7 +819,7 @@ exports.getSearchSuggestions = async (req, res, next) => {
     const anyWordRegex = new RegExp(words.join('|'), 'i');
 
     // 1. Matched Products (Top 6)
-    const products = await Product.find({
+    let products = await Product.find({
       isPublished: true,
       $or: [
         { title: allWordsRegex },
@@ -789,7 +833,7 @@ exports.getSearchSuggestions = async (req, res, next) => {
       .limit(6);
 
     // 2. Matched Categories
-    const categories = await Category.find({
+    let categories = await Category.find({
       name: anyWordRegex,
     })
       .select('name slug icon')
@@ -801,9 +845,36 @@ exports.getSearchSuggestions = async (req, res, next) => {
       { $group: { _id: '$brand', count: { $sum: 1 } } },
       { $limit: 4 },
     ]);
-    const brands = brandAgg.map(b => ({ name: b._id, count: b.count }));
+    let brands = brandAgg.map(b => ({ name: b._id, count: b.count }));
 
-    // 4. Matched Trending Searches
+    // 4. Point 7: Typo-Tolerance & Auto-Correction Fallback
+    let didYouMean = null;
+    let correctedQuery = null;
+
+    if (products.length < 3) {
+      try {
+        const fuzzyOutput = await fuzzySearchService.performFuzzySearch({
+          query: rawQuery,
+          ProductModel: Product,
+          CategoryModel: Category,
+          BrandModel: Brand,
+          limit: 6,
+        });
+
+        if (fuzzyOutput.hasCorrection) {
+          didYouMean = fuzzyOutput.didYouMean;
+          correctedQuery = fuzzyOutput.correctedQuery;
+        }
+
+        if (products.length === 0 && fuzzyOutput.results.length > 0) {
+          products = fuzzyOutput.results;
+        }
+      } catch (fErr) {
+        console.warn('[FuzzySearch] Suggestion fallback warning:', fErr.message);
+      }
+    }
+
+    // 5. Matched Trending Searches
     const matchedTrending = trendingSearches.filter(t => anyWordRegex.test(t));
 
     res.status(200).json({
@@ -812,6 +883,8 @@ exports.getSearchSuggestions = async (req, res, next) => {
       products,
       categories,
       brands,
+      didYouMean,
+      correctedQuery,
       trendingSearches: matchedTrending.length > 0 ? matchedTrending : trendingSearches.slice(0, 3),
     });
   } catch (error) {

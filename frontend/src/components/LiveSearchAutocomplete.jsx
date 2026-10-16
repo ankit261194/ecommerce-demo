@@ -37,6 +37,8 @@ export default function LiveSearchAutocomplete({
     products: [],
     categories: [],
     brands: [],
+    didYouMean: null,
+    correctedQuery: null,
     trendingSearches: [
       'Wireless Headphones',
       'AMOLED Smartwatch',
@@ -119,6 +121,8 @@ export default function LiveSearchAutocomplete({
             categories: res.data.categories || [],
             brands: res.data.brands || [],
             trendingSearches: res.data.trendingSearches || [],
+            didYouMean: res.data.didYouMean || null,
+            correctedQuery: res.data.correctedQuery || null,
           });
         }
       } catch (_) {
@@ -388,6 +392,28 @@ export default function LiveSearchAutocomplete({
           {/* Query Mode vs Idle History Mode */}
           {searchQuery.trim() ? (
             <div className="p-3 sm:p-4 space-y-4">
+              {/* Point 7: Typo-Tolerance "Did you mean" Banner */}
+              {suggestions.didYouMean && (
+                <div className="p-2.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/90 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="text-slate-500 font-semibold">Did you mean:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery(suggestions.didYouMean);
+                        saveSearchToHistory(suggestions.didYouMean);
+                      }}
+                      className="font-extrabold text-amber-900 underline hover:text-amber-950 transition-colors cursor-pointer"
+                    >
+                      {suggestions.didYouMean}
+                    </button>
+                  </div>
+                  <span className="text-[10px] font-bold text-amber-700 bg-amber-200/70 px-2 py-0.5 rounded-full shrink-0">
+                    Auto-Correct
+                  </span>
+                </div>
+              )}
+
               {/* 1. Live Product Suggestions */}
               {suggestions.products.length > 0 && (
                 <div className="space-y-2">

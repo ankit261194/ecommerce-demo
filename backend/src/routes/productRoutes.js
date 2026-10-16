@@ -7,6 +7,7 @@ const {
   getCategoryTree,
   getBrands,
   getSearchSuggestions,
+  fuzzySearchProducts,
   getFlashDeals,
   getSocialProofActivities,
   compareProducts,
@@ -23,6 +24,7 @@ router.get('/facets', getProductFacets);
 router.post('/compare', compareProducts);
 router.get('/flash-deals', getFlashDeals);
 router.get('/social-proof/recent-activities', getSocialProofActivities);
+router.get('/search/fuzzy', fuzzySearchProducts);
 router.get('/search/suggestions', getSearchSuggestions);
 router.get('/brands', getBrands);
 router.get('/categories/tree', getCategoryTree);

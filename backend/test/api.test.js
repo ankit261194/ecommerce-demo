@@ -17719,6 +17719,71 @@ const runTests = async () => {
       assert.strictEqual(data.success, false);
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 7: TYPO-TOLERANT INSTANT FUZZY SEARCH ENGINE
+    // =========================================================================
+    console.log('\n--- PILLAR 1 - POINT 7: TYPO-TOLERANT INSTANT FUZZY SEARCH ---');
+
+    await test('Point 7: GET /api/products/search/fuzzy returns exact matches with top relevance score', async () => {
+      const res = await fetch(`${baseUrl}/products/search/fuzzy?q=Wireless`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.results));
+      assert.ok(data.totalCount >= 1);
+      assert.ok(data.results[0]._searchScore >= 20);
+    });
+
+    await test('Point 7: GET /api/products/search/fuzzy handles 1-character typo and suggests correction', async () => {
+      // "headphne" -> typo for "headphones"
+      const res = await fetch(`${baseUrl}/products/search/fuzzy?q=headphne`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.hasCorrection, true);
+      assert.ok(data.didYouMean);
+      assert.ok(data.didYouMean.includes('headphone'));
+      assert.ok(data.results.length >= 1);
+    });
+
+    await test('Point 7: GET /api/products/search/fuzzy handles 2-character typo and auto-corrects', async () => {
+      // "smartwach" -> typo for "smartwatch"
+      const res = await fetch(`${baseUrl}/products/search/fuzzy?q=smartwach`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.results.length >= 1);
+    });
+
+    await test('Point 7: GET /api/products/search/suggestions returns typo-tolerant live autocomplete with didYouMean', async () => {
+      const res = await fetch(`${baseUrl}/products/search/suggestions?q=hedphone`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.products.length >= 1);
+      assert.ok(data.didYouMean);
+    });
+
+    await test('Point 7: GET /api/products/search/fuzzy supports category and brand filtering', async () => {
+      const sampleProd = await Product.findOne({ isPublished: true });
+      if (sampleProd && sampleProd.brand) {
+        const res = await fetch(`${baseUrl}/products/search/fuzzy?q=${encodeURIComponent(sampleProd.brand)}&brand=${encodeURIComponent(sampleProd.brand)}`);
+        assert.strictEqual(res.status, 200);
+        const data = await res.json();
+        assert.strictEqual(data.success, true);
+        assert.ok(Array.isArray(data.results));
+      }
+    });
+
+    await test('Point 7: GET /api/products/search/fuzzy gracefully handles empty query', async () => {
+      const res = await fetch(`${baseUrl}/products/search/fuzzy?q=`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.results.length, 0);
+      assert.strictEqual(data.totalCount, 0);
+    });
+
   } finally {
     if (server) {
       server.close();

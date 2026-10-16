@@ -223,6 +223,14 @@ const orderSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Point 17: 1-Click Instant Wallet Refund on Order Cancellation
+    instantWalletRefund: {
+      isRefunded: { type: Boolean, default: false },
+      refundAmount: { type: Number, default: 0 },
+      walletBalanceAfter: { type: Number, default: 0 },
+      refundedAt: { type: Date, default: null },
+      transactionId: { type: String, default: null },
+    },
     // Point #31: Wallet / Coins Payment Details & Cashback
     walletCoinsUsed: {
       type: Number,

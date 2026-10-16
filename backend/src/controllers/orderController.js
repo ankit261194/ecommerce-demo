@@ -1070,17 +1070,156 @@ exports.cancelOrder = async (req, res, next) => {
       }
     }
 
-    // Update master order status and payment status
+    // Update master order status and calculate instant wallet refund
     order.status = 'CANCELLED';
+
+    let refundableAmount = 0;
     if (order.paymentStatus === 'PAID') {
+      refundableAmount = order.totalAmount || 0;
+    } else if (order.paymentMethod === 'WALLET') {
+      refundableAmount = order.walletAmountDebited || order.totalAmount || 0;
+    } else if (order.splitPayment?.isSplit) {
+      refundableAmount = (order.splitPayment.walletAmount || 0) + (order.splitPayment.onlineAmount || 0);
+    } else if (order.splitPayment?.advancePayment?.isPartialCod) {
+      refundableAmount = order.splitPayment.advancePayment.advanceAmount || 0;
+    } else if (order.walletAmountDebited > 0) {
+      refundableAmount = order.walletAmountDebited;
+    }
+
+    let newWalletBalance = 0;
+    let refundTx = null;
+
+    if (refundableAmount > 0) {
+      const customer = await User.findById(order.customer);
+      if (customer) {
+        customer.walletBalance = Math.round(((customer.walletBalance || 0) + refundableAmount) * 100) / 100;
+        newWalletBalance = customer.walletBalance;
+        await customer.save();
+
+        refundTx = await WalletTransaction.create({
+          user: customer._id,
+          type: 'CREDIT',
+          currency: 'INR',
+          amount: refundableAmount,
+          category: 'ORDER_REFUND',
+          paymentMethod: 'WALLET',
+          title: 'Instant Order Cancellation Refund',
+          description: `Instant refund of ₹${refundableAmount} for cancelled order #${order.orderNumber}: ${reason}`,
+          order: order._id,
+          orderNumber: order.orderNumber,
+          balanceAfter: newWalletBalance,
+          status: 'SUCCESS',
+        });
+
+        order.instantWalletRefund = {
+          isRefunded: true,
+          refundAmount: refundableAmount,
+          walletBalanceAfter: newWalletBalance,
+          refundedAt: new Date(),
+          transactionId: refundTx?._id ? refundTx._id.toString() : null,
+        };
+
+        if (customer.phone) {
+          smsService
+            .sendSMS(
+              customer.phone,
+              `AuraMarket: Order #${order.orderNumber} cancelled. Instant refund of ₹${refundableAmount} has been credited to your Aura Wallet! Balance: ₹${newWalletBalance}.`
+            )
+            .catch(() => {});
+        }
+
+        if (customer.email) {
+          mailService
+            .sendEmail({
+              to: customer.email,
+              subject: `Instant Refund Credited - Order #${order.orderNumber}`,
+              text: `Hello ${customer.name || 'Customer'},\n\nYour order #${order.orderNumber} has been cancelled.\nAn instant refund of ₹${refundableAmount} has been credited to your Aura In-App Wallet.\nYour new balance is ₹${newWalletBalance}.\n\nThank you,\nAuraMarket Team`,
+            })
+            .catch(() => {});
+        }
+      }
       order.paymentStatus = 'REFUNDED';
     }
+
     await order.save();
+
+    // Broadcast status change via Socket.io
+    const socketService = require('../services/socketService');
+    socketService.emitOrderStatus(order.orderNumber, {
+      status: 'CANCELLED',
+      cancellationReason: reason,
+      instantRefund: order.instantWalletRefund,
+    });
 
     res.status(200).json({
       success: true,
-      message: 'Order cancelled successfully! Stock restored to inventory and vendor ledgers adjusted.',
+      message: refundableAmount > 0
+        ? `Order cancelled successfully! Instant refund of ₹${refundableAmount} credited to your Aura Wallet.`
+        : 'Order cancelled successfully! Stock restored to inventory and vendor ledgers adjusted.',
       data: order,
+      refundSummary: {
+        refundableAmount,
+        walletBalanceAfter: newWalletBalance,
+        creditedToWallet: refundableAmount > 0,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Order Cancellation & Instant Wallet Refund Preview
+// @route   GET /api/orders/:id/cancel-preview
+exports.getCancelPreview = async (req, res, next) => {
+  try {
+    const order = await Order.findById(req.params.id).populate('subOrders');
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    if (order.customer.toString() !== req.user._id.toString() && req.user.role !== 'superadmin') {
+      return res.status(403).json({ success: false, message: 'Not authorized to view this order' });
+    }
+
+    const isAlreadyDispatched = order.subOrders.some(sub =>
+      ['dispatched', 'out_for_delivery', 'delivered'].includes(sub.status)
+    );
+
+    let refundableAmount = 0;
+    if (order.paymentStatus === 'PAID') {
+      refundableAmount = order.totalAmount || 0;
+    } else if (order.paymentMethod === 'WALLET') {
+      refundableAmount = order.walletAmountDebited || order.totalAmount || 0;
+    } else if (order.splitPayment?.isSplit) {
+      refundableAmount = (order.splitPayment.walletAmount || 0) + (order.splitPayment.onlineAmount || 0);
+    } else if (order.splitPayment?.advancePayment?.isPartialCod) {
+      refundableAmount = order.splitPayment.advancePayment.advanceAmount || 0;
+    } else if (order.walletAmountDebited > 0) {
+      refundableAmount = order.walletAmountDebited;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        canCancel: !isAlreadyDispatched && order.status !== 'CANCELLED' && order.status !== 'DELIVERED',
+        isAlreadyDispatched,
+        totalAmount: order.totalAmount,
+        paymentMethod: order.paymentMethod,
+        paymentStatus: order.paymentStatus,
+        refundableAmount,
+        refundDestination: refundableAmount > 0 ? 'Aura In-App Wallet (Instant Credit)' : 'None (Cash on Delivery without advance)',
+        cancellationReasons: [
+          'Ordered by mistake',
+          'Found a better price elsewhere',
+          'Need to change delivery address or phone',
+          'Need different size / color / variant',
+          'Delivery time is too long',
+          'Other reason',
+        ],
+      },
     });
   } catch (error) {
     next(error);
@@ -1202,6 +1341,7 @@ exports.trackOrder = async (req, res, next) => {
         canSelfCancel,
         cancellationReason: order.cancellationReason || null,
         cancelledAt: order.cancelledAt || null,
+        instantWalletRefund: order.instantWalletRefund || null,
         proofOfDelivery: order.proofOfDelivery || { hasSignature: false },
         subOrders: subOrdersTracking,
       },

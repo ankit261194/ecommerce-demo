@@ -26,6 +26,7 @@ import {
   MessageSquare,
   Gift,
   FileCheck,
+  Wallet,
 } from 'lucide-react';
 import ReturnRefundModal from './ReturnRefundModal';
 import TaxInvoiceModal from './TaxInvoiceModal';
@@ -171,6 +172,10 @@ export default function LiveOrderTrackerModal({
         throw new Error(data.message || 'Could not cancel order.');
       }
       setShowCancelModal(false);
+      // Dispatch wallet_updated event so header wallet counter updates immediately
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('wallet_updated', { detail: data.refundSummary }));
+      }
       // Refresh tracked order status
       await fetchOrderTracking(orderData.orderId || orderData.rawOrderId);
     } catch (err) {
@@ -318,6 +323,20 @@ export default function LiveOrderTrackerModal({
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       All reserved items have been auto-restored to live inventory. Any payments made have been marked for instant refund.
                     </p>
+                    {orderData.instantWalletRefund?.isRefunded && (
+                      <div className="mt-2.5 p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-700 flex flex-wrap items-center justify-between gap-2 text-xs text-emerald-900 dark:text-emerald-200">
+                        <span className="flex items-center gap-1.5 font-bold">
+                          <Wallet className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <span>Instant Wallet Refund Credited: ₹{orderData.instantWalletRefund.refundAmount}</span>
+                          <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200">
+                            #17 INSTANT
+                          </span>
+                        </span>
+                        <span className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300">
+                          Wallet Balance: ₹{orderData.instantWalletRefund.walletBalanceAfter}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -919,6 +938,24 @@ export default function LiveOrderTrackerModal({
                 <span>
                   <strong>Automatic Inventory Restoration:</strong> Items in this order will immediately be returned to available merchant stock.
                 </span>
+              </div>
+
+              {/* Point 17: Instant Wallet Refund Guarantee Banner */}
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 text-[11px] text-emerald-800 dark:text-emerald-300 flex items-start gap-2">
+                <Wallet className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                <div>
+                  <p className="font-bold flex items-center gap-1.5">
+                    <span>Instant Wallet Refund Guarantee</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200 font-black">
+                      #17 INSTANT
+                    </span>
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-emerald-700 dark:text-emerald-300">
+                    {orderData?.totalAmount
+                      ? `₹${orderData.totalAmount} will be immediately credited to your Aura In-App Wallet. Zero bank waiting time!`
+                      : 'Any prepaid amount will immediately be credited to your Aura Wallet.'}
+                  </p>
+                </div>
               </div>
             </div>
 

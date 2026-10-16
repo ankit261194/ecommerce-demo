@@ -19262,6 +19262,272 @@ const runTests = async () => {
       assert.strictEqual(res.status, 401);
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 17: 1-CLICK SELF-SERVICE INSTANT ORDER CANCELLATION & WALLET REFUND
+    // =========================================================================
+    console.log('\n--- PILLAR 1 - POINT 17: 1-CLICK SELF-SERVICE INSTANT ORDER CANCELLATION & WALLET REFUND ---');
+
+    let point17Customer;
+    let point17OrderPaid;
+    let point17OrderCod;
+    let point17OrderSplit;
+    let initialPoint17Wallet = 1000;
+
+    await test('Point 17: Setup test customer and orders for Instant Cancellation & Wallet Refund testing', async () => {
+      point17Customer = await User.findOne({ role: 'customer' });
+      assert.ok(point17Customer, 'Customer user must exist');
+
+      point17Customer.walletBalance = initialPoint17Wallet;
+      await point17Customer.save();
+
+      const prod = await Product.findOne();
+      const vendor = await VendorProfile.findOne();
+
+      // 1. Create a PAID order (₹1499)
+      const parentOrderId1 = new mongoose.Types.ObjectId();
+      const sub1 = await SubOrder.create({
+        parentOrder: parentOrderId1,
+        vendor: vendor._id,
+        customer: point17Customer._id,
+        items: [{ product: prod._id, quantity: 1, price: 1499, totalPrice: 1499 }],
+        subTotal: 1499,
+        vendorEarning: 1349,
+        platformCommissionAmount: 150,
+        status: 'placed',
+      });
+
+      point17OrderPaid = await Order.create({
+        _id: parentOrderId1,
+        orderNumber: 'ORD-P17-PAID-' + Date.now(),
+        customer: point17Customer._id,
+        items: [{ product: prod._id, vendor: vendor._id, quantity: 1, price: 1499, totalPrice: 1499 }],
+        subOrders: [sub1._id],
+        totalAmount: 1499,
+        paymentMethod: 'UPI',
+        paymentStatus: 'PAID',
+        status: 'PLACED',
+        shippingAddress: {
+          recipientName: 'Point 17 Customer',
+          phone: '9876543210',
+          street: 'Aura Heights',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          pincode: '400001',
+        },
+      });
+
+      // 2. Create a COD order (₹899)
+      const parentOrderId2 = new mongoose.Types.ObjectId();
+      const sub2 = await SubOrder.create({
+        parentOrder: parentOrderId2,
+        vendor: vendor._id,
+        customer: point17Customer._id,
+        items: [{ product: prod._id, quantity: 1, price: 899, totalPrice: 899 }],
+        subTotal: 899,
+        vendorEarning: 809,
+        platformCommissionAmount: 90,
+        status: 'placed',
+      });
+
+      point17OrderCod = await Order.create({
+        _id: parentOrderId2,
+        orderNumber: 'ORD-P17-COD-' + Date.now(),
+        customer: point17Customer._id,
+        items: [{ product: prod._id, vendor: vendor._id, quantity: 1, price: 899, totalPrice: 899 }],
+        subOrders: [sub2._id],
+        totalAmount: 899,
+        paymentMethod: 'COD',
+        paymentStatus: 'PENDING',
+        status: 'PLACED',
+        shippingAddress: {
+          recipientName: 'Point 17 Customer',
+          phone: '9876543210',
+          street: 'Aura Heights',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          pincode: '400001',
+        },
+      });
+
+      // 3. Create a SPLIT_WALLET_ONLINE order (₹500 wallet + ₹1000 online = ₹1500)
+      const parentOrderId3 = new mongoose.Types.ObjectId();
+      const sub3 = await SubOrder.create({
+        parentOrder: parentOrderId3,
+        vendor: vendor._id,
+        customer: point17Customer._id,
+        items: [{ product: prod._id, quantity: 1, price: 1500, totalPrice: 1500 }],
+        subTotal: 1500,
+        vendorEarning: 1350,
+        platformCommissionAmount: 150,
+        status: 'placed',
+      });
+
+      point17OrderSplit = await Order.create({
+        _id: parentOrderId3,
+        orderNumber: 'ORD-P17-SPLIT-' + Date.now(),
+        customer: point17Customer._id,
+        items: [{ product: prod._id, vendor: vendor._id, quantity: 1, price: 1500, totalPrice: 1500 }],
+        subOrders: [sub3._id],
+        totalAmount: 1500,
+        paymentMethod: 'SPLIT_WALLET_ONLINE',
+        paymentStatus: 'PARTIALLY_PAID',
+        splitPayment: {
+          isSplit: true,
+          walletAmount: 500,
+          onlineAmount: 1000,
+          onlineMethod: 'UPI',
+        },
+        walletAmountDebited: 500,
+        status: 'PLACED',
+        shippingAddress: {
+          recipientName: 'Point 17 Customer',
+          phone: '9876543210',
+          street: 'Aura Heights',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          pincode: '400001',
+        },
+      });
+
+      assert.ok(point17OrderPaid._id);
+      assert.ok(point17OrderCod._id);
+      assert.ok(point17OrderSplit._id);
+    });
+
+    await test('Point 17: GET /api/orders/:id/cancel-preview returns refundable amount and instant wallet refund promise', async () => {
+      const res = await fetch(`${baseUrl}/orders/${point17OrderPaid._id}/cancel-preview`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.canCancel, true);
+      assert.strictEqual(body.data.refundableAmount, 1499);
+      assert.ok(body.data.refundDestination.includes('Aura In-App Wallet'));
+      assert.ok(Array.isArray(body.data.cancellationReasons));
+    });
+
+    await test('Point 17: POST /api/orders/:id/cancel on PAID order instantly refunds ₹1499 to customer wallet', async () => {
+      const balanceBefore = (await User.findById(point17Customer._id)).walletBalance;
+
+      const res = await fetch(`${baseUrl}/orders/${point17OrderPaid._id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ reason: 'Found a better price elsewhere' }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.status, 'CANCELLED');
+      assert.strictEqual(body.data.paymentStatus, 'REFUNDED');
+      assert.strictEqual(body.refundSummary.refundableAmount, 1499);
+      assert.strictEqual(body.refundSummary.creditedToWallet, true);
+
+      // Verify customer wallet balance increased by 1499
+      const customerAfter = await User.findById(point17Customer._id);
+      assert.strictEqual(customerAfter.walletBalance, balanceBefore + 1499);
+
+      // Verify WalletTransaction created
+      const tx = await WalletTransaction.findOne({ order: point17OrderPaid._id, category: 'ORDER_REFUND' });
+      assert.ok(tx, 'Refund WalletTransaction must exist');
+      assert.strictEqual(tx.amount, 1499);
+      assert.strictEqual(tx.type, 'CREDIT');
+      assert.strictEqual(tx.status, 'SUCCESS');
+    });
+
+    await test('Point 17: POST /api/orders/:id/cancel on COD order cancels with 0 refund and restores inventory', async () => {
+      const balanceBefore = (await User.findById(point17Customer._id)).walletBalance;
+
+      const res = await fetch(`${baseUrl}/orders/${point17OrderCod._id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ reason: 'Ordered by mistake' }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.status, 'CANCELLED');
+      assert.strictEqual(body.refundSummary.refundableAmount, 0);
+      assert.strictEqual(body.refundSummary.creditedToWallet, false);
+
+      // Wallet balance remains unchanged
+      const customerAfter = await User.findById(point17Customer._id);
+      assert.strictEqual(customerAfter.walletBalance, balanceBefore);
+    });
+
+    await test('Point 17: POST /api/orders/:id/cancel on SPLIT payment order refunds full combined amount (₹1500)', async () => {
+      const balanceBefore = (await User.findById(point17Customer._id)).walletBalance;
+
+      const res = await fetch(`${baseUrl}/orders/${point17OrderSplit._id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ reason: 'Delivery time is too long' }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.status, 'CANCELLED');
+      assert.strictEqual(body.refundSummary.refundableAmount, 1500);
+
+      // Customer wallet balance increased by ₹1500
+      const customerAfter = await User.findById(point17Customer._id);
+      assert.strictEqual(customerAfter.walletBalance, balanceBefore + 1500);
+    });
+
+    await test('Point 17: GET /api/orders/track/:identifier returns instantWalletRefund metadata on cancelled order', async () => {
+      const res = await fetch(`${baseUrl}/orders/track/${point17OrderPaid.orderNumber}`);
+      assert.strictEqual(res.status, 200);
+
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.status, 'CANCELLED');
+      assert.strictEqual(body.data.instantWalletRefund.isRefunded, true);
+      assert.strictEqual(body.data.instantWalletRefund.refundAmount, 1499);
+      assert.ok(body.data.instantWalletRefund.walletBalanceAfter > 0);
+    });
+
+    await test('Point 17: Guardrail: Already cancelled order cannot be cancelled again (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/orders/${point17OrderPaid._id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ reason: 'Try cancel again' }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+      assert.ok(body.message.includes('already cancelled'));
+    });
+
+    await test('Point 17: Role Security: Customer cannot cancel another user\'s order (403 Forbidden)', async () => {
+      const res = await fetch(`${baseUrl}/orders/${point17OrderPaid._id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ reason: 'Unauthorized cancellation attempt' }),
+      });
+
+      assert.strictEqual(res.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

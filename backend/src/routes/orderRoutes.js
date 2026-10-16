@@ -18,6 +18,7 @@ const {
   getOrderPodSlip,
   calculateSplitPayment,
   addOrderTip,
+  getCancelPreview,
 } = require('../controllers/orderController');
 const { protect } = require('../middlewares/auth');
 
@@ -39,10 +40,14 @@ router.get('/my', getMyOrders);
 router.get('/:id', getOrderById);
 router.get('/:id/pod', getOrderPod);
 router.post('/:id/pod-signature', saveOrderPodSignature);
+// Point 17: 1-Click Instant Self-Cancel & Instant Wallet Refund
+router.get('/:id/cancel-preview', getCancelPreview);
 router.post('/:id/cancel', cancelOrder);
+router.put('/:id/cancel', cancelOrder);
 router.post('/:id/advance-step', simulateOrderStep);
 router.post('/:id/tip', addOrderTip);
 router.post('/:id/verify-rto-risk', verifyRtoRisk);
 router.post('/:id/resend-rto-otp', resendRtoOtp);
 
 module.exports = router;
+

@@ -14,7 +14,7 @@ const integrationsSchema = new mongoose.Schema(
     sms: {
       activeProvider: {
         type: String,
-        enum: ['mock', 'fast2sms', 'msg91', 'twilio'],
+        enum: ['mock', 'fast2sms', 'msg91', 'twilio', 'gupshup'],
         default: 'mock',
       },
       fast2sms: {
@@ -31,6 +31,33 @@ const integrationsSchema = new mongoose.Schema(
         accountSid: { type: String, default: '' },
         authToken: { type: String, default: '' },
         fromPhone: { type: String, default: '' },
+      },
+      gupshup: {
+        appId: { type: String, default: '' },
+        apiKey: { type: String, default: '' },
+        sourcePhone: { type: String, default: '' },
+      },
+      dltTemplates: {
+        otpTemplateId: { type: String, default: '1107161829381928' },
+        orderPlacedTemplateId: { type: String, default: '1107161829381929' },
+        orderDispatchedTemplateId: { type: String, default: '1107161829381930' },
+        orderDeliveredTemplateId: { type: String, default: '1107161829381931' },
+      },
+    },
+    whatsapp: {
+      enabled: { type: Boolean, default: false },
+      provider: { type: String, default: 'meta_cloud_api' },
+      phoneNumberId: { type: String, default: '' },
+      businessAccountId: { type: String, default: '' },
+      accessToken: { type: String, default: '' },
+      templateNamespace: { type: String, default: 'auramarket_commerce_alerts' },
+      apiVersion: { type: String, default: 'v20.0' },
+      webhookVerifyToken: { type: String, default: 'auramarket_wa_verify_2026' },
+      automatedAlerts: {
+        orderConfirmation: { type: Boolean, default: true },
+        outForDelivery: { type: Boolean, default: true },
+        deliveryConfirmation: { type: Boolean, default: true },
+        cartRecovery: { type: Boolean, default: true },
       },
     },
     payments: {

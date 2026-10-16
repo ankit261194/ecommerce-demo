@@ -10732,6 +10732,198 @@ const runTests = async () => {
       assert.strictEqual(resTest.status, 403);
     });
 
+    // =========================================================================
+    // POINT 2: THIRD-PARTY SMS & WHATSAPP CLOUD API SETTINGS TESTS
+    // =========================================================================
+
+    await test('Point 2: GET /api/admin/messaging/settings returns SMS providers, WhatsApp config & masked secrets', async () => {
+      const res = await fetch(`${baseUrl}/admin/messaging/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.sms);
+      assert.ok(data.data.sms.activeProvider);
+      assert.ok(data.data.sms.fast2sms);
+      assert.ok(data.data.sms.msg91);
+      assert.ok(data.data.sms.twilio);
+      assert.ok(data.data.sms.gupshup);
+      assert.ok(data.data.sms.dltTemplates);
+      assert.strictEqual(data.data.whatsapp.provider, 'meta_cloud_api');
+      assert.strictEqual(data.data.whatsapp.apiVersion, 'v20.0');
+      assert.ok(data.data.whatsapp.automatedAlerts);
+    });
+
+    await test('Point 2: PUT /api/admin/messaging/settings saves live MSG91, Gupshup, DLT templates & WhatsApp Cloud API', async () => {
+      const payload = {
+        sms: {
+          activeProvider: 'msg91',
+          msg91: {
+            authKey: 'AUTH_KEY_MSG91_SUPER_SECRET',
+            senderId: 'AURAMK',
+            dltTemplateId: 'DLT_OTP_999888',
+          },
+          gupshup: {
+            appId: 'AURAGUPSHUP',
+            apiKey: 'GUPSHUP_SECRET_TOKEN_2026',
+            sourcePhone: '919876543210',
+          },
+          dltTemplates: {
+            otpTemplateId: '1107161829381928',
+            orderPlacedTemplateId: '1107161829381929',
+            orderDispatchedTemplateId: '1107161829381930',
+            orderDeliveredTemplateId: '1107161829381931',
+          },
+        },
+        whatsapp: {
+          enabled: true,
+          provider: 'meta_cloud_api',
+          phoneNumberId: '1092837465',
+          businessAccountId: '9081726354',
+          accessToken: 'EAAG_META_LONG_LIVED_SECRET_TOKEN_XYZ',
+          templateNamespace: 'auramarket_commerce_alerts',
+          apiVersion: 'v20.0',
+          automatedAlerts: {
+            orderConfirmation: true,
+            outForDelivery: true,
+            deliveryConfirmation: true,
+            cartRecovery: true,
+          },
+        },
+      };
+
+      const res = await fetch(`${baseUrl}/admin/messaging/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.sms.activeProvider, 'msg91');
+      assert.strictEqual(data.whatsapp.phoneNumberId, '1092837465');
+      assert.strictEqual(data.whatsapp.apiVersion, 'v20.0');
+    });
+
+    await test('Point 2: GET /api/admin/messaging/settings returns properly masked secrets for saved credentials', async () => {
+      const res = await fetch(`${baseUrl}/admin/messaging/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.sms.msg91.hasKey, true);
+      assert.ok(data.data.sms.msg91.authKeyMasked.includes('••••'));
+      assert.strictEqual(data.data.sms.gupshup.hasKey, true);
+      assert.ok(data.data.sms.gupshup.apiKeyMasked.includes('••••'));
+      assert.strictEqual(data.data.whatsapp.hasAccessToken, true);
+      assert.ok(data.data.whatsapp.accessTokenMasked.includes('••••'));
+    });
+
+    await test('Point 2: PUT /api/admin/messaging/settings preserves masked secret without overwriting', async () => {
+      const updatePayload = {
+        whatsapp: {
+          phoneNumberId: '1092837465',
+          accessToken: 'EAAG•••••••XYZ', // Masked representation submitted by client
+        },
+      };
+
+      const res = await fetch(`${baseUrl}/admin/messaging/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify(updatePayload),
+      });
+      assert.strictEqual(res.status, 200);
+
+      // Verify token is still present and valid
+      const checkRes = await fetch(`${baseUrl}/admin/messaging/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const checkData = await checkRes.json();
+      assert.strictEqual(checkData.data.whatsapp.hasAccessToken, true);
+    });
+
+    await test('Point 2: POST /api/admin/messaging/test-dispatch executes 1-click test SMS dispatch', async () => {
+      const res = await fetch(`${baseUrl}/admin/messaging/test-dispatch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          channel: 'sms',
+          phone: '9876543210',
+          customMessage: 'AuraMarket Unit Test SMS: Gateway is active!',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.channel, 'sms');
+      assert.strictEqual(data.phone, '9876543210');
+      assert.ok(data.latencyMs >= 0);
+      assert.ok(data.messageId.startsWith('SMS_'));
+    });
+
+    await test('Point 2: POST /api/admin/messaging/test-dispatch executes 1-click Meta WhatsApp Cloud API test dispatch', async () => {
+      const res = await fetch(`${baseUrl}/admin/messaging/test-dispatch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          channel: 'whatsapp',
+          phone: '+91 98765-43210',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.channel, 'whatsapp');
+      assert.strictEqual(data.provider, 'meta_cloud_api');
+      assert.strictEqual(data.phone, '919876543210');
+      assert.ok(data.latencyMs >= 0);
+      assert.ok(data.messageId.startsWith('wamid.HBgL'));
+    });
+
+    await test('Point 2: Validation & RBAC Security (short phone 400, customer 403)', async () => {
+      // 1. Short phone validation
+      const resShort = await fetch(`${baseUrl}/admin/messaging/test-dispatch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ channel: 'sms', phone: '123' }),
+      });
+      assert.strictEqual(resShort.status, 400);
+
+      // 2. Customer token rejected on settings GET
+      const resCustGet = await fetch(`${baseUrl}/admin/messaging/settings`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustGet.status, 403);
+
+      // 3. Customer token rejected on test dispatch
+      const resCustPost = await fetch(`${baseUrl}/admin/messaging/test-dispatch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ channel: 'sms', phone: '9876543210' }),
+      });
+      assert.strictEqual(resCustPost.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

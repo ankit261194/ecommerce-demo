@@ -42,6 +42,7 @@ const scannerRoutes = require('./routes/scannerRoutes');
 const voiceAssistantRoutes = require('./routes/voiceAssistantRoutes');
 const payoutSplitRoutes = require('./routes/payoutSplitRoutes');
 const paymentGatewayRoutes = require('./routes/paymentGatewayRoutes');
+const messagingConfigRoutes = require('./routes/messagingConfigRoutes');
 
 const app = express();
 
@@ -146,6 +147,7 @@ app.use('/api/ai', voiceAssistantRoutes);
 app.use('/api/payout-splits', payoutSplitRoutes);
 app.use('/api/payments', paymentGatewayRoutes);
 app.use('/api/admin/payments', paymentGatewayRoutes);
+app.use('/api/admin/messaging', messagingConfigRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

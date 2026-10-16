@@ -12736,6 +12736,316 @@ const runTests = async () => {
       assert.strictEqual(resAdminRoute.status, 403);
     });
 
+    // =========================================================================
+    // POINT 10: INVENTORY LOW-STOCK THRESHOLD & AUTO-RESTOCK ALERTS
+    // =========================================================================
+    console.log('\n--- POINT 10: INVENTORY LOW-STOCK THRESHOLD & AUTO-RESTOCK ALERTS ---');
+
+    let point10VendorToken;
+    let point10Vendor;
+    let prodCritical;
+    let prodOutOfStock;
+    let prodLowStock;
+    let prodHealthy;
+
+    await test('Point 10 Setup: Authenticate Apex Vendor & Seed Defined Inventory Matrix', async () => {
+      const res = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'apex@auramarket.com', password: 'vendor123456' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token);
+      point10VendorToken = data.token;
+
+      const apexUser = await User.findOne({ email: 'apex@auramarket.com' });
+      point10Vendor = await VendorProfile.findOne({ user: apexUser._id });
+
+      // Clean existing test products for this test block
+      await Product.deleteMany({ sku: { $in: ['P10-CRIT-01', 'P10-OUT-02', 'P10-LOW-03', 'P10-HLTH-04'] } });
+
+      const Category = require('../src/models/Category');
+      const testCat = (await Category.findOne()) || (await Category.create({ name: 'Inventory Test Cat', slug: 'inv-test-cat-' + Date.now() }));
+
+      // Create test products
+      prodCritical = await Product.create({
+        title: 'Point 10 Critical Item (1 Stock)',
+        slug: 'p10-crit-01-' + Date.now(),
+        description: 'Point 10 Critical Item description with low stock',
+        category: testCat._id,
+        sku: 'P10-CRIT-01',
+        vendor: point10Vendor._id,
+        stock: 1,
+        lowStockThreshold: 5,
+        sellingPrice: 1500,
+        mrp: 2000,
+      });
+
+      prodOutOfStock = await Product.create({
+        title: 'Point 10 Sold Out Item (0 Stock)',
+        slug: 'p10-out-02-' + Date.now(),
+        description: 'Point 10 Sold Out Item description with zero stock',
+        category: testCat._id,
+        sku: 'P10-OUT-02',
+        vendor: point10Vendor._id,
+        stock: 0,
+        lowStockThreshold: 5,
+        sellingPrice: 2500,
+        mrp: 3000,
+      });
+
+      prodLowStock = await Product.create({
+        title: 'Point 10 Low Stock Item (4 Stock)',
+        slug: 'p10-low-03-' + Date.now(),
+        description: 'Point 10 Low Stock Item description below threshold',
+        category: testCat._id,
+        sku: 'P10-LOW-03',
+        vendor: point10Vendor._id,
+        stock: 4,
+        lowStockThreshold: 5,
+        sellingPrice: 800,
+        mrp: 1200,
+      });
+
+      prodHealthy = await Product.create({
+        title: 'Point 10 Healthy Stock Item (50 Stock)',
+        slug: 'p10-hlth-04-' + Date.now(),
+        description: 'Point 10 Healthy Stock Item description above threshold',
+        category: testCat._id,
+        sku: 'P10-HLTH-04',
+        vendor: point10Vendor._id,
+        stock: 50,
+        lowStockThreshold: 5,
+        sellingPrice: 500,
+        mrp: 800,
+      });
+
+      assert.ok(prodCritical._id);
+      assert.ok(prodOutOfStock._id);
+      assert.ok(prodLowStock._id);
+      assert.ok(prodHealthy._id);
+    });
+
+    await test('Point 10: GET /api/vendor/inventory/low-stock returns telemetry and only at-risk SKUs', async () => {
+      const res = await fetch(`${baseUrl}/vendor/inventory/low-stock`, {
+        headers: { Authorization: `Bearer ${point10VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.count >= 3);
+      assert.ok(body.telemetry.outOfStockCount >= 1);
+      assert.ok(body.telemetry.criticalCount >= 2);
+      assert.ok(body.telemetry.totalAtRiskInventoryValue > 0);
+
+      const skus = body.products.map(p => p.sku);
+      assert.ok(skus.includes('P10-CRIT-01'));
+      assert.ok(skus.includes('P10-OUT-02'));
+      assert.ok(skus.includes('P10-LOW-03'));
+      assert.ok(!skus.includes('P10-HLTH-04'), 'Healthy 50-stock product must be excluded from low-stock radar');
+    });
+
+    await test('Point 10: PUT /api/vendor/inventory/thresholds updates single SKU threshold', async () => {
+      const res = await fetch(`${baseUrl}/vendor/inventory/thresholds`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point10VendorToken}`,
+        },
+        body: JSON.stringify({
+          productId: prodCritical._id.toString(),
+          lowStockThreshold: 15,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.updatedCount, 1);
+
+      const refreshed = await Product.findById(prodCritical._id);
+      assert.strictEqual(refreshed.lowStockThreshold, 15);
+    });
+
+    await test('Point 10: PUT /api/vendor/inventory/thresholds updates batch of thresholds', async () => {
+      const res = await fetch(`${baseUrl}/vendor/inventory/thresholds`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point10VendorToken}`,
+        },
+        body: JSON.stringify({
+          thresholds: [
+            { productId: prodOutOfStock._id.toString(), lowStockThreshold: 12 },
+            { productId: prodLowStock._id.toString(), lowStockThreshold: 8 },
+          ],
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.updatedCount, 2);
+
+      const refOut = await Product.findById(prodOutOfStock._id);
+      const refLow = await Product.findById(prodLowStock._id);
+      assert.strictEqual(refOut.lowStockThreshold, 12);
+      assert.strictEqual(refLow.lowStockThreshold, 8);
+    });
+
+    await test('Point 10: PUT /api/vendor/inventory/thresholds updates store-wide default threshold', async () => {
+      const res = await fetch(`${baseUrl}/vendor/inventory/thresholds`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point10VendorToken}`,
+        },
+        body: JSON.stringify({
+          defaultThreshold: 6,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.updatedCount >= 4);
+
+      const refHealthy = await Product.findById(prodHealthy._id);
+      assert.strictEqual(refHealthy.lowStockThreshold, 6);
+    });
+
+    await test('Point 10: PATCH /api/vendor/inventory/quick-restock replenishes stock for single item', async () => {
+      const res = await fetch(`${baseUrl}/vendor/inventory/quick-restock`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point10VendorToken}`,
+        },
+        body: JSON.stringify({
+          productId: prodOutOfStock._id.toString(),
+          additionalStock: 40,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.updatedCount, 1);
+      assert.strictEqual(body.products[0].newStock, 40);
+
+      const refOut = await Product.findById(prodOutOfStock._id);
+      assert.strictEqual(refOut.stock, 40);
+    });
+
+    await test('Point 10: PATCH /api/vendor/inventory/quick-restock replenishes batch of items', async () => {
+      const res = await fetch(`${baseUrl}/vendor/inventory/quick-restock`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point10VendorToken}`,
+        },
+        body: JSON.stringify({
+          restockItems: [
+            { productId: prodCritical._id.toString(), additionalStock: 25 },
+            { productId: prodLowStock._id.toString(), additionalStock: 30 },
+          ],
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.updatedCount, 2);
+
+      const refCrit = await Product.findById(prodCritical._id);
+      const refLow = await Product.findById(prodLowStock._id);
+      assert.strictEqual(refCrit.stock, 26); // was 1 + 25 = 26
+      assert.strictEqual(refLow.stock, 34);  // was 4 + 30 = 34
+    });
+
+    await test('Point 10: POST /api/vendor/inventory/trigger-restock-alert dispatches WhatsApp Red Alert via Meta Cloud API and logs audit', async () => {
+      const res = await fetch(`${baseUrl}/vendor/inventory/trigger-restock-alert`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${point10VendorToken}`,
+        },
+        body: JSON.stringify({
+          phone: '+91 98765 43210',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.channel, 'whatsapp');
+      assert.strictEqual(body.provider, 'meta_cloud_api');
+      assert.ok(body.messageId.startsWith('wamid.'));
+      assert.ok(body.messageText.includes('AURAMARKET RED ALERT'));
+      assert.ok(body.previewUrl.includes('wa.me/919876543210'));
+      assert.ok(body.latencyMs > 0);
+    });
+
+    await test('Point 10: GET /api/admin/inventory/low-stock allows Super Admin multi-vendor radar view', async () => {
+      const res = await fetch(`${baseUrl}/admin/inventory/low-stock`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.telemetry);
+    });
+
+    await test('Point 10: POST /api/admin/inventory/trigger-restock-alert allows Super Admin to alert vendor', async () => {
+      const res = await fetch(`${baseUrl}/admin/inventory/trigger-restock-alert`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          vendorId: point10Vendor._id.toString(),
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.channel, 'whatsapp');
+    });
+
+    await test('Point 10: Role Security: Customer cannot access low-stock inventory or restock routes (403 Forbidden)', async () => {
+      const resGet = await fetch(`${baseUrl}/vendor/inventory/low-stock`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resGet.status, 403);
+
+      const resPut = await fetch(`${baseUrl}/vendor/inventory/thresholds`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ defaultThreshold: 10 }),
+      });
+      assert.strictEqual(resPut.status, 403);
+
+      const resAlert = await fetch(`${baseUrl}/vendor/inventory/trigger-restock-alert`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(resAlert.status, 403);
+
+      const resPatch = await fetch(`${baseUrl}/vendor/inventory/quick-restock`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ productId: prodCritical._id.toString(), additionalStock: 10 }),
+      });
+      assert.strictEqual(resPatch.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

@@ -32,6 +32,10 @@ const {
   createVendorStaff,
   updateVendorStaff,
   deleteVendorStaff,
+  getLowStockInventory,
+  updateInventoryThresholds,
+  triggerRestockAlert,
+  quickRestockInventory,
 } = require('../controllers/vendorController');
 const { getVendorTaxReport, exportVendorTaxReportCSV } = require('../controllers/taxController');
 const { getSplitPackingSlips, getThermalReceipt } = require('../controllers/orderController');
@@ -70,6 +74,13 @@ router.post('/products', createProduct);
 router.post('/products/bulk-upload', bulkUploadProducts);
 router.get('/products/export-csv', exportProductsCSV);
 router.get('/products/sample-template', getProductSampleTemplate);
+
+// Point 10: Inventory Low-Stock Threshold & Auto-Restock Alerts
+router.get('/inventory/low-stock', getLowStockInventory);
+router.put('/inventory/thresholds', updateInventoryThresholds);
+router.post('/inventory/trigger-restock-alert', triggerRestockAlert);
+router.patch('/inventory/quick-restock', quickRestockInventory);
+
 router.post('/ai-generator/product-copy', generateProductCopy);
 router.post('/ai-generator/seo-meta', generateSeoMeta);
 router.put('/products/:id', updateProduct);

@@ -23,6 +23,7 @@ const auditLogSchema = new mongoose.Schema(
         'STAFF',
         'SYSTEM',
         'SECURITY',
+        'INVENTORY',
       ],
       default: 'SYSTEM',
     },

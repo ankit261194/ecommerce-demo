@@ -24,6 +24,7 @@ import {
   Users,
   MessageSquare,
   Barcode,
+  ShieldAlert,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -45,6 +46,7 @@ import VendorStaffManagerModal from '../components/VendorStaffManagerModal';
 import VendorChatInboxModal from '../components/VendorChatInboxModal';
 import VendorTaxReportModal from '../components/VendorTaxReportModal';
 import PosCounterScreen from '../components/PosCounterScreen';
+import InventoryAlertsModal from '../components/InventoryAlertsModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -179,6 +181,7 @@ export const VendorPortal = () => {
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [isTaxReportModalOpen, setIsTaxReportModalOpen] = useState(false); // Point #15: Vendor GST/VAT & HSN Tax Filing Report
   const [isPosModalOpen, setIsPosModalOpen] = useState(false); // Point #18: Offline POS Counter Billing Screen
+  const [isInventoryAlertsModalOpen, setIsInventoryAlertsModalOpen] = useState(false); // Point 10: Inventory Low-Stock Threshold & Auto-Restock Studio
   const [payoutAmount, setPayoutAmount] = useState('10000');
   const [notification, setNotification] = useState(null);
 
@@ -645,6 +648,19 @@ export const VendorPortal = () => {
             <span>POS Billing</span>
             <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-amber-400">
               #18
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsInventoryAlertsModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-black shadow-lg shadow-red-500/20 transition-all"
+            title="Point 10: Inventory Low-Stock Threshold & Auto-Restock Studio (Minimum Stock Thresholds, WhatsApp Red Alerts & Quick Replenishment)"
+          >
+            <ShieldAlert className="w-4 h-4 text-white" />
+            <span>Low Stock Radar</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-white text-red-600">
+              #10
             </span>
           </button>
 
@@ -1209,6 +1225,14 @@ export const VendorPortal = () => {
               <span>Bulk Excel / CSV (Point #55)</span>
             </button>
             <button
+              onClick={() => setIsInventoryAlertsModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white rounded-xl text-xs font-bold shadow-md shadow-red-600/20 transition-all hover:scale-105"
+              title="Point 10: Inventory Low-Stock Threshold & Auto-Restock Studio"
+            >
+              <ShieldAlert className="w-4 h-4 text-white" />
+              <span>Low-Stock Radar & Alerts (Point #10)</span>
+            </button>
+            <button
               onClick={() => setIsAddProductDrawerOpen(true)}
               className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
             >
@@ -1218,31 +1242,40 @@ export const VendorPortal = () => {
           </div>
         </div>
 
-        {/* Point #54: Low Stock Alert Warning Banner */}
+        {/* Point #10 & #54: Low Stock Alert Warning Banner */}
         {products.some(p => p.stock <= (p.lowStockThreshold || 5)) && (
-          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-amber-900 animate-fadeIn">
+          <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-red-950 animate-fadeIn">
             <div className="flex items-center gap-2.5">
-              <span className="p-2 rounded-xl bg-amber-500/20 text-amber-600">
+              <span className="p-2 rounded-xl bg-red-500/20 text-red-600">
                 <AlertTriangle className="w-5 h-5 animate-pulse" />
               </span>
               <div>
                 <p className="text-xs font-bold flex items-center gap-2">
-                  <span>Inventory Alert (Point #54):</span>
-                  <span className="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px]">
+                  <span className="text-red-900">Inventory Low-Stock Warning (Point #10):</span>
+                  <span className="px-2 py-0.5 rounded-full bg-red-600 text-white font-black text-[10px]">
                     {products.filter(p => p.stock <= (p.lowStockThreshold || 5)).length} Items Running Low / Out
                   </span>
                 </p>
-                <p className="text-[11px] text-amber-700">
-                  Products are below safety threshold. Restock now to prevent missed orders.
+                <p className="text-[11px] text-red-700">
+                  Products are below safety threshold. Restock or dispatch WhatsApp Red Alert to prevent stockouts.
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setStockFilter('low_stock')}
-              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-sm transition-all shrink-0"
-            >
-              Filter Low Stock
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setIsInventoryAlertsModalOpen(true)}
+                className="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs shadow-sm transition-all flex items-center gap-1.5"
+              >
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>Restock Studio & Alerts</span>
+              </button>
+              <button
+                onClick={() => setStockFilter('low_stock')}
+                className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-sm transition-all"
+              >
+                Filter Low Stock
+              </button>
+            </div>
           </div>
         )}
 
@@ -1909,6 +1942,14 @@ export const VendorPortal = () => {
           fetchVendorData();
         }}
         storeName={vendorData.storeName}
+      />
+
+      {/* Point 10: Inventory Low-Stock Threshold & Auto-Restock Studio */}
+      <InventoryAlertsModal
+        isOpen={isInventoryAlertsModalOpen}
+        onClose={() => setIsInventoryAlertsModalOpen(false)}
+        isAdmin={false}
+        onRestocked={fetchVendorData}
       />
     </div>
   );

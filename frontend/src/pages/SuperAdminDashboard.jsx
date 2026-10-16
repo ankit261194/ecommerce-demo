@@ -98,6 +98,7 @@ import StorageConfigManager from '../components/StorageConfigManager';
 import CourierAggregatorManager from '../components/CourierAggregatorManager';
 import GlobalSettingsManager from '../components/GlobalSettingsManager';
 import AuditTrailManager from '../components/AuditTrailManager';
+import InventoryAlertsModal from '../components/InventoryAlertsModal';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -555,6 +556,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
   const [showBulkActionDropdown, setShowBulkActionDropdown] = useState(false);
   const [isAdminBulkLabelsOpen, setIsAdminBulkLabelsOpen] = useState(false); // Point 9: Bulk 4x6 Thermal Labels
+  const [isInventoryAlertsModalOpen, setIsInventoryAlertsModalOpen] = useState(false); // Point 10: Inventory Low-Stock Radar & Automated Alerts
 
   // Point 33: Multi-Vendor Commission Split Inspector State
   const [selectedSplitOrder, setSelectedSplitOrder] = useState(null);
@@ -1198,6 +1200,18 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setIsInventoryAlertsModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-black shadow-lg shadow-red-500/20 transition-all"
+            title="Point 10: Platform-Wide Low-Stock Inventory Radar & Automated Alerts"
+          >
+            <ShieldAlert className="w-4 h-4 text-white" />
+            <span>Low-Stock Radar</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-white text-red-600">
+              #10
+            </span>
+          </button>
+
+          <button
             onClick={handleSeedDemo}
             disabled={isProcessing}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-sm transition-all"
@@ -1637,6 +1651,18 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
             <span>Courier Manifests</span>
             <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-200 ml-1">
               Point #12
+            </span>
+          </button>
+
+          <button
+            onClick={() => setIsInventoryAlertsModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition-all"
+            title="Point 10: Multi-Vendor Inventory Low-Stock Radar & Automated Alerts"
+          >
+            <ShieldAlert className="w-4 h-4 text-red-400" />
+            <span>Low-Stock Radar</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-red-500/30 text-red-300 ml-1">
+              Point #10
             </span>
           </button>
         </div>
@@ -3717,6 +3743,14 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           onClose={() => setPreviewPolicySlug(null)}
         />
       )}
+
+      {/* Point 10: Multi-Vendor Inventory Low-Stock Radar & Automated Restock Studio */}
+      <InventoryAlertsModal
+        isOpen={isInventoryAlertsModalOpen}
+        onClose={() => setIsInventoryAlertsModalOpen(false)}
+        isAdmin={true}
+        onRestocked={fetchDashboardData}
+      />
     </div>
   );
 };

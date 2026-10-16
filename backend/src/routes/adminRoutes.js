@@ -51,6 +51,10 @@ const {
   exportProductsCSV,
   getProductSampleTemplate,
   generateBulkShippingLabels,
+  getLowStockInventory,
+  updateInventoryThresholds,
+  triggerRestockAlert,
+  quickRestockInventory,
 } = require('../controllers/vendorController');
 const { protect, authorize, requirePermission } = require('../middlewares/auth');
 
@@ -74,6 +78,12 @@ router.patch('/vendors/:id/commission', updateVendorCommission);
 router.post('/products/bulk-upload', bulkUploadProducts);
 router.get('/products/export-csv', exportProductsCSV);
 router.get('/products/sample-template', getProductSampleTemplate);
+
+// Point 10: Multi-Vendor Inventory Low-Stock Radar & Automated Alerts
+router.get('/inventory/low-stock', getLowStockInventory);
+router.put('/inventory/thresholds', updateInventoryThresholds);
+router.post('/inventory/trigger-restock-alert', triggerRestockAlert);
+router.patch('/inventory/quick-restock', quickRestockInventory);
 
 // Vendor Withdrawal / Payout Approval Hub (Point #45)
 router.get('/payouts', getAllPayouts);

@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const router = express.Router();
 const {
   getServerHealth,
@@ -12,6 +12,9 @@ const {
   updateBackupSchedule,
   downloadBackup,
   simulateRestore,
+  getApiMetrics,
+  simulateApiDiagnosticPing,
+  resetApiMetrics,
 } = require('../controllers/telemetryController');
 const { protect, authorize } = require('../middlewares/auth');
 
@@ -19,10 +22,15 @@ const { protect, authorize } = require('../middlewares/auth');
 router.use(protect);
 router.use(authorize('superadmin', 'subadmin'));
 
-// Live Server & Database Telemetry
+// Live Server, Health & Telemetry
 router.get('/server-health', getServerHealth);
 router.get('/health', getServerHealth);
 router.get('/database', getDatabaseTelemetry);
+
+// Point 33: Live API Telemetry & Traffic Insights
+router.get('/api-metrics', getApiMetrics);
+router.post('/api-metrics/simulate-ping', simulateApiDiagnosticPing);
+router.post('/api-metrics/reset', authorize('superadmin'), resetApiMetrics);
 
 // Cron Jobs Engine
 router.get('/cron-jobs', getCronJobs);

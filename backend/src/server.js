@@ -127,6 +127,10 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Live API Telemetry & Latency Monitoring (Point #33 - Pillar 2)
+const { apiTelemetryMiddleware } = require('./middlewares/apiTelemetryMiddleware');
+app.use(apiTelemetryMiddleware);
+
 // Health Check
 app.get('/api/health', (req, res) => {
   const { getDbStatus } = require('./config/db');

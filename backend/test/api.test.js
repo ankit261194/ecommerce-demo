@@ -24310,6 +24310,211 @@ const runTests = async () => {
       assert.strictEqual(resRider.status, 403);
     });
 
+
+    // =========================================================================
+    // PILLAR 2 - POINT 33: SYSTEM HEALTH MONITOR & LIVE API TELEMETRY DASHBOARD
+    // =========================================================================
+    console.log('\n--- PILLAR 2 - POINT 33: SYSTEM HEALTH MONITOR & LIVE API TELEMETRY DASHBOARD ---');
+
+    let sampleTelemetryCronId = null;
+    let sampleTelemetryBackupId = null;
+
+    await test('Point 33: GET /api/telemetry/server-health returns OS, CPU, RAM, event loop lag, Redis and DB telemetry', async () => {
+      const res = await fetch(`${baseUrl}/telemetry/server-health`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200, 'Server health must return 200 OK');
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data);
+      assert.ok(['HEALTHY', 'WARNING', 'CRITICAL'].includes(data.data.status));
+      assert.ok(data.data.os);
+      assert.ok(data.data.os.platform);
+      assert.ok(data.data.node);
+      assert.ok(data.data.memory);
+      assert.ok(data.data.memory.usagePercent >= 0);
+      assert.ok(data.data.cpu);
+      assert.ok(data.data.cpu.coreCount >= 1);
+      assert.ok(typeof data.data.eventLoopLagMs === 'number');
+      assert.ok(data.data.redis);
+      assert.ok(data.data.redis.status);
+      assert.strictEqual(data.data.database.state, 'CONNECTED');
+      assert.ok(data.data.apiSummary);
+      assert.ok(data.data.apiSummary.totalRequests >= 1);
+    });
+
+    await test('Point 33: GET /api/telemetry/api-metrics returns live throughput, latency percentiles, status breakdown and request buffer', async () => {
+      const res = await fetch(`${baseUrl}/telemetry/api-metrics`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data);
+      assert.ok(data.data.summary);
+      assert.ok(typeof data.data.summary.totalRequests === 'number');
+      assert.ok(typeof data.data.summary.requestsPerMinute === 'number');
+      assert.ok(typeof data.data.summary.avgResponseTimeMs === 'number');
+      assert.ok(typeof data.data.summary.p95ResponseTimeMs === 'number');
+      assert.ok(typeof data.data.summary.p99ResponseTimeMs === 'number');
+      assert.ok(typeof data.data.summary.eventLoopLagMs === 'number');
+      assert.ok(typeof data.data.summary.successRatePercent === 'number');
+      assert.ok(data.data.statusCodes);
+      assert.ok(typeof data.data.statusCodes['2xx'] === 'number');
+      assert.ok(Array.isArray(data.data.recentRequests));
+      assert.ok(Array.isArray(data.data.slowestEndpoints));
+    });
+
+    await test('Point 33: POST /api/telemetry/api-metrics/simulate-ping performs diagnostic round-trip latency and DB ping test', async () => {
+      const res = await fetch(`${baseUrl}/telemetry/api-metrics/simulate-ping`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data);
+      assert.ok(typeof data.data.roundTripLatencyMs === 'number');
+      assert.ok(typeof data.data.databasePingLatencyMs === 'number');
+      assert.ok(typeof data.data.eventLoopLagMs === 'number');
+      assert.strictEqual(data.data.status, 'OPTIMAL');
+      assert.ok(data.data.timestamp);
+    });
+
+    await test('Point 33: POST /api/telemetry/api-metrics/reset flushes API telemetry buffer and latency counters', async () => {
+      const res = await fetch(`${baseUrl}/telemetry/api-metrics/reset`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.message.includes('reset successfully'));
+
+      // Verify that after reset, buffer is cleared
+      const checkRes = await fetch(`${baseUrl}/telemetry/api-metrics`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const checkData = await checkRes.json();
+      assert.ok(checkData.data.recentRequests.length <= 2, 'Buffer should only contain requests made after reset');
+    });
+
+    await test('Point 33: GET /api/telemetry/database returns collection metrics, storage estimates and live DB ping latency', async () => {
+      const res = await fetch(`${baseUrl}/telemetry/database`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data);
+      assert.strictEqual(data.data.connection.state, 'CONNECTED');
+      assert.ok(typeof data.data.connection.pingLatencyMs === 'number');
+      assert.ok(data.data.summary.totalCollections >= 10);
+      assert.ok(data.data.summary.totalRecords >= 1);
+      assert.ok(Array.isArray(data.data.collections));
+      const usersCol = data.data.collections.find(c => c.collection === 'users');
+      assert.ok(usersCol);
+      assert.ok(usersCol.count >= 1);
+    });
+
+    await test('Point 33: GET /api/telemetry/cron-jobs and POST /api/telemetry/cron-jobs/:id/run executes 1-click scheduled task', async () => {
+      const listRes = await fetch(`${baseUrl}/telemetry/cron-jobs`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(listRes.status, 200);
+      const listData = await listRes.json();
+      assert.strictEqual(listData.success, true);
+      assert.ok(listData.data.length >= 6);
+      const targetJob = listData.data.find(j => j.key === 'abandoned_cart_scanner');
+      assert.ok(targetJob);
+      sampleTelemetryCronId = targetJob._id;
+
+      const runRes = await fetch(`${baseUrl}/telemetry/cron-jobs/${targetJob._id}/run`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(runRes.status, 200);
+      const runData = await runRes.json();
+      assert.strictEqual(runData.success, true);
+      assert.strictEqual(runData.data.lastRunStatus, 'SUCCESS');
+      assert.ok(typeof runData.data.lastRunDurationMs === 'number');
+    });
+
+    await test('Point 33: PATCH /api/telemetry/cron-jobs/:id/toggle toggles cron worker status between ACTIVE and PAUSED', async () => {
+      assert.ok(sampleTelemetryCronId);
+      const toggleRes = await fetch(`${baseUrl}/telemetry/cron-jobs/${sampleTelemetryCronId}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(toggleRes.status, 200);
+      const toggleData = await toggleRes.json();
+      assert.strictEqual(toggleData.success, true);
+      const state1 = toggleData.data.isActive;
+
+      // Toggle back to original state
+      const revertRes = await fetch(`${baseUrl}/telemetry/cron-jobs/${sampleTelemetryCronId}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(revertRes.status, 200);
+      const revertData = await revertRes.json();
+      assert.strictEqual(revertData.data.isActive, !state1);
+    });
+
+    await test('Point 33: POST /api/telemetry/backups/trigger creates database snapshot and simulate-restore validates dry-run integrity', async () => {
+      const triggerRes = await fetch(`${baseUrl}/telemetry/backups/trigger`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ type: 'MANUAL' }),
+      });
+      assert.strictEqual(triggerRes.status, 201);
+      const triggerData = await triggerRes.json();
+      assert.strictEqual(triggerData.success, true);
+      assert.ok(triggerData.data.backupId);
+      assert.strictEqual(triggerData.data.checksum.length, 64);
+      sampleTelemetryBackupId = triggerData.data._id;
+
+      // Dry-run restore simulation
+      const simRes = await fetch(`${baseUrl}/telemetry/backups/${sampleTelemetryBackupId}/restore-simulation`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(simRes.status, 200);
+      const simData = await simRes.json();
+      assert.strictEqual(simData.success, true);
+      assert.strictEqual(simData.simulation.integrityStatus, 'PASSED');
+      assert.strictEqual(simData.simulation.checksumVerified, true);
+      assert.ok(simData.simulation.totalCollectionsVerified >= 10);
+    });
+
+    await test('Point 33: Role Security: Customer and delivery riders are strictly forbidden from viewing or managing telemetry (401 / 403)', async () => {
+      // Unauthenticated
+      const resUnauth = await fetch(`${baseUrl}/telemetry/server-health`);
+      assert.strictEqual(resUnauth.status, 401);
+
+      // Customer
+      const resCust = await fetch(`${baseUrl}/telemetry/api-metrics`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403);
+
+      // Rider
+      const resRider = await fetch(`${baseUrl}/telemetry/database`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resRider.status, 403);
+
+      // Customer trying to reset metrics
+      const resCustReset = await fetch(`${baseUrl}/telemetry/api-metrics/reset`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustReset.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

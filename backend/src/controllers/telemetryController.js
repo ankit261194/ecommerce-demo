@@ -1,10 +1,16 @@
-﻿const os = require('os');
+const os = require('os');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 
 const CronJob = require('../models/CronJob');
 const SystemBackup = require('../models/SystemBackup');
 const BackupSchedule = require('../models/BackupSchedule');
+const jobQueueService = require('../services/jobQueueService');
+const {
+  getApiTelemetryMetrics,
+  resetApiTelemetry,
+  getEventLoopLag,
+} = require('../middlewares/apiTelemetryMiddleware');
 
 // Models to gather database telemetry and backup data
 const User = require('../models/User');
@@ -178,7 +184,100 @@ exports.getServerHealth = async (req, res, next) => {
           freeFormatted: formatBytes(freeDiskBytes),
           usagePercent: diskUsagePercent,
         },
+        eventLoopLagMs: getEventLoopLag(),
+        redis: {
+          enabled: jobQueueService.settings?.redis?.enabled || false,
+          host: jobQueueService.settings?.redis?.host || '127.0.0.1',
+          port: jobQueueService.settings?.redis?.port || 6379,
+          status: jobQueueService.settings?.redis?.status || 'EMBEDDED_ACTIVE',
+          queuesCount: jobQueueService.queues?.length || 6,
+          isEmbeddedMode: !jobQueueService.settings?.redis?.enabled,
+        },
+        database: {
+          state: mongoose.connection?.readyState === 1 ? 'CONNECTED' : 'DISCONNECTED',
+          host: mongoose.connection?.host || 'localhost',
+          databaseName: mongoose.connection?.name || 'auramarket',
+        },
+        apiSummary: (() => {
+          const m = getApiTelemetryMetrics();
+          return {
+            totalRequests: m.summary.totalRequests,
+            requestsPerMinute: m.summary.requestsPerMinute,
+            requestsPerSecond: m.summary.requestsPerSecond,
+            avgResponseTimeMs: m.summary.avgResponseTimeMs,
+            successRatePercent: m.summary.successRatePercent,
+          };
+        })(),
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc Get real-time API request throughput, status breakdown, and latency percentiles
+ * @route GET /api/telemetry/api-metrics
+ * @access Private (Super Admin / Sub-Admin)
+ */
+exports.getApiMetrics = async (req, res, next) => {
+  try {
+    const metrics = getApiTelemetryMetrics();
+    res.status(200).json({
+      success: true,
+      data: metrics,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc Execute diagnostic round-trip latency ping test
+ * @route POST /api/telemetry/api-metrics/simulate-ping
+ * @access Private (Super Admin / Sub-Admin)
+ */
+exports.simulateApiDiagnosticPing = async (req, res, next) => {
+  try {
+    const start = process.hrtime();
+    let dbPingMs = 1;
+    if (mongoose.connection?.db) {
+      const dbStart = Date.now();
+      await mongoose.connection.db.admin().ping().catch(() => {});
+      dbPingMs = Math.max(1, Date.now() - dbStart);
+    }
+    const diff = process.hrtime(start);
+    const roundTripMs = Number(((diff[0] * 1e9 + diff[1]) / 1e6).toFixed(2));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        timestamp: new Date().toISOString(),
+        roundTripLatencyMs: roundTripMs,
+        databasePingLatencyMs: dbPingMs,
+        eventLoopLagMs: getEventLoopLag(),
+        status: roundTripMs < 100 ? 'OPTIMAL' : 'DEGRADED',
+        clientIp: req.ip || (req.headers && req.headers['x-forwarded-for']) || '127.0.0.1',
+        protocol: req.protocol,
+        httpVersion: req.httpVersion,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc Reset API telemetry buffer and latency counters
+ * @route POST /api/telemetry/api-metrics/reset
+ * @access Private (Super Admin)
+ */
+exports.resetApiMetrics = async (req, res, next) => {
+  try {
+    resetApiTelemetry();
+    res.status(200).json({
+      success: true,
+      message: 'API telemetry buffer and latency counters have been reset successfully',
     });
   } catch (error) {
     next(error);

@@ -1841,7 +1841,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
             <Activity className="w-4 h-4 text-amber-300" />
             <span>Server Health & Telemetry</span>
             <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-200 ml-1">
-              Point #11
+              Point #33
             </span>
           </button>
 
@@ -2945,7 +2945,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 22: LIVE SERVER HEALTH, CRON JOBS & DATABASE TELEMETRY (Point #11) */}
+      {/* TAB: ⚡ LIVE SERVER HEALTH, API TELEMETRY & DATABASE (Point #33 - Pillar 2) */}
       {/* ========================================================================= */}
       {activeDashboardTab === 'telemetry-health' && (
         <ServerTelemetryManager />

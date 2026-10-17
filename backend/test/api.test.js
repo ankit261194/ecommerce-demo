@@ -24176,6 +24176,140 @@ const runTests = async () => {
       assert.strictEqual(resRider.status, 403);
     });
 
+  
+    // =========================================================================
+    // PILLAR 2 - POINT 32: REAL-TIME OPERATIONAL AUDIT TRAIL & ACTION LOGS
+    // =========================================================================
+    console.log('\n--- PILLAR 2 - POINT 32: REAL-TIME OPERATIONAL AUDIT TRAIL & ACTION LOGS ---');
+
+    await test('Point 32: POST /api/admin/audit-logs/log-custom-event records operational sensitive action log with before/after state diff', async () => {
+      const res = await fetch(`${baseUrl}/admin/audit-logs/log-custom-event`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          action: 'UPDATE_COMMISSION_RULE',
+          module: 'FINANCE',
+          description: 'Updated default platform commission from 10% to 12.5%',
+          changeSummary: 'Commission rate adjusted: 10% -> 12.5%',
+          previousValue: { rate: 10 },
+          newValue: { rate: 12.5 },
+          severity: 'HIGH',
+          status: 'SUCCESS',
+        }),
+      });
+      assert.strictEqual(res.status, 201, 'Custom audit log must be recorded with 201 Created');
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.log);
+      assert.strictEqual(data.log.action, 'UPDATE_COMMISSION_RULE');
+      assert.strictEqual(data.log.module, 'FINANCE');
+      assert.strictEqual(data.log.severity, 'HIGH');
+      assert.strictEqual(data.log.status, 'SUCCESS');
+      assert.strictEqual(data.log.userEmail, 'admin@auramarket.com');
+    });
+
+    await test('Point 32: Validation: POST /api/admin/audit-logs/log-custom-event rejects missing action or description (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/admin/audit-logs/log-custom-event`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          module: 'CATALOG',
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Action and description are required'));
+    });
+
+    await test('Point 32: GET /api/admin/audit-logs lists logs with module, severity, and full-text keyword search filters', async () => {
+      const res = await fetch(`${baseUrl}/admin/audit-logs?module=FINANCE&severity=HIGH&search=commission`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data);
+      assert.ok(Array.isArray(data.data.logs));
+      assert.ok(data.data.logs.length >= 1, 'Must find the previously recorded finance log');
+      const found = data.data.logs.find(l => l.action === 'UPDATE_COMMISSION_RULE');
+      assert.ok(found);
+      assert.strictEqual(found.module, 'FINANCE');
+      assert.strictEqual(found.severity, 'HIGH');
+      assert.ok(data.data.pagination);
+      assert.ok(data.data.metrics);
+      assert.ok(typeof data.data.metrics.totalAllEvents === 'number');
+    });
+
+    await test('Point 32: GET /api/admin/audit-logs/stats returns event metrics, severity breakdown, top actions, and unique administrators', async () => {
+      const res = await fetch(`${baseUrl}/admin/audit-logs/stats`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.stats);
+      assert.ok(data.stats.totalEvents >= 1);
+      assert.ok(typeof data.stats.highEvents === 'number');
+      assert.ok(Array.isArray(data.stats.breakdownByModule));
+      assert.ok(Array.isArray(data.stats.topActions));
+      assert.ok(typeof data.stats.uniqueAdminsCount === 'number');
+    });
+
+    await test('Point 32: GET /api/admin/audit-logs/export exports compliance audit trail in RFC-4180 CSV format with UTF-8 BOM', async () => {
+      const res = await fetch(`${baseUrl}/admin/audit-logs/export`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const contentType = res.headers.get('content-type') || '';
+      assert.ok(contentType.includes('text/csv'), 'Content-Type must be text/csv');
+      const csvText = await res.text();
+      assert.ok(csvText.includes('Log ID'));
+      assert.ok(csvText.includes('Performer Email'));
+      assert.ok(csvText.includes('UPDATE_COMMISSION_RULE'));
+    });
+
+    await test('Point 32: DELETE /api/admin/audit-logs/prune enforces minimum 30-day retention safeguard (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/admin/audit-logs/prune`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          retentionDays: 15, // Illegal: less than 30 days
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Security compliance violation'));
+    });
+
+    await test('Point 32: Role Security: Customer and delivery riders are strictly forbidden from viewing security audit trail (401 / 403)', async () => {
+      // Unauthenticated
+      const resUnauth = await fetch(`${baseUrl}/admin/audit-logs`);
+      assert.strictEqual(resUnauth.status, 401);
+
+      // Customer
+      const resCust = await fetch(`${baseUrl}/admin/audit-logs`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403);
+
+      // Rider
+      const resRider = await fetch(`${baseUrl}/admin/audit-logs/stats`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resRider.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

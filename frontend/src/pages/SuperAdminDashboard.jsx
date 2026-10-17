@@ -1586,7 +1586,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
             <ShieldAlert className="w-4 h-4 text-indigo-300" />
             <span>Activity & Security Audit Trail</span>
             <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 ml-1">
-              Point #7
+              Point #32
             </span>
           </button>
 
@@ -2826,7 +2826,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB: 🛡️ ADMIN ACTIVITY & SECURITY AUDIT TRAIL LOGS (Point #7) */}
+      {/* TAB: 🛡️ ADMIN ACTIVITY & SECURITY AUDIT TRAIL LOGS (Point #32 - Pillar 2) */}
       {/* ========================================================================= */}
       {activeDashboardTab === 'audit-trail' && (
         <AuditTrailManager />

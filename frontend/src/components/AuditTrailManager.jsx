@@ -225,7 +225,7 @@ export default function AuditTrailManager() {
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-black uppercase tracking-wider border border-indigo-500/30">
               <ShieldAlert className="w-3.5 h-3.5" />
-              <span>Point #7 Enterprise Weapon</span>
+              <span>Point #32 (Pillar 2: Super Admin Engine)</span>
             </div>
             <h2 className="text-2xl font-black tracking-tight text-white flex items-center gap-3">
               Admin Activity & Security Audit Trail

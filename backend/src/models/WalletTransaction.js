@@ -31,6 +31,7 @@ const walletTransactionSchema = new mongoose.Schema(
         'BONUS_CREDIT',
         'DAILY_CHECKIN',
         'ORDER_REFUND',
+        'RETURN_REFUND',
         'WELCOME_BONUS',
         'SCRATCH_CARD',
         'ADMIN_CREDIT',

@@ -120,7 +120,7 @@ const orderSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['COD', 'RAZORPAY', 'STRIPE', 'UPI', 'WALLET', 'SPLIT_WALLET_ONLINE', 'PARTIAL_COD'],
+      enum: ['COD', 'RAZORPAY', 'STRIPE', 'UPI', 'WALLET', 'SPLIT_WALLET_ONLINE', 'PARTIAL_COD', 'ONLINE', 'REPLACEMENT_FREE'],
       default: 'COD',
     },
     paymentStatus: {
@@ -283,6 +283,21 @@ const orderSchema = new mongoose.Schema(
     flaggedForRtoRisk: {
       type: Boolean,
       default: false,
+    },
+    // Point 18: Automated Return & Replacement Flow
+    isReplacementOrder: {
+      type: Boolean,
+      default: false,
+    },
+    originalOrder: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Order',
+      default: null,
+    },
+    returnRequest: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ReturnRequest',
+      default: null,
     },
   },
   { timestamps: true }

@@ -19528,6 +19528,454 @@ const runTests = async () => {
       assert.strictEqual(res.status, 403);
     });
 
+    // ==============================================================================
+    // PILLAR 1 - POINT 18: AUTOMATED RETURN & REPLACEMENT FLOW WITH UNBOXING VIDEO
+    // ==============================================================================
+    console.log('\n--- PILLAR 1 - POINT 18: AUTOMATED RETURN & REPLACEMENT FLOW WITH UNBOXING VIDEO ---');
+
+    let point18Customer = null;
+    let point18Vendor = null;
+    let point18OrderDelivered = null;
+    let point18OrderPending = null;
+    let point18ReturnId = null;
+    let point18PickupOtp = null;
+
+    await test('Point 18: GET /api/returns/reasons returns standard return reason codes, unboxing video guidance, and 48h SLA policies', async () => {
+      const res = await fetch(`${baseUrl}/returns/reasons`);
+      assert.strictEqual(res.status, 200);
+
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(Array.isArray(body.reasons));
+      assert.ok(body.reasons.length >= 6);
+
+      const damagedReason = body.reasons.find(r => r.code === 'DAMAGED_IN_TRANSIT');
+      assert.ok(damagedReason, 'DAMAGED_IN_TRANSIT reason code must exist');
+      assert.strictEqual(damagedReason.unboxingVideoRecommended, true);
+      assert.strictEqual(damagedReason.photoRequired, true);
+
+      assert.strictEqual(body.policies.vendorInspectionSlaHours, 48);
+      assert.strictEqual(body.policies.platformAutoApprovalGuarantee, true);
+      assert.strictEqual(body.policies.instantReplacementOrderEnabled, true);
+      assert.strictEqual(body.policies.walletInstantRefundEnabled, true);
+    });
+
+    await test('Point 18: Setup test orders and customer for Automated Return & Replacement testing', async () => {
+      point18Customer = await User.findOne({ email: 'customer@auramarket.com' });
+      point18Vendor = await VendorProfile.findOne();
+      const testProd = (await Product.findOne()) || headphonesProduct;
+
+      // Delivered Order (Eligible for return/replacement)
+      point18OrderDelivered = await Order.create({
+        orderNumber: 'ORD-P18-DEL-' + Date.now(),
+        customer: point18Customer._id,
+        items: [
+          {
+            product: testProd._id,
+            title: testProd.title || testProd.name || 'Wireless Headphones',
+            quantity: 1,
+            price: 2499,
+            totalPrice: 2499,
+            vendor: point18Vendor?._id || testProd.vendor,
+          },
+        ],
+        subtotal: 2499,
+        totalAmount: 2499,
+        shippingFee: 0,
+        totalCommission: 249,
+        shippingAddress: {
+          recipientName: 'Point 18 Tester',
+          phone: '9876543214',
+          street: 'Block C-4, DLF Phase 5',
+          city: 'Gurugram',
+          state: 'Haryana',
+          pincode: '122009',
+        },
+        paymentMethod: 'UPI',
+        paymentStatus: 'PAID',
+        status: 'DELIVERED',
+        deliveryOtp: '4821',
+      });
+
+      const delSub = await SubOrder.create({
+        parentOrder: point18OrderDelivered._id,
+        vendor: point18Vendor?._id || headphonesProduct.vendor,
+        customer: point18Customer._id,
+        items: point18OrderDelivered.items,
+        subTotal: 2499,
+        totalAmount: 2499,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 249,
+        vendorEarning: 2250,
+        status: 'delivered',
+      });
+      point18OrderDelivered.subOrders = [delSub._id];
+      await point18OrderDelivered.save();
+
+      // In-transit / Pending Order (Should be rejected for return)
+      point18OrderPending = await Order.create({
+        orderNumber: 'ORD-P18-PEN-' + Date.now(),
+        customer: point18Customer._id,
+        items: point18OrderDelivered.items,
+        subtotal: 2499,
+        totalAmount: 2499,
+        shippingFee: 0,
+        totalCommission: 249,
+        shippingAddress: point18OrderDelivered.shippingAddress,
+        paymentMethod: 'COD',
+        paymentStatus: 'PENDING',
+        status: 'SHIPPED',
+        deliveryOtp: '4821',
+      });
+      const penSub = await SubOrder.create({
+        parentOrder: point18OrderPending._id,
+        vendor: point18Vendor?._id || headphonesProduct.vendor,
+        customer: point18Customer._id,
+        items: point18OrderPending.items,
+        subTotal: 2499,
+        totalAmount: 2499,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 249,
+        vendorEarning: 2250,
+        status: 'shipped',
+      });
+      point18OrderPending.subOrders = [penSub._id];
+      await point18OrderPending.save();
+
+      assert.ok(point18OrderDelivered._id);
+      assert.ok(point18OrderPending._id);
+    });
+
+    await test('Point 18: Guardrail: POST /api/returns/automated rejects non-delivered order with 400 Bad Request', async () => {
+      const res = await fetch(`${baseUrl}/returns/automated`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          orderId: point18OrderPending._id,
+          reasonCode: 'DAMAGED_IN_TRANSIT',
+          detailedDescription: 'Attempting return on undelivered parcel',
+          resolutionType: 'REPLACEMENT',
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+      assert.ok(body.message.includes('delivered'));
+    });
+
+    await test('Point 18: POST /api/returns/automated creates return/replacement request with unboxing video, photo proofs, and 48-Hour SLA', async () => {
+      const res = await fetch(`${baseUrl}/returns/automated`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          orderId: point18OrderDelivered._id,
+          reasonCode: 'DAMAGED_IN_TRANSIT',
+          detailedDescription: 'Package arrived crushed, headphone hinge is broken. Unboxing video recorded right after opening seal.',
+          unboxingVideo: {
+            url: 'https://cdn.auramarket.com/unboxing/vid-p18-test.mp4',
+            fileName: 'unboxing_test.mp4',
+            durationSeconds: 58,
+            fileSize: 14200000,
+          },
+          proofPhotos: [
+            'https://cdn.auramarket.com/proofs/crushed_box.jpg',
+            'https://cdn.auramarket.com/proofs/broken_hinge.jpg',
+          ],
+          resolutionType: 'REPLACEMENT',
+          replacementDetails: {
+            requestedColor: 'Midnight Black',
+            requestedSize: 'Universal',
+            replacementVariantSku: 'HP-BLK-01',
+            customerNote: 'Please verify packaging before sending replacement',
+          },
+          pickupSchedule: {
+            timeSlot: '13:00 - 17:00',
+            pickupAddress: {
+              street: 'Block C-4, DLF Phase 5',
+              city: 'Gurugram',
+              state: 'Haryana',
+              pincode: '122009',
+              phone: '9876543214',
+            },
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data);
+      point18ReturnId = body.data._id;
+      point18PickupOtp = body.reversePickupOtp;
+
+      assert.strictEqual(body.data.status, 'INSPECTION_PENDING');
+      assert.strictEqual(body.data.requestType, 'REPLACEMENT');
+      assert.strictEqual(body.data.reasonCode, 'DAMAGED_IN_TRANSIT');
+      assert.strictEqual(body.data.unboxingVideo.url, 'https://cdn.auramarket.com/unboxing/vid-p18-test.mp4');
+      assert.strictEqual(body.data.unboxingVideo.verified, true);
+      assert.strictEqual(body.data.proofPhotos.length, 2);
+      assert.strictEqual(body.data.inspectionSLA.status, 'PENDING_INSPECTION');
+      assert.ok(body.data.inspectionSLA.deadline);
+      assert.strictEqual(body.reversePickupOtp.length, 4);
+      assert.ok(body.reversePickupTask);
+    });
+
+    await test('Point 18: GET /api/returns/:id/inspection-status returns unboxing video metadata, remaining SLA hours, and reverse pickup OTP', async () => {
+      const res = await fetch(`${baseUrl}/returns/${point18ReturnId}/inspection-status`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.status, 'INSPECTION_PENDING');
+      assert.strictEqual(body.data.unboxingVideo.url, 'https://cdn.auramarket.com/unboxing/vid-p18-test.mp4');
+      assert.strictEqual(body.data.proofPhotosCount, 2);
+      assert.strictEqual(body.data.reversePickupOtp, point18PickupOtp);
+      assert.ok(body.data.inspectionSLA.remainingHours > 40 && body.data.inspectionSLA.remainingHours <= 48);
+      assert.strictEqual(body.data.inspectionSLA.isSlaExpired, false);
+    });
+
+    await test('Point 18: POST /api/returns/:id/inspect with APPROVE generates real replacement order (ORD-REP-...) and forward delivery', async () => {
+      const res = await fetch(`${baseUrl}/returns/${point18ReturnId}/inspect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          action: 'APPROVE',
+          inspectionNotes: 'Unboxing video verified. Courier damage confirmed. Replacement authorized immediately.',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.status, 'REPLACEMENT_CREATED');
+      assert.strictEqual(body.data.inspectionSLA.status, 'APPROVED');
+      assert.ok(body.data.replacementOrderNumber.startsWith('ORD-REP-'));
+      assert.ok(body.replacementOrder);
+      assert.strictEqual(body.replacementOrder.isReplacementOrder, true);
+      assert.strictEqual(body.replacementOrder.paymentStatus, 'PAID');
+      assert.ok(body.replacementDeliveryTask);
+
+      // Verify the replacement order exists in the DB
+      const dbRepOrder = await Order.findById(body.replacementOrder._id);
+      assert.ok(dbRepOrder);
+      assert.strictEqual(dbRepOrder.isReplacementOrder, true);
+      assert.strictEqual(dbRepOrder.originalOrder.toString(), point18OrderDelivered._id.toString());
+      assert.strictEqual(dbRepOrder.returnRequest.toString(), point18ReturnId.toString());
+    });
+
+    await test('Point 18: POST /api/returns/:id/inspect with REFUND_WALLET credits customer wallet and logs WalletTransaction', async () => {
+      const walletItem = {
+        product: point18OrderDelivered.items[0].product,
+        title: point18OrderDelivered.items[0].title,
+        quantity: 1,
+        price: 1800,
+        totalPrice: 1800,
+        vendor: point18Vendor?._id || point18OrderDelivered.items[0].vendor,
+      };
+      const orderWallet = await Order.create({
+        orderNumber: 'ORD-P18-WAL-' + Date.now(),
+        customer: point18Customer._id,
+        items: [walletItem],
+        subtotal: 1800,
+        totalAmount: 1800,
+        shippingFee: 0,
+        totalCommission: 180,
+        shippingAddress: point18OrderDelivered.shippingAddress,
+        paymentMethod: 'ONLINE',
+        paymentStatus: 'PAID',
+        status: 'DELIVERED',
+        deliveryOtp: '4821',
+      });
+      const subWallet = await SubOrder.create({
+        parentOrder: orderWallet._id,
+        vendor: point18Vendor?._id || headphonesProduct.vendor,
+        customer: point18Customer._id,
+        items: orderWallet.items,
+        subTotal: 1800,
+        totalAmount: 1800,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 180,
+        vendorEarning: 1620,
+        status: 'delivered',
+      });
+      orderWallet.subOrders = [subWallet._id];
+      await orderWallet.save();
+
+      // 2. Create return request with resolutionType: 'REFUND_WALLET'
+      const resCreate = await fetch(`${baseUrl}/returns/automated`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          orderId: orderWallet._id,
+          reasonCode: 'WRONG_ITEM_DELIVERED',
+          detailedDescription: 'Sent incorrect model entirely. Video proof attached.',
+          unboxingVideo: 'https://cdn.auramarket.com/unboxing/wrong_item.mp4',
+          resolutionType: 'REFUND_WALLET',
+        }),
+      });
+      assert.strictEqual(resCreate.status, 201);
+      const dataCreate = await resCreate.json();
+      const returnWalletId = dataCreate.data._id;
+
+      // Check balance before
+      const userBefore = await User.findById(point18Customer._id);
+      const balanceBefore = userBefore.walletBalance || 0;
+
+      // 3. Inspect & APPROVE
+      const resInspect = await fetch(`${baseUrl}/returns/${returnWalletId}/inspect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          action: 'APPROVE',
+          inspectionNotes: 'Wrong item verified from unboxing video. Refunding ?1800 to customer wallet.',
+        }),
+      });
+
+      assert.strictEqual(resInspect.status, 200);
+      const dataInspect = await resInspect.json();
+      assert.strictEqual(dataInspect.data.status, 'REFUNDED');
+
+      // 4. Verify wallet balance increased by ?1800
+      const userAfter = await User.findById(point18Customer._id);
+      assert.strictEqual(userAfter.walletBalance, balanceBefore + 1800);
+
+      // 5. Verify WalletTransaction
+      const walletTx = await WalletTransaction.findOne({
+        user: point18Customer._id,
+        category: 'RETURN_REFUND',
+        amount: 1800,
+      });
+      assert.ok(walletTx, 'WalletTransaction with category RETURN_REFUND must exist');
+      assert.strictEqual(walletTx.status, 'SUCCESS');
+    });
+
+    await test('Point 18: POST /api/returns/:id/sla-auto-approve automatically resolves request when vendor 48h SLA expires', async () => {
+      // 1. Create order and return request
+      const orderSla = await Order.create({
+        orderNumber: 'ORD-P18-SLA-' + Date.now(),
+        customer: point18Customer._id,
+        items: point18OrderDelivered.items,
+        subtotal: 1200,
+        totalAmount: 1200,
+        shippingFee: 0,
+        totalCommission: 120,
+        shippingAddress: point18OrderDelivered.shippingAddress,
+        paymentMethod: 'ONLINE',
+        paymentStatus: 'PAID',
+        status: 'DELIVERED',
+        deliveryOtp: '4821',
+      });
+      const subSla = await SubOrder.create({
+        parentOrder: orderSla._id,
+        vendor: point18Vendor?._id || headphonesProduct.vendor,
+        customer: point18Customer._id,
+        items: orderSla.items,
+        subTotal: 1200,
+        totalAmount: 1200,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 120,
+        vendorEarning: 1080,
+        status: 'delivered',
+      });
+      orderSla.subOrders = [subSla._id];
+      await orderSla.save();
+
+      const resCreate = await fetch(`${baseUrl}/returns/automated`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          orderId: orderSla._id,
+          reasonCode: 'MISSING_ACCESSORIES',
+          detailedDescription: 'Power brick missing. 48h vendor SLA test.',
+          unboxingVideo: 'https://cdn.auramarket.com/unboxing/missing_acc.mp4',
+          resolutionType: 'REPLACEMENT',
+        }),
+      });
+      assert.strictEqual(resCreate.status, 201);
+      const dataCreate = await resCreate.json();
+      const returnSlaId = dataCreate.data._id;
+
+      // 2. Trigger SLA auto-approval simulation
+      const resAuto = await fetch(`${baseUrl}/returns/${returnSlaId}/sla-auto-approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ force: true }),
+      });
+
+      assert.strictEqual(resAuto.status, 200);
+      const dataAuto = await resAuto.json();
+      assert.strictEqual(dataAuto.success, true);
+      assert.strictEqual(dataAuto.data.status, 'AUTO_APPROVED');
+      assert.strictEqual(dataAuto.data.inspectionSLA.isAutoApproved, true);
+      assert.ok(dataAuto.data.inspectionSLA.autoApprovalReason.includes('SLA Expired'));
+      assert.ok(dataAuto.replacementOrder);
+      assert.ok(dataAuto.replacementOrder.orderNumber.startsWith('ORD-REP-'));
+    });
+
+    await test('Point 18: PUT /api/returns/:id/reverse-pickup validates 4-digit pickup OTP before completing doorstep pickup', async () => {
+      // 1. Wrong OTP is rejected
+      const resFail = await fetch(`${baseUrl}/returns/${point18ReturnId}/reverse-pickup`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          status: 'PICKED_UP',
+          otp: '0000',
+        }),
+      });
+
+      assert.strictEqual(resFail.status, 400);
+      const dataFail = await resFail.json();
+      assert.strictEqual(dataFail.success, false);
+      assert.ok(dataFail.message.includes('Invalid reverse pickup verification OTP'));
+
+      // 2. Correct OTP succeeds
+      const resSuccess = await fetch(`${baseUrl}/returns/${point18ReturnId}/reverse-pickup`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          status: 'PICKED_UP',
+          otp: point18PickupOtp,
+          notes: 'Customer handed over parcel with intact packaging.',
+        }),
+      });
+
+      assert.strictEqual(resSuccess.status, 200);
+      const dataSuccess = await resSuccess.json();
+      assert.strictEqual(dataSuccess.success, true);
+      assert.strictEqual(dataSuccess.data.reversePickupStatus, 'PICKED_UP');
+      assert.strictEqual(dataSuccess.data.status, 'REVERSE_PICKUP_COMPLETED');
+    });
+
   } finally {
     if (server) {
       server.close();

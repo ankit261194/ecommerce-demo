@@ -46,6 +46,7 @@ import {
   Video,
   Rotate3d,
   LifeBuoy,
+  Download,
 } from 'lucide-react';
 import SupportHelpdeskModal from '../components/SupportHelpdeskModal';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -3496,18 +3497,33 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               </button>
             </div>
 
-            {/* Point #30: 1-Click Tax Invoice Download Button */}
-            <button
-              onClick={() => {
-                setInvoiceOrderId(activeOrderConfirmation.orderId);
-                setIsInvoiceModalOpen(true);
-              }}
-              className="w-full py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs border border-indigo-200 flex items-center justify-center gap-1.5 transition active:scale-95 shadow-sm"
-              title="Download GST Compliant Tax Invoice"
-            >
-              <Printer className="w-4 h-4 text-indigo-600" />
-              Download GST Tax Invoice (PDF)
-            </button>
+            {/* Point #20: 1-Click Download Official GST Tax Invoice PDF */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <a
+                href={`/api/orders/${activeOrderConfirmation.orderId}/invoice/pdf?download=true`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-95 shadow-sm"
+                title="Direct 1-Click Download Official GST Tax Invoice PDF with QR code & digital cryptoseal"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5" />
+                <span>GST Invoice (PDF)</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setInvoiceOrderId(activeOrderConfirmation.orderId);
+                  setIsInvoiceModalOpen(true);
+                }}
+                className="py-2.5 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs border border-indigo-200 flex items-center justify-center gap-1.5 transition active:scale-95 shadow-sm"
+                title="Preview GST Compliant Tax Invoice Sheet"
+              >
+                <Printer className="w-3.5 h-3.5 text-indigo-600" />
+                <span>View Invoice</span>
+              </button>
+            </div>
 
             {/* Point #74: Fake / Spam Order Prevention (RTO Guard Alert) */}
             {activeOrderConfirmation.rtoVerificationRequired && activeOrderConfirmation.rtoVerificationStatus === 'PENDING' && (

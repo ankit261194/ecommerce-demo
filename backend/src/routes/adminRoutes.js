@@ -41,6 +41,7 @@ const {
 } = require('../controllers/adminController');
 const {
   getTaxInvoice,
+  getInvoicePdf,
   getSplitPackingSlips,
   getRtoGuardOverview,
   overrideRtoGuard,
@@ -120,6 +121,7 @@ router.put('/orders/:id/status', updateOrderStatus);
 router.patch('/orders/:id/status', updateOrderStatus);
 router.get('/orders/:id/commission-split', getOrderCommissionSplit);
 router.get('/orders/:id/invoice', getTaxInvoice);
+router.get('/orders/:id/invoice/pdf', getInvoicePdf);
 router.get('/orders/:id/split-packing-slips', getSplitPackingSlips);
 router.get('/orders/:id/thermal-receipt', getThermalReceipt);
 router.get('/rto-guard/overview', getRtoGuardOverview);

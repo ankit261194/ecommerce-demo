@@ -1441,12 +1441,35 @@ exports.getTaxInvoice = async (req, res, next) => {
     }
 
     await order.populate([
-      { path: 'customer', select: 'name email phone' },
+      { path: 'customer', select: 'name email phone role' },
       {
         path: 'subOrders',
-        populate: [{ path: 'vendor', select: 'storeName pickupAddress phone businessEmail gstin pan' }],
+        populate: [{ path: 'vendor', select: 'storeName pickupAddress phone businessEmail gstin pan state' }],
       },
     ]);
+
+    // Role Security: Unauthorized customer cannot view another user's invoice (Point #20)
+    if (req.user) {
+      const isOwner = order.customer && (
+        (order.customer._id && order.customer._id.toString() === req.user._id.toString()) ||
+        order.customer.toString() === req.user._id.toString()
+      );
+      const isAdmin = req.user.role === 'superadmin' || req.user.role === 'admin';
+      const isVendor = req.user.role === 'vendor' && (
+        order.subOrders?.some(sub => {
+          const vId = sub.vendor?._id ? sub.vendor._id.toString() : sub.vendor?.toString();
+          const uVId = req.vendorProfile?._id?.toString() || req.user.vendorProfile?.toString();
+          return vId && (vId === uVId || vId === req.user._id.toString());
+        })
+      );
+
+      if (!isOwner && !isAdmin && !isVendor) {
+        return res.status(403).json({
+          success: false,
+          message: 'Forbidden: You are not authorized to access this invoice.',
+        });
+      }
+    }
 
     const UIConfig = require('../models/UIConfig');
     const uiConfig = await UIConfig.findOne();
@@ -1758,12 +1781,24 @@ exports.getTaxInvoice = async (req, res, next) => {
 </html>
     `;
 
+    const { getInvoiceData } = require('../services/invoicePdfService');
+    const invoiceServiceData = await getInvoiceData(order, taxCfg);
+
+    const pdfDownloadUrl = `/api/orders/${order.orderNumber || order._id}/invoice/pdf?download=true`;
+    const qrCodeDataUrl = invoiceServiceData.qrCodeDataUrl;
+    const digitalSeal = invoiceServiceData.digitalSeal;
+    const gstSummary = invoiceServiceData.gstSummary;
+
     if (req.query.format === 'html') {
       return res.type('html').send(printableHtml);
     }
 
     res.status(200).json({
       success: true,
+      pdfDownloadUrl,
+      qrCodeDataUrl,
+      digitalSeal,
+      gstSummary,
       data: {
         invoiceNumber,
         invoiceDate,
@@ -1771,11 +1806,18 @@ exports.getTaxInvoice = async (req, res, next) => {
         orderNumber: order.orderNumber || order._id.toString(),
         rawOrderId: order._id,
         orderDate,
+        pdfDownloadUrl,
+        qrCodeDataUrl,
+        digitalSeal,
+        gstSummary,
         seller,
         buyer,
         lineItems,
         hsnSummary,
-        companySeal,
+        companySeal: {
+          ...companySeal,
+          ...digitalSeal,
+        },
         pricing: {
           subtotal,
           cgstTotal,
@@ -1796,6 +1838,66 @@ exports.getTaxInvoice = async (req, res, next) => {
         printableHtml,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Download Official GST Tax Invoice PDF with QR code & Digital Seal (Point #20)
+// @route   GET /api/orders/:id/invoice/pdf
+// @route   GET /api/admin/orders/:id/invoice/pdf
+// @access  Public (Guest/Tracker) / Private (Customer Owner, SuperAdmin, Vendor)
+exports.getInvoicePdf = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const download = req.query.download === 'true' || req.query.download === '1';
+
+    let order = null;
+    const mongoose = require('mongoose');
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      order = await Order.findById(id);
+    }
+    if (!order) {
+      order = await Order.findOne({ orderNumber: id });
+    }
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found for PDF invoice generation' });
+    }
+
+    await order.populate([
+      { path: 'customer', select: 'name email phone role' },
+      {
+        path: 'subOrders',
+        populate: [{ path: 'vendor', select: 'storeName pickupAddress phone businessEmail gstin pan state' }],
+      },
+    ]);
+
+    // Role Security: Unauthorized customer cannot download another user's invoice (Point #20)
+    if (req.user) {
+      const isOwner = order.customer && (
+        (order.customer._id && order.customer._id.toString() === req.user._id.toString()) ||
+        order.customer.toString() === req.user._id.toString()
+      );
+      const isAdmin = req.user.role === 'superadmin' || req.user.role === 'admin';
+      const isVendor = req.user.role === 'vendor' && (
+        order.subOrders?.some(sub => {
+          const vId = sub.vendor?._id ? sub.vendor._id.toString() : sub.vendor?.toString();
+          const uVId = req.vendorProfile?._id?.toString() || req.user.vendorProfile?.toString();
+          return vId && (vId === uVId || vId === req.user._id.toString());
+        })
+      );
+
+      if (!isOwner && !isAdmin && !isVendor) {
+        return res.status(403).json({
+          success: false,
+          message: 'Forbidden: You are not authorized to download this invoice.',
+        });
+      }
+    }
+
+    const { generateInvoicePdf } = require('../services/invoicePdfService');
+    await generateInvoicePdf(order, res, { download });
   } catch (error) {
     next(error);
   }

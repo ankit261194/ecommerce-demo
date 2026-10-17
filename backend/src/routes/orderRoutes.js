@@ -9,6 +9,7 @@ const {
   trackOrder,
   simulateOrderStep,
   getTaxInvoice,
+  getInvoicePdf,
   getSplitPackingSlips,
   verifyRtoRisk,
   resendRtoOtp,
@@ -20,11 +21,12 @@ const {
   addOrderTip,
   getCancelPreview,
 } = require('../controllers/orderController');
-const { protect } = require('../middlewares/auth');
+const { protect, optionalAuth } = require('../middlewares/auth');
 
-// Public live order tracking, 1-click tax invoice and POD slip
+// Public live order tracking, 1-click tax invoice, downloadable PDF and POD slip
 router.get('/track/:identifier', trackOrder);
-router.get('/:id/invoice', getTaxInvoice);
+router.get('/:id/invoice', optionalAuth, getTaxInvoice);
+router.get('/:id/invoice/pdf', optionalAuth, getInvoicePdf);
 router.get('/:id/pod-slip', getOrderPodSlip);
 router.get('/:id/split-packing-slips', protect, getSplitPackingSlips);
 router.get('/:id/thermal-receipt', protect, getThermalReceipt);

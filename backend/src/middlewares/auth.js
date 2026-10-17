@@ -7,6 +7,8 @@ const protect = async (req, res, next) => {
   let token;
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
+  } else if (req.query && req.query.token) {
+    token = req.query.token;
   }
 
   if (!token) {
@@ -101,6 +103,8 @@ const optionalAuth = async (req, res, next) => {
   let token;
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
+  } else if (req.query && req.query.token) {
+    token = req.query.token;
   }
 
   if (!token) {
@@ -109,9 +113,27 @@ const optionalAuth = async (req, res, next) => {
 
   const allowDemoTokens = process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEMO_TOKENS === 'true';
   if (allowDemoTokens && (token.startsWith('mock_jwt_') || token.startsWith('demo_'))) {
+    let query = { role: 'customer' };
+    if (token.includes('superadmin') || token.includes('admin')) {
+      query = { $or: [{ role: 'superadmin' }, { email: 'admin@auramarket.com' }] };
+    } else if (token.includes('vendor')) {
+      query = { $or: [{ email: 'apex@auramarket.com' }, { role: 'vendor' }] };
+    } else if (token.includes('delivery') || token.includes('rider')) {
+      query = { $or: [{ email: 'rider@auramarket.com' }, { role: 'delivery' }] };
+    } else {
+      query = { $or: [{ email: 'customer@auramarket.com' }, { role: 'customer' }] };
+    }
     try {
-      const user = await User.findOne({ role: 'customer' });
-      if (user) req.user = user;
+      const user = await User.findOne(query);
+      if (user && user.isActive) {
+        req.user = user;
+        if (user.role === 'vendor' || user.role === 'vendor_staff' || user.isVendorStaff) {
+          const vendorProfile = await VendorProfile.findOne({
+            $or: [{ user: user._id }, { _id: user.vendorProfile }],
+          });
+          req.vendorProfile = vendorProfile;
+        }
+      }
     } catch (e) {}
     return next();
   }

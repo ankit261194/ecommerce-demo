@@ -20346,6 +20346,191 @@ const runTests = async () => {
       assert.strictEqual(data.data.satisfactionRating, null, 'Non-owner admin must not be able to forge customer satisfaction rating');
     });
 
+    // =========================================================================
+    // PILLAR 1 - POINT 20: OFFICIAL DOWNLOADABLE GST TAX INVOICE PDF WITH QR CODE & DIGITAL SEAL
+    // =========================================================================
+    console.log('\n--- PILLAR 1 - POINT 20: OFFICIAL DOWNLOADABLE GST TAX INVOICE PDF WITH QR CODE & DIGITAL SEAL ---');
+
+    // Setup unauthorized customer for RBAC tests
+    const p20UnauthRes = await fetch(`${baseUrl}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'P20 Unauthorized Shopper',
+        email: `unauth.p20.${Date.now()}@example.com`,
+        password: 'Password123!',
+        phone: `99${Math.floor(10000000 + Math.random() * 90000000)}`,
+      }),
+    });
+    const p20UnauthData = await p20UnauthRes.json();
+    const p20UnauthCustomerToken = p20UnauthData.token;
+
+    // Retrieve verified customer user and create test order
+    const p20Customer = await User.findOne({ email: 'customer@auramarket.com' });
+    const p20OrderNumber = `ORD-P20-${Date.now()}`;
+    const point20Order = await Order.create({
+      orderNumber: p20OrderNumber,
+      customer: p20Customer._id,
+      shippingAddress: {
+        recipientName: 'Aman Sharma',
+        phone: '9876543210',
+        street: '12-A, Connaught Place',
+        city: 'New Delhi',
+        state: 'Delhi',
+        pincode: '110001',
+      },
+      items: [
+        {
+          product: headphonesProduct._id,
+          vendor: headphonesProduct.vendor,
+          title: 'AuraStudio Pro Active Noise Cancelling Headphones',
+          variantSku: 'APX-HEAD-001',
+          hsnCode: '85183000',
+          quantity: 1,
+          price: 4999,
+          totalPrice: 4999,
+        },
+      ],
+      subtotal: 4236.44,
+      taxAmount: 762.56,
+      shippingFee: 0,
+      totalAmount: 4999,
+      paymentMethod: 'UPI',
+      paymentStatus: 'PAID',
+      status: 'CONFIRMED',
+    });
+
+    await test('Point 20: GET /api/orders/:id/invoice returns JSON with qrCodeDataUrl, digitalSeal, and gstSummary', async () => {
+      const res = await fetch(`${baseUrl}/orders/${point20Order._id}/invoice`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+
+      // Verify qrCodeDataUrl
+      const qrUrl = data.qrCodeDataUrl || data.data.qrCodeDataUrl;
+      assert.ok(qrUrl, 'Must return qrCodeDataUrl');
+      assert.ok(qrUrl.startsWith('data:image/png;base64,'), 'QR code must be a base64 PNG data URL');
+
+      // Verify digitalSeal
+      const seal = data.digitalSeal || data.data.digitalSeal;
+      assert.ok(seal, 'Must return digitalSeal');
+      assert.ok(seal.signer, 'Seal must contain authorized signer');
+      assert.ok(seal.hash, 'Seal must contain cryptographic SHA-256 hash');
+      assert.ok(seal.shortHash, 'Seal must contain short verification hash');
+      assert.strictEqual(seal.verified, true, 'Digital seal verified flag must be true');
+
+      // Verify gstSummary
+      const gst = data.gstSummary || data.data.gstSummary;
+      assert.ok(gst, 'Must return gstSummary');
+      assert.strictEqual(typeof gst.isInterState, 'boolean', 'isInterState must be boolean');
+      assert.ok(gst.placeOfSupply, 'Must contain placeOfSupply');
+      assert.ok(Array.isArray(gst.hsnBreakdown), 'Must contain hsnBreakdown array');
+      assert.ok(gst.taxableAmount > 0, 'taxableAmount must be positive');
+      assert.ok(gst.totalTax > 0, 'totalTax must be positive');
+
+      // Verify pdfDownloadUrl
+      const downloadUrl = data.pdfDownloadUrl || data.data.pdfDownloadUrl;
+      assert.ok(downloadUrl, 'Must return pdfDownloadUrl');
+      assert.ok(downloadUrl.includes('/invoice/pdf?download=true'), 'Download URL must point to PDF download');
+    });
+
+    await test('Point 20: GET /api/orders/:id/invoice/pdf streams binary PDF starting with %PDF- buffer signature', async () => {
+      // Lookup using orderNumber string
+      const res = await fetch(`${baseUrl}/orders/${point20Order.orderNumber}/invoice/pdf`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.headers.get('content-type'), 'application/pdf');
+
+      const arrayBuffer = await res.arrayBuffer();
+      const buf = Buffer.from(arrayBuffer);
+      assert.ok(buf.length > 1000, `PDF buffer length must be valid (was ${buf.length} bytes)`);
+      assert.strictEqual(buf.subarray(0, 4).toString(), '%PDF', 'PDF buffer must begin with %PDF magic header');
+
+      const disposition = res.headers.get('content-disposition');
+      assert.ok(disposition.includes('inline') || disposition.includes('filename='), 'Default disposition must be inline');
+    });
+
+    await test('Point 20: GET /api/orders/:id/invoice/pdf?download=true returns Content-Disposition: attachment; filename="Invoice-ORD-...pdf"', async () => {
+      // Lookup using ObjectId
+      const res = await fetch(`${baseUrl}/orders/${point20Order._id}/invoice/pdf?download=true`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.headers.get('content-type'), 'application/pdf');
+
+      const disposition = res.headers.get('content-disposition');
+      assert.ok(disposition, 'Must return Content-Disposition header');
+      assert.ok(disposition.includes('attachment'), `Content-Disposition must specify attachment (was: ${disposition})`);
+      assert.ok(disposition.includes(`filename="Invoice-${point20Order.orderNumber}.pdf"`), `Filename must match Invoice-ORD-...pdf pattern (was: ${disposition})`);
+
+      const arrayBuffer = await res.arrayBuffer();
+      const buf = Buffer.from(arrayBuffer);
+      assert.strictEqual(buf.subarray(0, 4).toString(), '%PDF', 'Must start with %PDF magic header');
+    });
+
+    await test('Point 20: Role Security: Unauthorized customer cannot download invoice of another user\'s order (403 Forbidden)', async () => {
+      // Unauthorized customer attempts to download customer A's invoice PDF
+      const resPdf = await fetch(`${baseUrl}/orders/${point20Order._id}/invoice/pdf`, {
+        headers: { Authorization: `Bearer ${p20UnauthCustomerToken}` },
+      });
+      assert.strictEqual(resPdf.status, 403, 'Unauthorized customer must receive 403 Forbidden for PDF invoice');
+      const dataPdf = await resPdf.json();
+      assert.strictEqual(dataPdf.success, false);
+
+      // Unauthorized customer also blocked from JSON invoice
+      const resJson = await fetch(`${baseUrl}/orders/${point20Order._id}/invoice`, {
+        headers: { Authorization: `Bearer ${p20UnauthCustomerToken}` },
+      });
+      assert.strictEqual(resJson.status, 403, 'Unauthorized customer must receive 403 Forbidden for JSON invoice');
+      const dataJson = await resJson.json();
+      assert.strictEqual(dataJson.success, false);
+    });
+
+    await test('Point 20: Intra-State vs Inter-State GST calculation & QR payload verification', async () => {
+      // Inter-State order (Buyer in Maharashtra, Seller in Delhi)
+      const interStateOrder = await Order.create({
+        orderNumber: `ORD-P20-INTER-${Date.now()}`,
+        customer: p20Customer._id,
+        shippingAddress: {
+          recipientName: 'Pooja Patil',
+          phone: '9876543211',
+          street: 'Bandra West',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          pincode: '400050',
+        },
+        items: [
+          {
+            product: headphonesProduct._id,
+            vendor: headphonesProduct.vendor,
+            title: 'AuraStudio Pro Headphones',
+            hsnCode: '85183000',
+            quantity: 1,
+            price: 1180,
+            totalPrice: 1180,
+          },
+        ],
+        totalAmount: 1180,
+        paymentMethod: 'ONLINE',
+        paymentStatus: 'PAID',
+      });
+
+      const res = await fetch(`${baseUrl}/orders/${interStateOrder._id}/invoice`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      const gst = data.gstSummary || data.data.gstSummary;
+
+      assert.strictEqual(gst.isInterState, true, 'Delhi -> Maharashtra supply must be Inter-State');
+      assert.ok(gst.igst > 0, 'Inter-State must apply IGST 18%');
+      assert.strictEqual(gst.cgst, 0, 'Inter-State must have 0 CGST');
+      assert.strictEqual(gst.sgst, 0, 'Inter-State must have 0 SGST');
+    });
+
   } finally {
     if (server) {
       server.close();

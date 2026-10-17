@@ -2471,6 +2471,13 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                   {/* Product Image & Badges */}
                   <div
                     onClick={() => {
+                      if (product.isSponsored && product.adCampaignId) {
+                        api.post('/ads/click', {
+                          campaignId: product.adCampaignId,
+                          productId: product._id,
+                          keywordMatched: product.adKeywordMatched || '',
+                        }).catch(() => {});
+                      }
                       setSelectedProduct(product);
                       if (product.hasVariants) setSelectedVariant(product.variants[0]);
                     }}
@@ -2486,6 +2493,12 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
                     {/* Discount Badge & Stock Urgency Badge */}
                     <div className="absolute top-2 left-2 sm:top-3 sm:left-3 flex flex-col gap-1 items-start z-10 pointer-events-none">
+                      {product.isSponsored && (
+                        <div className="bg-slate-900/90 text-amber-300 text-[8px] sm:text-[9px] font-black uppercase px-1.5 py-0.5 rounded shadow flex items-center gap-1 border border-amber-400/30 backdrop-blur-xs">
+                          <span>Ad</span>
+                          <span className="opacity-70">&bull; Sponsored</span>
+                        </div>
+                      )}
                       <div className="bg-rose-600 text-white text-[9px] sm:text-[10px] font-black uppercase px-1.5 py-0.5 sm:px-2 rounded-md sm:rounded-lg shadow">
                         {discount}% OFF
                       </div>

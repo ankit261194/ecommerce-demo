@@ -77,6 +77,15 @@ const {
   reorderHeroBanners,
   updateBrandStory,
 } = require('../controllers/vendorStorefrontController');
+const {
+  getVendorCampaigns,
+  getCampaignById,
+  createCampaign,
+  updateCampaign,
+  toggleCampaignStatus,
+  deleteCampaign,
+  getKeywordSuggestions,
+} = require('../controllers/sponsoredAdController');
 const { protect, authorize, requireVendorPermission } = require('../middlewares/auth');
 
 // Point 58: Public Storefront Vendor Showcase (Accessible by any customer/visitor)
@@ -150,6 +159,15 @@ router.post('/promotions', createVendorPromotion);
 router.put('/promotions/:id', updateVendorPromotion);
 router.patch('/promotions/:id/toggle', toggleVendorPromotion);
 router.delete('/promotions/:id', deleteVendorPromotion);
+
+// Point 40: Seller Sponsored Ads & CPC Keyword Bidding Engine (In-platform ad revenue)
+router.get('/ads/campaigns', requireVendorPermission('MARKETING_ADS', 'PRODUCTS_MANAGE'), getVendorCampaigns);
+router.post('/ads/campaigns', requireVendorPermission('MARKETING_ADS', 'PRODUCTS_MANAGE'), createCampaign);
+router.get('/ads/campaigns/:id', requireVendorPermission('MARKETING_ADS', 'PRODUCTS_MANAGE'), getCampaignById);
+router.put('/ads/campaigns/:id', requireVendorPermission('MARKETING_ADS', 'PRODUCTS_MANAGE'), updateCampaign);
+router.patch('/ads/campaigns/:id/toggle', requireVendorPermission('MARKETING_ADS', 'PRODUCTS_MANAGE'), toggleCampaignStatus);
+router.delete('/ads/campaigns/:id', requireVendorPermission('MARKETING_ADS', 'PRODUCTS_MANAGE'), deleteCampaign);
+router.get('/ads/keyword-suggestions', requireVendorPermission('MARKETING_ADS', 'PRODUCTS_MANAGE'), getKeywordSuggestions);
 
 // Point 12: Seller Health & SLA Performance Scorecard
 router.get('/health', getVendorHealth);

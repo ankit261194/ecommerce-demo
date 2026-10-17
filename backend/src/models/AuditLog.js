@@ -19,6 +19,7 @@ const auditLogSchema = new mongoose.Schema(
         'PRODUCTS',
         'CUSTOMERS',
         'MARKETING',
+        'MARKETING_ADS',
         'SETTINGS',
         'STAFF',
         'SYSTEM',

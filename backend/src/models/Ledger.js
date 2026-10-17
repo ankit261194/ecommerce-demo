@@ -20,7 +20,7 @@ const ledgerSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['ORDER_CREDIT', 'COMMISSION_DEBIT', 'PAYOUT_WITHDRAWAL', 'REFUND'],
+      enum: ['ORDER_CREDIT', 'COMMISSION_DEBIT', 'PAYOUT_WITHDRAWAL', 'REFUND', 'AD_SPEND'],
       required: true,
     },
     amount: {

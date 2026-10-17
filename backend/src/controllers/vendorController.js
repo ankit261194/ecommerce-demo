@@ -3600,6 +3600,12 @@ const VENDOR_PERMISSIONS_CATALOG = [
     description: 'Invite new team associates, assign permission roles, and revoke sub-account access.',
     category: 'Admin',
   },
+  {
+    key: 'MARKETING_ADS',
+    label: 'Sponsored Ads & Keyword Bidding',
+    description: 'Create and manage CPC sponsored product ad campaigns, keyword bids, and ad analytics.',
+    category: 'Marketing',
+  },
 ];
 
 const VENDOR_ROLE_PRESETS = [

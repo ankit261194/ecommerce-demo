@@ -44,6 +44,8 @@ let vendorToken;
 let riderToken;
 let customerToken;
 
+const generateToken = id => jwt.sign({ id }, process.env.JWT_SECRET || 'production_grade_super_secret_jwt_key_2026_obsidian_amber', { expiresIn: '7d' });
+
 const runTests = async () => {
   console.log('====================================================');
   console.log('🧪 AuraMarket Enterprise API & Panel Integration Tests');
@@ -26624,6 +26626,423 @@ const runTests = async () => {
         body: JSON.stringify({ subOrderIds: [p39SubOrder1._id] }),
       });
       assert.strictEqual(resRider.status, 403);
+    });
+
+    // =========================================================================
+    // PILLAR 3 - POINT 40: SELLER SPONSORED ADS & CPC KEYWORD BIDDING ENGINE
+    // =========================================================================
+    console.log('\n--- PILLAR 3 - POINT 40: SELLER SPONSORED ADS & CPC KEYWORD BIDDING ENGINE ---');
+
+    let p40Vendor, p40VendorUser, p40VendorToken;
+    let p40Product1, p40Product2, p40ForeignProduct;
+    let p40Campaign1Id;
+    let p40MarketingStaff, p40MarketingToken;
+    let p40PackagerStaff, p40PackagerToken;
+
+    await test('Point 40: Setup dedicated merchant accounts, products & staff for Sponsored Ads testing', async () => {
+      const uniqueSuffix = Date.now();
+
+      // 1. Primary Merchant
+      p40VendorUser = await User.create({
+        name: `Aura Ads Merchant ${uniqueSuffix}`,
+        email: `ads.merchant.${uniqueSuffix}@auramarket.com`,
+        phone: `98${Math.floor(10000000 + Math.random() * 90000000)}`,
+        password: 'Password123!',
+        role: 'vendor',
+        isActive: true,
+      });
+
+      p40Vendor = await VendorProfile.create({
+        user: p40VendorUser._id,
+        storeName: `SoundAura Official Store ${uniqueSuffix}`,
+        storeSlug: `soundaura-${uniqueSuffix}`,
+        status: 'approved',
+        walletBalance: 15000,
+      });
+
+      p40VendorUser.vendorProfile = p40Vendor._id;
+      await p40VendorUser.save();
+      p40VendorToken = generateToken(p40VendorUser._id);
+
+      // 2. Foreign Merchant for isolation tests
+      const foreignUser = await User.create({
+        name: `Foreign Ads Seller ${uniqueSuffix}`,
+        email: `foreign.ads.${uniqueSuffix}@auramarket.com`,
+        phone: `98${Math.floor(10000000 + Math.random() * 90000000)}`,
+        password: 'Password123!',
+        role: 'vendor',
+        isActive: true,
+      });
+      const foreignVendor = await VendorProfile.create({
+        user: foreignUser._id,
+        storeName: `Foreign Electronics ${uniqueSuffix}`,
+        storeSlug: `foreign-ads-${uniqueSuffix}`,
+        status: 'approved',
+        walletBalance: 5000,
+      });
+      foreignUser.vendorProfile = foreignVendor._id;
+      await foreignUser.save();
+
+      // 3. Category & Products
+      let adCategory = await Category.findOne({ slug: 'audio' });
+      if (!adCategory) {
+        adCategory = await Category.create({
+          name: 'Audio & Sound',
+          slug: 'audio-' + uniqueSuffix,
+          icon: 'headphones',
+          isActive: true,
+        });
+      }
+
+      p40Product1 = await Product.create({
+        vendor: p40Vendor._id,
+        title: 'SoundAura ANC Wireless Noise Cancelling Over-Ear Headphones',
+        slug: 'soundaura-anc-headphones-' + uniqueSuffix,
+        sku: 'AD-ANC-' + uniqueSuffix + '-1',
+        description: 'Premium active noise cancelling over-ear headphones with deep bass.',
+        category: adCategory._id,
+        mrp: 9999,
+        sellingPrice: 4999,
+        stock: 35,
+        rating: 4.8,
+        reviewsCount: 120,
+        isPublished: true,
+        thumbnail: 'https://cdn.auramarket.com/products/soundaura-anc-1.jpg',
+        images: ['https://cdn.auramarket.com/products/soundaura-anc-1.jpg'],
+      });
+
+      p40Product2 = await Product.create({
+        vendor: p40Vendor._id,
+        title: 'SoundAura Smart Fitness Watch with Heart Rate Monitor',
+        slug: 'soundaura-smart-watch-' + uniqueSuffix,
+        sku: 'AD-WATCH-' + uniqueSuffix + '-2',
+        description: 'Advanced fitness smartwatch with heart rate monitoring.',
+        category: adCategory._id,
+        mrp: 5999,
+        sellingPrice: 2499,
+        stock: 20,
+        rating: 4.5,
+        reviewsCount: 45,
+        isPublished: true,
+        thumbnail: 'https://cdn.auramarket.com/products/soundaura-watch-1.jpg',
+        images: ['https://cdn.auramarket.com/products/soundaura-watch-1.jpg'],
+      });
+
+      p40ForeignProduct = await Product.create({
+        vendor: foreignVendor._id,
+        title: 'Competitor Flagship Wireless Earbuds Pro',
+        slug: 'competitor-buds-' + uniqueSuffix,
+        sku: 'AD-BUDS-' + uniqueSuffix + '-3',
+        description: 'Competitor earbuds with noise cancellation.',
+        category: adCategory._id,
+        mrp: 8999,
+        sellingPrice: 4499,
+        stock: 50,
+        rating: 4.2,
+        isPublished: true,
+        thumbnail: 'https://cdn.auramarket.com/products/competitor-buds.jpg',
+        images: ['https://cdn.auramarket.com/products/competitor-buds.jpg'],
+      });
+
+      // 4. Sub-Staff Accounts (Point 37 + Point 40 RBAC)
+      p40MarketingStaff = await User.create({
+        name: `Marketing Associate ${uniqueSuffix}`,
+        email: `marketing.staff.${uniqueSuffix}@auramarket.com`,
+        phone: `98${Math.floor(10000000 + Math.random() * 90000000)}`,
+        password: 'Password123!',
+        role: 'vendor_staff',
+        isVendorStaff: true,
+        vendorProfile: p40Vendor._id,
+        permissions: ['MARKETING_ADS', 'PRODUCTS_MANAGE'],
+        isActive: true,
+      });
+      p40MarketingToken = generateToken(p40MarketingStaff._id);
+
+      p40PackagerStaff = await User.create({
+        name: `Packager Staff ${uniqueSuffix}`,
+        email: `packager.ads.${uniqueSuffix}@auramarket.com`,
+        phone: `98${Math.floor(10000000 + Math.random() * 90000000)}`,
+        password: 'Password123!',
+        role: 'vendor_staff',
+        isVendorStaff: true,
+        vendorProfile: p40Vendor._id,
+        permissions: ['PACKAGING_DISPATCH'], // Lacks MARKETING_ADS
+        isActive: true,
+      });
+      p40PackagerToken = generateToken(p40PackagerStaff._id);
+
+      assert.ok(p40VendorToken);
+      assert.ok(p40MarketingToken);
+      assert.ok(p40PackagerToken);
+    });
+
+    await test('Point 40: GET /api/vendor/ads/keyword-suggestions generates high-relevance search terms and CPC benchmarks', async () => {
+      const res = await fetch(`${baseUrl}/vendor/ads/keyword-suggestions?productId=${p40Product1._id}`, {
+        headers: { Authorization: `Bearer ${p40VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.ok(Array.isArray(json.data));
+      assert.ok(json.data.length > 0);
+
+      const firstKw = json.data[0];
+      assert.ok(firstKw.keyword);
+      assert.ok(firstKw.estimatedMonthlySearches > 0);
+      assert.ok(['LOW', 'MEDIUM', 'HIGH'].includes(firstKw.competition));
+      assert.ok(firstKw.suggestedBid >= 0.5);
+      assert.ok(firstKw.bidRange.min <= firstKw.bidRange.suggested);
+    });
+
+    await test('Point 40: POST /api/vendor/ads/campaigns launches a new sponsored product campaign with keyword bids', async () => {
+      const res = await fetch(`${baseUrl}/vendor/ads/campaigns`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p40VendorToken}`,
+        },
+        body: JSON.stringify({
+          campaignName: 'Q4 ANC Headphones Mega Campaign',
+          productId: p40Product1._id,
+          dailyBudget: 250,
+          totalBudget: 5000,
+          defaultBidCpc: 3.5,
+          placement: 'ALL',
+          keywords: [
+            { keyword: 'noise cancelling headphones', matchType: 'PHRASE', bidCpc: 4.5 },
+            { keyword: 'anc headphones', matchType: 'EXACT', bidCpc: 5.0 },
+            { keyword: 'wireless audio', matchType: 'BROAD', bidCpc: 3.0 },
+          ],
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.ok(json.data._id);
+      assert.strictEqual(json.data.campaignName, 'Q4 ANC Headphones Mega Campaign');
+      assert.strictEqual(json.data.status, 'ACTIVE');
+      assert.strictEqual(json.data.dailyBudget, 250);
+      assert.strictEqual(json.data.defaultBidCpc, 3.5);
+      assert.strictEqual(json.data.keywords.length, 3);
+      p40Campaign1Id = json.data._id;
+    });
+
+    await test('Point 40: Validation & Merchant Isolation: rejects invalid budgets, negative bids, and foreign products (400 / 403)', async () => {
+      // 1. Rejects missing campaign name
+      const resMissingName = await fetch(`${baseUrl}/vendor/ads/campaigns`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p40VendorToken}`,
+        },
+        body: JSON.stringify({
+          productId: p40Product1._id,
+          dailyBudget: 200,
+        }),
+      });
+      assert.strictEqual(resMissingName.status, 400);
+
+      // 2. Rejects budget lower than ₹50 minimum
+      const resLowBudget = await fetch(`${baseUrl}/vendor/ads/campaigns`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p40VendorToken}`,
+        },
+        body: JSON.stringify({
+          campaignName: 'Budget Too Low',
+          productId: p40Product1._id,
+          dailyBudget: 25,
+        }),
+      });
+      assert.strictEqual(resLowBudget.status, 400);
+
+      // 3. Rejects CPC bid lower than ₹0.50
+      const resLowBid = await fetch(`${baseUrl}/vendor/ads/campaigns`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p40VendorToken}`,
+        },
+        body: JSON.stringify({
+          campaignName: 'Bid Too Low',
+          productId: p40Product1._id,
+          dailyBudget: 100,
+          defaultBidCpc: 0.1,
+        }),
+      });
+      assert.strictEqual(resLowBid.status, 400);
+
+      // 4. Merchant Isolation: Vendor cannot sponsor a product owned by another merchant
+      const resForeign = await fetch(`${baseUrl}/vendor/ads/campaigns`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p40VendorToken}`,
+        },
+        body: JSON.stringify({
+          campaignName: 'Hijack Competitor Product',
+          productId: p40ForeignProduct._id,
+          dailyBudget: 200,
+        }),
+      });
+      assert.strictEqual(resForeign.status, 403);
+    });
+
+    await test('Point 40: GET /api/vendor/ads/campaigns returns vendor campaigns with aggregate portfolio KPIs', async () => {
+      const res = await fetch(`${baseUrl}/vendor/ads/campaigns`, {
+        headers: { Authorization: `Bearer ${p40VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.ok(Array.isArray(json.data.campaigns));
+      assert.ok(json.data.campaigns.length >= 1);
+      assert.ok(json.data.summary);
+      assert.ok(json.data.summary.totalDailyBudget >= 250);
+      assert.strictEqual(json.data.summary.activeCampaigns, 1);
+    });
+
+    await test('Point 40: PATCH /api/vendor/ads/campaigns/:id/toggle toggles campaign status between ACTIVE and PAUSED', async () => {
+      // Toggle to PAUSED
+      const resPause = await fetch(`${baseUrl}/vendor/ads/campaigns/${p40Campaign1Id}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${p40VendorToken}` },
+      });
+      assert.strictEqual(resPause.status, 200);
+      const jsonPause = await resPause.json();
+      assert.strictEqual(jsonPause.success, true);
+      assert.strictEqual(jsonPause.data.status, 'PAUSED');
+
+      // Toggle back to ACTIVE
+      const resActive = await fetch(`${baseUrl}/vendor/ads/campaigns/${p40Campaign1Id}/toggle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${p40VendorToken}` },
+      });
+      assert.strictEqual(resActive.status, 200);
+      const jsonActive = await resActive.json();
+      assert.strictEqual(jsonActive.data.status, 'ACTIVE');
+    });
+
+    await test('Point 40: PUT /api/vendor/ads/campaigns/:id updates daily budget and keyword bid targets', async () => {
+      const res = await fetch(`${baseUrl}/vendor/ads/campaigns/${p40Campaign1Id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p40VendorToken}`,
+        },
+        body: JSON.stringify({
+          dailyBudget: 400,
+          defaultBidCpc: 4.0,
+          keywords: [
+            { keyword: 'noise cancelling headphones', matchType: 'PHRASE', bidCpc: 6.0 },
+            { keyword: 'anc headphones', matchType: 'EXACT', bidCpc: 6.5 },
+            { keyword: 'bluetooth headset', matchType: 'BROAD', bidCpc: 3.5 },
+          ],
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.data.dailyBudget, 400);
+      assert.strictEqual(json.data.defaultBidCpc, 4.0);
+      assert.strictEqual(json.data.keywords.length, 3);
+    });
+
+    await test('Point 40: GET /api/ads/sponsored-products executes live auction engine and returns matched sponsored items', async () => {
+      // 1. Search matching keyword 'headphones'
+      const res = await fetch(`${baseUrl}/ads/sponsored-products?keyword=headphones&limit=4`);
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.ok(json.count >= 1);
+
+      const sponsoredItem = json.data.find((item) => item._id.toString() === p40Product1._id.toString());
+      assert.ok(sponsoredItem, 'Product 1 should win the auction slot for keyword headphones');
+      assert.strictEqual(sponsoredItem.isSponsored, true);
+      assert.ok(sponsoredItem.adCampaignId);
+      assert.ok(sponsoredItem.adBidCpc >= 3.5);
+
+      // Verify impression was recorded on the campaign
+      const campaignCheck = await fetch(`${baseUrl}/vendor/ads/campaigns/${p40Campaign1Id}`, {
+        headers: { Authorization: `Bearer ${p40VendorToken}` },
+      });
+      const campaignJson = await campaignCheck.json();
+      assert.ok(campaignJson.data.metrics.impressions >= 1);
+    });
+
+    await test('Point 40: POST /api/ads/click records click, deducts CPC from merchant wallet, and enforces anti-click fraud rate-limiting', async () => {
+      const initialWallet = (await VendorProfile.findById(p40Vendor._id)).walletBalance;
+
+      // 1. Valid first click
+      const resClick = await fetch(`${baseUrl}/ads/click`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaignId: p40Campaign1Id,
+          productId: p40Product1._id,
+          keywordMatched: 'noise cancelling headphones',
+        }),
+      });
+      assert.strictEqual(resClick.status, 200);
+      const jsonClick = await resClick.json();
+      assert.strictEqual(jsonClick.success, true);
+      assert.strictEqual(jsonClick.charged, true);
+      assert.ok(jsonClick.cpcCharged >= 3.5);
+
+      // Verify vendor wallet deduction
+      const updatedVendor = await VendorProfile.findById(p40Vendor._id);
+      assert.strictEqual(updatedVendor.walletBalance, initialWallet - jsonClick.cpcCharged);
+
+      // 2. Anti-Click Fraud Protection: Immediate second click from same IP/session must be deduplicated
+      const resDuplicateClick = await fetch(`${baseUrl}/ads/click`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaignId: p40Campaign1Id,
+          productId: p40Product1._id,
+          keywordMatched: 'noise cancelling headphones',
+        }),
+      });
+      assert.strictEqual(resDuplicateClick.status, 200);
+      const jsonDup = await resDuplicateClick.json();
+      assert.strictEqual(jsonDup.success, true);
+      assert.strictEqual(jsonDup.charged, false, 'Duplicate rapid click must NOT charge merchant wallet twice');
+      assert.strictEqual(jsonDup.fraudProtected, true);
+
+      // Wallet balance must remain unchanged after fraudulent click
+      const afterDupVendor = await VendorProfile.findById(p40Vendor._id);
+      assert.strictEqual(afterDupVendor.walletBalance, updatedVendor.walletBalance);
+    });
+
+    await test('Point 40: Granular Sub-Staff RBAC: Marketing/Catalog staff succeeds, Packager without ads permission is forbidden (403)', async () => {
+      // 1. Marketing staff (MARKETING_ADS) can view campaigns
+      const resMarketing = await fetch(`${baseUrl}/vendor/ads/campaigns`, {
+        headers: { Authorization: `Bearer ${p40MarketingToken}` },
+      });
+      assert.strictEqual(resMarketing.status, 200);
+
+      // 2. Packager staff (PACKAGING_DISPATCH only) is blocked from ad campaigns
+      const resPackager = await fetch(`${baseUrl}/vendor/ads/campaigns`, {
+        headers: { Authorization: `Bearer ${p40PackagerToken}` },
+      });
+      assert.strictEqual(resPackager.status, 403);
+      const jsonPackager = await resPackager.json();
+      assert.ok(jsonPackager.message.includes('lacks required permission'));
+    });
+
+    await test('Point 40: Role Security: Customer and unauthenticated requests to vendor ad management are rejected (401 / 403)', async () => {
+      // 1. Unauthenticated request
+      const resUnauth = await fetch(`${baseUrl}/vendor/ads/campaigns`);
+      assert.strictEqual(resUnauth.status, 401);
+
+      // 2. Customer token accessing vendor ads
+      const resCustomer = await fetch(`${baseUrl}/vendor/ads/campaigns`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustomer.status, 403);
     });
 
   } finally {

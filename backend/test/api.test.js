@@ -24515,6 +24515,285 @@ const runTests = async () => {
       assert.strictEqual(resCustReset.status, 403);
     });
 
+
+    // =========================================================================
+    // =========================================================================
+    // PILLAR 3 - POINT 34: SELF-SERVICE 4-STEP VENDOR REGISTRATION & ONBOARDING WIZARD
+    // =========================================================================
+    console.log('\n--- PILLAR 3 - POINT 34: SELF-SERVICE 4-STEP VENDOR REGISTRATION & ONBOARDING WIZARD ---');
+
+    let onboardingVendorToken = null;
+
+    await test('Point 34: Setup dedicated merchant account for Onboarding Wizard testing', async () => {
+      const regRes = await fetch(`${baseUrl}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Aura Artisan Merchant',
+          email: `onboard.vendor.${Date.now()}@auramarket.com`,
+          password: 'password123456',
+          phone: '+919876543210',
+          role: 'vendor',
+          storeName: 'Aura Heritage Store',
+        }),
+      });
+      assert.strictEqual(regRes.status, 201);
+      const regData = await regRes.json();
+      assert.strictEqual(regData.success, true);
+      assert.ok(regData.token);
+      onboardingVendorToken = regData.token;
+    });
+
+    await test('Point 34: GET /api/vendor/onboarding/check-slug validates store URL slug availability and length constraints', async () => {
+      // 1. Invalid short slug
+      const resShort = await fetch(`${baseUrl}/vendor/onboarding/check-slug?slug=ab`);
+      assert.strictEqual(resShort.status, 400);
+      const dataShort = await resShort.json();
+      assert.strictEqual(dataShort.success, false);
+
+      // 2. Available unique slug
+      const uniqueSlug = 'unique-artisan-seller-' + Date.now();
+      const resAvail = await fetch(`${baseUrl}/vendor/onboarding/check-slug?slug=${uniqueSlug}`);
+      assert.strictEqual(resAvail.status, 200);
+      const dataAvail = await resAvail.json();
+      assert.strictEqual(dataAvail.success, true);
+      assert.strictEqual(dataAvail.isAvailable, true);
+    });
+
+    await test('Point 34: GET /api/vendor/onboarding returns current draft step and onboarding state for vendor', async () => {
+      assert.ok(onboardingVendorToken, 'Onboarding vendor token must be present');
+      const res = await fetch(`${baseUrl}/vendor/onboarding`, {
+        headers: { Authorization: `Bearer ${onboardingVendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data);
+      assert.ok(typeof data.data.step === 'number');
+      assert.ok(['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'VERIFIED'].includes(data.data.status));
+      assert.ok(data.data.store);
+    });
+
+    await test('Point 34: POST /api/vendor/onboarding/step/1 saves store identity and advances step pointer', async () => {
+      const uniqueSlug = 'aura-crafts-studio-' + Date.now().toString().slice(-4);
+      const res = await fetch(`${baseUrl}/vendor/onboarding/step/1`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${onboardingVendorToken}`,
+        },
+        body: JSON.stringify({
+          storeName: 'Aura Crafts Studio',
+          storeSlug: uniqueSlug,
+          description: 'Authentic handcrafted heritage lifestyle products.',
+          supportPhone: '+919876501234',
+          supportEmail: 'vendor.care@auracrafts.com',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data);
+      assert.strictEqual(data.data.storeName, 'Aura Crafts Studio');
+      assert.ok(data.data.step >= 2);
+    });
+
+    await test('Point 34: POST /api/vendor/onboarding/step/2 validates PAN and GSTIN formatting and saves business legal entity', async () => {
+      // Invalid PAN format
+      const resInvalidPan = await fetch(`${baseUrl}/vendor/onboarding/step/2`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${onboardingVendorToken}`,
+        },
+        body: JSON.stringify({
+          legalName: 'Aura Crafts Retail Pvt Ltd',
+          panNumber: 'INVALID_PAN_123',
+        }),
+      });
+      assert.strictEqual(resInvalidPan.status, 400);
+      const dataPanErr = await resInvalidPan.json();
+      assert.strictEqual(dataPanErr.success, false);
+      assert.ok(dataPanErr.message.includes('Invalid PAN format'));
+
+      // Valid legal entity
+      const resValid = await fetch(`${baseUrl}/vendor/onboarding/step/2`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${onboardingVendorToken}`,
+        },
+        body: JSON.stringify({
+          legalName: 'Aura Crafts Retail Pvt Ltd',
+          entityType: 'Private Limited',
+          panNumber: 'ABCDE1234F',
+          gstNumber: '27ABCDE1234F1Z5',
+          authorizedSignatoryName: 'Vikramaditya Sharma',
+          authorizedSignatoryPhone: '+919811122334',
+        }),
+      });
+      assert.strictEqual(resValid.status, 200);
+      const dataValid = await resValid.json();
+      assert.strictEqual(dataValid.success, true);
+      assert.strictEqual(dataValid.data.panNumber, 'ABCDE1234F');
+      assert.strictEqual(dataValid.data.gstNumber, '27ABCDE1234F1Z5');
+      assert.ok(dataValid.data.step >= 3);
+    });
+
+    await test('Point 34: POST /api/vendor/onboarding/step/3 validates 6-digit Indian postal pincode and saves pickup warehouse address', async () => {
+      // Invalid pincode
+      const resInvalidPin = await fetch(`${baseUrl}/vendor/onboarding/step/3`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${onboardingVendorToken}`,
+        },
+        body: JSON.stringify({
+          street: 'Gala 5, Industrial Estate',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          pincode: '400', // Invalid 3-digit pincode
+        }),
+      });
+      assert.strictEqual(resInvalidPin.status, 400);
+      const dataPinErr = await resInvalidPin.json();
+      assert.strictEqual(dataPinErr.success, false);
+      assert.ok(dataPinErr.message.includes('pincode'));
+
+      // Valid pickup address
+      const resValid = await fetch(`${baseUrl}/vendor/onboarding/step/3`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${onboardingVendorToken}`,
+        },
+        body: JSON.stringify({
+          warehouseName: 'Central Logistics Hub',
+          contactPerson: 'Suresh Patil',
+          street: 'Gala 5, Shree Balaji Industrial Estate',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          pincode: '400001',
+          phone: '+919820011223',
+        }),
+      });
+      assert.strictEqual(resValid.status, 200);
+      const dataValid = await resValid.json();
+      assert.strictEqual(dataValid.success, true);
+      assert.strictEqual(dataValid.data.pickupAddress.pincode, '400001');
+      assert.ok(dataValid.data.step >= 4);
+    });
+
+    await test('Point 34: POST /api/vendor/onboarding/step/4 validates bank details and saves KYC document links', async () => {
+      // Invalid IFSC format
+      const resInvalidIfsc = await fetch(`${baseUrl}/vendor/onboarding/step/4`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${onboardingVendorToken}`,
+        },
+        body: JSON.stringify({
+          accountHolder: 'Aura Crafts Retail Pvt Ltd',
+          accountNumber: '987654321012',
+          ifscCode: 'INVALID_IFSC',
+        }),
+      });
+      assert.strictEqual(resInvalidIfsc.status, 400);
+      const dataIfscErr = await resInvalidIfsc.json();
+      assert.strictEqual(dataIfscErr.success, false);
+      assert.ok(dataIfscErr.message.includes('IFSC'));
+
+      // Valid bank & documents
+      const resValid = await fetch(`${baseUrl}/vendor/onboarding/step/4`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${onboardingVendorToken}`,
+        },
+        body: JSON.stringify({
+          accountHolder: 'Aura Crafts Retail Pvt Ltd',
+          accountNumber: '987654321012',
+          ifscCode: 'HDFC0001234',
+          bankName: 'HDFC Bank',
+          branchName: 'Fort Mumbai',
+          accountType: 'CURRENT',
+          upiId: 'auracrafts@okhdfcbank',
+          kycDocuments: {
+            gstCertificate: 'https://cdn.auramarket.com/kyc/gst_cert.pdf',
+            panCard: 'https://cdn.auramarket.com/kyc/pan_card.jpg',
+            cancelledCheque: 'https://cdn.auramarket.com/kyc/cheque.pdf',
+            idProof: 'https://cdn.auramarket.com/kyc/aadhaar.pdf',
+          },
+        }),
+      });
+      assert.strictEqual(resValid.status, 200);
+      const dataValid = await resValid.json();
+      assert.strictEqual(dataValid.success, true);
+      assert.strictEqual(dataValid.data.bankDetails.ifscCode, 'HDFC0001234');
+      assert.ok(dataValid.data.kycDocuments.gstCertificate);
+    });
+
+    await test('Point 34: POST /api/vendor/onboarding/submit rejects submission without terms agreement (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/vendor/onboarding/submit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${onboardingVendorToken}`,
+        },
+        body: JSON.stringify({
+          agreedToTerms: false,
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Terms'));
+    });
+
+    await test('Point 34: POST /api/vendor/onboarding/submit finalizes application, transitions status to SUBMITTED and pending review', async () => {
+      const res = await fetch(`${baseUrl}/vendor/onboarding/submit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${onboardingVendorToken}`,
+        },
+        body: JSON.stringify({
+          agreedToTerms: true,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data);
+      assert.strictEqual(data.data.onboardingStatus, 'SUBMITTED');
+      assert.strictEqual(data.data.status, 'pending');
+      assert.strictEqual(data.data.kycStatus, 'PENDING');
+      assert.ok(data.data.submittedAt);
+    });
+
+    await test('Point 34: Role Security: Customer and unauthenticated requests to vendor onboarding are strictly rejected (401 / 403)', async () => {
+      // Unauthenticated
+      const resUnauth = await fetch(`${baseUrl}/vendor/onboarding`);
+      assert.strictEqual(resUnauth.status, 401);
+
+      // Customer
+      const resCust = await fetch(`${baseUrl}/vendor/onboarding`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403);
+
+      // Rider
+      const resRider = await fetch(`${baseUrl}/vendor/onboarding/step/1`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ storeName: 'Rider Store' }),
+      });
+      assert.strictEqual(resRider.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

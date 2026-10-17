@@ -51,14 +51,34 @@ const {
   recalculateVendorHealth,
   submitSlaAppeal,
 } = require('../controllers/vendorHealthController');
+const {
+  checkStoreSlugAvailability,
+  getOnboardingState,
+  saveStep1,
+  saveStep2,
+  saveStep3,
+  saveStep4,
+  submitOnboarding,
+} = require('../controllers/vendorOnboardingController');
 const { protect, authorize, requireVendorPermission } = require('../middlewares/auth');
 
 // Point 58: Public Storefront Vendor Showcase (Accessible by any customer/visitor)
 router.get('/store/:slugOrId', getPublicVendorStore);
 
+// Point 34: Public Slug Availability Check
+router.get('/onboarding/check-slug', checkStoreSlugAvailability);
+
 // All subsequent vendor routes require Vendor authentication & role
 router.use(protect);
 router.use(authorize('vendor', 'vendor_staff'));
+
+// Point 34: Self-Service 4-Step Vendor Registration & Onboarding Wizard
+router.get('/onboarding', getOnboardingState);
+router.post('/onboarding/step/1', saveStep1);
+router.post('/onboarding/step/2', saveStep2);
+router.post('/onboarding/step/3', saveStep3);
+router.post('/onboarding/step/4', saveStep4);
+router.post('/onboarding/submit', submitOnboarding);
 
 // Point 58: Vendor Profile & Branding Customization
 router.get('/profile', getVendorProfile);

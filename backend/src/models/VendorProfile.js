@@ -69,18 +69,63 @@ const vendorProfileSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    // Point 34: Self-Service 4-Step Vendor Registration & Onboarding Wizard
+    onboardingStep: {
+      type: Number,
+      default: 1,
+      min: 1,
+      max: 4,
+    },
+    onboardingStatus: {
+      type: String,
+      enum: ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'VERIFIED', 'REJECTED'],
+      default: 'DRAFT',
+    },
+    onboardingSubmittedAt: {
+      type: Date,
+    },
+    businessDetails: {
+      legalName: { type: String, trim: true, default: '' },
+      tradeName: { type: String, trim: true, default: '' },
+      entityType: {
+        type: String,
+        enum: ['Proprietorship', 'Partnership', 'Private Limited', 'Public Limited', 'Individual', 'LLP'],
+        default: 'Proprietorship',
+      },
+      authorizedSignatoryName: { type: String, trim: true, default: '' },
+      authorizedSignatoryPhone: { type: String, trim: true, default: '' },
+      authorizedSignatoryEmail: { type: String, trim: true, default: '' },
+    },
     pickupAddress: {
+      warehouseName: { type: String, default: 'Primary Fulfillment Hub' },
+      contactPerson: { type: String, default: '' },
       street: String,
       city: String,
       state: String,
       pincode: String,
       phone: String,
+      isServiceable: { type: Boolean, default: true },
     },
     bankDetails: {
       accountHolder: String,
       accountNumber: String,
       ifscCode: String,
       bankName: String,
+      branchName: String,
+      accountType: {
+        type: String,
+        enum: ['CURRENT', 'SAVINGS'],
+        default: 'CURRENT',
+      },
+      upiId: { type: String, default: '' },
+      isPennyDropVerified: { type: Boolean, default: false },
+    },
+    agreedToTerms: {
+      type: Boolean,
+      default: false,
+    },
+    agreedToTermsAt: {
+      type: Date,
     },
     commissionRate: {
       type: Number,
@@ -108,6 +153,7 @@ const vendorProfileSchema = new mongoose.Schema(
       gstCertificate: { type: String, default: '' },
       panCard: { type: String, default: '' },
       bankProof: { type: String, default: '' },
+      cancelledCheque: { type: String, default: '' },
       idProof: { type: String, default: '' },
     },
     kycRejectionReason: {

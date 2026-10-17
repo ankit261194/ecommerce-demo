@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  X,
   Package,
   PlusCircle,
   Truck,
@@ -50,6 +51,7 @@ import PosCounterScreen from '../components/PosCounterScreen';
 import InventoryAlertsModal from '../components/InventoryAlertsModal';
 import VendorPromotionsManager from '../components/VendorPromotionsManager';
 import VendorHealthScorecard from '../components/VendorHealthScorecard';
+import VendorOnboardingWizard from '../components/VendorOnboardingWizard';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -173,6 +175,7 @@ export const VendorPortal = () => {
   const [isThermalModalOpen, setIsThermalModalOpen] = useState(false); // Point #75: Thermal Receipt Printer Modal
   const [selectedOrderForThermal, setSelectedOrderForThermal] = useState(null);
   const [isAiCopyModalOpen, setIsAiCopyModalOpen] = useState(false); // Point #76: AI Product Description & SEO Meta Generator
+  const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false); // Point #34: Self-Service 4-Step Vendor Registration
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // Point #58: Store Profile Customization
   const [isPublicStorePreviewOpen, setIsPublicStorePreviewOpen] = useState(false); // Point #58: Public Storefront Preview
   const [isVacationModalOpen, setIsVacationModalOpen] = useState(false); // Point #59: Vacation Mode Toggle
@@ -559,6 +562,19 @@ export const VendorPortal = () => {
             </span>
             <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${vendorData.vacationMode?.isVacation ? 'bg-slate-950 text-amber-400' : 'bg-slate-100 text-slate-700'}`}>
               #59
+            </span>
+          </button>
+
+                    <button
+            type="button"
+            onClick={() => setIsOnboardingModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 text-xs font-black shadow-md transition-all active:scale-95"
+            title="Point 34: Self-Service 4-Step Vendor Registration & Document Onboarding Wizard"
+          >
+            <Store className="w-4 h-4 text-slate-950" />
+            <span>Onboarding Wizard</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-amber-400">
+              Point #34
             </span>
           </button>
 

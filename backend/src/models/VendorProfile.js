@@ -175,6 +175,28 @@ const vendorProfileSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Point 48: Multi-Vendor Automated Escrow Payout Engine & Hold Periods
+    escrowBalance: {
+      type: Number,
+      default: 0,
+    },
+    customHoldDays: {
+      type: Number,
+      default: 7,
+    },
+    payoutSchedule: {
+      type: String,
+      enum: ['DAILY', 'WEEKLY_MONDAY', 'BIWEEKLY', 'MONTHLY_FIRST'],
+      default: 'WEEKLY_MONDAY',
+    },
+    autoReleaseEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    earlyReleaseEligible: {
+      type: Boolean,
+      default: false,
+    },
     totalSales: {
       type: Number,
       default: 0,

@@ -43,6 +43,7 @@ const walletTransactionSchema = new mongoose.Schema(
         'PARTIAL_COD_ADVANCE',
         'RIDER_TIP',
         'SPF_COMPENSATION',
+        'ESCROW_RELEASE',
       ],
       default: 'COIN_REDEMPTION',
     },

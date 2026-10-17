@@ -3,6 +3,7 @@ const CourierShipment = require('../models/CourierShipment');
 const SubOrder = require('../models/SubOrder');
 const Order = require('../models/Order');
 const AuditLog = require('../models/AuditLog');
+const { onSubOrderDelivered } = require('../services/escrowService');
 
 const maskSecret = (secret) => {
   if (!secret || secret.length <= 4) return '••••••••';
@@ -1273,11 +1274,17 @@ exports.ingestCourierWebhook = async (req, res, next) => {
       if (subOrder) {
         if (mappedStatus === 'DELIVERED') {
           subOrder.status = 'delivered';
-          subOrder.deliveredAt = new Date();
+          subOrder.deliveredAt = shipment.deliveredAt || new Date();
+          await subOrder.save();
+          try {
+            await onSubOrderDelivered(subOrder._id, subOrder.deliveredAt);
+          } catch (escrowErr) {
+            console.warn('Courier delivery escrow sync error:', escrowErr.message);
+          }
         } else if (mappedStatus === 'OUT_FOR_DELIVERY') {
           subOrder.status = 'out_for_delivery';
+          await subOrder.save();
         }
-        await subOrder.save();
       }
     }
 

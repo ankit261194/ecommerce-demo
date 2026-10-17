@@ -30546,6 +30546,665 @@ const runTests = async () => {
       assert.strictEqual(resCustConfig.status, 403);
     });
 
+    // =========================================================================
+    // PILLAR 5 - POINT 48: MULTI-VENDOR AUTOMATED ESCROW PAYOUT ENGINE & HOLD PERIODS
+    // =========================================================================
+    console.log('\n--- PILLAR 5 - POINT 48: MULTI-VENDOR AUTOMATED ESCROW PAYOUT ENGINE & HOLD PERIODS ---');
+
+    let p48AdminUser, p48AdminToken;
+    let p48CustomerUser, p48CustomerToken;
+    let p48ForeignCustomerUser, p48ForeignCustomerToken;
+    let p48VendorUser1, p48VendorProfile1, p48VendorToken1;
+    let p48VendorUser2, p48VendorProfile2, p48VendorToken2;
+    let p48Product1, p48Product2;
+    let p48Order1, p48SubOrder1;
+    let p48SubOrder2, p48SubOrder3, p48SubOrder4, p48SubOrder5;
+    let p48Unique = '';
+
+    await test('Point 48: Setup dedicated accounts, vendors, products & orders for escrow engine testing', async () => {
+      p48Unique = Date.now() + '_' + Math.floor(Math.random() * 10000);
+
+      // 1. Super Admin
+      p48AdminUser = await User.create({
+        name: 'Escrow Super Admin ' + p48Unique,
+        email: 'admin.escrow.' + p48Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'superadmin',
+      });
+      p48AdminToken = generateToken(p48AdminUser._id);
+
+      // 2. Customer
+      p48CustomerUser = await User.create({
+        name: 'Escrow Shopper ' + p48Unique,
+        email: 'customer.escrow.' + p48Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'customer',
+        walletBalance: 0,
+      });
+      p48CustomerToken = generateToken(p48CustomerUser._id);
+
+      // 3. Foreign Customer
+      p48ForeignCustomerUser = await User.create({
+        name: 'Foreign Shopper ' + p48Unique,
+        email: 'foreign.escrow.' + p48Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'customer',
+        walletBalance: 0,
+      });
+      p48ForeignCustomerToken = generateToken(p48ForeignCustomerUser._id);
+
+      // 4. Vendor 1
+      p48VendorUser1 = await User.create({
+        name: 'Apex Escrow Merchant ' + p48Unique,
+        email: 'vendor1.escrow.' + p48Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'vendor',
+      });
+      p48VendorProfile1 = await VendorProfile.create({
+        user: p48VendorUser1._id,
+        storeName: 'Apex Escrow Hub ' + p48Unique,
+        storeSlug: 'apex-escrow-' + p48Unique.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        phone: '9876543212',
+        walletBalance: 5000,
+        escrowBalance: 0,
+        customHoldDays: 7,
+        payoutSchedule: 'WEEKLY_MONDAY',
+        autoReleaseEnabled: true,
+        earlyReleaseEligible: false,
+      });
+      p48VendorUser1.vendorProfile = p48VendorProfile1._id;
+      await p48VendorUser1.save();
+      p48VendorToken1 = generateToken(p48VendorUser1._id);
+
+      // 5. Vendor 2
+      p48VendorUser2 = await User.create({
+        name: 'Starlight Escrow Merchant ' + p48Unique,
+        email: 'vendor2.escrow.' + p48Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'vendor',
+      });
+      p48VendorProfile2 = await VendorProfile.create({
+        user: p48VendorUser2._id,
+        storeName: 'Starlight Escrow Hub ' + p48Unique,
+        storeSlug: 'starlight-escrow-' + p48Unique.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        phone: '9876543213',
+        walletBalance: 2000,
+        escrowBalance: 0,
+        customHoldDays: 7,
+        payoutSchedule: 'WEEKLY_MONDAY',
+        autoReleaseEnabled: true,
+        earlyReleaseEligible: false,
+      });
+      p48VendorUser2.vendorProfile = p48VendorProfile2._id;
+      await p48VendorUser2.save();
+      p48VendorToken2 = generateToken(p48VendorUser2._id);
+
+      // 6. Category & Products
+      let p48Cat = await Category.findOne();
+      if (!p48Cat) {
+        p48Cat = await Category.create({
+          name: 'Electronics ' + p48Unique,
+          slug: 'electronics-' + p48Unique.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        });
+      }
+
+      p48Product1 = await Product.create({
+        title: 'Audiophile Noise-Cancelling Headphones ' + p48Unique,
+        slug: 'headphones-' + p48Unique.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        description: 'Audiophile Noise-Cancelling Headphones with Active Studio ANC',
+        category: p48Cat._id,
+        price: 4999,
+        mrp: 7999,
+        sellingPrice: 4999,
+        vendor: p48VendorProfile1._id,
+        user: p48VendorUser1._id,
+        sku: 'SKU-HEAD-' + p48Unique,
+        stock: 50,
+        countInStock: 50,
+      });
+
+      p48Product2 = await Product.create({
+        title: 'Studio Monitor Speakers ' + p48Unique,
+        slug: 'speakers-' + p48Unique.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        description: 'Studio Monitor Reference Speakers with High-Fidelity Drivers',
+        category: p48Cat._id,
+        price: 8999,
+        mrp: 12999,
+        sellingPrice: 8999,
+        vendor: p48VendorProfile2._id,
+        user: p48VendorUser2._id,
+        sku: 'SKU-SPEAK-' + p48Unique,
+        stock: 30,
+        countInStock: 30,
+      });
+
+      // 7. Parent Order
+      p48Order1 = await Order.create({
+        orderNumber: 'ORD-ESC-' + p48Unique,
+        customer: p48CustomerUser._id,
+        totalAmount: 4999,
+        finalAmount: 4999,
+        paymentStatus: 'PAID',
+        paymentMethod: 'ONLINE',
+        shippingAddress: {
+          recipientName: 'Priya Customer',
+          phone: '9876543210',
+          street: '123 MG Road',
+          city: 'Bengaluru',
+          state: 'Karnataka',
+          pincode: '560001',
+        },
+      });
+
+      // 8. SubOrder 1 (Pending delivery initially)
+      p48SubOrder1 = await SubOrder.create({
+        parentOrder: p48Order1._id,
+        vendor: p48VendorProfile1._id,
+        customer: p48CustomerUser._id,
+        items: [
+          {
+            product: p48Product1._id,
+            title: p48Product1.title,
+            quantity: 1,
+            price: 4999,
+            totalPrice: 4999,
+          },
+        ],
+        subTotal: 4999,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 499.9,
+        vendorEarning: 4499.1,
+        status: 'placed',
+      });
+      p48Order1.subOrders = [p48SubOrder1._id];
+      await p48Order1.save();
+    });
+
+    await test('Point 48: Test 1 - Delivery of order initializes return-window escrow hold with correct release due date (deliveredAt + 7 days)', async () => {
+      const { onSubOrderDelivered } = require('../src/services/escrowService');
+      const deliveredTime = new Date();
+
+      p48SubOrder1.status = 'delivered';
+      p48SubOrder1.deliveredAt = deliveredTime;
+      await p48SubOrder1.save();
+
+      const escrowResult = await onSubOrderDelivered(p48SubOrder1._id, deliveredTime);
+      assert.strictEqual(escrowResult.success, true);
+      assert.strictEqual(escrowResult.holdDays, 7);
+      assert.strictEqual(escrowResult.escrowAmount, 4499.1);
+
+      const refreshedSubOrder = await SubOrder.findById(p48SubOrder1._id);
+      assert.strictEqual(refreshedSubOrder.status, 'delivered');
+      assert.ok(refreshedSubOrder.escrowDetails);
+      assert.strictEqual(refreshedSubOrder.escrowDetails.escrowStatus, 'HOLD_IN_RETURN_WINDOW');
+      assert.strictEqual(refreshedSubOrder.escrowDetails.escrowHoldDays, 7);
+      assert.strictEqual(refreshedSubOrder.escrowDetails.escrowAmount, 4499.1);
+
+      // Verify release due date = deliveredAt + 7 days
+      const expectedDueDateMs = deliveredTime.getTime() + 7 * 24 * 60 * 60 * 1000;
+      const actualDueDateMs = new Date(refreshedSubOrder.escrowDetails.escrowReleaseDueDate).getTime();
+      assert.ok(Math.abs(actualDueDateMs - expectedDueDateMs) < 2000, 'Release due date must be within 2s of deliveredAt + 7 days');
+
+      // Verify vendor\'s escrowBalance was incremented
+      const refreshedVendor = await VendorProfile.findById(p48VendorProfile1._id);
+      assert.strictEqual(refreshedVendor.escrowBalance, 4499.1);
+    });
+
+    await test('Point 48: Test 2 - Premature release attempt is rejected (400 Bad Request: Hold period active)', async () => {
+      const res = await fetch(`${baseUrl}/vendor/escrow/release-matured`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48VendorToken1}`,
+        },
+        body: JSON.stringify({ subOrderId: p48SubOrder1._id.toString() }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+      assert.ok(body.message.includes('Hold period active'), 'Error message must specify active hold period');
+    });
+
+    await test('Point 48: Test 3 - Matured escrow release credits vendor wallet, updates escrowBalance, creates WalletTransaction & Ledger, and is idempotent', async () => {
+      // 1. Simulate hold period expiration by moving escrowReleaseDueDate 1 minute into the past
+      p48SubOrder1.escrowDetails.escrowReleaseDueDate = new Date(Date.now() - 60000);
+      await p48SubOrder1.save();
+
+      const vendorBefore = await VendorProfile.findById(p48VendorProfile1._id);
+      const initialWallet = vendorBefore.walletBalance;
+      const initialEscrow = vendorBefore.escrowBalance;
+
+      // 2. Vendor triggers matured release
+      const res = await fetch(`${baseUrl}/vendor/escrow/release-matured`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48VendorToken1}`,
+        },
+        body: JSON.stringify({ subOrderId: p48SubOrder1._id.toString() }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.releasedCount, 1);
+      assert.strictEqual(body.releasedAmount, 4499.1);
+
+      // 3. Verify vendor balances
+      const vendorAfter = await VendorProfile.findById(p48VendorProfile1._id);
+      assert.strictEqual(vendorAfter.walletBalance, initialWallet + 4499.1);
+      assert.strictEqual(vendorAfter.escrowBalance, initialEscrow - 4499.1);
+
+      // 4. Verify SubOrder escrow status
+      const subOrderAfter = await SubOrder.findById(p48SubOrder1._id);
+      assert.strictEqual(subOrderAfter.escrowDetails.escrowStatus, 'RELEASED_TO_WALLET');
+      assert.ok(subOrderAfter.escrowDetails.escrowReleasedAt);
+
+      // 5. Verify WalletTransaction created
+      const walletTx = await WalletTransaction.findOne({
+        user: p48VendorUser1._id,
+        category: 'ESCROW_RELEASE',
+      });
+      assert.ok(walletTx, 'WalletTransaction for ESCROW_RELEASE must be persisted');
+      assert.strictEqual(walletTx.amount, 4499.1);
+      assert.strictEqual(walletTx.type, 'CREDIT');
+      assert.strictEqual(walletTx.status, 'SUCCESS');
+
+      // 6. Verify Ledger entry created
+      const ledger = await Ledger.findOne({
+        vendor: p48VendorProfile1._id,
+        type: 'ESCROW_RELEASE',
+      });
+      assert.ok(ledger, 'Ledger entry for ESCROW_RELEASE must be persisted');
+      assert.strictEqual(ledger.amount, 4499.1);
+
+      // 7. Verify AuditLog entry
+      const auditLog = await AuditLog.findOne({
+        action: 'RELEASE_ESCROW_PAYOUT',
+        targetId: p48SubOrder1._id.toString(),
+      });
+      assert.ok(auditLog, 'AuditLog must be recorded for escrow payout release');
+
+      // 8. Idempotency Check: Calling release again returns 200 with alreadyReleased: true without duplicate credits
+      const resRepeat = await fetch(`${baseUrl}/vendor/escrow/release-matured`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48VendorToken1}`,
+        },
+        body: JSON.stringify({ subOrderId: p48SubOrder1._id.toString() }),
+      });
+      assert.strictEqual(resRepeat.status, 200);
+      const repeatBody = await resRepeat.json();
+      assert.strictEqual(repeatBody.alreadyReleased, true);
+      assert.strictEqual(repeatBody.releasedCount, 0);
+
+      const vendorFinal = await VendorProfile.findById(p48VendorProfile1._id);
+      assert.strictEqual(vendorFinal.walletBalance, vendorAfter.walletBalance, 'Wallet balance must not double-credit');
+    });
+
+    await test('Point 48: Test 4 - Disputing escrow hold prevents release (DISPUTED_HOLD)', async () => {
+      // 1. Create a new delivered suborder with hold due date in the past
+      p48SubOrder2 = await SubOrder.create({
+        parentOrder: p48Order1._id,
+        vendor: p48VendorProfile1._id,
+        customer: p48CustomerUser._id,
+        items: [{ product: p48Product1._id, title: p48Product1.title, quantity: 1, price: 2000, totalPrice: 2000 }],
+        subTotal: 2000,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 200,
+        vendorEarning: 1800,
+        status: 'delivered',
+        deliveredAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // Delivered 10 days ago
+        escrowDetails: {
+          escrowStatus: 'HOLD_IN_RETURN_WINDOW',
+          escrowHoldDays: 7,
+          deliveredAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+          escrowReleaseDueDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // Matured 3 days ago
+          escrowAmount: 1800,
+          platformCommissionHeld: 200,
+          isDisputed: false,
+        },
+      });
+
+      // 2. Super Admin disputes the hold
+      const resDispute = await fetch(`${baseUrl}/admin/escrow/${p48SubOrder2._id}/dispute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48AdminToken}`,
+        },
+        body: JSON.stringify({
+          reason: 'Customer reported counterfeit audio item; RTO inspection opened',
+          notes: 'Serial number verification in progress by compliance team',
+        }),
+      });
+
+      assert.strictEqual(resDispute.status, 200);
+      const disputeBody = await resDispute.json();
+      assert.strictEqual(disputeBody.success, true);
+      assert.strictEqual(disputeBody.subOrder.escrowDetails.isDisputed, true);
+      assert.strictEqual(disputeBody.subOrder.escrowDetails.escrowStatus, 'DISPUTED_HOLD');
+
+      // 3. Vendor attempts to release the disputed suborder -> Rejected with 400
+      const resReleaseAttempt = await fetch(`${baseUrl}/vendor/escrow/release-matured`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48VendorToken1}`,
+        },
+        body: JSON.stringify({ subOrderId: p48SubOrder2._id.toString() }),
+      });
+
+      assert.strictEqual(resReleaseAttempt.status, 400);
+      const attemptBody = await resReleaseAttempt.json();
+      assert.strictEqual(attemptBody.success, false);
+      assert.ok(attemptBody.message.includes('dispute'), 'Error message must cite active dispute hold');
+    });
+
+    await test('Point 48: Test 5 - Dispute resolution releases to vendor or refunds customer', async () => {
+      // Part A: REFUND_TO_CUSTOMER
+      const custBefore = await User.findById(p48CustomerUser._id);
+      const custInitialWallet = custBefore.walletBalance || 0;
+
+      const resResolveRefund = await fetch(`${baseUrl}/admin/escrow/${p48SubOrder2._id}/resolve-dispute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48AdminToken}`,
+        },
+        body: JSON.stringify({
+          decision: 'REFUND_TO_CUSTOMER',
+          notes: 'Customer claim substantiated: defective acoustic driver.',
+        }),
+      });
+
+      assert.strictEqual(resResolveRefund.status, 200);
+      const refundBody = await resResolveRefund.json();
+      assert.strictEqual(refundBody.success, true);
+      assert.strictEqual(refundBody.decision, 'REFUND_TO_CUSTOMER');
+
+      const subOrderRefunded = await SubOrder.findById(p48SubOrder2._id);
+      assert.strictEqual(subOrderRefunded.escrowDetails.escrowStatus, 'REFUNDED_TO_CUSTOMER');
+      assert.strictEqual(subOrderRefunded.escrowDetails.isDisputed, false);
+
+      const custAfter = await User.findById(p48CustomerUser._id);
+      assert.strictEqual(custAfter.walletBalance, custInitialWallet + 2000, 'Customer wallet credited with full refund');
+
+      // Part B: RELEASE_TO_VENDOR
+      p48SubOrder3 = await SubOrder.create({
+        parentOrder: p48Order1._id,
+        vendor: p48VendorProfile1._id,
+        customer: p48CustomerUser._id,
+        items: [{ product: p48Product1._id, title: p48Product1.title, quantity: 1, price: 1500, totalPrice: 1500 }],
+        subTotal: 1500,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 150,
+        vendorEarning: 1350,
+        status: 'delivered',
+        deliveredAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+        escrowDetails: {
+          escrowStatus: 'DISPUTED_HOLD',
+          escrowHoldDays: 7,
+          deliveredAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+          escrowReleaseDueDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+          escrowAmount: 1350,
+          platformCommissionHeld: 150,
+          isDisputed: true,
+          disputeReason: 'Doorstep tamper allegation',
+        },
+      });
+
+      const vendorBeforeResolve = await VendorProfile.findById(p48VendorProfile1._id);
+      const vendorWalletBefore = vendorBeforeResolve.walletBalance;
+
+      const resResolveVendor = await fetch(`${baseUrl}/admin/escrow/${p48SubOrder3._id}/resolve-dispute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48AdminToken}`,
+        },
+        body: JSON.stringify({
+          decision: 'RELEASE_TO_VENDOR',
+          notes: 'Tamper proof inspected and cleared: box integrity verified.',
+        }),
+      });
+
+      assert.strictEqual(resResolveVendor.status, 200);
+      const vendorResolveBody = await resResolveVendor.json();
+      assert.strictEqual(vendorResolveBody.success, true);
+      assert.strictEqual(vendorResolveBody.decision, 'RELEASE_TO_VENDOR');
+
+      const subOrderReleased = await SubOrder.findById(p48SubOrder3._id);
+      assert.strictEqual(subOrderReleased.escrowDetails.escrowStatus, 'RELEASED_TO_WALLET');
+      assert.strictEqual(subOrderReleased.escrowDetails.isDisputed, false);
+
+      const vendorAfterResolve = await VendorProfile.findById(p48VendorProfile1._id);
+      assert.strictEqual(vendorAfterResolve.walletBalance, vendorWalletBefore + 1350, 'Vendor wallet credited upon dispute release');
+    });
+
+    await test('Point 48: Test 6 - Admin batch release processes all eligible matured suborders across vendors', async () => {
+      // 1. Create matured suborders across both Vendor 1 and Vendor 2
+      p48SubOrder4 = await SubOrder.create({
+        parentOrder: p48Order1._id,
+        vendor: p48VendorProfile1._id,
+        customer: p48CustomerUser._id,
+        items: [{ product: p48Product1._id, title: p48Product1.title, quantity: 1, price: 1000, totalPrice: 1000 }],
+        subTotal: 1000,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 100,
+        vendorEarning: 900,
+        status: 'delivered',
+        escrowDetails: {
+          escrowStatus: 'HOLD_IN_RETURN_WINDOW',
+          escrowHoldDays: 7,
+          deliveredAt: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000),
+          escrowReleaseDueDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+          escrowAmount: 900,
+          platformCommissionHeld: 100,
+          isDisputed: false,
+        },
+      });
+
+      p48SubOrder5 = await SubOrder.create({
+        parentOrder: p48Order1._id,
+        vendor: p48VendorProfile2._id,
+        customer: p48CustomerUser._id,
+        items: [{ product: p48Product2._id, title: p48Product2.title, quantity: 1, price: 3000, totalPrice: 3000 }],
+        subTotal: 3000,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 300,
+        vendorEarning: 2700,
+        status: 'delivered',
+        escrowDetails: {
+          escrowStatus: 'HOLD_IN_RETURN_WINDOW',
+          escrowHoldDays: 7,
+          deliveredAt: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000),
+          escrowReleaseDueDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+          escrowAmount: 2700,
+          platformCommissionHeld: 300,
+          isDisputed: false,
+        },
+      });
+
+      const resBatch = await fetch(`${baseUrl}/admin/escrow/batch-release`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48AdminToken}`,
+        },
+        body: JSON.stringify({
+          subOrderIds: [p48SubOrder4._id.toString(), p48SubOrder5._id.toString()],
+        }),
+      });
+
+      assert.strictEqual(resBatch.status, 200);
+      const batchBody = await resBatch.json();
+      assert.strictEqual(batchBody.success, true);
+      assert.strictEqual(batchBody.releasedOrdersCount, 2);
+      assert.strictEqual(batchBody.totalReleased, 3600);
+      assert.strictEqual(batchBody.vendorCount, 2);
+
+      const checkSub4 = await SubOrder.findById(p48SubOrder4._id);
+      const checkSub5 = await SubOrder.findById(p48SubOrder5._id);
+      assert.strictEqual(checkSub4.escrowDetails.escrowStatus, 'RELEASED_TO_WALLET');
+      assert.strictEqual(checkSub5.escrowDetails.escrowStatus, 'RELEASED_TO_WALLET');
+    });
+
+    await test('Point 48: Test 7 - Admin escrow radar and config endpoints return valid analytics', async () => {
+      // 1. Admin Escrow Radar
+      const resRadar = await fetch(`${baseUrl}/admin/escrow/radar`, {
+        headers: { Authorization: `Bearer ${p48AdminToken}` },
+      });
+      assert.strictEqual(resRadar.status, 200);
+      const radarBody = await resRadar.json();
+      assert.strictEqual(radarBody.success, true);
+      assert.ok(typeof radarBody.data.platformTreasury.totalActiveEscrowPool === 'number');
+      assert.ok(Array.isArray(radarBody.data.forecast));
+      assert.ok(Array.isArray(radarBody.data.recentEscrowSubOrders));
+      assert.ok(radarBody.data.recentEscrowSubOrders.length > 0);
+
+      // 2. GET Escrow Config
+      const resConfig = await fetch(`${baseUrl}/admin/escrow/config`, {
+        headers: { Authorization: `Bearer ${p48AdminToken}` },
+      });
+      assert.strictEqual(resConfig.status, 200);
+      const configBody = await resConfig.json();
+      assert.strictEqual(configBody.success, true);
+      assert.ok(typeof configBody.data.defaultHoldDays === 'number');
+
+      // 3. PUT Escrow Config
+      const resUpdateConfig = await fetch(`${baseUrl}/admin/escrow/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48AdminToken}`,
+        },
+        body: JSON.stringify({
+          defaultHoldDays: 14,
+          minimumPayoutThreshold: 750,
+          powerSellerEarlyRelease: {
+            enabled: true,
+            minVendorRating: 4.9,
+            minCompletedOrders: 100,
+            reducedHoldDays: 3,
+            maxReturnRatePercent: 1.5,
+          },
+        }),
+      });
+      assert.strictEqual(resUpdateConfig.status, 200);
+      const updatedConfigBody = await resUpdateConfig.json();
+      assert.strictEqual(updatedConfigBody.success, true);
+      assert.strictEqual(updatedConfigBody.data.defaultHoldDays, 14);
+      assert.strictEqual(updatedConfigBody.data.minimumPayoutThreshold, 750);
+      assert.strictEqual(updatedConfigBody.data.powerSellerEarlyRelease.minVendorRating, 4.9);
+
+      // Restore default hold days to 7 for consistency
+      await fetch(`${baseUrl}/admin/escrow/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48AdminToken}`,
+        },
+        body: JSON.stringify({ defaultHoldDays: 7, minimumPayoutThreshold: 500 }),
+      });
+
+      // 4. Vendor Escrow Summary
+      const resVendorSummary = await fetch(`${baseUrl}/vendor/escrow/summary`, {
+        headers: { Authorization: `Bearer ${p48VendorToken1}` },
+      });
+      assert.strictEqual(resVendorSummary.status, 200);
+      const vendorSummaryBody = await resVendorSummary.json();
+      assert.strictEqual(vendorSummaryBody.success, true);
+      assert.ok(vendorSummaryBody.data.summary);
+      assert.ok(typeof vendorSummaryBody.data.summary.lockedEscrowBalance === 'number');
+      assert.ok(typeof vendorSummaryBody.data.summary.totalSettledBalance === 'number');
+      assert.ok(Array.isArray(vendorSummaryBody.data.upcomingReleases));
+    });
+
+    await test('Point 48: Test 8 - Role security guardrails (401 unauthenticated, 403 unauthorized)', async () => {
+      // 1. Unauthenticated request to vendor escrow summary (401)
+      const resUnauthSummary = await fetch(`${baseUrl}/vendor/escrow/summary`);
+      assert.strictEqual(resUnauthSummary.status, 401);
+
+      // 2. Unauthenticated request to admin escrow radar (401)
+      const resUnauthRadar = await fetch(`${baseUrl}/admin/escrow/radar`);
+      assert.strictEqual(resUnauthRadar.status, 401);
+
+      // 3. Customer calling vendor escrow summary (403)
+      const resCustSummary = await fetch(`${baseUrl}/vendor/escrow/summary`, {
+        headers: { Authorization: `Bearer ${p48CustomerToken}` },
+      });
+      assert.strictEqual(resCustSummary.status, 403);
+
+      // 4. Customer attempting to trigger vendor release (403)
+      const resCustRelease = await fetch(`${baseUrl}/vendor/escrow/release-matured`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48CustomerToken}`,
+        },
+        body: JSON.stringify({ subOrderId: p48SubOrder1._id.toString() }),
+      });
+      assert.strictEqual(resCustRelease.status, 403);
+
+      // 5. Vendor calling admin escrow radar (403)
+      const resVendorRadar = await fetch(`${baseUrl}/admin/escrow/radar`, {
+        headers: { Authorization: `Bearer ${p48VendorToken1}` },
+      });
+      assert.strictEqual(resVendorRadar.status, 403);
+
+      // 6. Vendor attempting admin batch release (403)
+      const resVendorBatch = await fetch(`${baseUrl}/admin/escrow/batch-release`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48VendorToken1}`,
+        },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(resVendorBatch.status, 403);
+
+      // 7. Customer attempting to place dispute on escrow hold (403)
+      const resCustDispute = await fetch(`${baseUrl}/admin/escrow/${p48SubOrder1._id}/dispute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48CustomerToken}`,
+        },
+        body: JSON.stringify({ reason: 'Unauthorized freeze attempt' }),
+      });
+      assert.strictEqual(resCustDispute.status, 403);
+
+      // 8. Vendor attempting to resolve dispute (403)
+      const resVendorResolve = await fetch(`${baseUrl}/admin/escrow/${p48SubOrder1._id}/resolve-dispute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48VendorToken1}`,
+        },
+        body: JSON.stringify({ decision: 'RELEASE_TO_VENDOR' }),
+      });
+      assert.strictEqual(resVendorResolve.status, 403);
+
+      // 9. Customer attempting to update escrow config (403)
+      const resCustConfig = await fetch(`${baseUrl}/admin/escrow/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48CustomerToken}`,
+        },
+        body: JSON.stringify({ defaultHoldDays: 1 }),
+      });
+      assert.strictEqual(resCustConfig.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

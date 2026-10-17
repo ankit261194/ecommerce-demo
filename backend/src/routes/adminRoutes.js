@@ -238,5 +238,21 @@ router.get('/routing-config', getRoutingConfig);
 router.put('/returns/routing-config', updateRoutingConfig);
 router.put('/routing-config', updateRoutingConfig);
 
+// Point 48: Multi-Vendor Automated Escrow Payout Engine & Hold Periods
+const {
+  getAdminEscrowRadar,
+  adminBatchReleaseEscrow,
+  disputeEscrowHold,
+  resolveEscrowDispute,
+  getEscrowConfig,
+  updateEscrowConfig,
+} = require('../controllers/escrowController');
+router.get('/escrow/radar', getAdminEscrowRadar);
+router.post('/escrow/batch-release', adminBatchReleaseEscrow);
+router.post('/escrow/:subOrderId/dispute', disputeEscrowHold);
+router.post('/escrow/:subOrderId/resolve-dispute', resolveEscrowDispute);
+router.get('/escrow/config', getEscrowConfig);
+router.put('/escrow/config', updateEscrowConfig);
+
 module.exports = router;
 

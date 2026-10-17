@@ -131,6 +131,7 @@ import AdminVendorVerificationHub from '../components/AdminVendorVerificationHub
 import HyperlocalDispatchSchedulerModal from '../components/HyperlocalDispatchSchedulerModal';
 import FleetLiveMapRadarModal from '../components/FleetLiveMapRadarModal';
 import ReverseLogisticsRoutingHub from '../components/ReverseLogisticsRoutingHub';
+import AdminEscrowSettlementEngine from '../components/AdminEscrowSettlementEngine';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -2032,6 +2033,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('escrow')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'escrow'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-indigo-400" />
+            <span>Escrow Settlement Engine</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 ml-1">
+              Point #48
+            </span>
+          </button>
+
+          <button
             onClick={() => setIsInventoryAlertsModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition-all"
             title="Point 10: Multi-Vendor Inventory Low-Stock Radar & Automated Alerts"
@@ -3109,6 +3125,15 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           isOpen={true}
           onClose={() => setActiveDashboardTab('overview')}
         />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 37: AUTOMATED ESCROW PAYOUT ENGINE & TREASURY (Pillar 5 • Point 48)   */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'escrow' && (
+        <div className="space-y-6 animate-fade-in">
+          <AdminEscrowSettlementEngine />
+        </div>
       )}
 
       {/* ========================================================================= */}

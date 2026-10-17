@@ -6,6 +6,7 @@ const CodReconciliation = require('../models/CodReconciliation');
 const smsService = require('../services/smsService');
 const mailService = require('../services/mailService');
 const { executeVendorPayoutSplit } = require('../services/payoutSplitService');
+const { onSubOrderDelivered } = require('../services/escrowService');
 const crypto = require('crypto');
 const ScratchCardReward = require('../models/ScratchCardReward');
 const { recordAuditLog } = require('../utils/auditLogger');
@@ -497,6 +498,13 @@ exports.verifyOtpAndCompleteDelivery = async (req, res, next) => {
       });
     } catch (splitErr) {
       console.warn('Automated payout split trigger error:', splitErr.message);
+    }
+
+    // Point 48: Multi-Vendor Automated Escrow Payout Engine & Hold Periods
+    try {
+      await onSubOrderDelivered(subOrder._id, task.deliveredAt || new Date());
+    } catch (escrowErr) {
+      console.warn('Automated escrow hold initialization error:', escrowErr.message);
     }
 
     // Point 16: Automated Post-Delivery Instant Scratch Card Reward Generation
@@ -1268,6 +1276,13 @@ exports.completeDigitalPodDelivery = async (req, res, next) => {
       });
     } catch (splitErr) {
       console.warn('Automated payout split trigger error:', splitErr.message);
+    }
+
+    // Point 48: Multi-Vendor Automated Escrow Payout Engine & Hold Periods
+    try {
+      await onSubOrderDelivered(subOrder._id, task.deliveredAt || new Date());
+    } catch (escrowErr) {
+      console.warn('Automated escrow hold initialization error:', escrowErr.message);
     }
 
     // Point 16: Automated Post-Delivery Instant Scratch Card Reward Generation

@@ -227,4 +227,12 @@ router.get('/returns', getVendorReturns);
 router.post('/returns/:id/grade-and-restock', vendorGradeAndRestock);
 router.get('/returns/spf-claims', getSpfClaimsList);
 
+// Point 48: Multi-Vendor Automated Escrow Payout Engine & Hold Periods
+const {
+  getVendorEscrowSummary,
+  releaseMaturedEscrowFunds,
+} = require('../controllers/escrowController');
+router.get('/escrow/summary', requireVendorPermission('WALLET_FINANCE'), getVendorEscrowSummary);
+router.post('/escrow/release-matured', requireVendorPermission('WALLET_FINANCE'), releaseMaturedEscrowFunds);
+
 module.exports = router;

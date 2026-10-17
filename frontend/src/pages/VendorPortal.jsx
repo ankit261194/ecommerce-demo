@@ -63,6 +63,7 @@ import BulkInlineCatalogEditorModal from '../components/BulkInlineCatalogEditorM
 import SponsoredAdsManagerModal from '../components/SponsoredAdsManagerModal';
 import InventoryAgingRadarModal from '../components/InventoryAgingRadarModal';
 import VendorReturnGradingModal from '../components/VendorReturnGradingModal';
+import VendorEscrowHoldTrackerModal from '../components/VendorEscrowHoldTrackerModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -201,6 +202,7 @@ export const VendorPortal = () => {
   const [isVacationModalOpen, setIsVacationModalOpen] = useState(false); // Point #59: Vacation Mode Toggle
   const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false); // Point #60: Customer Reviews Management
   const [isWalletLedgerModalOpen, setIsWalletLedgerModalOpen] = useState(false); // Point #61: Financial Wallet & Ledger
+  const [isEscrowModalOpen, setIsEscrowModalOpen] = useState(false); // Point #48: Automated Escrow Payout Engine
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [isChatInboxOpen, setIsChatInboxOpen] = useState(false);
@@ -771,6 +773,19 @@ export const VendorPortal = () => {
             <span>Wallet & Ledger</span>
             <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-emerald-400 text-slate-950">
               #61
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsEscrowModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all border border-indigo-500/20"
+            title="Multi-Vendor Automated Escrow Payout Engine & Hold Periods"
+          >
+            <ShieldCheck className="w-4 h-4 text-indigo-400" />
+            <span>Escrow Hold Tracker</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-indigo-400 text-slate-950">
+              #48
             </span>
           </button>
 
@@ -2146,6 +2161,13 @@ export const VendorPortal = () => {
         onClose={() => setIsWalletLedgerModalOpen(false)}
         onOpenWithdrawal={() => setIsPayoutModalOpen(true)}
         onRefreshData={fetchVendorData}
+      />
+
+      {/* Point 48: Multi-Vendor Automated Escrow Payout Engine & Hold Periods */}
+      <VendorEscrowHoldTrackerModal
+        isOpen={isEscrowModalOpen}
+        onClose={() => setIsEscrowModalOpen(false)}
+        onSuccess={fetchVendorData}
       />
 
       {/* Point 13: Vendor Sub-Staff Roles & Permissions Modal */}

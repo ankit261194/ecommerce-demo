@@ -171,8 +171,119 @@ const subOrderSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    // Point 48: Multi-Vendor Automated Escrow Payout Engine & Hold Periods
+    escrowDetails: {
+      escrowStatus: {
+        type: String,
+        enum: [
+          'HOLD_PENDING_DELIVERY',
+          'HOLD_IN_RETURN_WINDOW',
+          'ELIGIBLE_FOR_RELEASE',
+          'RELEASED_TO_WALLET',
+          'REFUNDED_TO_CUSTOMER',
+          'DISPUTED_HOLD',
+        ],
+        default: 'HOLD_PENDING_DELIVERY',
+      },
+      escrowHoldDays: {
+        type: Number,
+        default: 7,
+      },
+      deliveredAt: {
+        type: Date,
+        default: null,
+      },
+      escrowReleaseDueDate: {
+        type: Date,
+        default: null,
+      },
+      escrowReleasedAt: {
+        type: Date,
+        default: null,
+      },
+      escrowAmount: {
+        type: Number,
+        default: 0,
+      },
+      platformCommissionHeld: {
+        type: Number,
+        default: 0,
+      },
+      isDisputed: {
+        type: Boolean,
+        default: false,
+      },
+      disputeReason: {
+        type: String,
+        default: '',
+      },
+      disputedAt: {
+        type: Date,
+        default: null,
+      },
+      disputedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+      },
+      disputeResolution: {
+        type: String,
+        enum: ['', 'RELEASE_TO_VENDOR', 'REFUND_TO_CUSTOMER'],
+        default: '',
+      },
+      disputeResolvedAt: {
+        type: Date,
+        default: null,
+      },
+      disputeNotes: {
+        type: String,
+        default: '',
+      },
+      isEscrowAccounted: {
+        type: Boolean,
+        default: false,
+      },
+    },
   },
   { timestamps: true }
 );
+
+// Point 48: Automatic escrow lifecycle pre-save trigger
+subOrderSchema.pre('save', function (next) {
+  if (!this.escrowDetails) {
+    this.escrowDetails = {};
+  }
+  if (!this.escrowDetails.escrowStatus) {
+    this.escrowDetails.escrowStatus = this.status === 'delivered' ? 'HOLD_IN_RETURN_WINDOW' : 'HOLD_PENDING_DELIVERY';
+  }
+  if (!this.escrowDetails.escrowHoldDays) {
+    this.escrowDetails.escrowHoldDays = 7;
+  }
+  if ((!this.escrowDetails.escrowAmount || this.escrowDetails.escrowAmount === 0) && this.vendorEarning) {
+    this.escrowDetails.escrowAmount = this.vendorEarning;
+  }
+  if ((!this.escrowDetails.platformCommissionHeld || this.escrowDetails.platformCommissionHeld === 0) && this.platformCommissionAmount) {
+    this.escrowDetails.platformCommissionHeld = this.platformCommissionAmount;
+  }
+
+  // If status is transitioned to delivered or already delivered
+  if (this.status === 'delivered') {
+    const deliveryDate = this.deliveredAt || this.escrowDetails.deliveredAt || new Date();
+    if (!this.deliveredAt) {
+      this.deliveredAt = deliveryDate;
+    }
+    if (!this.escrowDetails.deliveredAt) {
+      this.escrowDetails.deliveredAt = deliveryDate;
+    }
+    if (this.escrowDetails.escrowStatus === 'HOLD_PENDING_DELIVERY') {
+      this.escrowDetails.escrowStatus = 'HOLD_IN_RETURN_WINDOW';
+    }
+    if (!this.escrowDetails.escrowReleaseDueDate && this.escrowDetails.deliveredAt) {
+      const holdDays = this.escrowDetails.escrowHoldDays || 7;
+      this.escrowDetails.escrowReleaseDueDate = new Date(this.escrowDetails.deliveredAt.getTime() + holdDays * 24 * 60 * 60 * 1000);
+    }
+  }
+  next();
+});
 
 module.exports = mongoose.model('SubOrder', subOrderSchema);

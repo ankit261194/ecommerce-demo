@@ -932,6 +932,19 @@ exports.inspectReturnRequest = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Return request not found' });
     }
 
+    const isPending =
+      returnReq.inspectionSLA?.status === 'PENDING_INSPECTION' ||
+      returnReq.status === 'INSPECTION_PENDING' ||
+      returnReq.status === 'REQUESTED';
+
+    if (!isPending) {
+      return res.status(400).json({
+        success: false,
+        message: `Return request has already been inspected or resolved (current status: ${returnReq.status})`,
+        data: returnReq,
+      });
+    }
+
     const decision = action ? action.toUpperCase() : 'APPROVE';
 
     if (decision === 'REJECT') {
@@ -941,6 +954,14 @@ exports.inspectReturnRequest = async (req, res, next) => {
       returnReq.inspectionSLA.inspectionNotes = inspectionNotes || 'Vendor rejected after unboxing evidence inspection.';
       returnReq.inspectionSLA.inspectedBy = req.user._id;
       returnReq.resolvedAt = new Date();
+
+      if (returnReq.reversePickupTask) {
+        await DeliveryTask.findByIdAndUpdate(
+          returnReq.reversePickupTask._id || returnReq.reversePickupTask,
+          { status: 'CANCELLED', cancellationReason: 'Return request rejected after inspection' }
+        );
+      }
+
       await returnReq.save();
 
       return res.status(200).json({
@@ -1195,8 +1216,34 @@ exports.autoResolveExpiredSLA = async (req, res, next) => {
         status: 'confirmed',
       });
 
-      repOrder.subOrders = [repSubOrder._id];
-      await repOrder.save();
+      // 3. Create Forward Delivery Task for Auto-Replacement Order
+      let rider = await User.findOne({ role: 'delivery', isActive: true });
+      if (!rider) rider = await User.findOne({ role: 'superadmin' });
+
+      const repDeliveryTask = await DeliveryTask.create({
+        subOrder: repSubOrder._id,
+        taskType: 'FORWARD_DELIVERY',
+        deliveryPartner: rider?._id,
+        pickupLocation: {
+          storeName: 'Merchant Fulfillment Hub',
+          phone: '9876543210',
+          address: 'Merchant Warehouse Hub',
+          city: 'Delhi',
+          pincode: '110001',
+        },
+        dropLocation: {
+          recipientName: repOrder.shippingAddress?.recipientName || 'Customer',
+          phone: repOrder.shippingAddress?.phone || '9876543210',
+          address: `${repOrder.shippingAddress?.street || ''}, ${repOrder.shippingAddress?.city || ''}`,
+          city: repOrder.shippingAddress?.city || 'Delhi',
+          pincode: repOrder.shippingAddress?.pincode || '110001',
+        },
+        status: 'ASSIGNED',
+        deliveryInstructions: `SLA AUTO-REPLACEMENT ORDER: Dispatch replacement package ${replacementOrderNumber}. Secret Handover OTP: ${repOrder.deliveryOtp}`,
+      });
+
+      repSubOrder.deliveryTask = repDeliveryTask._id;
+      await repSubOrder.save();
 
       returnReq.replacementOrder = repOrder._id;
       returnReq.replacementOrderNumber = repOrder.orderNumber;
@@ -1209,6 +1256,7 @@ exports.autoResolveExpiredSLA = async (req, res, next) => {
         message: 'SLA Expired! Request has been 100% AUTO-APPROVED and replacement order generated.',
         data: returnReq,
         replacementOrder: repOrder,
+        replacementDeliveryTask: repDeliveryTask,
       });
     } else {
       // Refund to wallet

@@ -223,7 +223,7 @@ export default function ReturnRefundModal({
 
       const payload = {
         orderId: rawOrderId,
-        subOrderId: orderData.subOrders?.[0]?.rawSubOrderId,
+        subOrderId: orderData.subOrders?.[0]?.rawSubOrderId || orderData.subOrders?.[0]?._id || orderData.subOrderId,
         items: itemsToProcess,
         reasonCode,
         detailedDescription: detailedDescription || `Return request for ${reasonCode}`,
@@ -598,7 +598,12 @@ export default function ReturnRefundModal({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
                     type="button"
-                    disabled={actionLoading || existingReturn.status === 'REPLACEMENT_CREATED' || existingReturn.status === 'AUTO_APPROVED'}
+                    disabled={
+                      actionLoading ||
+                      ['REPLACEMENT_CREATED', 'AUTO_APPROVED', 'REFUNDED', 'REJECTED', 'EXCHANGE_COMPLETED'].includes(
+                        existingReturn.status
+                      )
+                    }
                     onClick={() => handleSimulateInspection('APPROVE')}
                     className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5"
                   >
@@ -608,7 +613,12 @@ export default function ReturnRefundModal({
 
                   <button
                     type="button"
-                    disabled={actionLoading || existingReturn.status === 'AUTO_APPROVED' || existingReturn.status === 'REPLACEMENT_CREATED'}
+                    disabled={
+                      actionLoading ||
+                      ['AUTO_APPROVED', 'REPLACEMENT_CREATED', 'REFUNDED', 'REJECTED', 'EXCHANGE_COMPLETED'].includes(
+                        existingReturn.status
+                      )
+                    }
                     onClick={handleSimulateSlaAutoApproval}
                     className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-400 text-xs font-bold transition shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5"
                   >

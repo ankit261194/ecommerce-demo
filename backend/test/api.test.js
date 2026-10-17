@@ -19775,6 +19775,21 @@ const runTests = async () => {
       assert.strictEqual(dbRepOrder.returnRequest.toString(), point18ReturnId.toString());
     });
 
+    await test('Point 18: Guardrail: POST /api/returns/:id/inspect rejects duplicate inspection on already resolved return (400 Bad Request)', async () => {
+      const resDup = await fetch(`${baseUrl}/returns/${point18ReturnId}/inspect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ action: 'APPROVE' }),
+      });
+      assert.strictEqual(resDup.status, 400);
+      const dataDup = await resDup.json();
+      assert.strictEqual(dataDup.success, false);
+      assert.ok(dataDup.message.includes('already been inspected or resolved'));
+    });
+
     await test('Point 18: POST /api/returns/:id/inspect with REFUND_WALLET credits customer wallet and logs WalletTransaction', async () => {
       const walletItem = {
         product: point18OrderDelivered.items[0].product,
@@ -19916,7 +19931,21 @@ const runTests = async () => {
       const dataCreate = await resCreate.json();
       const returnSlaId = dataCreate.data._id;
 
-      // 2. Trigger SLA auto-approval simulation
+      // 2a. Guardrail: Calling without force before SLA expiration rejects with 400
+      const resPremature = await fetch(`${baseUrl}/returns/${returnSlaId}/sla-auto-approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ force: false }),
+      });
+      assert.strictEqual(resPremature.status, 400);
+      const dataPremature = await resPremature.json();
+      assert.strictEqual(dataPremature.success, false);
+      assert.ok(dataPremature.message.includes('Inspection SLA has not expired yet'));
+
+      // 2b. Trigger SLA auto-approval simulation with force: true
       const resAuto = await fetch(`${baseUrl}/returns/${returnSlaId}/sla-auto-approve`, {
         method: 'POST',
         headers: {
@@ -19934,6 +19963,7 @@ const runTests = async () => {
       assert.ok(dataAuto.data.inspectionSLA.autoApprovalReason.includes('SLA Expired'));
       assert.ok(dataAuto.replacementOrder);
       assert.ok(dataAuto.replacementOrder.orderNumber.startsWith('ORD-REP-'));
+      assert.ok(dataAuto.replacementDeliveryTask);
     });
 
     await test('Point 18: PUT /api/returns/:id/reverse-pickup validates 4-digit pickup OTP before completing doorstep pickup', async () => {

@@ -165,6 +165,9 @@ const userSchema = new mongoose.Schema(
     lastLocation: {
       lat: { type: Number, default: null },
       lng: { type: Number, default: null },
+      speed: { type: Number, default: 0 },
+      heading: { type: Number, default: 0 },
+      batteryLevel: { type: Number, default: 100 },
       updatedAt: { type: Date, default: null },
     },
     maxConcurrentOrders: {

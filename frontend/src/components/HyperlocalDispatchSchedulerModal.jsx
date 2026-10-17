@@ -20,7 +20,9 @@ import {
   Phone,
   BarChart3,
   Calendar,
+  Compass,
 } from 'lucide-react';
+import FleetLiveMapRadarModal from './FleetLiveMapRadarModal';
 
 export default function HyperlocalDispatchSchedulerModal({ isOpen, onClose, token }) {
   const [loading, setLoading] = useState(false);
@@ -42,6 +44,7 @@ export default function HyperlocalDispatchSchedulerModal({ isOpen, onClose, toke
   const [manualAssignTask, setManualAssignTask] = useState(null);
   const [selectedRiderForManual, setSelectedRiderForManual] = useState('');
   const [manualReason, setManualReason] = useState('Manual dispatcher optimization');
+  const [showFleetMap, setShowFleetMap] = useState(false);
 
   // Auto-refresh interval
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -294,6 +297,15 @@ export default function HyperlocalDispatchSchedulerModal({ isOpen, onClose, toke
             >
               <Download className="w-3.5 h-3.5" />
               <span>Export CSV</span>
+            </button>
+
+            <button
+              onClick={() => setShowFleetMap(true)}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition"
+              title="Open Live GPS Fleet Map (Point #43)"
+            >
+              <Compass className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Fleet Live Map</span>
             </button>
 
             <button
@@ -960,6 +972,14 @@ export default function HyperlocalDispatchSchedulerModal({ isOpen, onClose, toke
               </form>
             </div>
           </div>
+        )}
+
+        {/* Point #43: Fleet Live Map Radar Modal */}
+        {showFleetMap && (
+          <FleetLiveMapRadarModal
+            isOpen={showFleetMap}
+            onClose={() => setShowFleetMap(false)}
+          />
         )}
       </div>
     </div>

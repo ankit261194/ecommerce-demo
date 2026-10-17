@@ -20,6 +20,7 @@ import {
   Activity,
   Wifi,
   WifiOff,
+  Download,
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import api from '../api/client';
@@ -331,6 +332,9 @@ export default function LiveGpsTrackingMap({
                 <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
                   #16
                 </span>
+                <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-cyan-400 text-slate-950">
+                  #43 Leaflet/Mapbox
+                </span>
               </h4>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
@@ -355,6 +359,19 @@ export default function LiveGpsTrackingMap({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          {/* Export GeoJSON */}
+          <a
+            href={`/api/delivery/live-tracking/${identifier}/geojson`}
+            target="_blank"
+            rel="noreferrer"
+            download
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-bold border border-slate-700 transition"
+            title="Download GeoJSON Route Corridor (Point #43)"
+          >
+            <Download className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">GeoJSON</span>
+          </a>
+
           {/* Map Theme Toggle */}
           <button
             type="button"

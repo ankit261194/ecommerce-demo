@@ -69,6 +69,7 @@ import {
   Coins,
   Crown,
   Video,
+  Compass,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -127,6 +128,7 @@ import FlashSaleMegaCampaignManager from '../components/FlashSaleMegaCampaignMan
 import AbandonedCartRecoverySequenceManager from '../components/AbandonedCartRecoverySequenceManager';
 import AdminVendorVerificationHub from '../components/AdminVendorVerificationHub';
 import HyperlocalDispatchSchedulerModal from '../components/HyperlocalDispatchSchedulerModal';
+import FleetLiveMapRadarModal from '../components/FleetLiveMapRadarModal';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1998,6 +2000,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('fleet-live-map')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'fleet-live-map'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Compass className="w-4 h-4 text-emerald-400" />
+            <span>Fleet Live Map Radar</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-200 ml-1">
+              Point #43
+            </span>
+          </button>
+
+          <button
             onClick={() => setIsInventoryAlertsModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition-all"
             title="Point 10: Multi-Vendor Inventory Low-Stock Radar & Automated Alerts"
@@ -3054,6 +3071,16 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           isOpen={true}
           onClose={() => setActiveDashboardTab('overview')}
           token={localStorage.getItem('token') || ''}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 32: FLEET LIVE MAP RADAR & LEAFLET TRACKING (Pillar 4 • Point 43)    */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'fleet-live-map' && (
+        <FleetLiveMapRadarModal
+          isOpen={true}
+          onClose={() => setActiveDashboardTab('overview')}
         />
       )}
 

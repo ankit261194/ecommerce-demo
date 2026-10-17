@@ -450,12 +450,12 @@ export const CourierDashboard = () => {
           <button
             onClick={() => setIsRouteOptimizerModalOpen(true)}
             className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-sm transition-all flex items-center gap-1.5 text-xs font-bold"
-            title="Multi-Stop Rider Delivery Route Optimizer (Point #17)"
+            title="Multi-Stop Delivery Route Optimizer & Leaflet Circuit Map (Point #43)"
           >
             <Compass className="w-4 h-4 text-amber-400" />
-            <span>Route Optimizer</span>
-            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
-              #17
+            <span>Route Optimizer & Map</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-cyan-400 text-slate-950">
+              #43
             </span>
           </button>
           <button

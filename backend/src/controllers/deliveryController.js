@@ -1354,6 +1354,49 @@ exports.getLiveGpsTracking = async (req, res, next) => {
           trafficStatus: 'FLOWING',
           lastUpdatedAt,
         },
+        geoJson: {
+          type: 'FeatureCollection',
+          name: `AuraMarket_Delivery_${identifier}`,
+          features: [
+            {
+              type: 'Feature',
+              properties: { role: 'ORIGIN', title: originLabel, type: 'WAREHOUSE_PICKUP' },
+              geometry: { type: 'Point', coordinates: [originLng, originLat] },
+            },
+            {
+              type: 'Feature',
+              properties: { role: 'DESTINATION', title: destLabel, type: 'CUSTOMER_DOORSTEP' },
+              geometry: { type: 'Point', coordinates: [destLng, destLat] },
+            },
+            {
+              type: 'Feature',
+              properties: {
+                role: 'RIDER',
+                title: riderName,
+                speedKmH,
+                headingDegrees,
+                batteryLevel,
+                lastUpdatedAt,
+              },
+              geometry: { type: 'Point', coordinates: [riderPos[1], riderPos[0]] },
+            },
+            {
+              type: 'Feature',
+              properties: {
+                role: 'TRANSIT_CORRIDOR',
+                title: 'Optimized Delivery Corridor',
+                totalDistanceKm,
+                distanceRemainingKm,
+                etaMinutes,
+                trafficStatus: 'FLOWING',
+              },
+              geometry: {
+                type: 'LineString',
+                coordinates: polyline.map((pt) => [pt[1], pt[0]]),
+              },
+            },
+          ],
+        },
         simulationState: deliveryTask?.simulationState || {
           isSimulating: false,
           currentWaypointIndex: Math.floor(polyline.length * 0.65),
@@ -1367,6 +1410,134 @@ exports.getLiveGpsTracking = async (req, res, next) => {
   }
 };
 
+// @desc    Export GeoJSON FeatureCollection for Route & Telemetry (RFC 7946)
+// @route   GET /api/delivery/live-tracking/:identifier/geojson
+// @access  Public / Customer / GIS
+exports.exportTrackingGeoJson = async (req, res, next) => {
+  try {
+    const { identifier } = req.params;
+    const mongoose = require('mongoose');
+
+    let subOrder = null;
+    let order = null;
+    let deliveryTask = null;
+
+    if (mongoose.Types.ObjectId.isValid(identifier)) {
+      subOrder = await SubOrder.findById(identifier).populate('vendor deliveryPartner');
+      if (!subOrder) {
+        order = await Order.findById(identifier).populate('subOrders');
+        deliveryTask = await DeliveryTask.findById(identifier).populate('deliveryPartner');
+      }
+    }
+    if (!order && !subOrder && !deliveryTask) {
+      order = await Order.findOne({ orderNumber: identifier }).populate('subOrders');
+    }
+    if (order && !subOrder && order.subOrders?.length > 0) {
+      subOrder = await SubOrder.findById(order.subOrders[0]._id || order.subOrders[0]).populate('vendor deliveryPartner');
+    }
+    if (!deliveryTask && subOrder) {
+      deliveryTask = await DeliveryTask.findOne({ subOrder: subOrder._id }).populate('deliveryPartner');
+    }
+
+    let originLat = 19.0760;
+    let originLng = 72.8777;
+    let originLabel = 'Aura Fulfillment Hub, BKC';
+
+    let destLat = 19.1136;
+    let destLng = 72.8697;
+    let destLabel = 'Customer Doorstep';
+
+    if (subOrder?.vendor?.pickupAddress?.city) {
+      originLabel = `${subOrder.vendor.storeName || 'Merchant'} Hub (${subOrder.vendor.pickupAddress.city})`;
+    }
+    if (deliveryTask?.dropLocation?.coordinates?.lat && deliveryTask?.dropLocation?.coordinates?.lng) {
+      destLat = deliveryTask.dropLocation.coordinates.lat;
+      destLng = deliveryTask.dropLocation.coordinates.lng;
+    }
+
+    const numPoints = 8;
+    const polyline = [];
+    for (let i = 0; i <= numPoints; i++) {
+      const ratio = i / numPoints;
+      const jitterLat = Math.sin(ratio * Math.PI) * 0.004;
+      const jitterLng = Math.cos(ratio * Math.PI * 1.5) * 0.003;
+      polyline.push([
+        Math.round((originLat + (destLat - originLat) * ratio + jitterLat) * 10000) / 10000,
+        Math.round((originLng + (destLng - originLng) * ratio + jitterLng) * 10000) / 10000,
+      ]);
+    }
+
+    const riderLat = deliveryTask?.riderLocation?.lat || polyline[4][0];
+    const riderLng = deliveryTask?.riderLocation?.lng || polyline[4][1];
+    const speed = deliveryTask?.riderLocation?.speed || 28;
+    const heading = deliveryTask?.riderLocation?.heading || 42;
+    const riderName = deliveryTask?.deliveryPartner?.name || 'Courier Rider';
+
+    const geoJson = {
+      type: 'FeatureCollection',
+      name: `AuraMarket_Delivery_${identifier}`,
+      features: [
+        {
+          type: 'Feature',
+          properties: {
+            role: 'ORIGIN',
+            title: originLabel,
+            type: 'WAREHOUSE_PICKUP',
+          },
+          geometry: {
+            type: 'Point',
+            coordinates: [originLng, originLat],
+          },
+        },
+        {
+          type: 'Feature',
+          properties: {
+            role: 'DESTINATION',
+            title: destLabel,
+            type: 'CUSTOMER_DOORSTEP',
+          },
+          geometry: {
+            type: 'Point',
+            coordinates: [destLng, destLat],
+          },
+        },
+        {
+          type: 'Feature',
+          properties: {
+            role: 'RIDER',
+            title: riderName,
+            speedKmH: speed,
+            headingDegrees: heading,
+            lastUpdated: new Date().toISOString(),
+          },
+          geometry: {
+            type: 'Point',
+            coordinates: [riderLng, riderLat],
+          },
+        },
+        {
+          type: 'Feature',
+          properties: {
+            role: 'TRANSIT_CORRIDOR',
+            title: 'Optimized Delivery Route',
+            trafficStatus: 'FLOWING',
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: polyline.map((pt) => [pt[1], pt[0]]),
+          },
+        },
+      ],
+    };
+
+    res.setHeader('Content-Type', 'application/geo+json');
+    res.setHeader('Content-Disposition', `attachment; filename="route-${identifier}.geojson"`);
+    res.status(200).json(geoJson);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Update Rider GPS Coordinates from Mobile / App
 // @route   POST or PATCH /api/delivery/rider/location
 // @access  Private (Courier Rider / Admin)
@@ -1374,10 +1545,20 @@ exports.updateRiderLocation = async (req, res, next) => {
   try {
     const { lat, lng, speed, heading, accuracy, batteryLevel, taskId, orderIdentifier } = req.body;
 
-    if (lat === undefined || lng === undefined) {
+    if (lat === undefined || lng === undefined || isNaN(Number(lat)) || isNaN(Number(lng))) {
       return res.status(400).json({
         success: false,
-        message: 'Latitude (lat) and Longitude (lng) are required',
+        message: 'Latitude (lat) and Longitude (lng) must be valid numbers',
+      });
+    }
+
+    const numericLat = Number(lat);
+    const numericLng = Number(lng);
+
+    if (numericLat < -90 || numericLat > 90 || numericLng < -180 || numericLng > 180) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude must be between -90 and 90, Longitude between -180 and 180',
       });
     }
 
@@ -1397,11 +1578,9 @@ exports.updateRiderLocation = async (req, res, next) => {
       });
     }
 
-    const numericLat = Number(lat);
-    const numericLng = Number(lng);
     const numericSpeed = Number(speed || 0);
     const numericHeading = Number(heading || 0);
-    const numericBattery = Number(batteryLevel || 100);
+    const numericBattery = Number(batteryLevel !== undefined ? batteryLevel : 100);
     const numericAccuracy = Number(accuracy || 5);
 
     const locationUpdate = {
@@ -1428,7 +1607,39 @@ exports.updateRiderLocation = async (req, res, next) => {
       if (task.telemetryHistory.length > 50) {
         task.telemetryHistory = task.telemetryHistory.slice(-50);
       }
+
+      // Recompute route metrics and ETA if destination is defined
+      if (task.dropLocation?.coordinates?.lat && task.dropLocation?.coordinates?.lng) {
+        const destLat = task.dropLocation.coordinates.lat;
+        const destLng = task.dropLocation.coordinates.lng;
+        const remainingKm = calculateDistanceKm(numericLat, numericLng, destLat, destLng) || 0;
+        const estSpeed = numericSpeed > 0 ? numericSpeed : 25;
+        const etaMins = Math.max(1, Math.round((remainingKm / estSpeed) * 60));
+        task.routeMetrics = {
+          totalDistanceKm: task.routeMetrics?.totalDistanceKm || Math.max(remainingKm, 1),
+          distanceRemainingKm: Math.round(remainingKm * 100) / 100,
+          etaMinutes: etaMins,
+          etaTimestamp: new Date(Date.now() + etaMins * 60000),
+          trafficStatus: numericSpeed < 10 && numericSpeed > 0 ? 'CONGESTED' : (numericSpeed < 20 ? 'MODERATE' : 'FLOWING'),
+          lastCalculatedAt: new Date(),
+        };
+      }
+
       await task.save();
+    }
+
+    // Persist rider's last known location on User record
+    if (req.user?._id) {
+      await User.findByIdAndUpdate(req.user._id, {
+        lastLocation: {
+          lat: numericLat,
+          lng: numericLng,
+          speed: numericSpeed,
+          heading: numericHeading,
+          batteryLevel: numericBattery,
+          updatedAt: new Date(),
+        },
+      }).catch(() => {});
     }
 
     // Broadcast over Socket.io
@@ -1443,6 +1654,7 @@ exports.updateRiderLocation = async (req, res, next) => {
         riderId: req.user?._id,
         ...locationUpdate,
         taskId: task?._id || taskId || null,
+        routeMetrics: task?.routeMetrics || null,
         socketRoom: `order_${broadcastIdentifier}`,
       },
     });
@@ -1805,6 +2017,42 @@ exports.getOptimizedRoute = async (req, res, next) => {
       sequenceIndex++;
     }
 
+    // 2-Opt TSP Local Search Pass to eliminate polyline crossings
+    if (optimizedStops.length > 3) {
+      let improved = true;
+      let iterations = 0;
+      while (improved && iterations < 5) {
+        improved = false;
+        iterations++;
+        for (let i = 0; i < optimizedStops.length - 1; i++) {
+          for (let k = i + 1; k < optimizedStops.length; k++) {
+            const pA = i === 0 ? depot.coordinates : optimizedStops[i - 1].coordinates;
+            const pB = optimizedStops[i].coordinates;
+            const pC = optimizedStops[k].coordinates;
+            const pD = k + 1 < optimizedStops.length ? optimizedStops[k + 1].coordinates : null;
+
+            const currentD = getHaversineDist(pA.lat, pA.lng, pB.lat, pB.lng) + (pD ? getHaversineDist(pC.lat, pC.lng, pD.lat, pD.lng) : 0);
+            const swappedD = getHaversineDist(pA.lat, pA.lng, pC.lat, pC.lng) + (pD ? getHaversineDist(pB.lat, pB.lng, pD.lat, pD.lng) : 0);
+
+            if (swappedD < currentD - 0.05) {
+              const reversed = optimizedStops.slice(i, k + 1).reverse();
+              optimizedStops.splice(i, k - i + 1, ...reversed);
+              improved = true;
+            }
+          }
+        }
+      }
+      optimizedStops.forEach((st, idx) => {
+        st.stopSequence = idx + 1;
+      });
+    }
+
+    // Generate circuit polyline connecting depot to all optimized stops
+    const circuitPolyline = [
+      [depot.coordinates.lat, depot.coordinates.lng],
+      ...optimizedStops.map((st) => [st.coordinates.lat, st.coordinates.lng]),
+    ];
+
     // Savings Calculation
     originalDistance = Math.round(originalDistance * 100) / 100;
     optimizedDistance = Math.round(optimizedDistance * 100) / 100;
@@ -1822,6 +2070,7 @@ exports.getOptimizedRoute = async (req, res, next) => {
         totalStops: optimizedStops.length,
         originalDistanceKm: originalDistance,
         optimizedDistanceKm: optimizedDistance,
+        circuitPolyline,
         savings: {
           distanceSavedKm,
           timeSavedMinutes,
@@ -1842,7 +2091,7 @@ exports.getOptimizedRoute = async (req, res, next) => {
 // @access  Private (Courier Rider / Admin)
 exports.applyRouteSequence = async (req, res, next) => {
   try {
-    const { sequence } = req.body; // Array of { taskId, stopSequence }
+    const { sequence } = req.body; // Array of { taskId, stopSequence, legDistanceKm, legTravelMinutes, estimatedArrival }
 
     if (!Array.isArray(sequence) || sequence.length === 0) {
       return res.status(400).json({
@@ -1851,18 +2100,91 @@ exports.applyRouteSequence = async (req, res, next) => {
       });
     }
 
-    const updateOps = sequence.map(item =>
+    const updateOps = sequence.map((item) =>
       DeliveryTask.findByIdAndUpdate(item.taskId, {
-        $set: { stopSequence: item.stopSequence },
+        $set: {
+          stopSequence: item.stopSequence,
+          'optimizedRoute.stopSequence': item.stopSequence,
+          'optimizedRoute.legDistanceKm': item.legDistanceKm || 0,
+          'optimizedRoute.legTravelMinutes': item.legTravelMinutes || 0,
+          'optimizedRoute.estimatedArrival': item.estimatedArrival || '',
+          'optimizedRoute.optimizedAt': new Date(),
+        },
       })
     );
 
     await Promise.all(updateOps);
 
+    // Audit log
+    const { recordAuditLog } = require('../utils/auditLogger');
+    await recordAuditLog({
+      action: 'UPDATE_ROUTE_SEQUENCE',
+      module: 'LOGISTICS',
+      user: req.user,
+      req,
+      targetId: String(req.user._id),
+      targetType: 'DeliveryTaskSequence',
+      description: `Rider ${req.user.name || 'Courier'} applied optimized route sequence across ${sequence.length} stops`,
+      details: { stopsCount: sequence.length },
+    });
+
     res.status(200).json({
       success: true,
       message: `Successfully re-indexed ${sequence.length} stops for fuel-efficient dispatch!`,
       appliedSequenceCount: sequence.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Central Control Room Live Fleet Radar with on-duty couriers, active routes, and GPS
+// @route   GET /api/logistics/fleet/live-map
+// @access  Private (Super Admin)
+exports.getFleetLiveMap = async (req, res, next) => {
+  try {
+    const riders = await User.find({
+      role: 'delivery',
+      dutyStatus: 'ON_DUTY',
+    }).select('name email phone dutyStatus isAvailable assignedZone lastLocation maxConcurrentOrders');
+
+    const fleetRiders = await Promise.all(
+      riders.map(async (rider) => {
+        const tasks = await DeliveryTask.find({
+          deliveryPartner: rider._id,
+          status: { $in: ['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY'] },
+        }).select('_id dropLocation pickupLocation status isCod amountToCollect targetDeliveryTime slaExpiresAt dispatchType stopSequence');
+
+        return {
+          _id: rider._id,
+          name: rider.name,
+          phone: rider.phone,
+          dutyStatus: rider.dutyStatus || 'ON_DUTY',
+          isAvailable: rider.isAvailable !== false,
+          assignedZone: rider.assignedZone || 'Metropolitan Hub',
+          location: rider.lastLocation || {
+            lat: 19.0760,
+            lng: 72.8777,
+            speed: 26,
+            heading: 42,
+            batteryLevel: 90,
+            updatedAt: new Date(),
+          },
+          activeTasksCount: tasks.length,
+          maxAllowedTasks: rider.maxConcurrentOrders || 3,
+          tasks,
+        };
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      count: fleetRiders.length,
+      data: {
+        activeRidersCount: fleetRiders.length,
+        totalActiveTasks: fleetRiders.reduce((acc, r) => acc + r.activeTasksCount, 0),
+        riders: fleetRiders,
+      },
     });
   } catch (error) {
     next(error);

@@ -123,6 +123,31 @@ const deliveryTaskSchema = new mongoose.Schema(
       totalWaypoints: { type: Number, default: 8 },
       lastSimulatedAt: { type: Date, default: null },
     },
+    // Point 43: Multi-Stop Route Sequence & Metrics
+    stopSequence: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
+    optimizedRoute: {
+      stopSequence: { type: Number, default: 0 },
+      legDistanceKm: { type: Number, default: 0 },
+      legTravelMinutes: { type: Number, default: 0 },
+      estimatedArrival: { type: String, default: '' },
+      optimizedAt: { type: Date, default: null },
+    },
+    routeMetrics: {
+      totalDistanceKm: { type: Number, default: 0 },
+      distanceRemainingKm: { type: Number, default: 0 },
+      etaMinutes: { type: Number, default: 0 },
+      etaTimestamp: { type: Date, default: null },
+      trafficStatus: {
+        type: String,
+        enum: ['FLOWING', 'MODERATE', 'CONGESTED'],
+        default: 'FLOWING',
+      },
+      lastCalculatedAt: { type: Date, default: null },
+    },
     status: {
       type: String,
       enum: ['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED', 'CANCELLED'],

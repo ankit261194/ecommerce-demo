@@ -28008,6 +28008,379 @@ const runTests = async () => {
       assert.strictEqual(resRiderAssign.status, 403);
     });
 
+    // ========================================================
+    // PILLAR 4 - POINT 43: REAL-TIME GPS DELIVERY RIDER LIVE TRACKING & ROUTE OPTIMIZATION (LEAFLET/MAPBOX)
+    // ========================================================
+    console.log('\n--- PILLAR 4 - POINT 43: REAL-TIME GPS DELIVERY RIDER LIVE TRACKING & ROUTE OPTIMIZATION (LEAFLET/MAPBOX) ---');
+
+    let p43AdminUser, p43AdminToken;
+    let p43CustomerUser, p43CustomerToken;
+    let p43RiderUser, p43RiderToken;
+    let p43Task1, p43Task2, p43Task3;
+
+    await test('Point 43: Setup dedicated rider account, admin, and multi-stop tasks for GPS & route optimization', async () => {
+      const suffix = Date.now() + '_' + Math.floor(Math.random() * 10000);
+
+      p43AdminUser = await User.create({
+        name: 'Logistics Commander ' + suffix,
+        email: 'commander.' + suffix + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'superadmin',
+        isActive: true,
+      });
+      p43AdminToken = generateToken(p43AdminUser._id);
+
+      p43CustomerUser = await User.create({
+        name: 'GPS Shopper ' + suffix,
+        email: 'shopper.gps.' + suffix + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'customer',
+        isActive: true,
+      });
+      p43CustomerToken = generateToken(p43CustomerUser._id);
+
+      p43RiderUser = await User.create({
+        name: 'Rider Arjun Verma ' + suffix,
+        email: 'rider.arjun.' + suffix + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'delivery',
+        dutyStatus: 'ON_DUTY',
+        isAvailable: true,
+        isActive: true,
+        assignedZone: 'Mumbai Metropolitan',
+        lastLocation: {
+          lat: 19.0657,
+          lng: 72.8687,
+          speed: 26,
+          heading: 42,
+          batteryLevel: 94,
+          updatedAt: new Date(),
+        },
+      });
+      p43RiderToken = generateToken(p43RiderUser._id);
+
+      // Create 3 multi-stop tasks in distinct Mumbai hubs
+      p43Task1 = await DeliveryTask.create({
+        deliveryPartner: p43RiderUser._id,
+        status: 'OUT_FOR_DELIVERY',
+        dispatchStatus: 'OUT_FOR_DELIVERY',
+        dispatchType: '1_HOUR_HYPERLOCAL',
+        pickupLocation: {
+          storeName: 'Central BKC Hub',
+          address: 'G Block, BKC, Bandra East',
+          city: 'Mumbai',
+          pincode: '400051',
+        },
+        dropLocation: {
+          recipientName: 'Aman Sharma',
+          phone: '9876543211',
+          address: 'Flat 402, Green Glen Heights, Powai',
+          city: 'Mumbai',
+          pincode: '400076',
+          coordinates: { lat: 19.1176, lng: 72.9060 },
+        },
+        isCod: false,
+        amountToCollect: 0,
+      });
+
+      p43Task2 = await DeliveryTask.create({
+        deliveryPartner: p43RiderUser._id,
+        status: 'PICKED_UP',
+        dispatchStatus: 'EN_ROUTE_PICKUP',
+        dispatchType: 'SCHEDULED_SLOT',
+        pickupLocation: {
+          storeName: 'Central BKC Hub',
+          address: 'G Block, BKC, Bandra East',
+          city: 'Mumbai',
+          pincode: '400051',
+        },
+        dropLocation: {
+          recipientName: 'Meera Deshmukh',
+          phone: '9876543222',
+          address: 'B-12, Sai Kripa Towers, Ghatkopar East',
+          city: 'Mumbai',
+          pincode: '400077',
+          coordinates: { lat: 19.0860, lng: 72.9080 },
+        },
+        isCod: true,
+        amountToCollect: 2499,
+      });
+
+      p43Task3 = await DeliveryTask.create({
+        deliveryPartner: p43RiderUser._id,
+        status: 'ASSIGNED',
+        dispatchStatus: 'ASSIGNED',
+        dispatchType: 'STANDARD',
+        pickupLocation: {
+          storeName: 'Central BKC Hub',
+          address: 'G Block, BKC, Bandra East',
+          city: 'Mumbai',
+          pincode: '400051',
+        },
+        dropLocation: {
+          recipientName: 'Sunita Patel',
+          phone: '9876543233',
+          address: 'Plot 88, Saki Naka Junction, Andheri East',
+          city: 'Mumbai',
+          pincode: '400072',
+          coordinates: { lat: 19.1050, lng: 72.8880 },
+        },
+        isCod: true,
+        amountToCollect: 1199,
+      });
+
+      assert.ok(p43AdminToken);
+      assert.ok(p43CustomerToken);
+      assert.ok(p43RiderToken);
+      assert.ok(p43Task1._id);
+      assert.ok(p43Task2._id);
+      assert.ok(p43Task3._id);
+    });
+
+    await test('Point 43: POST /api/delivery/rider/location updates live rider telemetry and persists to DB and User.lastLocation', async () => {
+      const res = await fetch(baseUrl + '/delivery/rider/location', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p43RiderToken,
+        },
+        body: JSON.stringify({
+          lat: 19.0760,
+          lng: 72.8777,
+          speed: 32,
+          heading: 68,
+          batteryLevel: 88,
+          accuracy: 4,
+          taskId: p43Task1._id,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.data.lat, 19.0760);
+      assert.strictEqual(json.data.lng, 72.8777);
+      assert.strictEqual(json.data.speed, 32);
+      assert.strictEqual(json.data.heading, 68);
+      assert.strictEqual(json.data.batteryLevel, 88);
+      assert.ok(json.data.routeMetrics);
+      assert.ok(json.data.routeMetrics.distanceRemainingKm >= 0);
+
+      // Verify DB Task
+      const taskInDb = await DeliveryTask.findById(p43Task1._id);
+      assert.strictEqual(taskInDb.riderLocation.lat, 19.0760);
+      assert.strictEqual(taskInDb.riderLocation.speed, 32);
+      assert.ok(taskInDb.telemetryHistory.length >= 1);
+      assert.strictEqual(taskInDb.telemetryHistory[taskInDb.telemetryHistory.length - 1].lat, 19.0760);
+
+      // Verify User lastLocation
+      const userInDb = await User.findById(p43RiderUser._id);
+      assert.strictEqual(userInDb.lastLocation.lat, 19.0760);
+      assert.strictEqual(userInDb.lastLocation.speed, 32);
+      assert.strictEqual(userInDb.lastLocation.batteryLevel, 88);
+    });
+
+    await test('Point 43: Validation: POST /api/delivery/rider/location rejects missing or out-of-range coordinates (400 Bad Request)', async () => {
+      // 1. Missing coordinates
+      const resMissing = await fetch(baseUrl + '/delivery/rider/location', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p43RiderToken,
+        },
+        body: JSON.stringify({ speed: 25 }),
+      });
+      assert.strictEqual(resMissing.status, 400);
+
+      // 2. Out of range latitude (> 90)
+      const resOutOfRange = await fetch(baseUrl + '/delivery/rider/location', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p43RiderToken,
+        },
+        body: JSON.stringify({ lat: 105.4, lng: 72.8 }),
+      });
+      assert.strictEqual(resOutOfRange.status, 400);
+    });
+
+    await test('Point 43: GET /api/delivery/live-tracking/:identifier returns Leaflet-compatible GeoJSON FeatureCollection and route metadata', async () => {
+      const res = await fetch(baseUrl + '/delivery/live-tracking/' + p43Task1._id);
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.ok(json.data.route);
+      assert.ok(Array.isArray(json.data.route.polyline));
+      assert.ok(json.data.route.polyline.length >= 2);
+      assert.ok(json.data.geoJson);
+      assert.strictEqual(json.data.geoJson.type, 'FeatureCollection');
+      assert.ok(Array.isArray(json.data.geoJson.features));
+      assert.ok(json.data.geoJson.features.length >= 4);
+
+      // Verify features: Origin, Destination, Rider, Transit Corridor
+      const roles = json.data.geoJson.features.map(f => f.properties.role);
+      assert.ok(roles.includes('ORIGIN'));
+      assert.ok(roles.includes('DESTINATION'));
+      assert.ok(roles.includes('RIDER'));
+      assert.ok(roles.includes('TRANSIT_CORRIDOR'));
+    });
+
+    await test('Point 43: GET /api/delivery/live-tracking/:identifier/geojson exports standard RFC 7946 GeoJSON format', async () => {
+      const res = await fetch(baseUrl + '/delivery/live-tracking/' + p43Task1._id + '/geojson');
+      assert.strictEqual(res.status, 200);
+      assert.ok(res.headers.get('content-type').includes('application/geo+json'));
+
+      const geoJson = await res.json();
+      assert.strictEqual(geoJson.type, 'FeatureCollection');
+      assert.ok(Array.isArray(geoJson.features));
+      assert.ok(geoJson.features.length >= 3);
+    });
+
+    await test('Point 43: POST /api/delivery/live-tracking/:identifier/simulate-step advances waypoint and updates ETA', async () => {
+      const res = await fetch(baseUrl + '/delivery/live-tracking/' + p43Task1._id + '/simulate-step', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stepIndex: 3, customSpeed: 38 }),
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.data.currentWaypointIndex, 3);
+      assert.strictEqual(json.data.location.speed, 38);
+      assert.ok(json.data.route.distanceRemainingKm >= 0);
+    });
+
+    await test('Point 43: GET /api/delivery/live-tracking/:identifier/telemetry-history returns past GPS breadcrumbs', async () => {
+      const res = await fetch(baseUrl + '/delivery/live-tracking/' + p43Task1._id + '/telemetry-history');
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.ok(json.data.count >= 1);
+      assert.ok(Array.isArray(json.data.history));
+      assert.ok(json.data.history.length >= 1);
+    });
+
+    await test('Point 43: GET /api/delivery/rider/optimize-route computes TSP 2-Opt shortest circuit and savings metrics', async () => {
+      const res = await fetch(baseUrl + '/delivery/rider/optimize-route', {
+        headers: { Authorization: 'Bearer ' + p43RiderToken },
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.ok(json.data.depot);
+      assert.strictEqual(json.data.totalStops, 3);
+      assert.ok(Array.isArray(json.data.stops));
+      assert.strictEqual(json.data.stops.length, 3);
+
+      // Verify ordered stops structure
+      json.data.stops.forEach((stop, idx) => {
+        assert.strictEqual(stop.stopSequence, idx + 1);
+        assert.ok(stop.legDistanceKm >= 0);
+        assert.ok(stop.estimatedArrival);
+        assert.ok(stop.navigationUrl.includes('google.com/maps'));
+      });
+
+      // Verify savings metrics
+      assert.ok(json.data.savings.distanceSavedKm >= 0);
+      assert.ok(json.data.savings.fuelSavedLitres >= 0);
+      assert.ok(json.data.savings.co2SavedKg >= 0);
+      assert.ok(Array.isArray(json.data.circuitPolyline));
+      assert.ok(json.data.circuitPolyline.length >= 4);
+    });
+
+    await test('Point 43: POST /api/delivery/rider/apply-route-sequence persists stopSequence and logs audit trail', async () => {
+      const res = await fetch(baseUrl + '/delivery/rider/apply-route-sequence', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p43RiderToken,
+        },
+        body: JSON.stringify({
+          sequence: [
+            { taskId: p43Task1._id, stopSequence: 1, legDistanceKm: 4.2, legTravelMinutes: 12, estimatedArrival: '11:15 AM' },
+            { taskId: p43Task2._id, stopSequence: 2, legDistanceKm: 3.1, legTravelMinutes: 10, estimatedArrival: '11:30 AM' },
+            { taskId: p43Task3._id, stopSequence: 3, legDistanceKm: 2.5, legTravelMinutes: 8, estimatedArrival: '11:45 AM' },
+          ],
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.data?.appliedSequenceCount || json.appliedSequenceCount, 3);
+
+      // Verify DB persistence
+      const updatedT1 = await DeliveryTask.findById(p43Task1._id);
+      assert.strictEqual(updatedT1.stopSequence, 1);
+      assert.strictEqual(updatedT1.optimizedRoute.stopSequence, 1);
+      assert.strictEqual(updatedT1.optimizedRoute.legDistanceKm, 4.2);
+
+      const updatedT2 = await DeliveryTask.findById(p43Task2._id);
+      assert.strictEqual(updatedT2.stopSequence, 2);
+
+      // Verify Audit Log
+      const AuditLog = require('../src/models/AuditLog');
+      const audit = await AuditLog.findOne({ module: 'LOGISTICS', targetType: 'DeliveryTaskSequence' });
+      assert.ok(audit, 'Audit log entry must be created for route sequence application');
+    });
+
+    await test('Point 43: GET /api/logistics/fleet/live-map returns central command radar of on-duty couriers', async () => {
+      const res = await fetch(baseUrl + '/logistics/fleet/live-map', {
+        headers: { Authorization: 'Bearer ' + p43AdminToken },
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.ok(json.data.activeRidersCount >= 1);
+      assert.ok(json.data.totalActiveTasks >= 3);
+      assert.ok(Array.isArray(json.data.riders));
+
+      const foundRider = json.data.riders.find(r => r._id.toString() === p43RiderUser._id.toString());
+      assert.ok(foundRider);
+      assert.strictEqual(foundRider.name, p43RiderUser.name);
+      assert.ok(foundRider.location);
+      assert.strictEqual(foundRider.location.lat, 19.0760);
+      assert.ok(foundRider.tasks.length >= 3);
+    });
+
+    await test('Point 43: Role Security: Customer and unauthenticated requests to rider location and fleet live map are rejected (401 / 403)', async () => {
+      // 1. Unauthenticated to fleet live map
+      const resUnauthMap = await fetch(baseUrl + '/logistics/fleet/live-map');
+      assert.strictEqual(resUnauthMap.status, 401);
+
+      // 2. Customer to fleet live map (forbidden)
+      const resCustMap = await fetch(baseUrl + '/logistics/fleet/live-map', {
+        headers: { Authorization: 'Bearer ' + p43CustomerToken },
+      });
+      assert.strictEqual(resCustMap.status, 403);
+
+      // 3. Unauthenticated to rider location update
+      const resUnauthLoc = await fetch(baseUrl + '/delivery/rider/location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: 19.0, lng: 72.8 }),
+      });
+      assert.strictEqual(resUnauthLoc.status, 401);
+
+      // 4. Customer to rider location update (forbidden)
+      const resCustLoc = await fetch(baseUrl + '/delivery/rider/location', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p43CustomerToken,
+        },
+        body: JSON.stringify({ lat: 19.0, lng: 72.8 }),
+      });
+      assert.strictEqual(resCustLoc.status, 403);
+
+      // 5. Customer to optimize route (forbidden)
+      const resCustOpt = await fetch(baseUrl + '/delivery/rider/optimize-route', {
+        headers: { Authorization: 'Bearer ' + p43CustomerToken },
+      });
+      assert.strictEqual(resCustOpt.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

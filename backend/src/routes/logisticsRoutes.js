@@ -36,6 +36,8 @@ router.get('/riders/me/duty-status', (req, res) => {
   });
 });
 
+const { getFleetLiveMap } = require('../controllers/deliveryController');
+
 // Super Admin / Logistics Fleet Command Center Routes
 router.get('/slots/config', authorize('superadmin'), getSlotConfiguration);
 router.put('/slots/config', authorize('superadmin'), updateSlotConfiguration);
@@ -46,5 +48,6 @@ router.post('/dispatch/auto-assign/:taskId', authorize('superadmin'), triggerAut
 router.post('/dispatch/batch-auto-assign', authorize('superadmin'), batchAutoAssignTasks);
 router.post('/dispatch/manual-assign', authorize('superadmin'), manualAssignRider);
 router.get('/riders', authorize('superadmin'), getFleetRiders);
+router.get('/fleet/live-map', authorize('superadmin'), getFleetLiveMap);
 
 module.exports = router;

@@ -19,6 +19,7 @@ const {
   reportDeliveryFailure,
   rescheduleTask,
   getLiveGpsTracking,
+  exportTrackingGeoJson,
   updateRiderLocation,
   simulateTrackingStep,
   getTelemetryHistory,
@@ -29,8 +30,9 @@ const {
 } = require('../controllers/deliveryController');
 const { protect, authorize } = require('../middlewares/auth');
 
-// Point 16: Public Live Real-Time GPS Tracking Map & Interactive Telemetry (Accessible by customer)
+// Point 16 & Point 43: Public Live Real-Time GPS Tracking Map & Interactive Telemetry (Accessible by customer)
 router.get('/live-tracking/:identifier', getLiveGpsTracking);
+router.get('/live-tracking/:identifier/geojson', exportTrackingGeoJson);
 router.post('/live-tracking/:identifier/simulate-step', simulateTrackingStep);
 router.get('/live-tracking/:identifier/telemetry-history', getTelemetryHistory);
 

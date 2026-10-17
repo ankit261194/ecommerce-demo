@@ -141,6 +141,11 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    status: {
+      type: String,
+      enum: ['published', 'draft', 'archived'],
+      default: 'published',
+    },
     isFeatured: {
       type: Boolean,
       default: false,
@@ -266,6 +271,17 @@ productSchema.pre('save', function (next) {
     const savings = Math.max(0, this.mrp - this.sellingPrice);
     this.savingsAmount = savings;
     this.discountPercentage = this.mrp > 0 ? Math.round((savings / this.mrp) * 100) : 0;
+  }
+
+  // Point #38: Status & Publishing Synchronization
+  if (this.status === 'published') {
+    this.isPublished = true;
+  } else if (this.status === 'draft' || this.status === 'archived') {
+    this.isPublished = false;
+  } else if (this.isPublished === false) {
+    this.status = 'draft';
+  } else if (this.isPublished === true) {
+    this.status = 'published';
   }
 
   next();

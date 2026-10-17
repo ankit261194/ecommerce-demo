@@ -38,6 +38,7 @@ const {
   updateInventoryThresholds,
   triggerRestockAlert,
   quickRestockInventory,
+  bulkInlineUpdateProducts,
 } = require('../controllers/vendorController');
 const { getVendorTaxReport, exportVendorTaxReportCSV } = require('../controllers/taxController');
 const { getSplitPackingSlips, getThermalReceipt } = require('../controllers/orderController');
@@ -131,6 +132,7 @@ router.get('/tax-report/export-csv', requireVendorPermission('WALLET_FINANCE', '
 router.get('/dashboard', getVendorDashboard);
 router.get('/products', getVendorProducts);
 router.post('/products', requireVendorPermission('PRODUCTS_MANAGE'), createProduct);
+router.patch('/products/bulk-inline-update', requireVendorPermission('PRODUCTS_MANAGE', 'WAREHOUSE_INVENTORY'), bulkInlineUpdateProducts);
 router.post('/products/bulk-upload', bulkUploadProducts);
 router.get('/products/export-csv', exportProductsCSV);
 router.get('/products/sample-template', getProductSampleTemplate);

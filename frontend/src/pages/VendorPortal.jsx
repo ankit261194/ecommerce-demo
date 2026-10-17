@@ -28,6 +28,7 @@ import {
   ShieldAlert,
   Gift,
   Sparkles,
+  Table,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -55,6 +56,7 @@ import VendorHealthScorecard from '../components/VendorHealthScorecard';
 import VendorOnboardingWizard from '../components/VendorOnboardingWizard';
 import VendorVerificationManager from '../components/VendorVerificationManager';
 import VendorStorefrontBuilderModal from '../components/VendorStorefrontBuilderModal';
+import BulkInlineCatalogEditorModal from '../components/BulkInlineCatalogEditorModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -181,6 +183,7 @@ export const VendorPortal = () => {
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false); // Point #34: Self-Service 4-Step Vendor Registration
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false); // Point #35: Real-Time GSTIN & Bank Penny-Drop Verification
   const [isStorefrontBuilderOpen, setIsStorefrontBuilderOpen] = useState(false); // Point #36: Vendor Custom Micro-Storefront Builder
+  const [isSpreadsheetEditorOpen, setIsSpreadsheetEditorOpen] = useState(false); // Point #38: Bulk Inline Spreadsheet Catalog Editor
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // Point #58: Store Profile Customization
   const [isPublicStorePreviewOpen, setIsPublicStorePreviewOpen] = useState(false); // Point #58: Public Storefront Preview
   const [isVacationModalOpen, setIsVacationModalOpen] = useState(false); // Point #59: Vacation Mode Toggle
@@ -632,6 +635,19 @@ export const VendorPortal = () => {
             <span>Staff & Sub-Accounts</span>
             <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-blue-300">
               Point #37
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsSpreadsheetEditorOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-700 hover:to-cyan-700 text-white text-xs font-black shadow-md transition-all active:scale-95"
+            title="Point 38: Bulk Inline Spreadsheet Catalog Editor (Fast Excel-like price & stock editing)"
+          >
+            <Table className="w-4 h-4 text-emerald-200" />
+            <span>Spreadsheet Catalog</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-emerald-300">
+              Point #38
             </span>
           </button>
 
@@ -1301,6 +1317,14 @@ export const VendorPortal = () => {
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
               <span>Bulk Excel / CSV (Point #55)</span>
+            </button>
+            <button
+              onClick={() => setIsSpreadsheetEditorOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/25 transition-all hover:scale-105"
+              title="Point 38: Bulk Inline Spreadsheet Catalog Editor (Fast Excel-like price & stock editing)"
+            >
+              <Table className="w-4 h-4 text-emerald-200" />
+              <span>Spreadsheet Editor (Point #38)</span>
             </button>
             <button
               onClick={() => setIsInventoryAlertsModalOpen(true)}
@@ -2073,6 +2097,14 @@ export const VendorPortal = () => {
         isOpen={isStorefrontBuilderOpen}
         onClose={() => setIsStorefrontBuilderOpen(false)}
         onStorefrontUpdated={fetchVendorData}
+      />
+
+      {/* Point 38: Bulk Inline Spreadsheet Catalog Editor */}
+      <BulkInlineCatalogEditorModal
+        isOpen={isSpreadsheetEditorOpen}
+        onClose={() => setIsSpreadsheetEditorOpen(false)}
+        initialProducts={products}
+        onProductsUpdated={fetchVendorData}
       />
     </div>
   );

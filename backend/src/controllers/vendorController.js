@@ -53,14 +53,18 @@ exports.getVendorDashboard = async (req, res, next) => {
   }
 };
 
-// @desc    Get All Products of Logged-in Vendor (Point #54: Low Stock Alert Filter & Inventory Stats)
+// @desc    Get All Products of Logged-in Vendor (Point #54 & Point #38: Low Stock Alert Filter & Spreadsheet Catalog Stats)
 // @route   GET /api/vendor/products
 exports.getVendorProducts = async (req, res, next) => {
   try {
-    const vendor = await VendorProfile.findOne({ user: req.user._id });
+    const vendor = req.vendorProfile || await VendorProfile.findOne({
+      $or: [{ user: req.user._id }, { _id: req.user.vendorProfile }],
+    });
     if (!vendor) {
       return res.status(404).json({ success: false, message: 'Vendor profile not found' });
     }
+
+    const { filter, search, category, status } = req.query;
 
     const allProducts = await Product.find({ vendor: vendor._id })
       .populate('category', 'name slug')
@@ -71,15 +75,35 @@ exports.getVendorProducts = async (req, res, next) => {
       inStock: allProducts.filter(p => p.stock > (p.lowStockThreshold !== undefined ? p.lowStockThreshold : 5)).length,
       lowStock: allProducts.filter(p => p.stock > 0 && p.stock <= (p.lowStockThreshold !== undefined ? p.lowStockThreshold : 5)).length,
       outOfStock: allProducts.filter(p => p.stock <= 0).length,
+      published: allProducts.filter(p => p.isPublished && p.status !== 'draft' && p.status !== 'archived').length,
+      drafts: allProducts.filter(p => !p.isPublished || p.status === 'draft').length,
+      archived: allProducts.filter(p => p.status === 'archived').length,
     };
 
     let filtered = allProducts;
-    if (req.query.filter === 'low_stock') {
-      filtered = allProducts.filter(p => p.stock > 0 && p.stock <= (p.lowStockThreshold !== undefined ? p.lowStockThreshold : 5));
-    } else if (req.query.filter === 'out_of_stock') {
-      filtered = allProducts.filter(p => p.stock <= 0);
-    } else if (req.query.filter === 'in_stock') {
-      filtered = allProducts.filter(p => p.stock > (p.lowStockThreshold !== undefined ? p.lowStockThreshold : 5));
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      filtered = filtered.filter(p =>
+        (p.title && p.title.toLowerCase().includes(q)) ||
+        (p.sku && p.sku.toLowerCase().includes(q)) ||
+        (p.brand && p.brand.toLowerCase().includes(q))
+      );
+    }
+    if (category) {
+      filtered = filtered.filter(p => p.category && String(p.category._id || p.category) === String(category));
+    }
+    if (filter === 'low_stock') {
+      filtered = filtered.filter(p => p.stock > 0 && p.stock <= (p.lowStockThreshold !== undefined ? p.lowStockThreshold : 5));
+    } else if (filter === 'out_of_stock') {
+      filtered = filtered.filter(p => p.stock <= 0);
+    } else if (filter === 'in_stock') {
+      filtered = filtered.filter(p => p.stock > (p.lowStockThreshold !== undefined ? p.lowStockThreshold : 5));
+    } else if (filter === 'drafts' || status === 'draft') {
+      filtered = filtered.filter(p => !p.isPublished || p.status === 'draft');
+    } else if (filter === 'published' || status === 'published') {
+      filtered = filtered.filter(p => p.isPublished && p.status !== 'draft' && p.status !== 'archived');
+    } else if (filter === 'archived' || status === 'archived') {
+      filtered = filtered.filter(p => p.status === 'archived');
     }
 
     res.status(200).json({
@@ -1532,6 +1556,220 @@ exports.updateProductStock = async (req, res, next) => {
       success: true,
       message: `Stock updated successfully. Current stock: ${product.stock}`,
       data: product,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Bulk Inline Spreadsheet Catalog Editor (Point #38: Fast Excel-like price & stock editing)
+// @route   PATCH /api/vendor/products/bulk-inline-update
+exports.bulkInlineUpdateProducts = async (req, res, next) => {
+  try {
+    const vendor = req.vendorProfile || await VendorProfile.findOne({
+      $or: [{ user: req.user._id }, { _id: req.user.vendorProfile }],
+    });
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor profile not found' });
+    }
+
+    const { updates } = req.body;
+    if (!updates || !Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Updates array is required and must not be empty.',
+      });
+    }
+
+    if (updates.length > 200) {
+      return res.status(400).json({
+        success: false,
+        message: 'Batch size exceeds maximum limit of 200 items per request.',
+      });
+    }
+
+    // Sub-Staff permission verification:
+    // If user is sub-staff with WAREHOUSE_INVENTORY but lacking PRODUCTS_MANAGE, they cannot touch pricing
+    const userPerms = req.user.permissions || [];
+    const isSubStaff = req.user.role === 'vendor_staff' || (req.user.role === 'vendor' && req.user.isVendorStaff);
+    const hasFullProductsManage = !isSubStaff || userPerms.includes('ALL') || userPerms.includes('PRODUCTS_MANAGE');
+    const hasWarehouseOnly = isSubStaff && !hasFullProductsManage && userPerms.includes('WAREHOUSE_INVENTORY');
+
+    const anyPricingUpdate = updates.some(
+      (u) => u.sellingPrice !== undefined || u.price !== undefined || u.mrp !== undefined || u.compareAtPrice !== undefined
+    );
+
+    if (hasWarehouseOnly && anyPricingUpdate) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Warehouse staff cannot modify product pricing. Requires PRODUCTS_MANAGE permission.',
+        requiredPermission: 'PRODUCTS_MANAGE',
+        requiredPermissions: ['PRODUCTS_MANAGE'],
+        grantedPermissions: userPerms,
+      });
+    }
+
+    // Strict input validation across all rows before executing mutations
+    for (let i = 0; i < updates.length; i++) {
+      const item = updates[i];
+      const rowNum = i + 1;
+      const rawSelling = item.sellingPrice !== undefined ? item.sellingPrice : item.price;
+      const rawMrp = item.mrp !== undefined ? item.mrp : item.compareAtPrice;
+
+      if (rawSelling !== undefined && (typeof rawSelling !== 'number' || isNaN(rawSelling) || rawSelling <= 0)) {
+        return res.status(400).json({
+          success: false,
+          message: `Validation Error on row ${rowNum}: Selling price must be a positive number greater than 0.`,
+        });
+      }
+
+      if (rawMrp !== undefined && (typeof rawMrp !== 'number' || isNaN(rawMrp) || rawMrp < 0)) {
+        return res.status(400).json({
+          success: false,
+          message: `Validation Error on row ${rowNum}: MRP / Compare price must be a non-negative number.`,
+        });
+      }
+
+      if (item.stock !== undefined && (typeof item.stock !== 'number' || isNaN(item.stock) || item.stock < 0 || !Number.isInteger(item.stock))) {
+        return res.status(400).json({
+          success: false,
+          message: `Validation Error on row ${rowNum}: Stock quantity must be a non-negative integer.`,
+        });
+      }
+
+      if (item.lowStockThreshold !== undefined && (typeof item.lowStockThreshold !== 'number' || isNaN(item.lowStockThreshold) || item.lowStockThreshold < 0 || !Number.isInteger(item.lowStockThreshold))) {
+        return res.status(400).json({
+          success: false,
+          message: `Validation Error on row ${rowNum}: Low stock threshold must be a non-negative integer.`,
+        });
+      }
+
+      if (item.status !== undefined) {
+        const normStatus = String(item.status).toLowerCase().trim();
+        if (!['published', 'draft', 'archived'].includes(normStatus)) {
+          return res.status(400).json({
+            success: false,
+            message: `Validation Error on row ${rowNum}: Invalid status '${item.status}'. Must be published, draft, or archived.`,
+          });
+        }
+      }
+    }
+
+    const updatedProducts = [];
+    const errors = [];
+    let updatedCount = 0;
+    let failedCount = 0;
+
+    for (let i = 0; i < updates.length; i++) {
+      const item = updates[i];
+      const rowNum = i + 1;
+      const productId = item.productId || item.id || item._id;
+      const sku = item.sku;
+
+      if (!productId && !sku) {
+        failedCount++;
+        errors.push({ row: rowNum, error: 'Product identifier (productId or sku) is required.' });
+        continue;
+      }
+
+      // Look up product strictly for this vendor (merchant isolation)
+      const filter = { vendor: vendor._id };
+      if (productId) {
+        filter._id = productId;
+      } else {
+        filter.sku = sku;
+      }
+
+      const product = await Product.findOne(filter);
+      if (!product) {
+        failedCount++;
+        errors.push({ row: rowNum, productId: productId || sku, error: 'Product not found or not owned by your store.' });
+        continue;
+      }
+
+      const oldSellingPrice = product.sellingPrice || 0;
+      const oldStock = product.stock || 0;
+      const rawSelling = item.sellingPrice !== undefined ? item.sellingPrice : item.price;
+      const rawMrp = item.mrp !== undefined ? item.mrp : item.compareAtPrice;
+
+      // Apply selling price & MRP
+      if (rawSelling !== undefined) {
+        product.sellingPrice = Number(rawSelling);
+      }
+      if (rawMrp !== undefined) {
+        product.mrp = Math.max(Number(rawMrp), product.sellingPrice);
+      } else if (rawSelling !== undefined && product.mrp < product.sellingPrice) {
+        product.mrp = product.sellingPrice;
+      }
+
+      if (product.mrp !== undefined && product.sellingPrice !== undefined) {
+        const savings = Math.max(0, product.mrp - product.sellingPrice);
+        product.savingsAmount = savings;
+        product.discountPercentage = product.mrp > 0 ? Math.round((savings / product.mrp) * 100) : 0;
+      }
+
+      // Apply stock & threshold
+      if (item.stock !== undefined) {
+        product.stock = Number(item.stock);
+      }
+      if (item.lowStockThreshold !== undefined) {
+        product.lowStockThreshold = Number(item.lowStockThreshold);
+      }
+
+      // Apply status & publication state
+      if (item.status !== undefined) {
+        const normStatus = String(item.status).toLowerCase().trim();
+        product.status = normStatus;
+        product.isPublished = normStatus === 'published';
+      } else if (item.isPublished !== undefined) {
+        product.isPublished = Boolean(item.isPublished);
+        product.status = product.isPublished ? 'published' : 'draft';
+      }
+
+      await product.save();
+      updatedCount++;
+      updatedProducts.push(product);
+
+      // Trigger automated alerts if conditions met
+      if (rawSelling !== undefined && Number(rawSelling) < oldSellingPrice) {
+        try {
+          const { checkAndTriggerPriceDropAlerts } = require('./priceDropAlertController');
+          checkAndTriggerPriceDropAlerts(product._id, oldSellingPrice, Number(rawSelling)).catch(() => {});
+        } catch (e) {}
+      }
+
+      if (oldStock <= 0 && product.stock > 0) {
+        try {
+          const { checkAndTriggerStockAlerts } = require('./priceDropAlertController');
+          checkAndTriggerStockAlerts(product._id, oldStock, product.stock).catch(() => {});
+        } catch (e) {}
+      }
+    }
+
+    // Record audit log
+    await recordAuditLog({
+      action: 'VENDOR_BULK_INLINE_CATALOG_UPDATE',
+      module: 'PRODUCTS',
+      req,
+      description: `Bulk inline catalog update: ${updatedCount} products updated (${failedCount} failed) across prices and stock.`,
+      targetType: 'Product',
+      targetId: updatedProducts[0] ? String(updatedProducts[0]._id) : String(vendor._id),
+      previousValue: { batchSize: updates.length },
+      newValue: { updatedCount, failedCount },
+      changeSummary: `Applied spreadsheet edits to ${updatedCount} products.`,
+      severity: 'MEDIUM',
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Bulk inline update completed: ${updatedCount} updated, ${failedCount} failed.`,
+      summary: {
+        totalRequested: updates.length,
+        updatedCount,
+        failedCount,
+        errors: errors.length > 0 ? errors : undefined,
+      },
+      data: updatedProducts,
     });
   } catch (error) {
     next(error);

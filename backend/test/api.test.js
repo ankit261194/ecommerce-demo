@@ -33,6 +33,7 @@ const TaxMatrix = require('../src/models/TaxMatrix');
 const ShippingConfig = require('../src/models/ShippingConfig');
 const PincodeZone = require('../src/models/PincodeZone');
 const StaffRole = require('../src/models/StaffRole');
+const Category = require('../src/models/Category');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -25721,6 +25722,397 @@ const runTests = async () => {
         }),
       });
       assert.strictEqual(resStaffSelfInvite.status, 403);
+    });
+
+    // =========================================================================
+    // Point 38: Bulk Inline Spreadsheet Catalog Editor (Fast Excel-like price & stock editing)
+    // =========================================================================
+    console.log('\n--- PILLAR 3 - POINT 38: BULK INLINE SPREADSHEET CATALOG EDITOR ---');
+
+    let p38Prod1Id = '';
+    let p38Prod2Id = '';
+    let p38Prod3Id = '';
+
+    await test('Point 38: Setup dedicated product catalog items for Bulk Inline Spreadsheet Editor testing', async () => {
+      const testCategory = (await Category.findOne()) || (await Category.create({ name: 'Pro Audio Tech', slug: 'pro-audio-tech-' + Date.now() }));
+
+      // Create Product 1 (Active published item)
+      const p1 = await Product.create({
+        vendor: p35VendorProfileId,
+        title: 'P38 Studio Monitor Headphones',
+        slug: `p38-studio-monitor-headphones-${Date.now()}-1`,
+        description: 'Reference studio monitors for mixing and mastering.',
+        category: testCategory._id,
+        brand: 'AuraSound',
+        thumbnail: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
+        mrp: 5000,
+        sellingPrice: 3500,
+        discountPercentage: 30,
+        savingsAmount: 1500,
+        stock: 15,
+        lowStockThreshold: 5,
+        sku: `P38-MON-${Date.now().toString().slice(-4)}-1`,
+        status: 'published',
+        isPublished: true,
+      });
+      p38Prod1Id = String(p1._id);
+      assert.ok(p38Prod1Id);
+
+      // Create Product 2 (Draft item)
+      const p2 = await Product.create({
+        vendor: p35VendorProfileId,
+        title: 'P38 USB Condenser Microphone',
+        slug: `p38-usb-condenser-microphone-${Date.now()}-2`,
+        description: 'Broadcast-quality studio condenser mic with pop filter.',
+        category: testCategory._id,
+        brand: 'AuraSound',
+        thumbnail: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500',
+        mrp: 4000,
+        sellingPrice: 2500,
+        discountPercentage: 38,
+        savingsAmount: 1500,
+        stock: 25,
+        lowStockThreshold: 5,
+        sku: `P38-MIC-${Date.now().toString().slice(-4)}-2`,
+        status: 'draft',
+        isPublished: false,
+      });
+      p38Prod2Id = String(p2._id);
+      assert.ok(p38Prod2Id);
+
+      // Create Product 3 (Out of stock item)
+      const p3 = await Product.create({
+        vendor: p35VendorProfileId,
+        title: 'P38 Acoustic Foam Sound Panels',
+        slug: `p38-acoustic-foam-panels-${Date.now()}-3`,
+        description: 'High density sound absorption panels for recording booth.',
+        category: testCategory._id,
+        brand: 'AuraSound',
+        thumbnail: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
+        mrp: 2000,
+        sellingPrice: 1200,
+        discountPercentage: 40,
+        savingsAmount: 800,
+        stock: 0,
+        lowStockThreshold: 5,
+        sku: `P38-FOAM-${Date.now().toString().slice(-4)}-3`,
+        status: 'published',
+        isPublished: true,
+      });
+      p38Prod3Id = String(p3._id);
+      assert.ok(p38Prod3Id);
+    });
+
+    await test('Point 38: GET /api/vendor/products supports spreadsheet filters, search query, and category aggregation', async () => {
+      // 1. Fetch with search filter matching Product 1 title
+      const resSearch = await fetch(`${baseUrl}/vendor/products?search=Monitor`, {
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      assert.strictEqual(resSearch.status, 200);
+      const dataSearch = await resSearch.json();
+      assert.strictEqual(dataSearch.success, true);
+      assert.ok(dataSearch.data.some((p) => p._id === p38Prod1Id));
+      assert.strictEqual(dataSearch.data.some((p) => p._id === p38Prod2Id), false);
+
+      // 2. Fetch with drafts filter
+      const resDrafts = await fetch(`${baseUrl}/vendor/products?filter=drafts`, {
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      assert.strictEqual(resDrafts.status, 200);
+      const dataDrafts = await resDrafts.json();
+      assert.strictEqual(dataDrafts.success, true);
+      assert.ok(dataDrafts.data.some((p) => p._id === p38Prod2Id));
+
+      // 3. Verify spreadsheet statistics
+      assert.ok(dataSearch.stats.total >= 3);
+      assert.ok(dataSearch.stats.published >= 2);
+      assert.ok(dataSearch.stats.drafts >= 1);
+      assert.ok(dataSearch.stats.outOfStock >= 1);
+    });
+
+    await test('Point 38: PATCH /api/vendor/products/bulk-inline-update applies multi-SKU price, stock, threshold, and status edits', async () => {
+      const p2Doc = await Product.findById(p38Prod2Id);
+
+      const batchPayload = {
+        updates: [
+          {
+            productId: p38Prod1Id,
+            sellingPrice: 3999,
+            mrp: 5999,
+            stock: 50,
+            lowStockThreshold: 10,
+            status: 'published',
+          },
+          {
+            sku: p2Doc.sku,
+            sellingPrice: 2799,
+            mrp: 4500,
+            stock: 30,
+            status: 'published', // Publish from draft
+          },
+          {
+            productId: p38Prod3Id,
+            sellingPrice: 1499,
+            mrp: 2200,
+            stock: 100, // Restock from 0 to 100
+            status: 'published',
+          },
+        ],
+      };
+
+      const res = await fetch(`${baseUrl}/vendor/products/bulk-inline-update`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify(batchPayload),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.summary.totalRequested, 3);
+      assert.strictEqual(data.summary.updatedCount, 3);
+      assert.strictEqual(data.summary.failedCount, 0);
+
+      // Verify in DB that Product 1 received all updates and computed margins
+      const updatedP1 = await Product.findById(p38Prod1Id);
+      assert.strictEqual(updatedP1.sellingPrice, 3999);
+      assert.strictEqual(updatedP1.mrp, 5999);
+      assert.strictEqual(updatedP1.stock, 50);
+      assert.strictEqual(updatedP1.lowStockThreshold, 10);
+      assert.strictEqual(updatedP1.status, 'published');
+      assert.strictEqual(updatedP1.isPublished, true);
+      assert.strictEqual(updatedP1.savingsAmount, 2000);
+      assert.strictEqual(updatedP1.discountPercentage, 33);
+
+      // Verify Product 2 was successfully published from draft via SKU reference
+      const updatedP2 = await Product.findById(p38Prod2Id);
+      assert.strictEqual(updatedP2.sellingPrice, 2799);
+      assert.strictEqual(updatedP2.mrp, 4500);
+      assert.strictEqual(updatedP2.stock, 30);
+      assert.strictEqual(updatedP2.status, 'published');
+      assert.strictEqual(updatedP2.isPublished, true);
+
+      // Verify Product 3 was restocked to 100
+      const updatedP3 = await Product.findById(p38Prod3Id);
+      assert.strictEqual(updatedP3.stock, 100);
+      assert.strictEqual(updatedP3.sellingPrice, 1499);
+    });
+
+    await test('Point 38: Validation: PATCH /api/vendor/products/bulk-inline-update rejects empty updates, negative prices, and negative stock (400 Bad Request)', async () => {
+      // 1. Empty updates array
+      const resEmpty = await fetch(`${baseUrl}/vendor/products/bulk-inline-update`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({ updates: [] }),
+      });
+      assert.strictEqual(resEmpty.status, 400);
+
+      // 2. Negative selling price
+      const resNegPrice = await fetch(`${baseUrl}/vendor/products/bulk-inline-update`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          updates: [{ productId: p38Prod1Id, sellingPrice: -50 }],
+        }),
+      });
+      assert.strictEqual(resNegPrice.status, 400);
+      const dataNegPrice = await resNegPrice.json();
+      assert.ok(dataNegPrice.message.includes('Selling price must be a positive number'));
+
+      // 3. Negative stock
+      const resNegStock = await fetch(`${baseUrl}/vendor/products/bulk-inline-update`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          updates: [{ productId: p38Prod1Id, stock: -10 }],
+        }),
+      });
+      assert.strictEqual(resNegStock.status, 400);
+
+      // 4. Invalid status
+      const resBadStatus = await fetch(`${baseUrl}/vendor/products/bulk-inline-update`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          updates: [{ productId: p38Prod1Id, status: 'discontinued_forever' }],
+        }),
+      });
+      assert.strictEqual(resBadStatus.status, 400);
+    });
+
+    await test('Point 38: Merchant Isolation: Vendor cannot modify products owned by a different store', async () => {
+      // Find an existing product owned by apex tech (different vendor)
+      const apexProduct = await Product.findOne({ vendor: { $ne: p35VendorProfileId } });
+      assert.ok(apexProduct, 'Must have at least one product from another vendor');
+
+      const originalApexPrice = apexProduct.sellingPrice;
+      const originalApexStock = apexProduct.stock;
+
+      // Attempt to maliciously modify Apex Tech's product using P35 Vendor credentials
+      const resMalicious = await fetch(`${baseUrl}/vendor/products/bulk-inline-update`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          updates: [
+            {
+              productId: String(apexProduct._id),
+              sellingPrice: 1, // Tamper price to 1 rupee
+              stock: 9999,
+            },
+          ],
+        }),
+      });
+
+      assert.strictEqual(resMalicious.status, 200);
+      const dataMalicious = await resMalicious.json();
+      assert.strictEqual(dataMalicious.summary.updatedCount, 0);
+      assert.strictEqual(dataMalicious.summary.failedCount, 1);
+      assert.ok(dataMalicious.summary.errors[0].error.includes('not owned by your store'));
+
+      // Verify DB state was untouched
+      const freshApex = await Product.findById(apexProduct._id);
+      assert.strictEqual(freshApex.sellingPrice, originalApexPrice, 'Foreign store product price must be protected');
+      assert.strictEqual(freshApex.stock, originalApexStock, 'Foreign store product stock must be protected');
+    });
+
+    await test('Point 38: Granular Sub-Staff Permissions: Warehouse Manager can update stock & thresholds, but pricing edits are forbidden (403 Forbidden)', async () => {
+      // Create a dedicated warehouse-only staff member with WAREHOUSE_INVENTORY only
+      const staffRes = await fetch(`${baseUrl}/vendor/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Ramesh Inventory',
+          email: `ramesh.wh.${Date.now()}@auramarket.com`,
+          phone: '9822334455',
+          password: 'password123',
+          staffRoleTitle: 'Inventory Associate',
+          department: 'Warehouse',
+          permissions: ['WAREHOUSE_INVENTORY'],
+        }),
+      });
+      assert.strictEqual(staffRes.status, 201);
+      const staffData = await staffRes.json();
+
+      const loginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: staffData.data.email,
+          password: 'password123',
+        }),
+      });
+      assert.strictEqual(loginRes.status, 200);
+      const loginData = await loginRes.json();
+      const warehouseOnlyToken = loginData.token;
+
+      // 1. Warehouse-only staff successfully updates stock only (authorized by WAREHOUSE_INVENTORY)
+      const resStockOk = await fetch(`${baseUrl}/vendor/products/bulk-inline-update`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${warehouseOnlyToken}`,
+        },
+        body: JSON.stringify({
+          updates: [
+            {
+              productId: p38Prod1Id,
+              stock: 65,
+              lowStockThreshold: 12,
+            },
+          ],
+        }),
+      });
+      assert.strictEqual(resStockOk.status, 200);
+      const dataStockOk = await resStockOk.json();
+      assert.strictEqual(dataStockOk.summary.updatedCount, 1);
+
+      const checkStock = await Product.findById(p38Prod1Id);
+      assert.strictEqual(checkStock.stock, 65);
+      assert.strictEqual(checkStock.lowStockThreshold, 12);
+
+      // 2. Warehouse-only staff attempts to modify price without PRODUCTS_MANAGE permission
+      const resPriceForbidden = await fetch(`${baseUrl}/vendor/products/bulk-inline-update`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${warehouseOnlyToken}`,
+        },
+        body: JSON.stringify({
+          updates: [
+            {
+              productId: p38Prod1Id,
+              sellingPrice: 899,
+            },
+          ],
+        }),
+      });
+      assert.strictEqual(resPriceForbidden.status, 403);
+      const dataPriceForbidden = await resPriceForbidden.json();
+      assert.strictEqual(dataPriceForbidden.requiredPermission, 'PRODUCTS_MANAGE');
+      assert.ok(dataPriceForbidden.message.includes('Warehouse staff cannot modify product pricing'));
+
+      // Verify price was NOT modified
+      const checkPrice = await Product.findById(p38Prod1Id);
+      assert.strictEqual(checkPrice.sellingPrice, 3999, 'Product price must remain unchanged when blocked by RBAC');
+    });
+
+    await test('Point 38: Role Security: Customer, delivery riders, and unauthenticated requests to bulk-inline-update are rejected (401 / 403)', async () => {
+      // 1. Unauthenticated request
+      const resUnauth = await fetch(`${baseUrl}/vendor/products/bulk-inline-update`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          updates: [{ productId: p38Prod1Id, stock: 10 }],
+        }),
+      });
+      assert.strictEqual(resUnauth.status, 401);
+
+      // 2. Customer request
+      const resCust = await fetch(`${baseUrl}/vendor/products/bulk-inline-update`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          updates: [{ productId: p38Prod1Id, stock: 10 }],
+        }),
+      });
+      assert.strictEqual(resCust.status, 403);
+
+      // 3. Delivery rider request
+      const resRider = await fetch(`${baseUrl}/vendor/products/bulk-inline-update`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          updates: [{ productId: p38Prod1Id, stock: 10 }],
+        }),
+      });
+      assert.strictEqual(resRider.status, 403);
     });
 
   } finally {

@@ -45,7 +45,9 @@ import {
   Zap,
   Video,
   Rotate3d,
+  LifeBuoy,
 } from 'lucide-react';
+import SupportHelpdeskModal from '../components/SupportHelpdeskModal';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
 import { ProductDetailModal } from '../components/ProductDetailModal';
 import WishlistDrawer from '../components/WishlistDrawer';
@@ -135,6 +137,15 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [redeemedCoins, setRedeemedCoins] = useState(0);
   const [customerWallet, setCustomerWallet] = useState({ coins: 500, balance: 250 });
+
+  // Point #19: Formal Customer Support Helpdesk State & Listener
+  const [isHelpdeskOpen, setIsHelpdeskOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpenHelpdesk = () => setIsHelpdeskOpen(true);
+    window.addEventListener('auramarket_open_helpdesk', handleOpenHelpdesk);
+    return () => window.removeEventListener('auramarket_open_helpdesk', handleOpenHelpdesk);
+  }, []);
 
   // Point #38: Homepage Hero Slider & Promo Banners State
   const [heroBanners, setHeroBanners] = useState([
@@ -3876,6 +3887,28 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
       {/* Point 15: True Native Web Push Notifications Opt-In & Floating Status Bell */}
       <WebPushOptInBanner customerEmail={user?.email || ''} />
+
+      {/* Point #19: Floating Customer Support Helpdesk Launch Pill */}
+      <button
+        type="button"
+        onClick={() => setIsHelpdeskOpen(true)}
+        className="fixed bottom-36 left-6 z-40 px-3.5 py-2.5 rounded-full bg-gradient-to-r from-indigo-800 via-indigo-900 to-slate-900 hover:from-indigo-750 hover:to-slate-950 text-white font-black text-xs shadow-2xl flex items-center gap-2 border border-indigo-400/40 backdrop-blur-md group hover:scale-105 active:scale-95 transition-all"
+        title="Formal Customer Support Helpdesk (Ticketing System with SLAs)"
+      >
+        <div className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center group-hover:rotate-12 transition-transform shadow-md font-bold">
+          <LifeBuoy className="w-3.5 h-3.5" />
+        </div>
+        <span className="font-bold text-white">Helpdesk</span>
+        <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black uppercase">
+          2h SLA
+        </span>
+      </button>
+
+      {/* Point #19: Formal Customer Support Helpdesk Modal */}
+      <SupportHelpdeskModal
+        isOpen={isHelpdeskOpen}
+        onClose={() => setIsHelpdeskOpen(false)}
+      />
     </div>
   );
 };

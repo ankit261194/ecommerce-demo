@@ -27,6 +27,7 @@ import {
   Gift,
   FileCheck,
   Wallet,
+  LifeBuoy,
 } from 'lucide-react';
 import ReturnRefundModal from './ReturnRefundModal';
 import TaxInvoiceModal from './TaxInvoiceModal';
@@ -34,6 +35,7 @@ import WhatsAppOrderBotModal from './WhatsAppOrderBotModal';
 import ScratchCardModal from './ScratchCardModal';
 import LiveGpsTrackingMap from './LiveGpsTrackingMap';
 import ProofOfDeliveryModal from './ProofOfDeliveryModal';
+import SupportHelpdeskModal from './SupportHelpdeskModal';
 
 export default function LiveOrderTrackerModal({
   isOpen,
@@ -71,6 +73,9 @@ export default function LiveOrderTrackerModal({
 
   // Point #21: Digital Proof of Delivery (POD) Signature & Slip State
   const [showPodModal, setShowPodModal] = useState(false);
+
+  // Point #19: Formal Customer Support Helpdesk (Ticketing System with SLAs)
+  const [showSupportModal, setShowSupportModal] = useState(false);
 
   const cancellationReasons = [
     'Ordered by mistake',
@@ -847,6 +852,14 @@ export default function LiveOrderTrackerModal({
                 Return / Refund
               </button>
             )}
+            {/* Point #19: Formal Customer Support Helpdesk Button */}
+            <button
+              onClick={() => setShowSupportModal(true)}
+              className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-sm active:scale-95 flex items-center gap-1.5"
+            >
+              <LifeBuoy className="w-3.5 h-3.5" />
+              Need Help with this Order?
+            </button>
             <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline">
               Powered by AuraMarket Express Logistics Engine
             </span>
@@ -1047,6 +1060,14 @@ export default function LiveOrderTrackerModal({
           orderId={orderData._id || orderData.rawOrderId || orderData.orderId}
         />
       )}
+
+      {/* Point #19: Formal Customer Support Helpdesk Modal */}
+      <SupportHelpdeskModal
+        isOpen={showSupportModal}
+        onClose={() => setShowSupportModal(false)}
+        orderData={orderData}
+        apiUrl={apiUrl}
+      />
     </div>
   );
 }

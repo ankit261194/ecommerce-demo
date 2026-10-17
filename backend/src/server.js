@@ -63,6 +63,7 @@ const videoShoppingRoutes = require('./routes/videoShoppingRoutes');
 const rtoFraudRoutes = require('./routes/rtoFraudRoutes');
 const mapRoutes = require('./routes/mapRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
+const supportTicketRoutes = require('./routes/supportTicketRoutes');
 
 const app = express();
 
@@ -200,6 +201,8 @@ app.use('/api/video-shopping', videoShoppingRoutes);
 app.use('/api/rto-fraud', rtoFraudRoutes);
 app.use('/api/maps', mapRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/support/tickets', supportTicketRoutes);
+app.use('/api/support', supportTicketRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

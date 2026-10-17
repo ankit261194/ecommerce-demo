@@ -20006,6 +20006,235 @@ const runTests = async () => {
       assert.strictEqual(dataSuccess.data.status, 'REVERSE_PICKUP_COMPLETED');
     });
 
+    console.log('\n--- PILLAR 1 - POINT 19: FORMAL CUSTOMER SUPPORT HELPDESK (TICKETING SYSTEM WITH ATTACHMENTS & SLAS) ---');
+
+    let point19TicketId;
+    let point19TicketNumber;
+    let point19CustomerId;
+    let point19AgentId;
+
+    await test('Point 19: POST /api/support/tickets creates ticket with URGENT priority, sets 2-hour SLA deadline, and attachments', async () => {
+      const decodedCustomer = jwt.decode(customerToken);
+      point19CustomerId = decodedCustomer.id;
+
+      const res = await fetch(`${baseUrl}/support/tickets`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          subject: 'Critical: Payment deducted but order status stuck in pending',
+          category: 'PAYMENT_BILLING',
+          priority: 'URGENT',
+          message: 'My card was charged Rs. 4,999 but I do not see the confirmed badge. Please check urgently.',
+          attachments: [
+            {
+              url: 'https://cdn.auramarket.com/support/bank_sms_proof.png',
+              fileName: 'bank_sms_proof.png',
+              fileSize: 1048576,
+              fileType: 'image/png',
+            },
+          ],
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data._id);
+      assert.ok(data.data.ticketNumber.startsWith('TCK-'));
+      point19TicketId = data.data._id;
+      point19TicketNumber = data.data.ticketNumber;
+
+      assert.strictEqual(data.data.priority, 'URGENT');
+      assert.strictEqual(data.data.category, 'PAYMENT_BILLING');
+      assert.strictEqual(data.data.status, 'OPEN');
+
+      // SLA 2-Hour First Response Deadline Verification
+      const firstResponseDeadline = new Date(data.data.sla.firstResponseDeadline);
+      const createdAt = new Date(data.data.createdAt);
+      const diffHours = (firstResponseDeadline.getTime() - createdAt.getTime()) / (1000 * 3600);
+      assert.strictEqual(Math.round(diffHours), 2, 'URGENT first response SLA must be exactly 2 hours');
+
+      // SLA 12-Hour Resolution Deadline Verification
+      const resolutionDeadline = new Date(data.data.sla.resolutionDeadline);
+      const resDiffHours = (resolutionDeadline.getTime() - createdAt.getTime()) / (1000 * 3600);
+      assert.strictEqual(Math.round(resDiffHours), 12, 'URGENT resolution SLA must be exactly 12 hours');
+
+      // Message thread & attachments verification
+      assert.strictEqual(data.data.messages.length, 1);
+      assert.strictEqual(data.data.messages[0].senderRole, 'customer');
+      assert.strictEqual(data.data.messages[0].attachments.length, 1);
+      assert.strictEqual(data.data.messages[0].attachments[0].fileName, 'bank_sms_proof.png');
+    });
+
+    await test('Point 19: Role Security: Customer cannot view another user\'s ticket (403 Forbidden)', async () => {
+      const intruderUser = await User.create({
+        name: 'Intruder Customer',
+        email: `intruder_${Date.now()}@example.com`,
+        phone: '9870000019',
+        role: 'customer',
+        password: 'password123',
+      });
+      const intruderToken = jwt.sign(
+        { id: intruderUser._id },
+        process.env.JWT_SECRET || 'production_grade_super_secret_jwt_key_2026_obsidian_amber',
+        { expiresIn: '1h' }
+      );
+
+      const res = await fetch(`${baseUrl}/support/tickets/${point19TicketId}`, {
+        headers: { Authorization: `Bearer ${intruderToken}` },
+      });
+
+      assert.strictEqual(res.status, 403);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Forbidden') || data.message.includes('permission'));
+    });
+
+    await test('Point 19: POST /api/support/tickets/:id/reply adds customer and agent replies, stamps firstRespondedAt', async () => {
+      // 1. Agent / Admin replies first -> stamps firstRespondedAt and updates status
+      const resAgent = await fetch(`${baseUrl}/support/tickets/${point19TicketId}/reply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          message: 'Hello, our payment desk investigated transaction TXN_987654 and verified settlement with your bank.',
+          attachments: [
+            {
+              url: 'https://cdn.auramarket.com/support/pg_settlement_receipt.pdf',
+              fileName: 'pg_settlement_receipt.pdf',
+              fileSize: 42300,
+              fileType: 'application/pdf',
+            },
+          ],
+        }),
+      });
+
+      assert.strictEqual(resAgent.status, 200);
+      const dataAgent = await resAgent.json();
+      assert.strictEqual(dataAgent.success, true);
+      assert.ok(dataAgent.data.sla.firstRespondedAt, 'Agent reply must stamp firstRespondedAt');
+      assert.strictEqual(dataAgent.data.messages.length, 2);
+      assert.strictEqual(dataAgent.data.status, 'WAITING_CUSTOMER');
+
+      // 2. Customer replies back
+      const resCust = await fetch(`${baseUrl}/support/tickets/${point19TicketId}/reply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          message: 'Thank you! The order has updated to Confirmed. Everything is sorted now.',
+        }),
+      });
+
+      assert.strictEqual(resCust.status, 200);
+      const dataCust = await resCust.json();
+      assert.strictEqual(dataCust.success, true);
+      assert.strictEqual(dataCust.data.messages.length, 3);
+      assert.strictEqual(dataCust.data.status, 'IN_PROGRESS');
+    });
+
+    await test('Point 19: PUT /api/support/tickets/:id/assign assigns agent to ticket', async () => {
+      const agentUser = await User.create({
+        name: 'Pooja Verma Support',
+        email: `agent_pooja_${Date.now()}@auramarket.com`,
+        phone: '9870000020',
+        role: 'agent',
+        password: 'password123',
+      });
+      point19AgentId = agentUser._id;
+
+      const res = await fetch(`${baseUrl}/support/tickets/${point19TicketId}/assign`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          agentId: agentUser._id,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.assignedAgent._id.toString(), agentUser._id.toString());
+    });
+
+    await test('Point 19: PUT /api/support/tickets/:id/close resolves ticket and records 5-star satisfaction rating', async () => {
+      const res = await fetch(`${baseUrl}/support/tickets/${point19TicketId}/close`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          status: 'RESOLVED',
+          satisfactionRating: 5,
+          feedbackComment: 'Lightning-fast resolution within 30 minutes! Truly world-class customer support.',
+          resolutionSummary: 'Payment captured and order confirmed.',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'RESOLVED');
+      assert.strictEqual(data.data.satisfactionRating, 5);
+      assert.strictEqual(data.data.feedbackComment, 'Lightning-fast resolution within 30 minutes! Truly world-class customer support.');
+      assert.ok(data.data.sla.resolvedAt, 'Must stamp sla.resolvedAt');
+      assert.strictEqual(data.data.sla.resolutionBreached, false);
+    });
+
+    await test('Point 19: GET /api/support/tickets/analytics aggregates total, open, resolved, and breached tickets', async () => {
+      const SupportTicket = require('../src/models/SupportTicket');
+      const pastTime = new Date(Date.now() - 48 * 3600 * 1000);
+      await SupportTicket.create({
+        ticketNumber: `TCK-BREACH-${Date.now()}`,
+        customer: point19CustomerId,
+        subject: 'Delayed Courier Escalation (SLA Breached)',
+        category: 'DELIVERY_COURIER',
+        priority: 'URGENT',
+        status: 'OPEN',
+        createdAt: pastTime,
+        sla: {
+          firstResponseDeadline: new Date(pastTime.getTime() + 2 * 3600 * 1000),
+          resolutionDeadline: new Date(pastTime.getTime() + 12 * 3600 * 1000),
+          firstRespondedAt: null,
+          firstResponseBreached: true,
+          resolutionBreached: true,
+          resolvedAt: null,
+        },
+        messages: [
+          {
+            sender: point19CustomerId,
+            senderRole: 'customer',
+            message: 'Order delayed by 3 days.',
+            createdAt: pastTime,
+          },
+        ],
+      });
+
+      const res = await fetch(`${baseUrl}/support/tickets/analytics`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.totalTickets >= 2);
+      assert.ok(data.data.resolvedTickets >= 1);
+      assert.ok(data.data.breachedTickets >= 1);
+      assert.ok(typeof data.data.averageSatisfactionRating === 'number');
+      assert.strictEqual(data.data.averageSatisfactionRating, 5);
+    });
+
   } finally {
     if (server) {
       server.close();

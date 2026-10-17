@@ -17,6 +17,9 @@ const WalletTransaction = require('../src/models/WalletTransaction');
 const ScratchCardReward = require('../src/models/ScratchCardReward');
 const PayoutSplit = require('../src/models/PayoutSplit');
 const AuditLog = require('../src/models/AuditLog');
+const Warehouse = require('../src/models/Warehouse');
+const WarehouseInventory = require('../src/models/WarehouseInventory');
+const StockTransferOrder = require('../src/models/StockTransferOrder');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -21926,6 +21929,308 @@ const runTests = async () => {
           Authorization: `Bearer ${riderToken}`,
         },
         body: JSON.stringify({ destinationPincode: '110001', items: [] }),
+      });
+      assert.strictEqual(resRider.status, 403, 'Delivery rider token must return 403 Forbidden');
+    });
+
+    // =========================================================================
+    // PILLAR 2 - POINT 25: INTERNAL STOCK TRANSFER ORDERS (INTER-WAREHOUSE STO)
+    // =========================================================================
+    console.log('\n--- PILLAR 2 - POINT 25: INTERNAL STOCK TRANSFER ORDERS (STO) ---');
+
+    let point25TransferId = null;
+    let point25TransferNumber = null;
+    let point25CancelTransferId = null;
+
+    await test('Point 25: Validation: rejects transfer if sourceWarehouse and destinationWarehouse are identical (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/admin/stock-transfers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          sourceWarehouse: point24WarehouseDelhiId,
+          destinationWarehouse: point24WarehouseDelhiId,
+          items: [
+            {
+              product: point24ProductId1,
+              sku: 'P24-WATCH-01',
+              title: 'P24 Smart Watch Pro',
+              quantity: 10,
+            },
+          ],
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('must be distinct'));
+    });
+
+    await test('Point 25: POST /api/admin/stock-transfers creates new inter-warehouse transfer order (STO) with REQUESTED status', async () => {
+      const res = await fetch(`${baseUrl}/admin/stock-transfers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          sourceWarehouse: point24WarehouseDelhiId,
+          destinationWarehouse: point24WarehouseBlrId,
+          priority: 'URGENT',
+          notes: 'Emergency replenishment of watches to Bengaluru South Hub',
+          items: [
+            {
+              product: point24ProductId1,
+              sku: 'P24-WATCH-01',
+              title: 'P24 Smart Watch Pro',
+              quantity: 15,
+            },
+          ],
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data._id);
+      assert.ok(data.data.transferNumber.startsWith('STO-'));
+      assert.strictEqual(data.data.status, 'REQUESTED');
+      assert.strictEqual(data.data.priority, 'URGENT');
+      assert.strictEqual(data.data.totalUnitsRequested, 15);
+      point25TransferId = data.data._id;
+      point25TransferNumber = data.data.transferNumber;
+    });
+
+    await test('Point 25: GET /api/admin/stock-transfers lists transfer orders with populated hubs and item details', async () => {
+      const res = await fetch(`${baseUrl}/admin/stock-transfers?status=REQUESTED`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      const found = data.data.find((t) => t._id === point25TransferId);
+      assert.ok(found, 'Created STO must be present in listing');
+      assert.ok(found.sourceWarehouse.warehouseCode);
+      assert.ok(found.destinationWarehouse.warehouseCode);
+    });
+
+    await test('Point 25: GET /api/admin/stock-transfers/:id returns detailed STO with audit timeline', async () => {
+      const res = await fetch(`${baseUrl}/admin/stock-transfers/${point25TransferId}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.transferNumber, point25TransferNumber);
+      assert.ok(Array.isArray(data.data.activityTimeline));
+      assert.ok(data.data.activityTimeline.length >= 1);
+    });
+
+    await test('Point 25: POST /api/admin/stock-transfers/:id/approve reserves available inventory at source warehouse', async () => {
+      // Prior to approval, check Delhi hub has availableStock
+      const invBefore = await WarehouseInventory.findOne({
+        warehouse: point24WarehouseDelhiId,
+        product: point24ProductId1,
+      });
+      const availBefore = invBefore.availableStock;
+      const resBefore = invBefore.reservedStock || 0;
+
+      const res = await fetch(`${baseUrl}/admin/stock-transfers/${point25TransferId}/approve`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'APPROVED');
+
+      // Verify 15 units were reserved at Delhi hub
+      const invAfter = await WarehouseInventory.findOne({
+        warehouse: point24WarehouseDelhiId,
+        product: point24ProductId1,
+      });
+      assert.strictEqual(invAfter.availableStock, availBefore - 15);
+      assert.strictEqual(invAfter.reservedStock, resBefore + 15);
+    });
+
+    await test('Point 25: Guardrail: cannot approve transfer if source warehouse has insufficient stock (400 Bad Request)', async () => {
+      // Create transfer requesting 99999 units (exceeding stock)
+      const resCreate = await fetch(`${baseUrl}/admin/stock-transfers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          sourceWarehouse: point24WarehouseDelhiId,
+          destinationWarehouse: point24WarehouseBlrId,
+          items: [{ product: point24ProductId1, quantity: 99999 }],
+        }),
+      });
+      const dataCreate = await resCreate.json();
+
+      const resApprove = await fetch(`${baseUrl}/admin/stock-transfers/${dataCreate.data._id}/approve`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resApprove.status, 400);
+      const dataApprove = await resApprove.json();
+      assert.strictEqual(dataApprove.success, false);
+      assert.ok(dataApprove.message.includes('Insufficient inventory'));
+    });
+
+    await test('Point 25: POST /api/admin/stock-transfers/:id/dispatch deducts reserved stock and updates status to IN_TRANSIT with tracking AWB', async () => {
+      const res = await fetch(`${baseUrl}/admin/stock-transfers/${point25TransferId}/dispatch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          courierPartner: 'BlueDart Surface Express',
+          trackingNumber: 'AWB-BLR-8829910',
+          vehicleNumber: 'DL-01-AB-9922',
+          driverName: 'Harpreet Singh',
+          driverPhone: '+91 98111 55667',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'IN_TRANSIT');
+      assert.strictEqual(data.data.totalUnitsDispatched, 15);
+      assert.strictEqual(data.data.transitDetails.trackingNumber, 'AWB-BLR-8829910');
+
+      // Verify reserved stock at source hub has been cleared/deducted
+      const invAfter = await WarehouseInventory.findOne({
+        warehouse: point24WarehouseDelhiId,
+        product: point24ProductId1,
+      });
+      assert.strictEqual(invAfter.reservedStock, 0);
+    });
+
+    await test('Point 25: POST /api/admin/stock-transfers/:id/receive accepts stock at destination hub, increments available inventory, and logs audit trail', async () => {
+      // Check destination warehouse stock before receiving
+      const destBefore = await WarehouseInventory.findOne({
+        warehouse: point24WarehouseBlrId,
+        product: point24ProductId1,
+      });
+      const destAvailBefore = destBefore?.availableStock || 0;
+
+      const res = await fetch(`${baseUrl}/admin/stock-transfers/${point25TransferId}/receive`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          receivedItems: [
+            {
+              product: point24ProductId1,
+              receivedQuantity: 15,
+              damagedQuantity: 0,
+            },
+          ],
+          remarks: 'Received 15 units intact without transit damage',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'RECEIVED');
+      assert.strictEqual(data.data.totalUnitsReceived, 15);
+
+      // Verify destination inventory increased by exactly 15 units
+      const destAfter = await WarehouseInventory.findOne({
+        warehouse: point24WarehouseBlrId,
+        product: point24ProductId1,
+      });
+      assert.strictEqual(destAfter.availableStock, destAvailBefore + 15);
+      const lastAudit = destAfter.auditLog[destAfter.auditLog.length - 1];
+      assert.strictEqual(lastAudit.action, 'TRANSFER_IN');
+      assert.strictEqual(lastAudit.quantityDelta, 15);
+    });
+
+    await test('Point 25: POST /api/admin/stock-transfers/:id/cancel releases reserved stock if transfer is cancelled prior to transit', async () => {
+      // 1. Create a transfer of 5 units
+      const resCreate = await fetch(`${baseUrl}/admin/stock-transfers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          sourceWarehouse: point24WarehouseDelhiId,
+          destinationWarehouse: point24WarehouseBlrId,
+          items: [{ product: point24ProductId1, quantity: 5 }],
+        }),
+      });
+      const dataCreate = await resCreate.json();
+      point25CancelTransferId = dataCreate.data._id;
+
+      // 2. Approve it (reserving 5 units)
+      await fetch(`${baseUrl}/admin/stock-transfers/${point25CancelTransferId}/approve`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      const invMid = await WarehouseInventory.findOne({
+        warehouse: point24WarehouseDelhiId,
+        product: point24ProductId1,
+      });
+      const availMid = invMid.availableStock;
+
+      // 3. Cancel it (must restore 5 units to availableStock)
+      const resCancel = await fetch(`${baseUrl}/admin/stock-transfers/${point25CancelTransferId}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ reason: 'Rebalance not required' }),
+      });
+      assert.strictEqual(resCancel.status, 200);
+      const dataCancel = await resCancel.json();
+      assert.strictEqual(dataCancel.success, true);
+      assert.strictEqual(dataCancel.data.status, 'CANCELLED');
+
+      const invFinal = await WarehouseInventory.findOne({
+        warehouse: point24WarehouseDelhiId,
+        product: point24ProductId1,
+      });
+      assert.strictEqual(invFinal.availableStock, availMid + 5);
+    });
+
+    await test('Point 25: GET /api/admin/stock-transfers/analytics returns accurate fleet and unit metrics', async () => {
+      const res = await fetch(`${baseUrl}/admin/stock-transfers/analytics`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.totalTransfers >= 2);
+      assert.ok(data.data.completed >= 1);
+      assert.ok(data.data.unitsReceived >= 15);
+      assert.ok(data.data.accuracyRate > 0);
+    });
+
+    await test('Point 25: Role Security: Customer and unauthenticated requests are rejected (401 / 403)', async () => {
+      // Unauthenticated
+      const resUnauth = await fetch(`${baseUrl}/admin/stock-transfers`);
+      assert.strictEqual(resUnauth.status, 401, 'Unauthenticated request must return 401');
+
+      // Customer
+      const resCust = await fetch(`${baseUrl}/admin/stock-transfers`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403, 'Customer token must return 403 Forbidden');
+
+      // Delivery Rider
+      const resRider = await fetch(`${baseUrl}/admin/stock-transfers/${point25TransferId}/approve`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${riderToken}` },
       });
       assert.strictEqual(resRider.status, 403, 'Delivery rider token must return 403 Forbidden');
     });

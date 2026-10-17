@@ -28,6 +28,7 @@ import {
   Zap,
 } from 'lucide-react';
 import api from '../api/client';
+import StockTransferOrderManager from './StockTransferOrderManager';
 
 export default function MultiWarehouseRoutingHub() {
   const [activeTab, setActiveTab] = useState('network'); // 'network' | 'simulator' | 'inventory'
@@ -449,6 +450,21 @@ export default function MultiWarehouseRoutingHub() {
             Live Sandbox
           </span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('transfers')}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 font-black text-xs sm:text-sm transition-all ${
+            activeTab === 'transfers'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <Truck className="w-4 h-4" />
+          <span>Stock Transfers (STO)</span>
+          <span className="px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-700 text-[10px] font-bold">
+            Point #25
+          </span>
+        </button>
       </div>
 
       {/* TAB 1: FULFILLMENT NETWORK */}
@@ -853,6 +869,11 @@ export default function MultiWarehouseRoutingHub() {
             )}
           </div>
         </div>
+      )}
+
+      {/* TAB 3: INTERNAL STOCK TRANSFER ORDERS (Point 25) */}
+      {activeTab === 'transfers' && (
+        <StockTransferOrderManager />
       )}
 
       {/* CREATE / EDIT WAREHOUSE MODAL */}

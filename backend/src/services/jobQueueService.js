@@ -37,39 +37,39 @@ class JobQueueService {
   registerDefaultProcessors() {
     // 1. Send Email Processor
     this.registerProcessor('send_email', async (job, updateProgress, log) => {
-      log('Starting email dispatch pipeline...', 'info');
-      updateProgress(20);
+      await log('Starting email dispatch pipeline...', 'info');
+      await updateProgress(20);
       const { to, subject, html, text } = job.data || {};
       if (!to || !subject) {
         throw new Error('Email recipient (to) and subject are required');
       }
-      log(`Sending email to ${to} with subject "${subject}"`, 'info');
-      updateProgress(60);
+      await log(`Sending email to ${to} with subject "${subject}"`, 'info');
+      await updateProgress(60);
       const mailResult = await mailService.sendMail({ to, subject, html, text });
-      updateProgress(100);
-      log('Email dispatched successfully via mailService', 'info');
+      await updateProgress(100);
+      await log('Email dispatched successfully via mailService', 'info');
       return { sent: true, recipient: to, messageId: mailResult?.messageId || 'local-msg' };
     });
 
     // 2. Notification Dispatcher (SMS / Push)
     this.registerProcessor('send_notification', async (job, updateProgress, log) => {
-      log('Processing multi-channel notification dispatch...', 'info');
-      updateProgress(30);
+      await log('Processing multi-channel notification dispatch...', 'info');
+      await updateProgress(30);
       const { channel, recipient, content } = job.data || {};
-      log(`Notification dispatched to ${channel || 'in-app'}: ${recipient}`, 'info');
-      updateProgress(100);
+      await log(`Notification dispatched to ${channel || 'in-app'}: ${recipient}`, 'info');
+      await updateProgress(100);
       return { delivered: true, channel: channel || 'in-app', recipient, deliveredAt: new Date() };
     });
 
     // 3. Reports & Analytics Summary Generator
     this.registerProcessor('generate_report', async (job, updateProgress, log) => {
-      log('Compiling analytical ledger data...', 'info');
-      updateProgress(25);
+      await log('Compiling analytical ledger data...', 'info');
+      await updateProgress(25);
       const { reportType, period } = job.data || {};
-      log(`Aggregating metrics for report: ${reportType || 'general'} (${period || 'daily'})`, 'info');
-      updateProgress(75);
-      log('Report compilation complete, generated export summary', 'info');
-      updateProgress(100);
+      await log(`Aggregating metrics for report: ${reportType || 'general'} (${period || 'daily'})`, 'info');
+      await updateProgress(75);
+      await log('Report compilation complete, generated export summary', 'info');
+      await updateProgress(100);
       return {
         reportType: reportType || 'financial_summary',
         generatedAt: new Date(),
@@ -80,38 +80,38 @@ class JobQueueService {
 
     // 4. Maintenance & Cache Cleanup
     this.registerProcessor('maintenance_cleanup', async (job, updateProgress, log) => {
-      log('Executing scheduled background maintenance...', 'info');
-      updateProgress(50);
+      await log('Executing scheduled background maintenance...', 'info');
+      await updateProgress(50);
       const cutoff = new Date(Date.now() - (this.settings.autoCleanCompletedDays * 86400000));
       const deleted = await JobQueue.deleteMany({
         status: 'completed',
         completedAt: { $lt: cutoff },
       });
-      log(`Purged ${deleted.deletedCount} old completed jobs beyond retention period`, 'info');
-      updateProgress(100);
+      await log(`Purged ${deleted.deletedCount} old completed jobs beyond retention period`, 'info');
+      await updateProgress(100);
       return { purgedCount: deleted.deletedCount };
     });
 
     // 5. General Testing & Simulation Processor
     this.registerProcessor('test_job', async (job, updateProgress, log) => {
       const { simulateDurationMs = 100, shouldFail = false, failOnAttempts = 0, echo = 'AuraMarket' } = job.data || {};
-      log(`Commencing test job execution (Echo: ${echo})`, 'info');
-      updateProgress(25);
+      await log(`Commencing test job execution (Echo: ${echo})`, 'info');
+      await updateProgress(25);
 
       if (simulateDurationMs > 0) {
         await new Promise((res) => setTimeout(res, Math.min(simulateDurationMs, 500)));
       }
-      updateProgress(50);
+      await updateProgress(50);
 
       // Check simulated failure condition
       if (shouldFail || (failOnAttempts > 0 && job.attemptsMade < failOnAttempts)) {
-        log(`Simulated intentional failure triggered on attempt ${job.attemptsMade + 1}`, 'error');
+        await log(`Simulated intentional failure triggered on attempt ${job.attemptsMade + 1}`, 'error');
         throw new Error(`Simulated test failure (Attempt ${job.attemptsMade + 1} of ${job.maxAttempts})`);
       }
 
-      updateProgress(85);
-      log('Finalizing test job outcome and payload synthesis', 'info');
-      updateProgress(100);
+      await updateProgress(85);
+      await log('Finalizing test job outcome and payload synthesis', 'info');
+      await updateProgress(100);
       return {
         acknowledged: true,
         echo,

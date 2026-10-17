@@ -52,6 +52,7 @@ import InventoryAlertsModal from '../components/InventoryAlertsModal';
 import VendorPromotionsManager from '../components/VendorPromotionsManager';
 import VendorHealthScorecard from '../components/VendorHealthScorecard';
 import VendorOnboardingWizard from '../components/VendorOnboardingWizard';
+import VendorVerificationManager from '../components/VendorVerificationManager';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -176,6 +177,7 @@ export const VendorPortal = () => {
   const [selectedOrderForThermal, setSelectedOrderForThermal] = useState(null);
   const [isAiCopyModalOpen, setIsAiCopyModalOpen] = useState(false); // Point #76: AI Product Description & SEO Meta Generator
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false); // Point #34: Self-Service 4-Step Vendor Registration
+  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false); // Point #35: Real-Time GSTIN & Bank Penny-Drop Verification
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // Point #58: Store Profile Customization
   const [isPublicStorePreviewOpen, setIsPublicStorePreviewOpen] = useState(false); // Point #58: Public Storefront Preview
   const [isVacationModalOpen, setIsVacationModalOpen] = useState(false); // Point #59: Vacation Mode Toggle
@@ -575,6 +577,19 @@ export const VendorPortal = () => {
             <span>Onboarding Wizard</span>
             <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-amber-400">
               Point #34
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsVerificationModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white text-xs font-black shadow-md transition-all active:scale-95"
+            title="Point 35: Real-Time Government GSTIN & Bank Penny-Drop Account Verification"
+          >
+            <ShieldCheck className="w-4 h-4 text-white" />
+            <span>Compliance & Verification</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-indigo-300">
+              Point #35
             </span>
           </button>
 
@@ -2022,6 +2037,20 @@ export const VendorPortal = () => {
           onClose={() => setIsHealthModalOpen(false)}
         />
       )}
+
+      {/* Point 34: Self-Service 4-Step Vendor Registration & Document Onboarding Wizard */}
+      <VendorOnboardingWizard
+        isOpen={isOnboardingModalOpen}
+        onClose={() => setIsOnboardingModalOpen(false)}
+        onCompleted={fetchVendorData}
+      />
+
+      {/* Point 35: Real-Time Government GSTIN & Bank Penny-Drop Account Verification */}
+      <VendorVerificationManager
+        isOpen={isVerificationModalOpen}
+        onClose={() => setIsVerificationModalOpen(false)}
+        onVerificationUpdated={fetchVendorData}
+      />
     </div>
   );
 };

@@ -24794,6 +24794,282 @@ const runTests = async () => {
       assert.strictEqual(resRider.status, 403);
     });
 
+    // =========================================================================
+    // PILLAR 3 - POINT 35: REAL-TIME GOVERNMENT GSTIN & BANK PENNY-DROP VERIFICATION
+    // =========================================================================
+    console.log('\n--- PILLAR 3 - POINT 35: REAL-TIME GOVERNMENT GSTIN & BANK PENNY-DROP VERIFICATION ---');
+
+    let p35VendorToken = null;
+    let p35VendorProfileId = null;
+
+    await test('Point 35: Setup dedicated merchant account for GSTIN & Penny-Drop testing', async () => {
+      const regRes = await fetch(`${baseUrl}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Aura Verification Merchant',
+          email: `p35.vendor.${Date.now()}@auramarket.com`,
+          password: 'password123456',
+          phone: '+919876543299',
+          role: 'vendor',
+          storeName: 'Aura Verified Emporium',
+        }),
+      });
+      assert.strictEqual(regRes.status, 201);
+      const regData = await regRes.json();
+      assert.strictEqual(regData.success, true);
+      assert.ok(regData.token);
+      p35VendorToken = regData.token;
+
+      // Fetch vendor profile ID
+      const profRes = await fetch(`${baseUrl}/vendor/profile`, {
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      assert.strictEqual(profRes.status, 200);
+      const profData = await profRes.json();
+      assert.ok(profData.data?._id);
+      p35VendorProfileId = profData.data._id;
+    });
+
+    await test('Point 35: GET /api/vendor/verification/status returns initial unverified state for vendor', async () => {
+      const res = await fetch(`${baseUrl}/vendor/verification/status`, {
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.gstinVerification.status, 'UNVERIFIED');
+      assert.strictEqual(data.data.bankVerification.status, 'UNVERIFIED');
+      assert.strictEqual(data.data.complianceReview.status, 'PENDING');
+    });
+
+    await test('Point 35: POST /api/vendor/verification/gstin validates 15-char regex and rejects invalid format (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/vendor/verification/gstin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          gstin: 'INVALID_GSTIN_123',
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('15 alphanumeric characters'));
+    });
+
+    await test('Point 35: POST /api/vendor/verification/gstin handles cancelled/suspended GSTIN properly (verified: false)', async () => {
+      const res = await fetch(`${baseUrl}/vendor/verification/gstin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          gstin: '27ABCDE1234F1Z9',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.verified, false);
+      assert.strictEqual(data.data.status, 'FAILED');
+      assert.ok(data.data.failureReason.includes('CANCELLED'));
+    });
+
+    await test('Point 35: POST /api/vendor/verification/gstin verifies valid 15-char GSTIN, resolves state and computes name match', async () => {
+      const res = await fetch(`${baseUrl}/vendor/verification/gstin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          gstin: '27ABCDE1234F1Z5',
+          legalName: 'Aura Verified Emporium Pvt Ltd',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.verified, true);
+      assert.strictEqual(data.data.status, 'VERIFIED');
+      assert.strictEqual(data.data.gstStatus, 'ACTIVE');
+      assert.strictEqual(data.data.stateJurisdiction, 'Maharashtra');
+      assert.strictEqual(data.data.gstin, '27ABCDE1234F1Z5');
+      assert.ok(data.data.nameMatchScore >= 50);
+      assert.ok(['MATCHED', 'PARTIAL'].includes(data.data.nameMatchStatus));
+    });
+
+    await test('Point 35: POST /api/vendor/verification/bank-penny-drop validates account number and IFSC constraints (400 Bad Request)', async () => {
+      // Missing account number
+      const resMissing = await fetch(`${baseUrl}/vendor/verification/bank-penny-drop`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          ifscCode: 'HDFC0001234',
+        }),
+      });
+      assert.strictEqual(resMissing.status, 400);
+
+      // Invalid IFSC
+      const resIfsc = await fetch(`${baseUrl}/vendor/verification/bank-penny-drop`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          accountNumber: '987654321012',
+          ifscCode: 'INVALID_IFSC',
+        }),
+      });
+      assert.strictEqual(resIfsc.status, 400);
+      const dataIfsc = await resIfsc.json();
+      assert.strictEqual(dataIfsc.success, false);
+    });
+
+    await test('Point 35: POST /api/vendor/verification/bank-penny-drop handles dormant/frozen account failures (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/vendor/verification/bank-penny-drop`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          accountNumber: '987654320000',
+          ifscCode: 'HDFC0001234',
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.strictEqual(data.code, 'ACCOUNT_DORMANT_OR_INVALID');
+    });
+
+    await test('Point 35: POST /api/vendor/verification/bank-penny-drop simulates ₹1.00 IMPS transfer, generates UTR and verifies bank', async () => {
+      const res = await fetch(`${baseUrl}/vendor/verification/bank-penny-drop`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          accountNumber: '987654321012',
+          ifscCode: 'HDFC0001234',
+          accountHolder: 'Aura Verified Emporium Pvt Ltd',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.verified, true);
+      assert.strictEqual(data.data.status, 'VERIFIED');
+      assert.strictEqual(data.data.bankName, 'HDFC Bank');
+      assert.strictEqual(data.data.ifscCode, 'HDFC0001234');
+      assert.strictEqual(data.data.pennyAmount, 1.0);
+      assert.ok(data.data.utr.startsWith('IMPS'));
+      assert.ok(data.data.nameMatchScore >= 50);
+    });
+
+    await test('Point 35: GET /api/admin/vendor-verification returns compliance dossiers with stats and filtering', async () => {
+      const res = await fetch(`${baseUrl}/admin/vendor-verification`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data.vendors));
+      assert.ok(data.data.stats);
+      assert.ok(data.data.stats.total >= 1);
+
+      // Filter by status
+      const resFilter = await fetch(`${baseUrl}/admin/vendor-verification?status=AUTO_VERIFIED`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resFilter.status, 200);
+    });
+
+    await test('Point 35: GET /api/admin/vendor-verification/:id retrieves detailed dossier for single vendor', async () => {
+      const res = await fetch(`${baseUrl}/admin/vendor-verification/${p35VendorProfileId}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data._id.toString(), p35VendorProfileId.toString());
+      assert.ok(data.data.gstinVerification);
+      assert.ok(data.data.bankVerification);
+    });
+
+    await test('Point 35: POST /api/admin/vendor-verification/:id/review approves compliance, updates kycStatus to VERIFIED and status to approved', async () => {
+      const res = await fetch(`${baseUrl}/admin/vendor-verification/${p35VendorProfileId}/review`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          action: 'APPROVE',
+          remarks: 'Compliance dossier reviewed and approved by Principal Auditor.',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.complianceStatus, 'MANUAL_VERIFIED');
+      assert.strictEqual(data.data.kycStatus, 'VERIFIED');
+      assert.strictEqual(data.data.status, 'approved');
+    });
+
+    await test('Point 35: POST /api/admin/vendor-verification/:id/reverify triggers automated re-check without error', async () => {
+      const res = await fetch(`${baseUrl}/admin/vendor-verification/${p35VendorProfileId}/reverify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          verifyGst: true,
+          verifyBank: true,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.gstinVerification.status, 'VERIFIED');
+      assert.strictEqual(data.data.bankVerification.status, 'VERIFIED');
+    });
+
+    await test('Point 35: Role Security: Customer and unauthenticated requests to vendor verification and admin compliance hub are rejected (401 / 403)', async () => {
+      // Unauthenticated vendor verification
+      const resUnauth = await fetch(`${baseUrl}/vendor/verification/status`);
+      assert.strictEqual(resUnauth.status, 401);
+
+      // Customer calling vendor verification
+      const resCust = await fetch(`${baseUrl}/vendor/verification/status`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403);
+
+      // Vendor calling admin verification hub
+      const resVendorToAdmin = await fetch(`${baseUrl}/admin/vendor-verification`, {
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      assert.strictEqual(resVendorToAdmin.status, 403);
+
+      // Customer calling admin verification hub
+      const resCustToAdmin = await fetch(`${baseUrl}/admin/vendor-verification`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustToAdmin.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

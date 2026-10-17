@@ -63,6 +63,12 @@ const {
   overrideVendorHealthTier,
   reviewSlaAppeal,
 } = require('../controllers/vendorHealthController');
+const {
+  getAdminVendorVerificationList,
+  getAdminVendorVerificationDetails,
+  reviewAdminVendorVerification,
+  reverifyAdminVendor,
+} = require('../controllers/vendorVerificationController');
 const { protect, authorize, requirePermission } = require('../middlewares/auth');
 
 // All admin routes require Super Admin or Sub-Admin authorization
@@ -80,6 +86,12 @@ router.put('/vendors/:id/kyc', updateVendorKYC);
 router.patch('/vendors/:id/kyc', updateVendorKYC);
 router.put('/vendors/:id/commission', updateVendorCommission);
 router.patch('/vendors/:id/commission', updateVendorCommission);
+
+// Point 35: Vendor Government GSTIN & Bank Verification Compliance Hub
+router.get('/vendor-verification', getAdminVendorVerificationList);
+router.get('/vendor-verification/:id', getAdminVendorVerificationDetails);
+router.post('/vendor-verification/:id/review', reviewAdminVendorVerification);
+router.post('/vendor-verification/:id/reverify', reverifyAdminVendor);
 
 // Bulk Products Operations (Point #8)
 router.post('/products/bulk-upload', bulkUploadProducts);

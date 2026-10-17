@@ -60,6 +60,11 @@ const {
   saveStep4,
   submitOnboarding,
 } = require('../controllers/vendorOnboardingController');
+const {
+  getVendorVerificationStatus,
+  verifyVendorGstin,
+  verifyVendorBankPennyDrop,
+} = require('../controllers/vendorVerificationController');
 const { protect, authorize, requireVendorPermission } = require('../middlewares/auth');
 
 // Point 58: Public Storefront Vendor Showcase (Accessible by any customer/visitor)
@@ -79,6 +84,11 @@ router.post('/onboarding/step/2', saveStep2);
 router.post('/onboarding/step/3', saveStep3);
 router.post('/onboarding/step/4', saveStep4);
 router.post('/onboarding/submit', submitOnboarding);
+
+// Point 35: Real-Time Government GSTIN & Bank Penny-Drop Verification
+router.get('/verification/status', getVendorVerificationStatus);
+router.post('/verification/gstin', verifyVendorGstin);
+router.post('/verification/bank-penny-drop', verifyVendorBankPennyDrop);
 
 // Point 58: Vendor Profile & Branding Customization
 router.get('/profile', getVendorProfile);

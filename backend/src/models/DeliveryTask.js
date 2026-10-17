@@ -27,8 +27,56 @@ const deliveryTaskSchema = new mongoose.Schema(
     deliveryPartner: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      required: false,
+      default: null,
     },
+    // Point 42: Dispatch Scheduler & Order Reference
+    order: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Order',
+      default: null,
+    },
+    dispatchType: {
+      type: String,
+      enum: ['1_HOUR_HYPERLOCAL', 'SCHEDULED_SLOT', 'STANDARD', 'FORWARD_DELIVERY', 'REVERSE_PICKUP'],
+      default: 'FORWARD_DELIVERY',
+    },
+    deliverySlot: {
+      slotKey: { type: String, default: 'standard' },
+      title: { type: String, default: 'Standard Delivery' },
+      type: { type: String, default: 'STANDARD' },
+      date: { type: String, default: '' },
+      startTime: { type: String, default: '' },
+      endTime: { type: String, default: '' },
+      fee: { type: Number, default: 0 },
+      is1HourHyperlocal: { type: Boolean, default: false },
+    },
+    targetDeliveryTime: {
+      type: Date,
+      default: null,
+    },
+    slaExpiresAt: {
+      type: Date,
+      default: null,
+    },
+    dispatchStatus: {
+      type: String,
+      enum: ['UNASSIGNED', 'ASSIGNED', 'ACCEPTED', 'EN_ROUTE_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED', 'CANCELLED'],
+      default: 'ASSIGNED',
+    },
+    autoAssigned: {
+      type: Boolean,
+      default: false,
+    },
+    assignmentLog: [
+      {
+        rider: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        riderName: { type: String, default: '' },
+        assignedAt: { type: Date, default: Date.now },
+        method: { type: String, enum: ['AUTO', 'MANUAL'], default: 'AUTO' },
+        reason: { type: String, default: '' },
+      },
+    ],
     pickupLocation: {
       storeName: String,
       phone: String,

@@ -25,6 +25,7 @@ const auditLogSchema = new mongoose.Schema(
         'SYSTEM',
         'SECURITY',
         'INVENTORY',
+        'LOGISTICS',
         'SHIPPING_LOGISTICS',
       ],
       default: 'SYSTEM',

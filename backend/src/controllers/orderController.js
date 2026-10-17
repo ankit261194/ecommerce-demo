@@ -757,6 +757,30 @@ exports.createOrder = async (req, res, next) => {
       splitPayment: splitPaymentData,
       // Point 26: Affiliate Attribution
       affiliate: affiliateData,
+      // Point 42: Dynamic Delivery Slot & 1-Hour Hyperlocal Dispatch
+      deliverySlot: req.body.deliverySlot ? {
+        slotKey: req.body.deliverySlot.slotKey || 'standard',
+        title: req.body.deliverySlot.title || 'Standard Delivery',
+        type: req.body.deliverySlot.type || (req.body.deliverySlot.isHyperlocal1Hour ? 'HYPERLOCAL_1HR' : 'STANDARD'),
+        date: req.body.deliverySlot.date || new Date().toISOString().split('T')[0],
+        startTime: req.body.deliverySlot.startTime || '',
+        endTime: req.body.deliverySlot.endTime || '',
+        fee: Number(req.body.deliverySlot.fee) || 0,
+        isHyperlocal1Hour: Boolean(req.body.deliverySlot.isHyperlocal1Hour || req.body.deliverySlot.slotKey === 'hyperlocal_1hr'),
+        targetDeliveryTime: req.body.deliverySlot.targetDeliveryTime || (req.body.deliverySlot.isHyperlocal1Hour ? new Date(Date.now() + 60 * 60 * 1000) : null),
+        bookedAt: new Date(),
+      } : {
+        slotKey: 'standard',
+        title: 'Standard Delivery',
+        type: 'STANDARD',
+        date: new Date().toISOString().split('T')[0],
+        startTime: '',
+        endTime: '',
+        fee: 0,
+        isHyperlocal1Hour: false,
+        targetDeliveryTime: null,
+        bookedAt: new Date(),
+      },
     });
 
     if (affiliatePartnerDoc && affiliateData.partner) {
@@ -892,35 +916,51 @@ exports.createOrder = async (req, res, next) => {
         status: 'COMPLETED',
       });
 
-      // Create Delivery Task for courier partner
-      if (deliveryPartner) {
-        const allocatedTip = !isTipAssigned ? tipAmount : 0;
-        isTipAssigned = true;
-        await DeliveryTask.create({
-          subOrder: subOrder._id,
-          deliveryPartner: deliveryPartner._id,
-          deliveryInstructions: deliveryInstructions || '',
-          tipAmount: allocatedTip,
-          tipPaidOut: false,
-          pickupLocation: {
-            storeName: vendor.storeName,
-            phone: vendor.pickupAddress?.phone || '9876543210',
-            address: `${vendor.pickupAddress?.street || 'Shop 101'}, ${vendor.pickupAddress?.city || 'Delhi'}`,
-            city: vendor.pickupAddress?.city || 'Delhi',
-            pincode: vendor.pickupAddress?.pincode || '',
-          },
-          dropLocation: {
-            recipientName: shippingAddress.recipientName,
-            phone: shippingAddress.phone,
-            address: `${shippingAddress.street}, ${shippingAddress.city}, ${shippingAddress.state}`,
-            city: shippingAddress.city || '',
-            pincode: shippingAddress.pincode,
-            mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${shippingAddress.street}, ${shippingAddress.city}, ${shippingAddress.pincode}`)}`,
-          },
-          isCod: activePaymentMethod === 'COD',
-          amountToCollect: activePaymentMethod === 'COD' ? vendorGroup.subTotal : 0,
-        });
+      // Create Delivery Task for courier partner / dispatch fleet
+      const allocatedTip = !isTipAssigned ? tipAmount : 0;
+      isTipAssigned = true;
+
+      let taskDispatchType = 'FORWARD_DELIVERY';
+      if (masterOrder.deliverySlot?.isHyperlocal1Hour || masterOrder.deliverySlot?.type === 'HYPERLOCAL_1HR') {
+        taskDispatchType = '1_HOUR_HYPERLOCAL';
+      } else if (masterOrder.deliverySlot?.type === 'SCHEDULED_SLOT' || masterOrder.deliverySlot?.type === 'SAME_DAY') {
+        taskDispatchType = 'SCHEDULED_SLOT';
       }
+
+      const isDynamicScheduled = taskDispatchType === '1_HOUR_HYPERLOCAL' || taskDispatchType === 'SCHEDULED_SLOT';
+      const assignedPartner = isDynamicScheduled ? null : deliveryPartner;
+
+      await DeliveryTask.create({
+        order: masterOrder._id,
+        subOrder: subOrder._id,
+        deliveryPartner: assignedPartner ? assignedPartner._id : null,
+        deliveryInstructions: deliveryInstructions || '',
+        tipAmount: allocatedTip,
+        tipPaidOut: false,
+        dispatchType: taskDispatchType,
+        deliverySlot: masterOrder.deliverySlot,
+        targetDeliveryTime: masterOrder.deliverySlot?.targetDeliveryTime || null,
+        slaExpiresAt: masterOrder.deliverySlot?.targetDeliveryTime || null,
+        dispatchStatus: assignedPartner ? 'ASSIGNED' : 'UNASSIGNED',
+        autoAssigned: false,
+        pickupLocation: {
+          storeName: vendor.storeName,
+          phone: vendor.pickupAddress?.phone || '9876543210',
+          address: `${vendor.pickupAddress?.street || 'Shop 101'}, ${vendor.pickupAddress?.city || 'Delhi'}`,
+          city: vendor.pickupAddress?.city || 'Delhi',
+          pincode: vendor.pickupAddress?.pincode || '',
+        },
+        dropLocation: {
+          recipientName: shippingAddress.recipientName,
+          phone: shippingAddress.phone,
+          address: `${shippingAddress.street}, ${shippingAddress.city}, ${shippingAddress.state}`,
+          city: shippingAddress.city || '',
+          pincode: shippingAddress.pincode,
+          mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${shippingAddress.street}, ${shippingAddress.city}, ${shippingAddress.pincode}`)}`,
+        },
+        isCod: activePaymentMethod === 'COD',
+        amountToCollect: activePaymentMethod === 'COD' ? vendorGroup.subTotal : 0,
+      });
     }
 
     // Step 4: Update Master Order with Sub-Order references and total commission

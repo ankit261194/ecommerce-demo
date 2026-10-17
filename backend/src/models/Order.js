@@ -332,6 +332,23 @@ const orderSchema = new mongoose.Schema(
         default: 'NONE',
       },
     },
+    // Point 42: Dynamic Delivery Slot & 1-Hour Hyperlocal Dispatch
+    deliverySlot: {
+      slotKey: { type: String, default: 'standard' },
+      title: { type: String, default: 'Standard Delivery' },
+      type: {
+        type: String,
+        enum: ['HYPERLOCAL_1HR', 'SAME_DAY', 'SCHEDULED_SLOT', 'STANDARD'],
+        default: 'STANDARD',
+      },
+      date: { type: String, default: '' }, // YYYY-MM-DD
+      startTime: { type: String, default: '' },
+      endTime: { type: String, default: '' },
+      fee: { type: Number, default: 0 },
+      isHyperlocal1Hour: { type: Boolean, default: false },
+      targetDeliveryTime: { type: Date, default: null },
+      bookedAt: { type: Date, default: null },
+    },
   },
   { timestamps: true }
 );

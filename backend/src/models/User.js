@@ -148,6 +148,31 @@ const userSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // Point 42: Courier Logistics Fleet Rider Duty & Location Telemetry
+    dutyStatus: {
+      type: String,
+      enum: ['ON_DUTY', 'OFF_DUTY'],
+      default: 'ON_DUTY',
+    },
+    isAvailable: {
+      type: Boolean,
+      default: true,
+    },
+    assignedZone: {
+      type: String,
+      default: '',
+    },
+    lastLocation: {
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null },
+      updatedAt: { type: Date, default: null },
+    },
+    maxConcurrentOrders: {
+      type: Number,
+      default: 3,
+      min: 1,
+      max: 10,
+    },
     // Point 27: VIP Loyalty Points & Customer Tier Matrix
     loyalty: {
       tier: {

@@ -27591,6 +27591,423 @@ const runTests = async () => {
       assert.strictEqual(resRider.status, 403);
     });
 
+    // =========================================================================
+    // PILLAR 4 - POINT 42: DYNAMIC DELIVERY SLOT & 1-HOUR HYPERLOCAL DISPATCH SCHEDULER
+    // =========================================================================
+    console.log('\n--- PILLAR 4 - POINT 42: DYNAMIC DELIVERY SLOT & 1-HOUR HYPERLOCAL DISPATCH SCHEDULER ---');
+
+    const DeliverySlotConfig = require('../src/models/DeliverySlotConfig');
+
+    let p42AdminUser;
+    let p42AdminToken;
+    let p42CustomerUser;
+    let p42CustomerToken;
+    let p42Rider1;
+    let p42Rider1Token;
+    let p42Rider2;
+    let p42Rider2Token;
+    let p42Rider3;
+    let p42Rider3Token;
+    let p42Vendor;
+    let p42Product;
+    let p42DeliveryTask;
+    let p42MasterOrder;
+
+    await test('Point 42: Setup dedicated accounts, fleet riders & delivery slots for dispatch testing', async () => {
+      const uniqueSuffix = Date.now() + '_' + Math.floor(Math.random() * 10000);
+
+      // Super Admin
+      p42AdminUser = await User.create({
+        name: 'Logistics Fleet Admin ' + uniqueSuffix,
+        email: 'fleet.admin.' + uniqueSuffix + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'superadmin',
+        isActive: true,
+      });
+      p42AdminToken = generateToken(p42AdminUser._id);
+
+      // Customer
+      p42CustomerUser = await User.create({
+        name: 'Express Shopper ' + uniqueSuffix,
+        email: 'shopper.express.' + uniqueSuffix + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'customer',
+        isActive: true,
+      });
+      p42CustomerToken = generateToken(p42CustomerUser._id);
+
+      // Vendor & Product
+      const vendorUser = await User.create({
+        name: 'Quick Hub Merchant ' + uniqueSuffix,
+        email: 'quickhub.' + uniqueSuffix + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'vendor',
+        isActive: true,
+      });
+      p42Vendor = await VendorProfile.create({
+        user: vendorUser._id,
+        storeName: 'Quick Hub Express ' + uniqueSuffix,
+        storeSlug: 'quick-hub-' + uniqueSuffix,
+        status: 'approved',
+        walletBalance: 10000,
+        pickupAddress: {
+          street: '12 Logistics Park',
+          city: 'Delhi',
+          pincode: '110001',
+          phone: '9876543210',
+        },
+      });
+      vendorUser.vendorProfile = p42Vendor._id;
+      await vendorUser.save();
+
+      let groceryCategory = await Category.findOne({ slug: 'groceries' });
+      if (!groceryCategory) {
+        groceryCategory = await Category.create({
+          name: 'Groceries & Instant Essentials',
+          slug: 'groceries-' + uniqueSuffix,
+          icon: 'shopping-basket',
+          isActive: true,
+        });
+      }
+
+      p42Product = await Product.create({
+        vendor: p42Vendor._id,
+        title: 'Hyperlocal Instant Grocery Kit ' + uniqueSuffix,
+        slug: 'grocery-kit-' + uniqueSuffix,
+        sku: 'KIT-EXP-' + uniqueSuffix,
+        description: 'Instant essentials and groceries delivered in 60 minutes.',
+        category: groceryCategory._id,
+        mrp: 1200,
+        sellingPrice: 999,
+        stock: 50,
+        status: 'published',
+        isPublished: true,
+      });
+
+      // Rider 1: ON_DUTY, isAvailable: true, 0 active tasks (least loaded)
+      p42Rider1 = await User.create({
+        name: 'Rider Arjun Verma ' + uniqueSuffix,
+        email: 'rider.arjun.' + uniqueSuffix + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'delivery',
+        dutyStatus: 'ON_DUTY',
+        isAvailable: true,
+        assignedZone: '110001',
+        lastLocation: { lat: 28.6139, lng: 77.2090, updatedAt: new Date() },
+        maxConcurrentOrders: 3,
+        isActive: true,
+      });
+      p42Rider1Token = generateToken(p42Rider1._id);
+
+      // Rider 2: ON_DUTY, isAvailable: true, 2 active tasks (heavier loaded)
+      p42Rider2 = await User.create({
+        name: 'Rider Vikram Singh ' + uniqueSuffix,
+        email: 'rider.vikram.' + uniqueSuffix + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'delivery',
+        dutyStatus: 'ON_DUTY',
+        isAvailable: true,
+        assignedZone: '110001',
+        lastLocation: { lat: 28.6200, lng: 77.2150, updatedAt: new Date() },
+        maxConcurrentOrders: 3,
+        isActive: true,
+      });
+      p42Rider2Token = generateToken(p42Rider2._id);
+
+      // Create 2 active tasks for Rider 2 to create load imbalance
+      for (let i = 0; i < 2; i++) {
+        await DeliveryTask.create({
+          deliveryPartner: p42Rider2._id,
+          status: 'OUT_FOR_DELIVERY',
+          dispatchStatus: 'OUT_FOR_DELIVERY',
+          dispatchType: 'STANDARD',
+          pickupLocation: { storeName: 'Test Hub' },
+          dropLocation: { recipientName: 'Test Customer ' + i },
+        });
+      }
+
+      // Rider 3: OFF_DUTY, isAvailable: false
+      p42Rider3 = await User.create({
+        name: 'Rider Kabir Khan ' + uniqueSuffix,
+        email: 'rider.kabir.' + uniqueSuffix + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'delivery',
+        dutyStatus: 'OFF_DUTY',
+        isAvailable: false,
+        isActive: true,
+      });
+      p42Rider3Token = generateToken(p42Rider3._id);
+
+      assert.ok(p42AdminToken);
+      assert.ok(p42CustomerToken);
+      assert.ok(p42Rider1Token);
+      assert.ok(p42Rider2Token);
+      assert.ok(p42Rider3Token);
+    });
+
+    await test('Point 42: GET /api/logistics/slots/available returns dynamic 1-hour express and scheduled slot options', async () => {
+      const res = await fetch(baseUrl + '/logistics/slots/available?pincode=110001');
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.ok(json.date);
+      assert.ok(json.hyperlocal1Hour);
+      assert.strictEqual(json.hyperlocal1Hour.slotKey, 'hyperlocal_1hr');
+      assert.ok(Array.isArray(json.slots));
+      assert.ok(json.slots.length >= 3);
+      assert.ok(json.standardShipping);
+      assert.strictEqual(json.standardShipping.fee, 0);
+    });
+
+    await test('Point 42: GET & PUT /api/logistics/slots/config manages express surcharge fees, operating hours and capacity', async () => {
+      // 1. Fetch current config
+      const resGet = await fetch(baseUrl + '/logistics/slots/config', {
+        headers: { Authorization: 'Bearer ' + p42AdminToken },
+      });
+      assert.strictEqual(resGet.status, 200);
+      const jsonGet = await resGet.json();
+      assert.strictEqual(jsonGet.success, true);
+      assert.ok(jsonGet.data.hyperlocal1Hour);
+
+      // 2. Update config: set fee to ₹59, maxOrdersPerHour to 25
+      const resPut = await fetch(baseUrl + '/logistics/slots/config', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p42AdminToken,
+        },
+        body: JSON.stringify({
+          hyperlocal1Hour: {
+            enabled: true,
+            fee: 59,
+            maxOrdersPerHour: 25,
+            slaMinutes: 60,
+          },
+          autoAssignment: {
+            enabled: true,
+            maxConcurrentTasksPerRider: 4,
+          },
+        }),
+      });
+      assert.strictEqual(resPut.status, 200);
+      const jsonPut = await resPut.json();
+      assert.strictEqual(jsonPut.success, true);
+      assert.strictEqual(jsonPut.data.hyperlocal1Hour.fee, 59);
+      assert.strictEqual(jsonPut.data.hyperlocal1Hour.maxOrdersPerHour, 25);
+    });
+
+    await test('Point 42: Customer order placement with 1-Hour Hyperlocal deliverySlot creates DeliveryTask with SLA deadline', async () => {
+      const resOrder = await fetch(baseUrl + '/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p42CustomerToken,
+        },
+        body: JSON.stringify({
+          items: [{ product: p42Product._id, quantity: 1 }],
+          shippingAddress: {
+            recipientName: 'Express Shopper',
+            phone: '9876543210',
+            street: 'Flat 101, City Heights',
+            city: 'Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'COD',
+          deliverySlot: {
+            slotKey: 'hyperlocal_1hr',
+            title: '⚡ 1-Hour Hyperlocal Express',
+            type: 'HYPERLOCAL_1HR',
+            fee: 59,
+            isHyperlocal1Hour: true,
+          },
+        }),
+      });
+      assert.strictEqual(resOrder.status, 201);
+      const jsonOrder = await resOrder.json();
+      assert.strictEqual(jsonOrder.success, true);
+      p42MasterOrder = jsonOrder.data;
+      assert.ok(p42MasterOrder.deliverySlot);
+      assert.strictEqual(p42MasterOrder.deliverySlot.isHyperlocal1Hour, true);
+
+      // Verify DeliveryTask created in database
+      p42DeliveryTask = await DeliveryTask.findOne({ order: p42MasterOrder._id });
+      assert.ok(p42DeliveryTask, 'DeliveryTask must be generated for the order');
+      assert.strictEqual(p42DeliveryTask.dispatchType, '1_HOUR_HYPERLOCAL');
+      assert.strictEqual(p42DeliveryTask.dispatchStatus, 'UNASSIGNED');
+      assert.ok(p42DeliveryTask.slaExpiresAt, 'SLA expiry must be set for 1-hour express');
+    });
+
+    await test('Point 42: POST /api/logistics/dispatch/auto-assign/:taskId selects optimal least-loaded rider (Rider 1 over loaded Rider 2 & off-duty Rider 3)', async () => {
+      const resAssign = await fetch(baseUrl + '/logistics/dispatch/auto-assign/' + p42DeliveryTask._id, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + p42AdminToken },
+      });
+      assert.strictEqual(resAssign.status, 200);
+      const jsonAssign = await resAssign.json();
+      assert.strictEqual(jsonAssign.success, true);
+      assert.strictEqual(jsonAssign.data.rider._id.toString(), p42Rider1._id.toString(), 'Least loaded on-duty Rider 1 must be auto-assigned');
+
+      // Verify task in DB has autoAssigned = true and assignmentLog
+      const updatedTask = await DeliveryTask.findById(p42DeliveryTask._id);
+      assert.strictEqual(updatedTask.deliveryPartner.toString(), p42Rider1._id.toString());
+      assert.strictEqual(updatedTask.dispatchStatus, 'ASSIGNED');
+      assert.strictEqual(updatedTask.autoAssigned, true);
+      assert.ok(updatedTask.assignmentLog.length >= 1);
+      assert.strictEqual(updatedTask.assignmentLog[0].method, 'AUTO');
+    });
+
+    await test('Point 42: POST /api/logistics/dispatch/batch-auto-assign processes multiple unassigned tasks concurrently', async () => {
+      // Create 2 unassigned tasks
+      await DeliveryTask.create({
+        dispatchType: 'SCHEDULED_SLOT',
+        dispatchStatus: 'UNASSIGNED',
+        status: 'ASSIGNED',
+        pickupLocation: { storeName: 'Hub A', pincode: '110001' },
+        dropLocation: { recipientName: 'Customer A', pincode: '110001' },
+      });
+      await DeliveryTask.create({
+        dispatchType: '1_HOUR_HYPERLOCAL',
+        dispatchStatus: 'UNASSIGNED',
+        status: 'ASSIGNED',
+        pickupLocation: { storeName: 'Hub B', pincode: '110001' },
+        dropLocation: { recipientName: 'Customer B', pincode: '110001' },
+      });
+
+      const resBatch = await fetch(baseUrl + '/logistics/dispatch/batch-auto-assign', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + p42AdminToken },
+      });
+      assert.strictEqual(resBatch.status, 200);
+      const jsonBatch = await resBatch.json();
+      assert.strictEqual(jsonBatch.success, true);
+      assert.ok(jsonBatch.data.assigned >= 2, 'Batch assign must assign the unassigned tasks');
+    });
+
+    await test('Point 42: POST /api/logistics/dispatch/manual-assign overrides automated matching with dispatcher reason and audit trail', async () => {
+      const resManual = await fetch(baseUrl + '/logistics/dispatch/manual-assign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p42AdminToken,
+        },
+        body: JSON.stringify({
+          taskId: p42DeliveryTask._id,
+          riderId: p42Rider2._id,
+          reason: 'Senior courier requested by high-value VIP customer',
+        }),
+      });
+      assert.strictEqual(resManual.status, 200);
+      const jsonManual = await resManual.json();
+      assert.strictEqual(jsonManual.success, true);
+      assert.strictEqual(jsonManual.data.rider._id.toString(), p42Rider2._id.toString());
+
+      // Verify in DB
+      const task = await DeliveryTask.findById(p42DeliveryTask._id);
+      assert.strictEqual(task.deliveryPartner.toString(), p42Rider2._id.toString());
+      assert.strictEqual(task.autoAssigned, false);
+      const lastLog = task.assignmentLog[task.assignmentLog.length - 1];
+      assert.strictEqual(lastLog.method, 'MANUAL');
+      assert.ok(lastLog.reason.includes('Senior courier requested'));
+    });
+
+    await test('Point 42: GET /api/logistics/dispatch/radar returns live fleet KPIs, slot capacity meters & filters', async () => {
+      const resRadar = await fetch(baseUrl + '/logistics/dispatch/radar', {
+        headers: { Authorization: 'Bearer ' + p42AdminToken },
+      });
+      assert.strictEqual(resRadar.status, 200);
+      const jsonRadar = await resRadar.json();
+      assert.strictEqual(jsonRadar.success, true);
+      assert.ok(jsonRadar.summary);
+      assert.ok(jsonRadar.summary.onDutyRidersCount >= 2);
+      assert.ok(Array.isArray(jsonRadar.slotUtilization));
+      assert.ok(Array.isArray(jsonRadar.tasks));
+      assert.ok(jsonRadar.tasks.length >= 1);
+    });
+
+    await test('Point 42: GET /api/logistics/riders returns fleet couriers with live workload & capacity status', async () => {
+      const resRiders = await fetch(baseUrl + '/logistics/riders', {
+        headers: { Authorization: 'Bearer ' + p42AdminToken },
+      });
+      assert.strictEqual(resRiders.status, 200);
+      const jsonRiders = await resRiders.json();
+      assert.strictEqual(jsonRiders.success, true);
+      assert.ok(Array.isArray(jsonRiders.data));
+      assert.ok(jsonRiders.data.length >= 3);
+
+      const r1 = jsonRiders.data.find(r => r._id.toString() === p42Rider1._id.toString());
+      assert.ok(r1);
+      assert.strictEqual(r1.dutyStatus, 'ON_DUTY');
+    });
+
+    await test('Point 42: PATCH /api/logistics/riders/:id/duty-status toggles duty and online availability', async () => {
+      const resDuty = await fetch(baseUrl + '/logistics/riders/' + p42Rider1._id + '/duty-status', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p42Rider1Token,
+        },
+        body: JSON.stringify({
+          dutyStatus: 'OFF_DUTY',
+          isAvailable: false,
+        }),
+      });
+      assert.strictEqual(resDuty.status, 200);
+      const jsonDuty = await resDuty.json();
+      assert.strictEqual(jsonDuty.success, true);
+      assert.strictEqual(jsonDuty.data.dutyStatus, 'OFF_DUTY');
+      assert.strictEqual(jsonDuty.data.isAvailable, false);
+    });
+
+    await test('Point 42: GET /api/logistics/dispatch/radar/export-csv generates RFC-4180 CSV export with UTF-8 BOM', async () => {
+      const resCsv = await fetch(baseUrl + '/logistics/dispatch/radar/export-csv', {
+        headers: { Authorization: 'Bearer ' + p42AdminToken },
+      });
+      assert.strictEqual(resCsv.status, 200);
+      assert.ok(resCsv.headers.get('content-type').includes('text/csv'));
+
+      const buf = Buffer.from(await resCsv.arrayBuffer());
+      assert.ok(buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf, 'Must start with UTF-8 BOM bytes (EF BB BF)');
+      const csvText = buf.toString('utf8');
+      assert.ok(csvText.includes('Task ID,Order Ref,Dispatch Type'));
+      assert.ok(csvText.includes('1_HOUR_HYPERLOCAL'));
+    });
+
+    await test('Point 42: Role Security: Customer and unauthenticated requests to dispatch management endpoints are rejected (401 / 403)', async () => {
+      // 1. Unauthenticated request to radar
+      const resUnauth = await fetch(baseUrl + '/logistics/dispatch/radar');
+      assert.strictEqual(resUnauth.status, 401);
+
+      // 2. Customer request to radar
+      const resCust = await fetch(baseUrl + '/logistics/dispatch/radar', {
+        headers: { Authorization: 'Bearer ' + p42CustomerToken },
+      });
+      assert.strictEqual(resCust.status, 403);
+
+      // 3. Customer request to slot config
+      const resCustConfig = await fetch(baseUrl + '/logistics/slots/config', {
+        headers: { Authorization: 'Bearer ' + p42CustomerToken },
+      });
+      assert.strictEqual(resCustConfig.status, 403);
+
+      // 4. Rider request to manual assign (requires superadmin)
+      const resRiderAssign = await fetch(baseUrl + '/logistics/dispatch/manual-assign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p42Rider2Token,
+        },
+        body: JSON.stringify({ taskId: p42DeliveryTask._id, riderId: p42Rider1._id }),
+      });
+      assert.strictEqual(resRiderAssign.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

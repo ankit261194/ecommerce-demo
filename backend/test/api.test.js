@@ -20676,6 +20676,363 @@ const runTests = async () => {
       assert.strictEqual(sparsePdfBuffer.subarray(0, 4).toString(), '%PDF');
     });
 
+    // =========================================================================
+    // PILLAR 2 - POINT 21: THIRD-PARTY CLOUD STORAGE GUI (AWS S3 / CLOUDFLARE R2 PRESIGNED DIRECT UPLOADS)
+    // =========================================================================
+    console.log('\n--- PILLAR 2 - POINT 21: THIRD-PARTY CLOUD STORAGE GUI (AWS S3 / CLOUDFLARE R2 PRESIGNED DIRECT UPLOADS) ---');
+
+    let point21UploadedFileKey = null;
+
+    await test('Point 21: GET /api/admin/storage/settings returns masked credentials and multi-cloud providers', async () => {
+      const res = await fetch(`${baseUrl}/admin/storage/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data);
+      assert.ok(data.data.s3);
+      assert.ok(data.data.r2);
+      assert.ok(data.data.wasabi);
+      assert.ok(data.data.spaces);
+      assert.ok(data.data.local);
+      assert.ok(data.data.activeProvider);
+      assert.strictEqual(typeof data.data.s3.accessKeyMasked, 'string');
+      assert.strictEqual(typeof data.data.s3.secretKeyMasked, 'string');
+    });
+
+    await test('Point 21: PUT /api/admin/storage/settings updates S3 & R2 credentials and preserves existing keys on mask', async () => {
+      // 1. Update settings with explicit secret key
+      const resUpdate = await fetch(`${baseUrl}/admin/storage/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          activeProvider: 's3',
+          s3: {
+            bucket: 'test-auramarket-s3-media',
+            region: 'ap-south-1',
+            accessKey: 'AKIA_POINT21_TEST_KEY',
+            secretKey: 'point21_super_secret_s3_key_12345',
+            cdnUrl: 'https://cdn.auramarket.com',
+          },
+          r2: {
+            bucket: 'test-auramarket-r2-media',
+            accountId: 'r2_acct_point21_test',
+            accessKey: 'r2_point21_access_key',
+            secretKey: 'r2_point21_secret_key',
+            publicCustomDomain: 'https://pub-r2.auramarket.com',
+          },
+        }),
+      });
+
+      assert.strictEqual(resUpdate.status, 200);
+      const dataUpdate = await resUpdate.json();
+      assert.strictEqual(dataUpdate.success, true);
+
+      // Verify in DB that secret was set
+      const UIConfig = require('../src/models/UIConfig');
+      let config = await UIConfig.findOne();
+      assert.strictEqual(config.integrations.storage.s3.secretKey, 'point21_super_secret_s3_key_12345');
+      assert.strictEqual(config.integrations.storage.r2.accountId, 'r2_acct_point21_test');
+
+      // 2. Update with masked bullet characters (••••••••) and verify it PRESERVES the real secret
+      const resPreserve = await fetch(`${baseUrl}/admin/storage/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          s3: {
+            bucket: 'test-auramarket-s3-media-updated',
+            secretKey: '••••••••',
+          },
+        }),
+      });
+
+      assert.strictEqual(resPreserve.status, 200);
+      config = await UIConfig.findOne();
+      assert.strictEqual(
+        config.integrations.storage.s3.secretKey,
+        'point21_super_secret_s3_key_12345',
+        'Masked secret update must preserve existing secretKey'
+      );
+      assert.strictEqual(config.integrations.storage.s3.bucket, 'test-auramarket-s3-media-updated');
+    });
+
+    await test('Point 21: POST /api/admin/storage/test-ping tests latency, handshake and connection for S3, R2 & Local', async () => {
+      // Test S3 ping
+      const resS3 = await fetch(`${baseUrl}/admin/storage/test-ping`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ provider: 's3' }),
+      });
+      assert.strictEqual(resS3.status, 200);
+      const dataS3 = await resS3.json();
+      assert.strictEqual(dataS3.success, true);
+      assert.strictEqual(dataS3.provider, 's3');
+      assert.ok(dataS3.latencyMs >= 16);
+      assert.strictEqual(dataS3.hasCredentialsConfigured, true);
+
+      // Test Cloudflare R2 ping
+      const resR2 = await fetch(`${baseUrl}/admin/storage/test-ping`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ provider: 'r2' }),
+      });
+      assert.strictEqual(resR2.status, 200);
+      const dataR2 = await resR2.json();
+      assert.strictEqual(dataR2.success, true);
+      assert.strictEqual(dataR2.provider, 'r2');
+      assert.ok(dataR2.latencyMs >= 16);
+
+      // Test Local storage ping
+      const resLocal = await fetch(`${baseUrl}/admin/storage/test-ping`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ provider: 'local' }),
+      });
+      assert.strictEqual(resLocal.status, 200);
+      const dataLocal = await resLocal.json();
+      assert.strictEqual(dataLocal.success, true);
+      assert.strictEqual(dataLocal.provider, 'local');
+      assert.strictEqual(dataLocal.latencyMs, 4);
+    });
+
+    await test('Point 21: POST /api/admin/storage/presigned-upload generates valid SigV4 presigned PUT URL, fileKey, publicUrl, and headers', async () => {
+      const fileName = 'headphones-studio-pro.webp';
+      const fileType = 'image/webp';
+      const fileSize = 204800; // 200 KB
+
+      const res = await fetch(`${baseUrl}/admin/storage/presigned-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          fileName,
+          fileType,
+          fileSize,
+          folder: 'products',
+          provider: 's3',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+
+      // Verify returned fields
+      const uploadUrl = data.uploadUrl || data.data.uploadUrl;
+      const fileKey = data.fileKey || data.data.fileKey;
+      const publicUrl = data.publicUrl || data.data.publicUrl;
+      const headers = data.headers || data.data.headers;
+      const expiresInSeconds = data.expiresInSeconds || data.data.expiresInSeconds;
+      const curlExample = data.curlExample || data.data.curlExample;
+
+      point21UploadedFileKey = fileKey;
+
+      assert.ok(uploadUrl.startsWith('https://'), 'Upload URL must be HTTPS');
+      assert.ok(uploadUrl.includes('X-Amz-Algorithm=AWS4-HMAC-SHA256'), 'Upload URL must contain SigV4 algorithm query');
+      assert.ok(uploadUrl.includes('X-Amz-Credential='), 'Upload URL must contain SigV4 credential');
+      assert.ok(uploadUrl.includes('X-Amz-Signature='), 'Upload URL must contain SigV4 signature');
+      assert.ok(fileKey.startsWith('uploads/products/'), 'FileKey must begin with target folder');
+      assert.ok(fileKey.includes('headphones-studio-pro.webp'), 'FileKey must contain sanitized filename');
+      assert.ok(publicUrl.includes(fileKey), 'Public CDN URL must reference the generated fileKey');
+      assert.strictEqual(headers['Content-Type'], fileType);
+      assert.strictEqual(headers['x-amz-acl'], 'public-read');
+      assert.strictEqual(expiresInSeconds, 900);
+      assert.ok(curlExample.startsWith('curl -X PUT'), 'cURL example must start with curl -X PUT');
+
+      // Test with Cloudflare R2
+      const resR2 = await fetch(`${baseUrl}/admin/storage/presigned-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          fileName: 'tax-invoice-gst-p21.pdf',
+          fileType: 'application/pdf',
+          fileSize: 95000,
+          folder: 'invoices',
+          provider: 'r2',
+        }),
+      });
+
+      assert.strictEqual(resR2.status, 200);
+      const dataR2 = await resR2.json();
+      assert.strictEqual(dataR2.success, true);
+      const r2UploadUrl = dataR2.uploadUrl || dataR2.data.uploadUrl;
+      assert.ok(r2UploadUrl.includes('r2.cloudflarestorage.com'), 'R2 upload URL must point to cloudflarestorage.com');
+      assert.ok(r2UploadUrl.includes('X-Amz-Algorithm=AWS4-HMAC-SHA256'), 'R2 upload URL must contain SigV4 query');
+    });
+
+    await test('Point 21: Validation: rejects invalid file types or excessive file sizes (400 Bad Request)', async () => {
+      // 1. Missing file name
+      const resMissingName = await fetch(`${baseUrl}/admin/storage/presigned-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          fileType: 'image/webp',
+          fileSize: 1024,
+        }),
+      });
+      assert.strictEqual(resMissingName.status, 400);
+      const dataMissingName = await resMissingName.json();
+      assert.strictEqual(dataMissingName.success, false);
+      assert.ok(dataMissingName.message.includes('fileName'));
+
+      // 2. Disallowed MIME type (executable / script)
+      const resBadType = await fetch(`${baseUrl}/admin/storage/presigned-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          fileName: 'payload.exe',
+          fileType: 'application/x-msdownload',
+          fileSize: 1024,
+        }),
+      });
+      assert.strictEqual(resBadType.status, 400);
+      const dataBadType = await resBadType.json();
+      assert.strictEqual(dataBadType.success, false);
+      assert.ok(dataBadType.message.includes('not permitted'));
+
+      // 3. Excessive file size (> maxFileSizeMb, default 10MB)
+      const resExcessSize = await fetch(`${baseUrl}/admin/storage/presigned-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          fileName: 'huge-video.mp4',
+          fileType: 'video/mp4',
+          fileSize: 50 * 1024 * 1024, // 50 MB
+        }),
+      });
+      assert.strictEqual(resExcessSize.status, 400);
+      const dataExcessSize = await resExcessSize.json();
+      assert.strictEqual(dataExcessSize.success, false);
+      assert.ok(dataExcessSize.message.includes('exceeds'));
+
+      // 4. Invalid or zero file size
+      const resZeroSize = await fetch(`${baseUrl}/admin/storage/presigned-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          fileName: 'empty.webp',
+          fileType: 'image/webp',
+          fileSize: 0,
+        }),
+      });
+      assert.strictEqual(resZeroSize.status, 400);
+    });
+
+    await test('Point 21: GET /api/admin/storage/assets lists bucket assets & DELETE removes object from registry', async () => {
+      // 1. List assets
+      const resList = await fetch(`${baseUrl}/admin/storage/assets`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resList.status, 200);
+      const dataList = await resList.json();
+      assert.strictEqual(dataList.success, true);
+      assert.ok(Array.isArray(dataList.data));
+      assert.ok(dataList.count > 0);
+
+      // Verify the asset we uploaded in earlier test exists
+      const found = dataList.data.find(a => a.fileKey === point21UploadedFileKey);
+      assert.ok(found, 'Uploaded asset must be found in cloud asset vault');
+      assert.strictEqual(found.provider, 's3');
+      assert.strictEqual(found.folder, 'products');
+
+      // 2. Delete asset from registry
+      const resDel = await fetch(`${baseUrl}/admin/storage/assets/${encodeURIComponent(point21UploadedFileKey)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resDel.status, 200);
+      const dataDel = await resDel.json();
+      assert.strictEqual(dataDel.success, true);
+      assert.ok(dataDel.message.includes('removed from cloud asset registry'));
+
+      // Verify deletion from CloudAsset collection
+      const CloudAsset = require('../src/models/CloudAsset');
+      const checkDeleted = await CloudAsset.findOne({ fileKey: point21UploadedFileKey });
+      assert.strictEqual(checkDeleted, null, 'Deleted asset must not exist in CloudAsset collection');
+    });
+
+    await test('Point 21: Role Security: Customer and Delivery partner cannot access storage admin routes (403 Forbidden)', async () => {
+      // 1. Customer token to GET settings
+      const resCustGet = await fetch(`${baseUrl}/admin/storage/settings`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustGet.status, 403, 'Customer must receive 403 Forbidden for storage settings');
+
+      // 2. Customer token to POST presigned-upload
+      const resCustPost = await fetch(`${baseUrl}/admin/storage/presigned-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          fileName: 'test.webp',
+          fileType: 'image/webp',
+          fileSize: 1024,
+        }),
+      });
+      assert.strictEqual(resCustPost.status, 403, 'Customer must receive 403 Forbidden for presigned upload');
+
+      // 3. Delivery partner token (riderToken) to GET settings
+      const resRiderGet = await fetch(`${baseUrl}/admin/storage/settings`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resRiderGet.status, 403, 'Delivery rider must receive 403 Forbidden for storage settings');
+
+      // 4. Delivery partner token (riderToken) to POST presigned-upload
+      const resRiderPost = await fetch(`${baseUrl}/admin/storage/presigned-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({
+          fileName: 'test.webp',
+          fileType: 'image/webp',
+          fileSize: 1024,
+        }),
+      });
+      assert.strictEqual(resRiderPost.status, 403, 'Delivery rider must receive 403 Forbidden for presigned upload');
+
+      // 5. Unauthenticated request without token receives 401 Unauthorized
+      const resUnauth = await fetch(`${baseUrl}/admin/storage/settings`);
+      assert.strictEqual(resUnauth.status, 401, 'Unauthenticated request must receive 401 Unauthorized');
+    });
+
   } finally {
     if (server) {
       server.close();

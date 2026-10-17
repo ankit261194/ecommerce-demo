@@ -68,6 +68,7 @@ const jobQueueRoutes = require('./routes/jobQueueRoutes');
 const warehouseRoutes = require('./routes/warehouseRoutes');
 const stockTransferRoutes = require('./routes/stockTransferRoutes');
 const { adminRouter: affiliateAdminRoutes, publicRouter: affiliatePublicRoutes } = require('./routes/affiliateRoutes');
+const { adminRouter: loyaltyAdminRoutes, publicRouter: loyaltyPublicRoutes } = require('./routes/loyaltyRoutes');
 
 const app = express();
 
@@ -214,6 +215,8 @@ app.use('/api/admin/stock-transfers', stockTransferRoutes);
 app.use('/api/stock-transfers', stockTransferRoutes);
 app.use('/api/admin/affiliates', affiliateAdminRoutes);
 app.use('/api/affiliates', affiliatePublicRoutes);
+app.use('/api/admin/loyalty', loyaltyAdminRoutes);
+app.use('/api/loyalty', loyaltyPublicRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

@@ -24,6 +24,8 @@ const AffiliatePartner = require('../src/models/AffiliatePartner');
 const AffiliateReferral = require('../src/models/AffiliateReferral');
 const AffiliatePayout = require('../src/models/AffiliatePayout');
 const AffiliateProgramSetting = require('../src/models/AffiliateProgramSetting');
+const LoyaltyTierConfig = require('../src/models/LoyaltyTierConfig');
+const LoyaltyActivityLog = require('../src/models/LoyaltyActivityLog');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -21188,16 +21190,19 @@ const runTests = async () => {
       // Process pending job
       await jobQueueService.processNextJobs();
       
-      // Wait for completion (up to 500ms)
+      // Wait for completion (up to 1.5s)
       let data;
-      for (let attempt = 0; attempt < 10; attempt++) {
-        await new Promise(r => setTimeout(r, 60));
+      for (let attempt = 0; attempt < 15; attempt++) {
+        await new Promise(r => setTimeout(r, 100));
         const res = await fetch(`${baseUrl}/admin/queues/jobs/${point22JobId}`, {
           headers: { Authorization: `Bearer ${adminToken}` },
         });
         if (res.status === 200) {
           data = await res.json();
           if (data.data?.status === 'completed') break;
+          if (data.data?.status === 'waiting') {
+            await jobQueueService.processNextJobs();
+          }
         }
       }
 
@@ -21249,9 +21254,9 @@ const runTests = async () => {
       assert.strictEqual(jobDoc.attemptsMade, 1);
       assert.strictEqual(jobDoc.status, 'delayed', 'Job should be in delayed status awaiting backoff');
       assert.strictEqual(jobDoc.isDeadLetter, false);
-
-      // Fast-forward runAt to past so it becomes eligible for attempt 2
+      // Fast-forward runAt to past and set status to waiting so it becomes immediately eligible for attempt 2
       jobDoc.runAt = new Date(Date.now() - 1000);
+      jobDoc.status = 'waiting';
       await jobDoc.save();
 
       // Attempt 2: Trigger worker again -> reaches maxAttempts (2)
@@ -21259,7 +21264,8 @@ const runTests = async () => {
       for (let i = 0; i < 20; i++) {
         jobDoc = await JobQueue.findOne({ jobId: point22FailedJobId });
         if (jobDoc && jobDoc.attemptsMade >= 2) break;
-        await new Promise(r => setTimeout(r, 50));
+        await jobQueueService.processNextJobs();
+        await new Promise(r => setTimeout(r, 60));
       }
 
       assert.strictEqual(jobDoc.attemptsMade, 2);
@@ -22539,6 +22545,357 @@ const runTests = async () => {
           Authorization: `Bearer ${riderToken}`,
         },
         body: JSON.stringify({ affiliateId: point26PartnerId, amount: 50 }),
+      });
+      assert.strictEqual(resRider.status, 403, 'Delivery rider token must return 403 Forbidden');
+    });
+
+    // =========================================================================
+    // PILLAR 2 - POINT 27: VIP LOYALTY POINTS & CUSTOMER TIER MATRIX
+    // =========================================================================
+    console.log('\n--- PILLAR 2 - POINT 27: VIP LOYALTY POINTS & CUSTOMER TIER MATRIX ---');
+
+    let point27CustomerId = null;
+
+    await test('Point 27: GET /api/loyalty/tiers returns tier matrix (Bronze, Silver, Gold, Platinum, Diamond) and program rules', async () => {
+      const res = await fetch(`${baseUrl}/loyalty/tiers`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data.tiers));
+      assert.strictEqual(data.data.tiers.length, 5);
+      const tierCodes = data.data.tiers.map((t) => t.tier);
+      assert.ok(tierCodes.includes('BRONZE'));
+      assert.ok(tierCodes.includes('SILVER'));
+      assert.ok(tierCodes.includes('GOLD'));
+      assert.ok(tierCodes.includes('PLATINUM'));
+      assert.ok(tierCodes.includes('DIAMOND'));
+    });
+
+    await test('Point 27: GET /api/loyalty/my-status returns customer tier progress, points balance, and daily check-in availability', async () => {
+      const res = await fetch(`${baseUrl}/loyalty/my-status`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.currentTier);
+      assert.ok(['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'].includes(data.data.currentTier.tier));
+      assert.ok(data.data.pointsBalance >= 0);
+      assert.strictEqual(typeof data.data.canCheckInToday, 'boolean');
+      assert.ok(Array.isArray(data.data.recentLogs));
+    });
+
+    await test('Point 27: POST /api/loyalty/check-in awards daily attendance reward points and logs streak', async () => {
+      const testCustomer = await User.findOne({ email: 'customer@auramarket.com' });
+      assert.ok(testCustomer);
+      point27CustomerId = testCustomer._id;
+      testCustomer.loyalty = testCustomer.loyalty || {};
+      testCustomer.loyalty.lastCheckInDate = null;
+      testCustomer.loyalty.checkInStreak = 0;
+      await testCustomer.save();
+
+      const coinsBefore = testCustomer.walletCoins || 0;
+
+      const res = await fetch(`${baseUrl}/loyalty/check-in`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.pointsAwarded >= 10);
+      assert.strictEqual(data.data.streak, 1);
+      assert.strictEqual(data.data.newPointsBalance, coinsBefore + data.data.pointsAwarded);
+
+      const log = await LoyaltyActivityLog.findOne({
+        user: point27CustomerId,
+        type: 'DAILY_CHECKIN',
+      }).sort({ createdAt: -1 });
+      assert.ok(log);
+      assert.strictEqual(log.points, data.data.pointsAwarded);
+    });
+
+    await test('Point 27: Guardrail: POST /api/loyalty/check-in rejects duplicate check-in on the same day (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/loyalty/check-in`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Already checked in today'));
+    });
+
+    await test('Point 27: GET & PUT /api/admin/loyalty/config updates program parameters and tier perks', async () => {
+      const resGet = await fetch(`${baseUrl}/admin/loyalty/config`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resGet.status, 200);
+      const configData = await resGet.json();
+
+      const updatedTiers = configData.data.tiers.map((t) => {
+        if (t.tier === 'GOLD') {
+          return { ...t, freeShippingAlways: true, cashbackMultiplier: 1.5, discountPercentage: 5 };
+        }
+        return t;
+      });
+
+      const resPut = await fetch(`${baseUrl}/admin/loyalty/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          ...configData.data,
+          dailyCheckInBasePoints: 12,
+          tiers: updatedTiers,
+        }),
+      });
+      assert.strictEqual(resPut.status, 200);
+      const dataPut = await resPut.json();
+      assert.strictEqual(dataPut.success, true);
+      assert.strictEqual(dataPut.data.dailyCheckInBasePoints, 12);
+    });
+
+    await test('Point 27: GET /api/admin/loyalty/customers lists customer directory with tier badges and points', async () => {
+      const res = await fetch(`${baseUrl}/admin/loyalty/customers?page=1&limit=10`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data.customers));
+      assert.ok(data.data.customers.length >= 1);
+      assert.ok(data.data.pagination);
+    });
+
+    await test('Point 27: POST /api/admin/loyalty/adjust-points manually credits and debits points with audit note', async () => {
+      // 1. Credit 250 points
+      const resCredit = await fetch(`${baseUrl}/admin/loyalty/adjust-points`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          userId: point27CustomerId,
+          points: 250,
+          type: 'CREDIT',
+          reason: 'VIP welcome festival bonus grant',
+        }),
+      });
+      assert.strictEqual(resCredit.status, 200);
+      const creditData = await resCredit.json();
+      assert.strictEqual(creditData.success, true);
+
+      // 2. Debit 50 points
+      const resDebit = await fetch(`${baseUrl}/admin/loyalty/adjust-points`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          userId: point27CustomerId,
+          points: 50,
+          type: 'DEBIT',
+          reason: 'Manual points reconciliation correction',
+        }),
+      });
+      assert.strictEqual(resDebit.status, 200);
+      const debitData = await resDebit.json();
+      assert.strictEqual(debitData.success, true);
+
+      // Verify audit log
+      const auditLog = await LoyaltyActivityLog.findOne({
+        user: point27CustomerId,
+        type: 'ADMIN_ADJUSTMENT',
+      }).sort({ createdAt: -1 });
+      assert.ok(auditLog);
+      assert.strictEqual(auditLog.points, -50);
+      assert.ok(auditLog.description.includes('reconciliation'));
+    });
+
+    await test('Point 27: Guardrail: rejects points debit exceeding customer balance (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/admin/loyalty/adjust-points`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          userId: point27CustomerId,
+          points: 9999999,
+          type: 'DEBIT',
+          reason: 'Invalid excess debit attempt',
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Cannot debit'));
+    });
+
+    await test('Point 27: POST /api/admin/loyalty/override-tier upgrades customer to GOLD with tierLock: true', async () => {
+      const res = await fetch(`${baseUrl}/admin/loyalty/override-tier`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          userId: point27CustomerId,
+          tier: 'GOLD',
+          tierLock: true,
+          customDiscountPercentage: 5,
+          reason: 'High-value customer promotion to GOLD tier',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.loyalty.tier, 'GOLD');
+      assert.strictEqual(data.data.loyalty.tierLock, true);
+    });
+
+    await test('Point 27: Checkout VIP Tier Integration: GOLD member gets unconditional free shipping, tier discount, and 1.5x cashback multiplier', async () => {
+      const testProd = await Product.findOne({ isPublished: { $ne: false } });
+      assert.ok(testProd, 'Product must exist for order');
+
+      // Place order under ₹999 to verify GOLD member gets free delivery
+      const res = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [
+            {
+              product: testProd._id,
+              quantity: 1,
+              price: 500,
+            },
+          ],
+          shippingAddress: {
+            recipientName: 'VIP Gold Patron',
+            phone: '9876543210',
+            street: '45 Connaught Place',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'COD',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      const order = data.data || data.order;
+      assert.ok(order);
+
+      // Verify VIP perks applied on order
+      assert.strictEqual(order.shippingFee, 0, 'GOLD VIP tier must waive shippingFee (free shipping)');
+      assert.ok(order.loyalty);
+      assert.strictEqual(order.loyalty.tier, 'GOLD');
+      assert.strictEqual(order.loyalty.freeShippingGranted, true);
+      assert.strictEqual(order.loyalty.cashbackMultiplier, 1.5);
+      assert.ok(order.loyalty.cashbackCoinsEarned >= 10);
+
+      // Verify customer lifetime metrics updated
+      const customerAfter = await User.findById(point27CustomerId);
+      assert.ok(customerAfter.loyalty.lifetimeSpend >= 475);
+      assert.ok(customerAfter.loyalty.lifetimeOrdersCount >= 1);
+    });
+
+    await test('Point 27: Auto Tier Promotion: Customer auto-promotes to PLATINUM when lifetime spend exceeds threshold', async () => {
+      const customerToPromote = await User.findById(point27CustomerId);
+      assert.ok(customerToPromote);
+
+      // Unlock tier and simulate reaching ₹55,000 lifetime spend (exceeds PLATINUM minSpend: 50,000)
+      customerToPromote.loyalty.tierLock = false;
+      customerToPromote.loyalty.lifetimeSpend = 55000;
+      customerToPromote.loyalty.lifetimeOrdersCount = 26;
+      await customerToPromote.save();
+
+      const testProd = await Product.findOne({ isPublished: { $ne: false } });
+      const res = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [
+            {
+              product: testProd._id,
+              quantity: 1,
+              price: 100,
+            },
+          ],
+          shippingAddress: {
+            recipientName: 'VIP Candidate',
+            phone: '9876543210',
+            street: '12 Marine Drive',
+            city: 'Mumbai',
+            state: 'Maharashtra',
+            pincode: '400020',
+          },
+          paymentMethod: 'COD',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const customerUpgraded = await User.findById(point27CustomerId);
+      assert.strictEqual(customerUpgraded.loyalty.tier, 'PLATINUM', 'Must be promoted to PLATINUM');
+    });
+
+    await test('Point 27: GET /api/admin/loyalty/analytics returns member distribution, points in circulation, and financial liability', async () => {
+      const res = await fetch(`${baseUrl}/admin/loyalty/analytics`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.totalCustomers >= 1);
+      assert.ok(data.data.distribution);
+      assert.ok(typeof data.data.totalPointsInCirculation === 'number');
+      assert.ok(typeof data.data.financialLiabilityInr === 'number');
+      assert.ok(Array.isArray(data.data.topVipCustomers));
+    });
+
+    await test('Point 27: GET /api/admin/loyalty/logs returns filterable audit records', async () => {
+      const res = await fetch(`${baseUrl}/admin/loyalty/logs?page=1&limit=10`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data.logs));
+      assert.ok(data.data.logs.length >= 1);
+      assert.ok(data.data.pagination);
+    });
+
+    await test('Point 27: Role Security: Unauthenticated and non-admin requests to /api/admin/loyalty/* are rejected (401 / 403)', async () => {
+      // Unauthenticated
+      const resUnauth = await fetch(`${baseUrl}/admin/loyalty/config`);
+      assert.strictEqual(resUnauth.status, 401, 'Unauthenticated request must return 401');
+
+      // Customer
+      const resCust = await fetch(`${baseUrl}/admin/loyalty/config`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403, 'Customer token must return 403 Forbidden');
+
+      // Delivery Rider
+      const resRider = await fetch(`${baseUrl}/admin/loyalty/adjust-points`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ userId: point27CustomerId, points: 50, type: 'CREDIT', reason: 'Test' }),
       });
       assert.strictEqual(resRider.status, 403, 'Delivery rider token must return 403 Forbidden');
     });

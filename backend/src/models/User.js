@@ -148,6 +148,49 @@ const userSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // Point 27: VIP Loyalty Points & Customer Tier Matrix
+    loyalty: {
+      tier: {
+        type: String,
+        enum: ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'],
+        default: 'BRONZE',
+      },
+      tierAchievedAt: {
+        type: Date,
+        default: Date.now,
+      },
+      lifetimeSpend: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      lifetimeOrdersCount: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      pointsBalance: {
+        type: Number,
+        default: 500, // kept in sync with walletCoins
+        min: 0,
+      },
+      tierLock: {
+        type: Boolean,
+        default: false,
+      },
+      lastCheckInDate: {
+        type: Date,
+        default: null,
+      },
+      checkInStreak: {
+        type: Number,
+        default: 0,
+      },
+      customDiscountPercentage: {
+        type: Number,
+        default: 0,
+      },
+    },
   },
   { timestamps: true }
 );

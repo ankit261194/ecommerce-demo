@@ -55,6 +55,14 @@ const orderSchema = new mongoose.Schema(
       discountAmount: { type: Number, default: 0 },
       discountType: { type: String, default: null },
     },
+    // Point 27: VIP Loyalty Points & Customer Tier Matrix
+    loyalty: {
+      tier: { type: String, default: 'BRONZE' },
+      tierDiscountAmount: { type: Number, default: 0 },
+      freeShippingGranted: { type: Boolean, default: false },
+      cashbackMultiplier: { type: Number, default: 1.0 },
+      cashbackCoinsEarned: { type: Number, default: 0 },
+    },
     totalAmount: {
       type: Number,
       required: true,

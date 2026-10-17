@@ -248,17 +248,21 @@ class JobQueueService {
 
       if (!availableJob) {
         this.isProcessing = false;
-        return;
+        return null;
       }
 
       // Execute job in background
-      this.executeJob(availableJob).finally(() => {
+      try {
+        await this.executeJob(availableJob);
+      } finally {
         this.isProcessing = false;
         // Check for more pending jobs
         setImmediate(() => this.processNextJobs().catch(() => {}));
-      });
+      }
+      return availableJob;
     } catch (err) {
       this.isProcessing = false;
+      return null;
     }
   }
 

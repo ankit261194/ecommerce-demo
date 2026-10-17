@@ -290,6 +290,21 @@ exports.createOrder = async (req, res, next) => {
       uiConfigDoc = await UIConfig.findOne();
     } catch (e) {}
 
+    // Point 27: VIP Customer Loyalty Tier Perks Check
+    let customerUser = await User.findById(req.user._id);
+    const LoyaltyTierConfig = require('../models/LoyaltyTierConfig');
+    let loyaltyConfigDoc = null;
+    let customerTierDef = null;
+    try {
+      loyaltyConfigDoc = await LoyaltyTierConfig.getOrCreateConfig();
+      if (customerUser && loyaltyConfigDoc?.tiers) {
+        const userTier = customerUser.loyalty?.tier || 'BRONZE';
+        customerTierDef = loyaltyConfigDoc.tiers.find((t) => t.tier === userTier && t.isActive !== false);
+      }
+    } catch (_) {}
+
+    const isVipFreeShipping = Boolean(customerTierDef?.freeShippingAlways);
+
     const freeThreshold = uiConfigDoc?.shipping?.freeShippingThreshold ?? 999;
     const defaultFee = uiConfigDoc?.shipping?.defaultShippingFee ?? 99;
     const expressFee = uiConfigDoc?.shipping?.expressShippingFee ?? 149;
@@ -298,10 +313,26 @@ exports.createOrder = async (req, res, next) => {
     let baseShippingFee = 0;
     if (req.body.shippingMethod === 'EXPRESS') {
       baseShippingFee = expressFee;
+    } else if (isVipFreeShipping || totalOrderAmount >= freeThreshold) {
+      baseShippingFee = 0;
     } else {
-      baseShippingFee = totalOrderAmount >= freeThreshold ? 0 : defaultFee;
+      baseShippingFee = defaultFee;
     }
-    const shippingFee = baseShippingFee + codHandlingFee;
+    const shippingFee = req.body.shippingMethod === 'EXPRESS'
+      ? (expressFee + codHandlingFee)
+      : (isVipFreeShipping ? 0 : (baseShippingFee + codHandlingFee));
+
+    // VIP Permanent Tier Discount Check
+    let tierDiscountAmount = 0;
+    if (req.body.applyTierDiscount || req.body.useVipDiscount) {
+      const tierDiscountPct = Math.max(
+        customerTierDef?.discountPercentage || 0,
+        customerUser?.loyalty?.customDiscountPercentage || 0
+      );
+      if (tierDiscountPct > 0) {
+        tierDiscountAmount = Math.round((totalOrderAmount * tierDiscountPct) / 100);
+      }
+    }
 
     // Tax Engine: GST Calculation
     const taxSettings = uiConfigDoc?.taxSettings;
@@ -333,7 +364,6 @@ exports.createOrder = async (req, res, next) => {
     // Point #31: Customer In-App Wallet & Reward Coins Redemption
     const coinsToRedeem = Number(req.body.coinsToRedeem || req.body.walletCoinsUsed || 0);
     let coinDiscount = 0;
-    let customerUser = await User.findById(req.user._id);
 
     if (coinsToRedeem > 0 && customerUser) {
       const availableCoins = customerUser.walletCoins || 0;
@@ -344,7 +374,7 @@ exports.createOrder = async (req, res, next) => {
         });
       }
       // 1 Coin = ₹1 discount (cannot exceed net payable order total)
-      const maxRedeemable = Math.max(0, totalOrderAmount - couponDiscountAmount + shippingFee);
+      const maxRedeemable = Math.max(0, totalOrderAmount - couponDiscountAmount - tierDiscountAmount + shippingFee);
       coinDiscount = Math.min(coinsToRedeem, maxRedeemable);
     }
 
@@ -367,7 +397,7 @@ exports.createOrder = async (req, res, next) => {
     const netTaxAdd = calculationMode === 'EXCLUSIVE' ? taxAmount : 0;
     const finalTotalAmount = Math.max(
       0,
-      totalOrderAmount + netTaxAdd + giftWrapPrice - couponDiscountAmount + shippingFee - coinDiscount + tipAmount
+      totalOrderAmount + netTaxAdd + giftWrapPrice - couponDiscountAmount - tierDiscountAmount + shippingFee - coinDiscount + tipAmount
     );
 
     // Point #26 & Point 12: Resolve Payment Gateway, Split Payment Engine & Verification
@@ -519,10 +549,56 @@ exports.createOrder = async (req, res, next) => {
       customerUser.walletCoins = Math.max(0, (customerUser.walletCoins || 0) - coinDiscount);
     }
 
-    // Point #31: 5% Cashback Reward on completed orders (minimum 10 coins)
-    const cashbackEarned = Math.max(10, Math.round(finalTotalAmount * 0.05));
+    // Point 27 & Point #31: Loyalty Tier Cashback Multiplier
+    const cashbackMultiplier = customerTierDef?.cashbackMultiplier || 1.0;
+    const baseCashback = Math.max(10, Math.round(finalTotalAmount * 0.05));
+    const cashbackEarned = Math.max(10, Math.round(baseCashback * cashbackMultiplier));
+
     if (customerUser) {
       customerUser.walletCoins = (customerUser.walletCoins || 0) + cashbackEarned;
+
+      // Update customer loyalty metrics
+      if (!customerUser.loyalty) {
+        customerUser.loyalty = {
+          tier: 'BRONZE',
+          pointsBalance: customerUser.walletCoins,
+          lifetimeSpend: 0,
+          lifetimeOrdersCount: 0,
+        };
+      }
+      customerUser.loyalty.pointsBalance = customerUser.walletCoins;
+      customerUser.loyalty.lifetimeSpend = (customerUser.loyalty.lifetimeSpend || 0) + finalTotalAmount;
+      customerUser.loyalty.lifetimeOrdersCount = (customerUser.loyalty.lifetimeOrdersCount || 0) + 1;
+
+      // Auto tier upgrade evaluation
+      if (loyaltyConfigDoc?.autoPromoteEnabled !== false && !customerUser.loyalty.tierLock) {
+        const { evaluateTier } = require('./loyaltyController');
+        const eligibleTier = evaluateTier(
+          loyaltyConfigDoc,
+          customerUser.loyalty.lifetimeSpend,
+          customerUser.loyalty.lifetimeOrdersCount
+        );
+        const tierRank = { BRONZE: 1, SILVER: 2, GOLD: 3, PLATINUM: 4, DIAMOND: 5 };
+        const currentTier = customerUser.loyalty.tier || 'BRONZE';
+        if (eligibleTier && (tierRank[eligibleTier] || 0) > (tierRank[currentTier] || 0)) {
+          customerUser.loyalty.tier = eligibleTier;
+          customerUser.loyalty.tierAchievedAt = new Date();
+
+          // Log tier upgrade in LoyaltyActivityLog
+          const LoyaltyActivityLog = require('../models/LoyaltyActivityLog');
+          await LoyaltyActivityLog.create({
+            user: customerUser._id,
+            type: 'TIER_UPGRADE',
+            points: 0,
+            balanceAfter: customerUser.walletCoins,
+            tier: eligibleTier,
+            title: `🎉 VIP Tier Promoted: ${currentTier} ➔ ${eligibleTier}`,
+            description: `Auto-promoted to ${eligibleTier} after reaching ₹${customerUser.loyalty.lifetimeSpend} lifetime spend.`,
+            metadata: { previousTier: currentTier, newTier: eligibleTier },
+          }).catch(() => {});
+        }
+      }
+
       await customerUser.save();
     }
 
@@ -608,11 +684,18 @@ exports.createOrder = async (req, res, next) => {
       customer: req.user._id,
       items: validatedItems,
       subtotal: totalOrderAmount,
-      discountAmount: couponDiscountAmount + coinDiscount,
+      discountAmount: couponDiscountAmount + coinDiscount + tierDiscountAmount,
       coupon: appliedCoupon,
       walletCoinsUsed: coinDiscount,
       walletAmountDebited,
       cashbackEarned,
+      loyalty: {
+        tier: customerUser?.loyalty?.tier || 'BRONZE',
+        tierDiscountAmount,
+        freeShippingGranted: isVipFreeShipping,
+        cashbackMultiplier,
+        cashbackCoinsEarned: cashbackEarned,
+      },
       totalAmount: finalTotalAmount,
       shippingFee,
       // Point 14: Customer Delivery Rider Tipping
@@ -854,8 +937,10 @@ exports.createOrder = async (req, res, next) => {
       status: 'COMPLETED',
     });
 
-    // Point #31: Record Wallet & Coin Transactions
+    // Point #31 & Point 27: Record Wallet & Coin Transactions + Loyalty Activity Logs
     if (customerUser) {
+      const LoyaltyActivityLog = require('../models/LoyaltyActivityLog');
+
       if (coinDiscount > 0) {
         await WalletTransaction.create({
           user: customerUser._id,
@@ -870,6 +955,18 @@ exports.createOrder = async (req, res, next) => {
           balanceAfter: customerUser.walletBalance || 0,
           coinsAfter: customerUser.walletCoins || 0,
         });
+
+        await LoyaltyActivityLog.create({
+          user: customerUser._id,
+          type: 'REDEEM_ORDER',
+          points: -coinDiscount,
+          balanceAfter: customerUser.walletCoins || 0,
+          tier: customerUser.loyalty?.tier || 'BRONZE',
+          order: masterOrder._id,
+          orderNumber: masterOrder.orderNumber,
+          title: '🪙 Coins Redeemed at Checkout',
+          description: `Redeemed ${coinDiscount} coins for ₹${coinDiscount} discount on Order #${masterOrder.orderNumber}`,
+        }).catch(() => {});
       }
 
       if (walletAmountDebited > 0) {
@@ -895,13 +992,25 @@ exports.createOrder = async (req, res, next) => {
           currency: 'COINS',
           amount: cashbackEarned,
           category: 'CASHBACK',
-          title: '🎁 5% Cashback Reward Coins',
-          description: `Earned ${cashbackEarned} cashback coins on Order #${masterOrder.orderNumber}`,
+          title: `🎁 ${Math.round(5 * (cashbackMultiplier || 1))}% Cashback Reward Coins`,
+          description: `Earned ${cashbackEarned} cashback coins on Order #${masterOrder.orderNumber} (${cashbackMultiplier || 1}x multiplier)`,
           order: masterOrder._id,
           orderNumber: masterOrder.orderNumber,
           balanceAfter: customerUser.walletBalance || 0,
           coinsAfter: customerUser.walletCoins || 0,
         });
+
+        await LoyaltyActivityLog.create({
+          user: customerUser._id,
+          type: 'EARN_ORDER',
+          points: cashbackEarned,
+          balanceAfter: customerUser.walletCoins || 0,
+          tier: customerUser.loyalty?.tier || 'BRONZE',
+          order: masterOrder._id,
+          orderNumber: masterOrder.orderNumber,
+          title: `🛍️ Order Cashback (${customerUser.loyalty?.tier || 'BRONZE'} Tier)`,
+          description: `Earned ${cashbackEarned} coins on Order #${masterOrder.orderNumber} with ${cashbackMultiplier}x multiplier`,
+        }).catch(() => {});
       }
     }
 

@@ -164,6 +164,10 @@ supportTicketSchema.pre('save', function (next) {
     this.ticketNumber = `TCK-${timestamp}-${randomSuffix}`;
   }
 
+  if (!this.sla) {
+    this.sla = {};
+  }
+
   const priorityKey = (this.priority || 'MEDIUM').toUpperCase();
   const slaConfig = SLA_HOURS[priorityKey] || SLA_HOURS.MEDIUM;
   const baseTime = this.createdAt ? new Date(this.createdAt).getTime() : Date.now();
@@ -175,13 +179,16 @@ supportTicketSchema.pre('save', function (next) {
     this.sla.resolutionDeadline = new Date(baseTime + slaConfig.resolution * 3600 * 1000);
   }
 
-  // Check breach flags
+  // Check breach flags only for active (non-resolved/non-closed) tickets
   const now = new Date();
-  if (!this.sla.firstRespondedAt && this.sla.firstResponseDeadline && now > this.sla.firstResponseDeadline) {
-    this.sla.firstResponseBreached = true;
-  }
-  if (!this.sla.resolvedAt && this.sla.resolutionDeadline && now > this.sla.resolutionDeadline) {
-    this.sla.resolutionBreached = true;
+  const isResolvedOrClosed = ['RESOLVED', 'CLOSED'].includes(this.status);
+  if (!isResolvedOrClosed) {
+    if (!this.sla.firstRespondedAt && this.sla.firstResponseDeadline && now > this.sla.firstResponseDeadline) {
+      this.sla.firstResponseBreached = true;
+    }
+    if (!this.sla.resolvedAt && this.sla.resolutionDeadline && now > this.sla.resolutionDeadline) {
+      this.sla.resolutionBreached = true;
+    }
   }
 
   next();

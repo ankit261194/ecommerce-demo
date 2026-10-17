@@ -20235,6 +20235,117 @@ const runTests = async () => {
       assert.strictEqual(data.data.averageSatisfactionRating, 5);
     });
 
+    await test('Point 19: POST /api/support/tickets resolves orderNumber string to Order ObjectId without CastError', async () => {
+      // Create a test order first
+      const sampleOrder = await Order.create({
+        orderNumber: `ORD-TICKTEST-${Date.now()}`,
+        customer: point19CustomerId,
+        shippingAddress: {
+          recipientName: 'Customer Test',
+          phone: '9876543210',
+          street: '123 Market Street',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          pincode: '400001',
+        },
+        items: [
+          {
+            product: new mongoose.Types.ObjectId(),
+            vendor: new mongoose.Types.ObjectId(),
+            title: 'Test Audio Cable',
+            quantity: 1,
+            price: 499,
+            totalPrice: 499,
+          },
+        ],
+        totalAmount: 499,
+        paymentMethod: 'COD',
+        status: 'CONFIRMED',
+      });
+
+      const res = await fetch(`${baseUrl}/support/tickets`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          subject: `Tracking Inquiry for #${sampleOrder.orderNumber}`,
+          category: 'ORDER_STATUS',
+          priority: 'MEDIUM',
+          orderId: sampleOrder.orderNumber, // Passed as orderNumber string (not ObjectId)
+          message: 'Can you please check the courier dispatch for this order?',
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.order.toString(), sampleOrder._id.toString(), 'Must resolve orderNumber string to ObjectId');
+    });
+
+    await test('Point 19: GET /api/support/tickets/admin safely handles regex characters without ReDoS or crash', async () => {
+      // Testing with regex special chars [, *, (, +, ?, ^, $
+      const res = await fetch(`${baseUrl}/support/tickets/admin?search=[*+?^`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+    });
+
+    await test('Point 19: PUT /api/support/tickets/:id/assign rejects invalid agent ID format (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/support/tickets/${point19TicketId}/assign`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          agentId: 'not_a_valid_object_id',
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Invalid agent ID format'));
+    });
+
+    await test('Point 19: Customer satisfaction rating is strictly isolated to ticket customer owner', async () => {
+      const SupportTicket = require('../src/models/SupportTicket');
+      // Admin tries to resolve ticket with satisfaction rating
+      const testTicket = await SupportTicket.create({
+        customer: point19CustomerId,
+        subject: 'Admin close rating security test',
+        priority: 'LOW',
+        status: 'OPEN',
+        messages: [{ sender: point19CustomerId, message: 'Need help' }],
+      });
+
+      // Admin resolves ticket attempting to inject forged 5-star rating
+      const res = await fetch(`${baseUrl}/support/tickets/${testTicket._id}/close`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          status: 'RESOLVED',
+          satisfactionRating: 5,
+          feedbackComment: 'Admin self-rating injection',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'RESOLVED');
+      assert.strictEqual(data.data.satisfactionRating, null, 'Non-owner admin must not be able to forge customer satisfaction rating');
+    });
+
   } finally {
     if (server) {
       server.close();

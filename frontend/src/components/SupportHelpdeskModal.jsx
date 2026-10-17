@@ -106,6 +106,10 @@ export default function SupportHelpdeskModal({
   const [newOrderId, setNewOrderId] = useState('');
   const [newMessage, setNewMessage] = useState('');
   const [newAttachments, setNewAttachments] = useState([]);
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [isCustomOrderInput, setIsCustomOrderInput] = useState(false);
+  const fileInputRef = useRef(null);
+  const replyFileInputRef = useRef(null);
 
   // Reply Chat State
   const [replyMessage, setReplyMessage] = useState('');
@@ -133,12 +137,45 @@ export default function SupportHelpdeskModal({
     }
   }, [orderData]);
 
-  // Fetch Tickets on Mount or Open
+  // Fetch Tickets & Customer Orders on Mount or Open
   useEffect(() => {
     if (isOpen) {
       fetchTickets();
+      fetchCustomerOrders();
     }
   }, [isOpen, statusFilter]);
+
+  const fetchCustomerOrders = async () => {
+    try {
+      const token = localStorage.getItem('auramarket_token') || 'demo_customer_token';
+      const res = await fetch(`${apiUrl}/orders/my`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCustomerOrders(data.data || []);
+      }
+    } catch (_) {}
+  };
+
+  const handleFileUpload = (e, isReply = false) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const newAtt = {
+      url: URL.createObjectURL(file),
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type || 'application/octet-stream',
+    };
+
+    if (isReply) {
+      setReplyAttachments((prev) => [...prev, newAtt]);
+    } else {
+      setNewAttachments((prev) => [...prev, newAtt]);
+    }
+    e.target.value = '';
+  };
 
   // Scroll to bottom of chat when messages change
   useEffect(() => {
@@ -874,6 +911,12 @@ export default function SupportHelpdeskModal({
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
+                            {ticket.status === 'WAITING_CUSTOMER' && (
+                              <span className="px-2 py-0.5 rounded-full bg-purple-500 text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 animate-pulse shadow-sm">
+                                <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                                New Reply
+                              </span>
+                            )}
                             {ticket.messages && ticket.messages.length > 0 && (
                               <span className="text-[11px] text-slate-400 flex items-center gap-1">
                                 <MessageSquare className="w-3.5 h-3.5" />
@@ -995,18 +1038,59 @@ export default function SupportHelpdeskModal({
                 </div>
               </div>
 
-              {/* Linked Order ID */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                  3. Related Order Number (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={newOrderId}
-                  onChange={(e) => setNewOrderId(e.target.value)}
-                  placeholder="e.g. ORD-1792206-891 or leave empty"
-                  className="w-full p-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                />
+              {/* Linked Order ID - Order Linking Dropdown */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                    3. Related Order (Order Linking Dropdown)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomOrderInput(!isCustomOrderInput);
+                      if (!isCustomOrderInput) setNewOrderId('');
+                    }}
+                    className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
+                  >
+                    {isCustomOrderInput ? '← Select from Order Dropdown' : '+ Enter Order # Manually'}
+                  </button>
+                </div>
+
+                {!isCustomOrderInput ? (
+                  <select
+                    value={newOrderId}
+                    onChange={(e) => {
+                      if (e.target.value === '__CUSTOM__') {
+                        setIsCustomOrderInput(true);
+                        setNewOrderId('');
+                      } else {
+                        setNewOrderId(e.target.value);
+                      }
+                    }}
+                    className="w-full p-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                  >
+                    <option value="">-- No Order Linked (General Inquiry) --</option>
+                    {orderData && (
+                      <option value={orderData.orderNumber || orderData.orderId || orderData._id}>
+                        Current Tracking Order #{orderData.orderNumber || orderData.orderId}
+                      </option>
+                    )}
+                    {customerOrders.map((ord) => (
+                      <option key={ord._id} value={ord.orderNumber}>
+                        #{ord.orderNumber} • ₹{ord.totalAmount} • {ord.status} ({new Date(ord.createdAt).toLocaleDateString()})
+                      </option>
+                    ))}
+                    <option value="__CUSTOM__">✏️ Enter Custom Order Number Manually...</option>
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={newOrderId}
+                    onChange={(e) => setNewOrderId(e.target.value)}
+                    placeholder="e.g. ORD-1792206-891"
+                    className="w-full p-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                  />
+                )}
               </div>
 
               {/* Subject */}
@@ -1041,12 +1125,25 @@ export default function SupportHelpdeskModal({
 
               {/* Attachments Section */}
               <div className="space-y-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={(e) => handleFileUpload(e, false)}
+                  className="hidden"
+                />
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
                     6. Attachments & Proof Files ({newAttachments.length})
                   </label>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-slate-400">Sample quick attach:</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold border border-indigo-200 flex items-center gap-1 hover:bg-indigo-100 transition"
+                    >
+                      <Paperclip className="w-3 h-3" /> Upload File
+                    </button>
+                    <span className="text-[10px] text-slate-400">Samples:</span>
                     <button
                       type="button"
                       onClick={() => addSampleAttachment('payment')}
@@ -1359,14 +1456,28 @@ export default function SupportHelpdeskModal({
                     </div>
                   )}
 
+                  <input
+                    type="file"
+                    ref={replyFileInputRef}
+                    onChange={(e) => handleFileUpload(e, true)}
+                    className="hidden"
+                  />
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => addSampleAttachment('payment')}
-                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors"
-                      title="Attach Payment Proof / Screenshot"
+                      onClick={() => replyFileInputRef.current?.click()}
+                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors flex items-center gap-1"
+                      title="Upload File Attachment"
                     >
                       <Paperclip className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addSampleAttachment('payment')}
+                      className="px-2 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold transition-colors hidden sm:inline"
+                      title="Quick Sample Proof"
+                    >
+                      + Sample
                     </button>
 
                     <input

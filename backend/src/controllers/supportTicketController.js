@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const SupportTicket = require('../models/SupportTicket');
 const User = require('../models/User');
+const Order = require('../models/Order');
+const SubOrder = require('../models/SubOrder');
 const Notification = require('../models/Notification');
 const mailService = require('../services/mailService');
 
@@ -38,8 +40,51 @@ exports.createTicket = async (req, res) => {
       });
     }
 
+    const validPriorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
     const priorityKey = (priority || 'MEDIUM').toUpperCase();
-    const slaConfig = SLA_HOURS[priorityKey] || SLA_HOURS.MEDIUM;
+    const finalPriority = validPriorities.includes(priorityKey) ? priorityKey : 'MEDIUM';
+    const slaConfig = SLA_HOURS[finalPriority] || SLA_HOURS.MEDIUM;
+
+    const validCategories = [
+      'ORDER_STATUS',
+      'PAYMENT_BILLING',
+      'DELIVERY_COURIER',
+      'RETURN_REFUND',
+      'PRODUCT_DEFECT',
+      'ACCOUNT_SECURITY',
+      'GENERAL_INQUIRY',
+    ];
+    const normalizedCategory = category ? category.toString().trim().toUpperCase() : 'GENERAL_INQUIRY';
+    const finalCategory = validCategories.includes(normalizedCategory) ? normalizedCategory : 'GENERAL_INQUIRY';
+
+    // Safe Order ID Resolution (handles both ObjectId and orderNumber string)
+    let resolvedOrderId = null;
+    const inputOrder = (orderId || order || '').toString().trim();
+    if (inputOrder) {
+      if (mongoose.Types.ObjectId.isValid(inputOrder)) {
+        resolvedOrderId = inputOrder;
+      } else {
+        const matchedOrder = await Order.findOne({ orderNumber: inputOrder }).select('_id');
+        if (matchedOrder) {
+          resolvedOrderId = matchedOrder._id;
+        }
+      }
+    }
+
+    // Safe SubOrder ID Resolution (handles both ObjectId and subOrderNumber string)
+    let resolvedSubOrderId = null;
+    const inputSubOrder = (subOrderId || subOrder || '').toString().trim();
+    if (inputSubOrder) {
+      if (mongoose.Types.ObjectId.isValid(inputSubOrder)) {
+        resolvedSubOrderId = inputSubOrder;
+      } else {
+        const matchedSub = await SubOrder.findOne({ subOrderNumber: inputSubOrder }).select('_id');
+        if (matchedSub) {
+          resolvedSubOrderId = matchedSub._id;
+        }
+      }
+    }
+
     const now = new Date();
     const firstResponseDeadline = new Date(now.getTime() + slaConfig.response * 3600 * 1000);
     const resolutionDeadline = new Date(now.getTime() + slaConfig.resolution * 3600 * 1000);
@@ -62,11 +107,11 @@ exports.createTicket = async (req, res) => {
     const ticket = await SupportTicket.create({
       ticketNumber,
       customer: req.user._id,
-      order: orderId || order || null,
-      subOrder: subOrderId || subOrder || null,
+      order: resolvedOrderId,
+      subOrder: resolvedSubOrderId,
       subject: subject.trim(),
-      category: category || 'GENERAL_INQUIRY',
-      priority: priorityKey,
+      category: finalCategory,
+      priority: finalPriority,
       status: 'OPEN',
       sla: {
         firstResponseDeadline,
@@ -209,7 +254,15 @@ exports.getTicketById = async (req, res) => {
       }
     }
     if (hasBreachChanged) {
-      await ticket.save();
+      await SupportTicket.updateOne(
+        { _id: ticket._id },
+        {
+          $set: {
+            'sla.firstResponseBreached': ticket.sla.firstResponseBreached,
+            'sla.resolutionBreached': ticket.sla.resolutionBreached,
+          },
+        }
+      );
     }
 
     return res.status(200).json({
@@ -297,7 +350,7 @@ exports.addMessageReply = async (req, res) => {
     }
 
     // Status management
-    if (status) {
+    if (status && isAdminOrAgent) {
       ticket.status = status;
     } else {
       if (['agent', 'admin'].includes(senderRole)) {
@@ -357,7 +410,7 @@ exports.closeTicket = async (req, res) => {
 
     const { satisfactionRating, feedbackComment, resolutionSummary, status } = req.body;
 
-    const targetStatus = status || 'RESOLVED';
+    const targetStatus = status === 'CLOSED' ? 'CLOSED' : 'RESOLVED';
     ticket.status = targetStatus;
 
     const now = new Date();
@@ -367,17 +420,24 @@ exports.closeTicket = async (req, res) => {
         ticket.sla.resolutionBreached = true;
       }
     }
+    if (!ticket.sla.firstRespondedAt) {
+      ticket.sla.firstRespondedAt = now;
+    }
 
-    if (satisfactionRating !== undefined && satisfactionRating !== null) {
-      const ratingNum = Number(satisfactionRating);
-      if (ratingNum >= 1 && ratingNum <= 5) {
-        ticket.satisfactionRating = ratingNum;
+    // Only ticket customer owner can rate experience
+    if (isOwner) {
+      if (satisfactionRating !== undefined && satisfactionRating !== null) {
+        const ratingNum = Number(satisfactionRating);
+        if (ratingNum >= 1 && ratingNum <= 5) {
+          ticket.satisfactionRating = ratingNum;
+        }
+      }
+
+      if (feedbackComment) {
+        ticket.feedbackComment = feedbackComment.trim();
       }
     }
 
-    if (feedbackComment) {
-      ticket.feedbackComment = feedbackComment.trim();
-    }
     if (resolutionSummary) {
       ticket.resolutionSummary = resolutionSummary.trim();
     }
@@ -414,7 +474,8 @@ exports.getAdminTickets = async (req, res) => {
     if (category) filter.category = category;
 
     if (search && search.trim()) {
-      const searchRegex = new RegExp(search.trim(), 'i');
+      const escaped = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(escaped, 'i');
       filter.$or = [{ ticketNumber: searchRegex }, { subject: searchRegex }];
     }
 
@@ -479,7 +540,22 @@ exports.assignTicket = async (req, res) => {
       });
     }
 
-    ticket.assignedAgent = targetAgentId;
+    if (!mongoose.Types.ObjectId.isValid(targetAgentId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid agent ID format.',
+      });
+    }
+
+    const agentUser = await User.findById(targetAgentId);
+    if (!agentUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'Assigned agent user not found.',
+      });
+    }
+
+    ticket.assignedAgent = agentUser._id;
     if (ticket.status === 'OPEN') {
       ticket.status = 'IN_PROGRESS';
     }

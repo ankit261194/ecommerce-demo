@@ -21180,14 +21180,21 @@ const runTests = async () => {
     await test('Point 22: Worker processes job to completion, records duration, progress, logs, and execution result', async () => {
       // Process pending job
       await jobQueueService.processNextJobs();
-      // Wait small tick for processor
-      await new Promise(r => setTimeout(r, 100));
+      
+      // Wait for completion (up to 500ms)
+      let data;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        await new Promise(r => setTimeout(r, 60));
+        const res = await fetch(`${baseUrl}/admin/queues/jobs/${point22JobId}`, {
+          headers: { Authorization: `Bearer ${adminToken}` },
+        });
+        if (res.status === 200) {
+          data = await res.json();
+          if (data.data?.status === 'completed') break;
+        }
+      }
 
-      const res = await fetch(`${baseUrl}/admin/queues/jobs/${point22JobId}`, {
-        headers: { Authorization: `Bearer ${adminToken}` },
-      });
-      assert.strictEqual(res.status, 200);
-      const data = await res.json();
+      assert.ok(data, 'Job data must be returned');
       assert.strictEqual(data.success, true);
       assert.strictEqual(data.data.status, 'completed');
       assert.strictEqual(data.data.progress, 100);
@@ -21570,6 +21577,355 @@ const runTests = async () => {
           Authorization: `Bearer ${riderToken}`,
         },
         body: JSON.stringify({ type: 'MANUAL' }),
+      });
+      assert.strictEqual(resRider.status, 403, 'Delivery rider token must return 403 Forbidden');
+    });
+
+    // =========================================================================
+    // PILLAR 2 - POINT 24: MULTI-WAREHOUSE / MULTI-INVENTORY ROUTING HUB
+    // =========================================================================
+    console.log('\n--- PILLAR 2 - POINT 24: MULTI-WAREHOUSE & INVENTORY ROUTING HUB ---');
+
+    let point24WarehouseDelhiId = null;
+    let point24WarehouseBlrId = null;
+    let point24ProductId1 = null;
+    let point24ProductId2 = null;
+
+    // First ensure we have two test products
+    await test('Point 24: Setup test products for multi-warehouse inventory allocation', async () => {
+      const existingProds = await Product.find().limit(2);
+      if (existingProds && existingProds.length >= 2) {
+        point24ProductId1 = existingProds[0]._id.toString();
+        point24ProductId2 = existingProds[1]._id.toString();
+      } else {
+        const cat = await Category.findOne();
+        const vendor = await VendorProfile.findOne();
+        const p1 = await Product.create({
+          title: 'P24 Smart Watch Pro',
+          slug: 'p24-smart-watch-pro-' + Date.now(),
+          sellingPrice: 4999,
+          mrp: 6999,
+          description: 'Multi-warehouse test watch',
+          sku: 'P24-WATCH-01',
+          category: cat?._id,
+          vendor: vendor?._id,
+          stock: 100,
+        });
+        point24ProductId1 = p1._id.toString();
+
+        const p2 = await Product.create({
+          title: 'P24 Bluetooth Earbuds ANC',
+          slug: 'p24-earbuds-anc-' + Date.now(),
+          sellingPrice: 2499,
+          mrp: 3999,
+          description: 'Multi-warehouse test earbuds',
+          sku: 'P24-AUDIO-02',
+          category: cat?._id,
+          vendor: vendor?._id,
+          stock: 80,
+        });
+        point24ProductId2 = p2._id.toString();
+      }
+
+      assert.ok(point24ProductId1, 'Product 1 must be created/found');
+      assert.ok(point24ProductId2, 'Product 2 must be created/found');
+    });
+
+    await test('Point 24: POST /api/admin/warehouses creates new regional fulfillment hubs', async () => {
+      // 1. Create Delhi Hub (North)
+      const resDel = await fetch(`${baseUrl}/admin/warehouses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'North Fulfillment Hub - Delhi NCR',
+          warehouseCode: `WH-DEL-${Date.now().toString().slice(-4)}`,
+          type: 'REGIONAL_DC',
+          address: {
+            street: 'Samalka Logistics Park',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110037',
+            location: {
+              type: 'Point',
+              coordinates: [77.2090, 28.6139],
+            },
+          },
+          contact: {
+            managerName: 'Arun Verma',
+            phone: '+91 98111 22233',
+            email: 'delhi.hub@auramarket.com',
+          },
+          servicedPincodes: ['110001', '110002', '110037', '122001', '201301'],
+          capacity: {
+            maxDailyShipments: 10000,
+            totalPalletCapacity: 2000,
+            usedPalletCapacity: 850,
+          },
+          dispatchCutoffTime: '19:00',
+          slaHours: 24,
+        }),
+      });
+      assert.strictEqual(resDel.status, 201);
+      const dataDel = await resDel.json();
+      assert.strictEqual(dataDel.success, true);
+      assert.ok(dataDel.data._id);
+      point24WarehouseDelhiId = dataDel.data._id;
+
+      // 2. Create Bengaluru Hub (South)
+      const resBlr = await fetch(`${baseUrl}/admin/warehouses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'South Mother Hub - Bengaluru',
+          warehouseCode: `WH-BLR-${Date.now().toString().slice(-4)}`,
+          type: 'CENTRAL_HUB',
+          address: {
+            street: 'Hosur Road Industrial Corridor',
+            city: 'Bengaluru',
+            state: 'Karnataka',
+            pincode: '560100',
+            location: {
+              type: 'Point',
+              coordinates: [77.5946, 12.9716],
+            },
+          },
+          contact: {
+            managerName: 'Suresh Rao',
+            phone: '+91 99000 88776',
+            email: 'blr.hub@auramarket.com',
+          },
+          servicedPincodes: ['560001', '560002', '560100', '600001'],
+          capacity: {
+            maxDailyShipments: 15000,
+            totalPalletCapacity: 3500,
+            usedPalletCapacity: 1200,
+          },
+          dispatchCutoffTime: '20:00',
+          slaHours: 24,
+        }),
+      });
+      assert.strictEqual(resBlr.status, 201);
+      const dataBlr = await resBlr.json();
+      assert.strictEqual(dataBlr.success, true);
+      assert.ok(dataBlr.data._id);
+      point24WarehouseBlrId = dataBlr.data._id;
+    });
+
+    await test('Point 24: GET /api/admin/warehouses lists fulfillment hubs with real-time stock and capacity metrics', async () => {
+      const res = await fetch(`${baseUrl}/admin/warehouses`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.data.length >= 2);
+
+      const delhiHub = data.data.find((w) => w._id === point24WarehouseDelhiId);
+      assert.ok(delhiHub);
+      assert.strictEqual(delhiHub.address.city, 'New Delhi');
+      assert.ok(delhiHub.totalSkus !== undefined);
+    });
+
+    await test('Point 24: GET /api/admin/warehouses/:id retrieves single warehouse with itemized inventory', async () => {
+      const res = await fetch(`${baseUrl}/admin/warehouses/${point24WarehouseDelhiId}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data._id, point24WarehouseDelhiId);
+      assert.ok(Array.isArray(data.data.inventory));
+    });
+
+    await test('Point 24: PUT /api/admin/warehouses/:id updates hub capacity and operating hours', async () => {
+      const res = await fetch(`${baseUrl}/admin/warehouses/${point24WarehouseDelhiId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          operatingHours: '06:00 - 23:00',
+          capacity: {
+            maxDailyShipments: 12000,
+          },
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.operatingHours, '06:00 - 23:00');
+      assert.strictEqual(data.data.capacity.maxDailyShipments, 12000);
+    });
+
+    await test('Point 24: POST /api/admin/warehouses/:id/stock-adjust adds inventory with audit log', async () => {
+      // Stock watch in Delhi hub: 50 units
+      const res1 = await fetch(`${baseUrl}/admin/warehouses/${point24WarehouseDelhiId}/stock-adjust`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          productId: point24ProductId1,
+          sku: 'P24-WATCH-01',
+          quantityDelta: 50,
+          reason: 'RESTOCK',
+        }),
+      });
+      assert.strictEqual(res1.status, 200);
+      const data1 = await res1.json();
+      assert.strictEqual(data1.success, true);
+      assert.strictEqual(data1.data.availableStock, 50);
+
+      // Stock watch in Bengaluru hub: 30 units
+      const res2 = await fetch(`${baseUrl}/admin/warehouses/${point24WarehouseBlrId}/stock-adjust`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          productId: point24ProductId1,
+          sku: 'P24-WATCH-01',
+          quantityDelta: 30,
+          reason: 'RESTOCK',
+        }),
+      });
+      assert.strictEqual(res2.status, 200);
+
+      // Stock earbuds ONLY in Bengaluru hub: 40 units
+      const res3 = await fetch(`${baseUrl}/admin/warehouses/${point24WarehouseBlrId}/stock-adjust`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          productId: point24ProductId2,
+          sku: 'P24-AUDIO-02',
+          quantityDelta: 40,
+          reason: 'RESTOCK',
+        }),
+      });
+      assert.strictEqual(res3.status, 200);
+    });
+
+    await test('Point 24: POST /api/admin/warehouses/route-simulation (Single-Warehouse): allocates 100% of cart to closest warehouse within service radius', async () => {
+      // Destination in Delhi (110001) for Watch Pro (stocked in Delhi)
+      const res = await fetch(`${baseUrl}/admin/warehouses/route-simulation`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          destinationPincode: '110001',
+          items: [
+            {
+              product: point24ProductId1,
+              sku: 'P24-WATCH-01',
+              title: 'P24 Smart Watch Pro',
+              quantity: 2,
+            },
+          ],
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.allocated, true);
+      assert.strictEqual(data.data.splitShipment, false, 'Must be single-box fulfillment from closest Delhi hub');
+      assert.strictEqual(data.data.totalPackages, 1);
+      assert.strictEqual(data.data.warehouseAllocations[0].warehouseId, point24WarehouseDelhiId);
+      assert.ok(data.data.warehouseAllocations[0].distanceKm < 50, 'Delhi to 110001 should be local distance');
+    });
+
+    await test('Point 24: POST /api/admin/warehouses/route-simulation (Multi-Warehouse Split): splits order across multiple hubs when no single warehouse has all items', async () => {
+      // Destination 110001 asks for 60 units of Watch (Delhi has 50, Bengaluru has 30 -> neither single hub can fulfill 60 alone, requiring 2 split packages)
+      const res = await fetch(`${baseUrl}/admin/warehouses/route-simulation`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          destinationPincode: '110001',
+          items: [
+            {
+              product: point24ProductId1,
+              sku: 'P24-WATCH-01',
+              title: 'P24 Smart Watch Pro',
+              quantity: 60,
+            },
+          ],
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.allocated, true);
+      assert.strictEqual(data.data.splitShipment, true, 'Must split shipment across multiple hubs');
+      assert.strictEqual(data.data.totalPackages, 2);
+      assert.strictEqual(data.data.outOfStockShortfalls.length, 0);
+    });
+
+    await test('Point 24: GET /api/admin/warehouses/analytics returns aggregated network pallet utilization and active hubs count', async () => {
+      const res = await fetch(`${baseUrl}/admin/warehouses/analytics`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.totalHubs >= 2);
+      assert.ok(data.data.activeHubs >= 2);
+      assert.ok(data.data.networkCapacity.totalPallets > 0);
+      assert.strictEqual(data.data.routingEngineStatus, 'HEALTHY_ACTIVE');
+    });
+
+    await test('Point 24: DELETE /api/admin/warehouses/:id safely archives warehouse to INACTIVE', async () => {
+      const res = await fetch(`${baseUrl}/admin/warehouses/${point24WarehouseBlrId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+
+      // Verify status is now INACTIVE
+      const resCheck = await fetch(`${baseUrl}/admin/warehouses/${point24WarehouseBlrId}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const dataCheck = await resCheck.json();
+      assert.strictEqual(dataCheck.data.status, 'INACTIVE');
+    });
+
+    await test('Point 24: Role Security: Customer and unauthenticated requests are rejected (401 / 403)', async () => {
+      // Unauthenticated
+      const resUnauth = await fetch(`${baseUrl}/admin/warehouses`);
+      assert.strictEqual(resUnauth.status, 401, 'Unauthenticated request must return 401');
+
+      // Customer
+      const resCust = await fetch(`${baseUrl}/admin/warehouses`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403, 'Customer token must return 403 Forbidden');
+
+      // Delivery Rider
+      const resRider = await fetch(`${baseUrl}/admin/warehouses/route-simulation`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ destinationPincode: '110001', items: [] }),
       });
       assert.strictEqual(resRider.status, 403, 'Delivery rider token must return 403 Forbidden');
     });

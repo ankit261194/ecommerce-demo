@@ -188,8 +188,8 @@ const requirePermission = (permission) => {
 };
 
 
-// Point #13: Granular Vendor Sub-Staff Permission Verification
-const requireVendorPermission = (permission) => {
+// Point #13 & Point #37: Granular Vendor Sub-Staff Permission Verification
+const requireVendorPermission = (...permissions) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({
@@ -211,13 +211,15 @@ const requireVendorPermission = (permission) => {
     // Vendor Sub-Staff with restricted permissions
     if (req.user.role === 'vendor_staff' || (req.user.role === 'vendor' && req.user.isVendorStaff)) {
       const userPerms = req.user.permissions || [];
-      if (userPerms.includes('ALL') || userPerms.includes(permission)) {
+      const hasPermission = userPerms.includes('ALL') || permissions.some((p) => userPerms.includes(p));
+      if (hasPermission) {
         return next();
       }
       return res.status(403).json({
         success: false,
-        message: `Forbidden: Sub-staff member '${req.user.name}' lacks required '${permission}' permission for this vendor action.`,
-        requiredPermission: permission,
+        message: `Forbidden: Sub-staff member '${req.user.name}' lacks required permission for this vendor action. Required one of: ${permissions.join(', ')}.`,
+        requiredPermission: permissions[0],
+        requiredPermissions: permissions,
         grantedPermissions: userPerms,
       });
     }

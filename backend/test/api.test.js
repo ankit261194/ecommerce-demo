@@ -25324,6 +25324,405 @@ const runTests = async () => {
       assert.strictEqual(resCustBanner.status, 403);
     });
 
+    // =========================================================================
+    // Point 37: Vendor Sub-Accounts & Staff Roles (Warehouse Manager, Packager, Accountant)
+    // =========================================================================
+    let p37WarehouseStaffId = '';
+    let p37PackagerStaffId = '';
+    let p37AccountantStaffId = '';
+    let p37WarehouseToken = '';
+    let p37AccountantToken = '';
+
+    await test('Point 37: GET /api/vendor/staff/permissions returns complete permissions catalog and pre-configured role presets (Warehouse Manager, Packager, Accountant)', async () => {
+      const res = await fetch(`${baseUrl}/vendor/staff/permissions`, {
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.permissions));
+      assert.ok(Array.isArray(data.presets));
+
+      // Verify Point 37 key role presets
+      const warehousePreset = data.presets.find((p) => p.id === 'WAREHOUSE_MANAGER');
+      assert.ok(warehousePreset, 'Must have WAREHOUSE_MANAGER preset');
+      assert.strictEqual(warehousePreset.roleTitle, 'Warehouse Manager');
+      assert.ok(warehousePreset.permissions.includes('WAREHOUSE_INVENTORY'));
+      assert.ok(warehousePreset.permissions.includes('PRODUCTS_MANAGE'));
+
+      const packagerPreset = data.presets.find((p) => p.id === 'PACKAGER');
+      assert.ok(packagerPreset, 'Must have PACKAGER preset');
+      assert.strictEqual(packagerPreset.roleTitle, 'Packager & Fulfillment Specialist');
+      assert.ok(packagerPreset.permissions.includes('PACKAGING_DISPATCH'));
+
+      const accountantPreset = data.presets.find((p) => p.id === 'ACCOUNTANT');
+      assert.ok(accountantPreset, 'Must have ACCOUNTANT preset');
+      assert.strictEqual(accountantPreset.roleTitle, 'Accountant & Financial Auditor');
+      assert.ok(accountantPreset.permissions.includes('WALLET_FINANCE'));
+      assert.ok(accountantPreset.permissions.includes('ACCOUNTING_TAX'));
+    });
+
+    await test('Point 37: GET /api/vendor/staff/me/effective-permissions returns owner role and full unrestricted access for primary vendor', async () => {
+      const res = await fetch(`${baseUrl}/vendor/staff/me/effective-permissions`, {
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.isOwner, true);
+      assert.strictEqual(data.data.staffRoleTitle, 'Store Owner & Principal Merchant');
+      assert.ok(data.data.permissions.includes('ALL'));
+    });
+
+    await test('Point 37: POST /api/vendor/staff creates a Warehouse Manager sub-account with stock receiving & inventory permissions', async () => {
+      const res = await fetch(`${baseUrl}/vendor/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Karan Sharma',
+          email: 'warehouse.karan@auramarket.com',
+          phone: '9811122233',
+          password: 'password123',
+          staffRoleTitle: 'Warehouse Manager',
+          department: 'Warehouse & Inventory',
+          permissions: ['PRODUCTS_MANAGE', 'WAREHOUSE_INVENTORY', 'ORDERS_MANAGE'],
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.role, 'vendor_staff');
+      assert.strictEqual(data.data.isVendorStaff, true);
+      assert.strictEqual(data.data.staffRoleTitle, 'Warehouse Manager');
+      assert.strictEqual(data.data.department, 'Warehouse & Inventory');
+      assert.strictEqual(data.data.isActive, true);
+      p37WarehouseStaffId = data.data._id;
+    });
+
+    await test('Point 37: POST /api/vendor/staff creates a Packager sub-account with thermal label and split packing slip permissions', async () => {
+      const res = await fetch(`${baseUrl}/vendor/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Deepak Verma',
+          email: 'packager.deepak@auramarket.com',
+          phone: '9822233344',
+          password: 'password123',
+          staffRoleTitle: 'Packager & Fulfillment Specialist',
+          department: 'Fulfillment & Logistics',
+          permissions: ['PACKAGING_DISPATCH', 'ORDERS_MANAGE'],
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.staffRoleTitle, 'Packager & Fulfillment Specialist');
+      assert.strictEqual(data.data.department, 'Fulfillment & Logistics');
+      p37PackagerStaffId = data.data._id;
+    });
+
+    await test('Point 37: POST /api/vendor/staff creates an Accountant sub-account with wallet ledger and tax filing permissions', async () => {
+      const res = await fetch(`${baseUrl}/vendor/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Neha Agarwal',
+          email: 'accountant.neha@auramarket.com',
+          phone: '9833344455',
+          password: 'password123',
+          staffRoleTitle: 'Accountant & Financial Auditor',
+          department: 'Finance & Accounts',
+          permissions: ['WALLET_FINANCE', 'ACCOUNTING_TAX'],
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.staffRoleTitle, 'Accountant & Financial Auditor');
+      assert.ok(data.data.permissions.includes('WALLET_FINANCE'));
+      assert.ok(data.data.permissions.includes('ACCOUNTING_TAX'));
+      p37AccountantStaffId = data.data._id;
+    });
+
+    await test('Point 37: POST /api/vendor/staff input validation rejects invalid email format, short password, and duplicate email (400 Bad Request)', async () => {
+      // Invalid email
+      const resInvalidEmail = await fetch(`${baseUrl}/vendor/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Test Staff',
+          email: 'not-an-email',
+          password: 'password123',
+          staffRoleTitle: 'Staff',
+        }),
+      });
+      assert.strictEqual(resInvalidEmail.status, 400);
+
+      // Short password (< 6 chars)
+      const resShortPass = await fetch(`${baseUrl}/vendor/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Test Staff',
+          email: 'staff.short@auramarket.com',
+          password: '123',
+          staffRoleTitle: 'Staff',
+        }),
+      });
+      assert.strictEqual(resShortPass.status, 400);
+
+      // Duplicate email
+      const resDup = await fetch(`${baseUrl}/vendor/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Karan Sharma Dup',
+          email: 'warehouse.karan@auramarket.com',
+          password: 'password123',
+          staffRoleTitle: 'Staff',
+        }),
+      });
+      assert.strictEqual(resDup.status, 400);
+    });
+
+    await test('Point 37: GET /api/vendor/staff supports search query filtering and status filtering', async () => {
+      // Search by name
+      const resSearch = await fetch(`${baseUrl}/vendor/staff?search=Karan`, {
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      assert.strictEqual(resSearch.status, 200);
+      const dataSearch = await resSearch.json();
+      assert.strictEqual(dataSearch.count, 1);
+      assert.strictEqual(dataSearch.data[0].email, 'warehouse.karan@auramarket.com');
+
+      // Status active
+      const resActive = await fetch(`${baseUrl}/vendor/staff?status=ACTIVE`, {
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      assert.strictEqual(resActive.status, 200);
+      const dataActive = await resActive.json();
+      assert.ok(dataActive.count >= 3);
+    });
+
+    await test('Point 37: PATCH /api/vendor/staff/:id/toggle-status toggles active/suspended state instantly', async () => {
+      // Suspend Deepak
+      const resToggle = await fetch(`${baseUrl}/vendor/staff/${p37PackagerStaffId}/toggle-status`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      assert.strictEqual(resToggle.status, 200);
+      const dataToggle = await resToggle.json();
+      assert.strictEqual(dataToggle.success, true);
+      assert.strictEqual(dataToggle.data.isActive, false);
+
+      // Verify filtered by SUSPENDED
+      const resSuspended = await fetch(`${baseUrl}/vendor/staff?status=SUSPENDED`, {
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      assert.strictEqual(resSuspended.status, 200);
+      const dataSuspended = await resSuspended.json();
+      const foundSuspended = dataSuspended.data.some((s) => s._id === p37PackagerStaffId);
+      assert.strictEqual(foundSuspended, true);
+
+      // Reactivate Deepak
+      const resReactivate = await fetch(`${baseUrl}/vendor/staff/${p37PackagerStaffId}/toggle-status`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      assert.strictEqual(resReactivate.status, 200);
+      const dataReactivate = await resReactivate.json();
+      assert.strictEqual(dataReactivate.data.isActive, true);
+    });
+
+    await test('Point 37: Sub-Staff Auth & Effective Permissions: Sub-staff can log in and view granted permissions via /staff/me/effective-permissions', async () => {
+      // Login as Warehouse Manager Karan
+      const loginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'warehouse.karan@auramarket.com',
+          password: 'password123',
+        }),
+      });
+      assert.strictEqual(loginRes.status, 200);
+      const loginData = await loginRes.json();
+      assert.ok(loginData.token);
+      p37WarehouseToken = loginData.token;
+
+      // Check effective permissions
+      const effRes = await fetch(`${baseUrl}/vendor/staff/me/effective-permissions`, {
+        headers: { Authorization: `Bearer ${p37WarehouseToken}` },
+      });
+      assert.strictEqual(effRes.status, 200);
+      const effData = await effRes.json();
+      assert.strictEqual(effData.success, true);
+      assert.strictEqual(effData.data.isOwner, false);
+      assert.strictEqual(effData.data.isVendorStaff, true);
+      assert.strictEqual(effData.data.staffRoleTitle, 'Warehouse Manager');
+      assert.strictEqual(effData.data.department, 'Warehouse & Inventory');
+      assert.ok(effData.data.permissions.includes('WAREHOUSE_INVENTORY'));
+      assert.ok(effData.data.permissions.includes('PRODUCTS_MANAGE'));
+    });
+
+    await test('Point 37: Granular Route-Level Access Enforcement: Sub-staff is forbidden from endpoints outside their granted permissions (403 Forbidden)', async () => {
+      // Karan (Warehouse Manager) tries to access STORE_SETTINGS endpoint
+      const resStorefront = await fetch(`${baseUrl}/vendor/storefront/customization`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p37WarehouseToken}`,
+        },
+        body: JSON.stringify({ themeColor: '#123456' }),
+      });
+      assert.strictEqual(resStorefront.status, 403);
+      const dataStorefront = await resStorefront.json();
+      assert.strictEqual(dataStorefront.success, false);
+      assert.ok(dataStorefront.message.includes('lacks required permission'));
+
+      // Karan tries to request a payout (requires WALLET_FINANCE)
+      const resPayout = await fetch(`${baseUrl}/vendor/payout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p37WarehouseToken}`,
+        },
+        body: JSON.stringify({ amount: 1000 }),
+      });
+      assert.strictEqual(resPayout.status, 403);
+
+      // Karan tries to access wallet ledger (requires WALLET_FINANCE)
+      const resWallet = await fetch(`${baseUrl}/vendor/wallet`, {
+        headers: { Authorization: `Bearer ${p37WarehouseToken}` },
+      });
+      assert.strictEqual(resWallet.status, 403);
+    });
+
+    await test('Point 37: Granular Route-Level Access Enforcement: Accountant sub-staff can access financial ledger but is blocked from product catalog', async () => {
+      // Login as Accountant Neha
+      const loginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'accountant.neha@auramarket.com',
+          password: 'password123',
+        }),
+      });
+      assert.strictEqual(loginRes.status, 200);
+      const loginData = await loginRes.json();
+      assert.ok(loginData.token);
+      p37AccountantToken = loginData.token;
+
+      // Neha can access wallet ledger (granted WALLET_FINANCE)
+      const resWallet = await fetch(`${baseUrl}/vendor/wallet`, {
+        headers: { Authorization: `Bearer ${p37AccountantToken}` },
+      });
+      assert.strictEqual(resWallet.status, 200);
+      const dataWallet = await resWallet.json();
+      assert.strictEqual(dataWallet.success, true);
+
+      // Neha can access tax filing report (granted ACCOUNTING_TAX)
+      const resTax = await fetch(`${baseUrl}/vendor/tax-report`, {
+        headers: { Authorization: `Bearer ${p37AccountantToken}` },
+      });
+      assert.strictEqual(resTax.status, 200);
+
+      // Neha is blocked from creating products (requires PRODUCTS_MANAGE)
+      const resProduct = await fetch(`${baseUrl}/vendor/products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p37AccountantToken}`,
+        },
+        body: JSON.stringify({ title: 'Unauthorized Product' }),
+      });
+      assert.strictEqual(resProduct.status, 403);
+    });
+
+    await test('Point 37: PUT /api/vendor/staff/:id updates sub-staff role title, phone, and department', async () => {
+      const res = await fetch(`${baseUrl}/vendor/staff/${p37WarehouseStaffId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          staffRoleTitle: 'Senior Warehouse & Logistics Lead',
+          department: 'Central Fulfillment Hub',
+          phone: '9811199999',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.staffRoleTitle, 'Senior Warehouse & Logistics Lead');
+      assert.strictEqual(data.data.department, 'Central Fulfillment Hub');
+      assert.strictEqual(data.data.phone, '9811199999');
+    });
+
+    await test('Point 37: DELETE /api/vendor/staff/:id revokes access and deletes sub-account', async () => {
+      const res = await fetch(`${baseUrl}/vendor/staff/${p37AccountantStaffId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+
+      // Verify Neha no longer in staff list
+      const resList = await fetch(`${baseUrl}/vendor/staff`, {
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      const dataList = await resList.json();
+      const foundNeha = dataList.data.some((s) => s._id === p37AccountantStaffId);
+      assert.strictEqual(foundNeha, false, 'Deleted accountant must no longer exist in staff list');
+    });
+
+    await test('Point 37: Role Security: Customer and unauthenticated requests to /api/vendor/staff/* are rejected (401 / 403)', async () => {
+      // Unauthenticated
+      const resUnauth = await fetch(`${baseUrl}/vendor/staff`);
+      assert.strictEqual(resUnauth.status, 401);
+
+      // Customer
+      const resCust = await fetch(`${baseUrl}/vendor/staff`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403);
+
+      // Sub-staff trying to invite another staff member (requires STAFF_MANAGE which Karan lacks)
+      const resStaffSelfInvite = await fetch(`${baseUrl}/vendor/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p37WarehouseToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Rogue Associate',
+          email: 'rogue@store.com',
+          password: 'password123',
+          staffRoleTitle: 'Associate',
+        }),
+      });
+      assert.strictEqual(resStaffSelfInvite.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

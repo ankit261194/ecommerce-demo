@@ -625,13 +625,13 @@ export const VendorPortal = () => {
           <button
             type="button"
             onClick={() => setIsStaffModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all"
-            title="Manage Sub-Staff Roles & Granular Portal Permissions"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-black shadow-md transition-all active:scale-95"
+            title="Point 37: Vendor Sub-Accounts & Staff Roles (Warehouse manager, packager, accountant)"
           >
-            <Users className="w-4 h-4 text-amber-400" />
-            <span>Staff & Roles</span>
-            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
-              #13
+            <Users className="w-4 h-4 text-amber-300" />
+            <span>Staff & Sub-Accounts</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-blue-300">
+              Point #37
             </span>
           </button>
 

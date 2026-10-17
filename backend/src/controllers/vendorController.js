@@ -2390,7 +2390,12 @@ exports.deleteVendorReviewReply = async (req, res, next) => {
 // @route   GET /api/vendor/wallet
 exports.getVendorWallet = async (req, res, next) => {
   try {
-    const vendor = await VendorProfile.findOne({ user: req.user._id });
+    let vendor = req.vendorProfile;
+    if (!vendor) {
+      vendor = await VendorProfile.findOne({
+        $or: [{ user: req.user._id }, { _id: req.user.vendorProfile }],
+      });
+    }
     if (!vendor) {
       return res.status(404).json({ success: false, message: 'Vendor profile not found' });
     }
@@ -2529,7 +2534,12 @@ exports.getVendorWallet = async (req, res, next) => {
 // @route   GET /api/vendor/wallet/export-csv
 exports.exportVendorLedgerCSV = async (req, res, next) => {
   try {
-    const vendor = await VendorProfile.findOne({ user: req.user._id });
+    let vendor = req.vendorProfile;
+    if (!vendor) {
+      vendor = await VendorProfile.findOne({
+        $or: [{ user: req.user._id }, { _id: req.user.vendorProfile }],
+      });
+    }
     if (!vendor) {
       return res.status(404).json({ success: false, message: 'Vendor profile not found' });
     }
@@ -2629,72 +2639,127 @@ exports.generateSeoMeta = async (req, res, next) => {
 
 
 // =========================================================================
-// POINT 13: VENDOR SUB-STAFF ROLES & GRANULAR PERMISSIONS
+// POINT 13 & POINT 37: VENDOR SUB-STAFF ROLES & GRANULAR PERMISSIONS
+// (Warehouse Manager, Packager, Accountant & Store Associates)
 // =========================================================================
 
 const VENDOR_PERMISSIONS_CATALOG = [
   {
     key: 'PRODUCTS_MANAGE',
-    label: 'Product Catalog & Inventory',
-    description: 'Add new items, update pricing, upload images, and edit stock counts.',
+    label: 'Product Catalog & Pricing',
+    description: 'Add new items, update pricing, manage multi-variant SKUs, and upload gallery media.',
     category: 'Inventory',
   },
   {
+    key: 'WAREHOUSE_INVENTORY',
+    label: 'Warehouse Stock & Restock Alerts',
+    description: 'Adjust warehouse inventory, manage low-stock threshold alerts, and receiving manifests.',
+    category: 'Warehouse & Inventory',
+  },
+  {
     key: 'ORDERS_MANAGE',
-    label: 'Orders, Manifests & Packing',
-    description: 'View orders, update dispatch status, print shipping labels and handover manifests.',
+    label: 'Orders, Status & Dispatch',
+    description: 'View merchant orders, update dispatch status, manage split shipments and tracking.',
     category: 'Fulfillment',
   },
   {
+    key: 'PACKAGING_DISPATCH',
+    label: 'Packing Slips & Thermal Labels',
+    description: 'Print 4x6 thermal courier labels, multi-vendor split packing slips, and mark orders packed.',
+    category: 'Fulfillment & Packaging',
+  },
+  {
     key: 'REVIEWS_MANAGE',
-    label: 'Customer Inquiries & Reviews',
-    description: 'Respond to customer product reviews and answer store inquiries.',
+    label: 'Customer Reviews & Inquiries',
+    description: 'Respond to customer reviews, handle rating appeals, and answer buyer questions.',
     category: 'Support',
   },
   {
     key: 'WALLET_FINANCE',
-    label: 'Wallet, Earnings & Payout Requests',
+    label: 'Financial Wallet & Ledger',
     description: 'View vendor ledger balance, download CSV statements, and request payout withdrawals.',
     category: 'Finance (High Security)',
   },
   {
+    key: 'ACCOUNTING_TAX',
+    label: 'Tax Reports (GST/VAT) & Invoices',
+    description: 'Download GSTR-1/GSTR-3B tax filing reports, inspect tax invoice breakdowns, and audit commissions.',
+    category: 'Finance & Accounting',
+  },
+  {
     key: 'STORE_SETTINGS',
     label: 'Store Branding & Vacation Mode',
-    description: 'Modify store banner, logo, return policy, and enable vacation mode.',
+    description: 'Modify store banner, logo, micro-storefront customization, and toggle holiday break.',
     category: 'Settings',
   },
   {
     key: 'STAFF_MANAGE',
     label: 'Manage Sub-Staff & Team Access',
-    description: 'Invite new team associates, assign permission roles, and revoke staff access.',
+    description: 'Invite new team associates, assign permission roles, and revoke sub-account access.',
     category: 'Admin',
   },
 ];
 
 const VENDOR_ROLE_PRESETS = [
   {
-    roleTitle: 'Order & Dispatch Specialist',
-    description: 'Handles order packing, label printing, and courier manifests.',
-    permissions: ['ORDERS_MANAGE'],
+    id: 'WAREHOUSE_MANAGER',
+    roleTitle: 'Warehouse Manager',
+    department: 'Warehouse & Inventory',
+    description: 'Oversees warehouse inventory receiving, SKU stock levels, low-stock alerts, and restocking.',
+    permissions: ['PRODUCTS_MANAGE', 'WAREHOUSE_INVENTORY', 'ORDERS_MANAGE'],
   },
   {
+    id: 'PACKAGER',
+    roleTitle: 'Packager & Fulfillment Specialist',
+    department: 'Fulfillment & Logistics',
+    description: 'Dedicated to order packaging queue, 4x6 thermal shipping labels, split slips, and carrier handover.',
+    permissions: ['PACKAGING_DISPATCH', 'ORDERS_MANAGE'],
+  },
+  {
+    id: 'ACCOUNTANT',
+    roleTitle: 'Accountant & Financial Auditor',
+    department: 'Finance & Accounts',
+    description: 'Audits ledger transactions, monitors payout schedules, and downloads GST/VAT tax filing reports.',
+    permissions: ['WALLET_FINANCE', 'ACCOUNTING_TAX'],
+  },
+  {
+    id: 'ORDER_DISPATCH',
+    roleTitle: 'Order & Dispatch Specialist',
+    department: 'Operations',
+    description: 'Handles order packing, label printing, and courier manifests.',
+    permissions: ['ORDERS_MANAGE', 'PACKAGING_DISPATCH'],
+  },
+  {
+    id: 'CATALOG_LEAD',
     roleTitle: 'Catalog & Inventory Lead',
+    department: 'Catalog',
     description: 'Maintains product catalog, SKU stock levels, and media.',
     permissions: ['PRODUCTS_MANAGE', 'ORDERS_MANAGE'],
   },
   {
+    id: 'CUSTOMER_CARE',
     roleTitle: 'Customer Care & Review Rep',
+    department: 'Support',
     description: 'Monitors customer reviews and buyer inquiries.',
     permissions: ['ORDERS_MANAGE', 'REVIEWS_MANAGE'],
   },
   {
+    id: 'STORE_MANAGER',
     roleTitle: 'Assistant Store Manager',
-    description: 'Comprehensive daily store operations excluding payout withdrawals.',
-    permissions: ['PRODUCTS_MANAGE', 'ORDERS_MANAGE', 'REVIEWS_MANAGE', 'STORE_SETTINGS'],
+    department: 'Management',
+    description: 'Comprehensive daily store operations excluding sensitive payout withdrawals.',
+    permissions: [
+      'PRODUCTS_MANAGE',
+      'WAREHOUSE_INVENTORY',
+      'ORDERS_MANAGE',
+      'PACKAGING_DISPATCH',
+      'REVIEWS_MANAGE',
+      'STORE_SETTINGS',
+    ],
   },
 ];
 
-// @desc Get permission catalog and role presets for vendor sub-staff
+// @desc Get permission catalog and role presets for vendor sub-staff (Point #37)
 // @route GET /api/vendor/staff/permissions
 // @access Private (Vendor / Vendor Staff)
 exports.getVendorStaffPermissions = async (req, res, next) => {
@@ -2709,9 +2774,38 @@ exports.getVendorStaffPermissions = async (req, res, next) => {
   }
 };
 
-// @desc Get all sub-staff members for current vendor store
-// @route GET /api/vendor/staff
+// @desc Get effective permissions of logged-in vendor or sub-staff member (Point #37)
+// @route GET /api/vendor/staff/me/effective-permissions
 // @access Private (Vendor / Vendor Staff)
+exports.getEffectiveVendorPermissions = async (req, res, next) => {
+  try {
+    const isOwner = req.user.role === 'vendor' && !req.user.isVendorStaff;
+    const allPermKeys = VENDOR_PERMISSIONS_CATALOG.map((p) => p.key);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        userId: req.user._id,
+        name: req.user.name,
+        email: req.user.email,
+        isOwner,
+        role: req.user.role,
+        isVendorStaff: Boolean(req.user.isVendorStaff),
+        staffRoleTitle: isOwner ? 'Store Owner & Principal Merchant' : req.user.staffRoleTitle || 'Store Associate',
+        department: isOwner ? 'Executive Management' : req.user.department || 'Operations',
+        permissions: isOwner ? ['ALL', ...allPermKeys] : req.user.permissions || [],
+        storeId: req.vendorProfile?._id,
+        storeName: req.vendorProfile?.storeName,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Get all sub-staff members for current vendor store with search & filtering (Point #37)
+// @route GET /api/vendor/staff
+// @access Private (Vendor Owner / Staff Manager)
 exports.getVendorStaff = async (req, res, next) => {
   try {
     if (!req.vendorProfile) {
@@ -2721,13 +2815,37 @@ exports.getVendorStaff = async (req, res, next) => {
       });
     }
 
-    let staff = await User.find({
+    const { search, status, roleTitle } = req.query;
+    const query = {
       vendorProfile: req.vendorProfile._id,
       isVendorStaff: true,
-    }).select('-password').sort({ createdAt: -1 });
+    };
 
-    // Seed realistic default sub-staff for demo vendor if none exist
-    if (staff.length === 0) {
+    if (search && search.trim()) {
+      const q = search.trim();
+      query.$or = [
+        { name: { $regex: q, $options: 'i' } },
+        { email: { $regex: q, $options: 'i' } },
+        { phone: { $regex: q, $options: 'i' } },
+      ];
+    }
+
+    if (status) {
+      if (status.toUpperCase() === 'ACTIVE') {
+        query.isActive = true;
+      } else if (status.toUpperCase() === 'SUSPENDED') {
+        query.isActive = false;
+      }
+    }
+
+    if (roleTitle && roleTitle.trim()) {
+      query.staffRoleTitle = { $regex: roleTitle.trim(), $options: 'i' };
+    }
+
+    let staff = await User.find(query).select('-password').sort({ createdAt: -1 });
+
+    // Seed realistic default sub-staff for demo vendor if table is completely empty and no search was performed
+    if (staff.length === 0 && !search && !status && !roleTitle) {
       const defaultStaff = await User.create({
         name: 'Arjun Mehta',
         email: `dispatch.${req.vendorProfile.storeSlug || 'store'}@auramarket.com`,
@@ -2736,11 +2854,14 @@ exports.getVendorStaff = async (req, res, next) => {
         role: 'vendor_staff',
         vendorProfile: req.vendorProfile._id,
         isVendorStaff: true,
-        staffRoleTitle: 'Order & Dispatch Specialist',
-        permissions: ['ORDERS_MANAGE'],
+        staffRoleTitle: 'Packager & Fulfillment Specialist',
+        department: 'Fulfillment & Logistics',
+        permissions: ['PACKAGING_DISPATCH', 'ORDERS_MANAGE'],
         isActive: true,
       });
-      staff = [defaultStaff];
+      const sObj = defaultStaff.toObject();
+      delete sObj.password;
+      staff = [sObj];
     }
 
     res.status(200).json({
@@ -2753,7 +2874,7 @@ exports.getVendorStaff = async (req, res, next) => {
   }
 };
 
-// @desc Invite / Create a new vendor sub-staff member
+// @desc Invite / Create a new vendor sub-staff member (Point #37)
 // @route POST /api/vendor/staff
 // @access Private (Vendor Owner / Staff Manager)
 exports.createVendorStaff = async (req, res, next) => {
@@ -2765,19 +2886,41 @@ exports.createVendorStaff = async (req, res, next) => {
       });
     }
 
-    const { name, email, phone, password, staffRoleTitle, permissions } = req.body;
+    const { name, email, phone, password, staffRoleTitle, department, permissions } = req.body;
 
-    if (!name || !email || !password || !staffRoleTitle) {
+    if (!name || !name.trim()) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide name, email, password, and staff role title',
+        message: 'Staff member name is required.',
       });
     }
 
-    if (password.length < 6) {
+    if (!email || !email.trim()) {
       return res.status(400).json({
         success: false,
-        message: 'Password must be at least 6 characters long',
+        message: 'Staff email address is required.',
+      });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email address format.',
+      });
+    }
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long.',
+      });
+    }
+
+    if (!staffRoleTitle || !staffRoleTitle.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Staff role title is required.',
       });
     }
 
@@ -2785,7 +2928,7 @@ exports.createVendorStaff = async (req, res, next) => {
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: `User with email '${email}' is already registered on AuraMarket`,
+        message: `User with email '${email}' is already registered on AuraMarket.`,
       });
     }
 
@@ -2798,6 +2941,7 @@ exports.createVendorStaff = async (req, res, next) => {
       vendorProfile: req.vendorProfile._id,
       isVendorStaff: true,
       staffRoleTitle: staffRoleTitle.trim(),
+      department: department?.trim() || 'Operations',
       permissions: Array.isArray(permissions) && permissions.length > 0 ? permissions : ['ORDERS_MANAGE'],
       isActive: true,
     });
@@ -2815,7 +2959,7 @@ exports.createVendorStaff = async (req, res, next) => {
   }
 };
 
-// @desc Update sub-staff permissions and status
+// @desc Update sub-staff permissions and status (Point #37)
 // @route PUT /api/vendor/staff/:id
 // @access Private (Vendor Owner / Staff Manager)
 exports.updateVendorStaff = async (req, res, next) => {
@@ -2840,9 +2984,11 @@ exports.updateVendorStaff = async (req, res, next) => {
       });
     }
 
-    const { staffRoleTitle, permissions, isActive, phone, password } = req.body;
+    const { name, staffRoleTitle, department, permissions, isActive, phone, password } = req.body;
 
+    if (name) staff.name = name.trim();
     if (staffRoleTitle) staff.staffRoleTitle = staffRoleTitle.trim();
+    if (department) staff.department = department.trim();
     if (Array.isArray(permissions)) staff.permissions = permissions;
     if (isActive !== undefined) staff.isActive = Boolean(isActive);
     if (phone) staff.phone = phone.trim();
@@ -2863,7 +3009,48 @@ exports.updateVendorStaff = async (req, res, next) => {
   }
 };
 
-// @desc Remove / Deactivate a vendor sub-staff member
+// @desc Toggle active/suspended status of sub-staff (Point #37)
+// @route PATCH /api/vendor/staff/:id/toggle-status
+// @access Private (Vendor Owner / Staff Manager)
+exports.toggleVendorStaffStatus = async (req, res, next) => {
+  try {
+    if (!req.vendorProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vendor profile not found',
+      });
+    }
+
+    const staff = await User.findOne({
+      _id: req.params.id,
+      vendorProfile: req.vendorProfile._id,
+      isVendorStaff: true,
+    });
+
+    if (!staff) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vendor sub-staff member not found',
+      });
+    }
+
+    staff.isActive = !staff.isActive;
+    await staff.save();
+
+    const staffResponse = staff.toObject();
+    delete staffResponse.password;
+
+    return res.status(200).json({
+      success: true,
+      message: `Staff associate '${staff.name}' status changed to ${staff.isActive ? 'Active' : 'Suspended'}.`,
+      data: staffResponse,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Remove / Deactivate a vendor sub-staff member (Point #37)
 // @route DELETE /api/vendor/staff/:id
 // @access Private (Vendor Owner / Staff Manager)
 exports.deleteVendorStaff = async (req, res, next) => {

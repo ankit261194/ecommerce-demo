@@ -28,9 +28,11 @@ const {
   generateProductCopy,
   generateSeoMeta,
   getVendorStaffPermissions,
+  getEffectiveVendorPermissions,
   getVendorStaff,
   createVendorStaff,
   updateVendorStaff,
+  toggleVendorStaffStatus,
   deleteVendorStaff,
   getLowStockInventory,
   updateInventoryThresholds,
@@ -119,16 +121,16 @@ router.post('/reviews/:id/reply', replyVendorReview);
 router.delete('/reviews/:id/reply', deleteVendorReviewReply);
 
 // Point 61: Real-Time Vendor Financial Wallet & Ledger
-router.get('/wallet', getVendorWallet);
-router.get('/wallet/export-csv', exportVendorLedgerCSV);
+router.get('/wallet', requireVendorPermission('WALLET_FINANCE'), getVendorWallet);
+router.get('/wallet/export-csv', requireVendorPermission('WALLET_FINANCE'), exportVendorLedgerCSV);
 
 // Point 15: Vendor GST/VAT & HSN Tax Filing Report
-router.get('/tax-report', getVendorTaxReport);
-router.get('/tax-report/export-csv', exportVendorTaxReportCSV);
+router.get('/tax-report', requireVendorPermission('WALLET_FINANCE', 'ACCOUNTING_TAX'), getVendorTaxReport);
+router.get('/tax-report/export-csv', requireVendorPermission('WALLET_FINANCE', 'ACCOUNTING_TAX'), exportVendorTaxReportCSV);
 
 router.get('/dashboard', getVendorDashboard);
 router.get('/products', getVendorProducts);
-router.post('/products', createProduct);
+router.post('/products', requireVendorPermission('PRODUCTS_MANAGE'), createProduct);
 router.post('/products/bulk-upload', bulkUploadProducts);
 router.get('/products/export-csv', exportProductsCSV);
 router.get('/products/sample-template', getProductSampleTemplate);
@@ -167,11 +169,13 @@ router.put('/orders/:id/status', updateSubOrderStatus);
 router.post('/payout', requireVendorPermission('WALLET_FINANCE'), requestPayout);
 
 
-// Point #13: Vendor Sub-Staff Roles & Granular Permissions
+// Point #13 & Point #37: Vendor Sub-Staff Roles & Granular Permissions (Warehouse Manager, Packager, Accountant)
 router.get('/staff/permissions', getVendorStaffPermissions);
+router.get('/staff/me/effective-permissions', getEffectiveVendorPermissions);
 router.get('/staff', requireVendorPermission('STAFF_MANAGE'), getVendorStaff);
 router.post('/staff', requireVendorPermission('STAFF_MANAGE'), createVendorStaff);
 router.put('/staff/:id', requireVendorPermission('STAFF_MANAGE'), updateVendorStaff);
+router.patch('/staff/:id/toggle-status', requireVendorPermission('STAFF_MANAGE'), toggleVendorStaffStatus);
 router.delete('/staff/:id', requireVendorPermission('STAFF_MANAGE'), deleteVendorStaff);
 
 module.exports = router;

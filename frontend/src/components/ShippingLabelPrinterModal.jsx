@@ -22,6 +22,7 @@ export default function ShippingLabelPrinterModal({
   vendorData = { storeName: 'Apex Tech Hub', phone: '+91 98765 43210', gstin: '07AAAAA0000A1Z5' },
 }) {
   const [printFormat, setPrintFormat] = useState('thermal'); // 'thermal' | 'a4'
+  const [maskPhone, setMaskPhone] = useState(false);
   const printAreaRef = useRef(null);
 
   if (!isOpen || !order) return null;
@@ -29,7 +30,10 @@ export default function ShippingLabelPrinterModal({
   const orderNum = order.parentOrderNumber || order.id || 'ORD-98214';
   const subOrderNum = order.id || 'SUB-9821';
   const customerName = order.customerName || 'Aman Sharma';
-  const customerPhone = order.customerPhone || '9876543210';
+  const rawCustomerPhone = order.customerPhone || (order.shippingAddress?.phone) || '9876543210';
+  const customerPhone = maskPhone && rawCustomerPhone.length >= 10
+    ? `${rawCustomerPhone.slice(0, 2)}XXXXXX${rawCustomerPhone.slice(-2)}`
+    : rawCustomerPhone;
   const customerAddress = order.shippingAddress
     ? `${order.shippingAddress.street || ''}, ${order.shippingAddress.city || ''}, ${order.shippingAddress.state || ''} - ${order.shippingAddress.pincode || '110001'}`
     : 'Flat 402, Green Valley Apartments, Sector 62, Noida, UP - 201301';
@@ -101,13 +105,16 @@ export default function ShippingLabelPrinterModal({
             </div>
             <div>
               <h3 className="text-base font-black text-white flex items-center gap-2">
-                <span>Shipping Label & Packing Slip Station</span>
+                <span>Shipping Label & Branded Packing Slip Station</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  Point #39
+                </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                   Point #57
                 </span>
               </h3>
               <p className="text-xs text-slate-400">
-                Direct Thermal (100x150mm) & A4 Packing Slip printer with vector barcodes
+                Direct Thermal (100x150mm) & A4 Packing Slip printer with vector barcodes & phone masking
               </p>
             </div>
           </div>
@@ -148,6 +155,19 @@ export default function ShippingLabelPrinterModal({
               <FileText className="w-3.5 h-3.5" />
               <span>A4 Full Tax Invoice / Packing Slip</span>
             </button>
+
+            {/* Phone Masking Toggle (Point #39) */}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 text-slate-300 transition-colors">
+              <input
+                type="checkbox"
+                checked={maskPhone}
+                onChange={(e) => setMaskPhone(e.target.checked)}
+                className="w-3.5 h-3.5 rounded text-amber-500 focus:ring-0 cursor-pointer accent-amber-500"
+              />
+              <span className="text-[11px] font-semibold text-slate-300">
+                Mask Phone {maskPhone ? '(Active)' : ''}
+              </span>
+            </label>
           </div>
 
           <div className="flex items-center gap-2">

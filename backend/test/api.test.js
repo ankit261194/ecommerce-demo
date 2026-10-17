@@ -26115,6 +26115,517 @@ const runTests = async () => {
       assert.strictEqual(resRider.status, 403);
     });
 
+    // =========================================================================
+    // PILLAR 3 - POINT 39: SELF-SERVICE SHIPPING LABEL & BRANDED PACKING SLIP GENERATION
+    // =========================================================================
+    let p39Vendor, p39VendorToken, p39ForeignVendor, p39ForeignVendorToken;
+    let p39Order, p39SubOrder1, p39SubOrder2, p39ForeignSubOrder;
+    let p39PackagerToken, p39AccountantToken;
+
+    await test('Point 39: Setup dedicated merchant accounts, staff & test sub-orders for Shipping Label & Manifest testing', async () => {
+      // 1. Primary Vendor
+      const p39Email = `p39.vendor.${Date.now()}@auramarket.com`;
+      const regRes = await fetch(`${baseUrl}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Apex Logistics Merchant',
+          email: p39Email,
+          password: 'password123',
+          role: 'vendor',
+          phone: '9811223344',
+        }),
+      });
+      assert.strictEqual(regRes.status, 201);
+      const regData = await regRes.json();
+      p39VendorToken = regData.token;
+      const userId = regData.user?.id || regData.user?._id;
+
+      // Update VendorProfile with branded logo
+      p39Vendor = await VendorProfile.findOne({ user: userId });
+      if (!p39Vendor) {
+        p39Vendor = await VendorProfile.create({
+          user: userId,
+          storeName: 'Apex Logistics Pro',
+          storeSlug: `apex-logistics-${Date.now()}`,
+          status: 'approved',
+          logo: 'https://cdn.auramarket.com/stores/apex-logistics-logo.png',
+          storeLogo: 'https://cdn.auramarket.com/stores/apex-logistics-logo.png',
+          phone: '+91 98112 23344',
+          supportEmail: p39Email,
+          address: 'Plot 88, Electronic City Phase 1, Bangalore, Karnataka - 560100',
+          gstin: '29ABCDE1234F1Z5',
+        });
+      } else {
+        p39Vendor.logo = 'https://cdn.auramarket.com/stores/apex-logistics-logo.png';
+        p39Vendor.storeLogo = 'https://cdn.auramarket.com/stores/apex-logistics-logo.png';
+        p39Vendor.status = 'approved';
+        p39Vendor.gstin = '29ABCDE1234F1Z5';
+        await p39Vendor.save();
+      }
+
+      // 2. Foreign Vendor for Merchant Isolation tests
+      const foreignEmail = `p39.foreign.${Date.now()}@auramarket.com`;
+      const foreignReg = await fetch(`${baseUrl}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Foreign Store Merchant',
+          email: foreignEmail,
+          password: 'password123',
+          role: 'vendor',
+          phone: '9844556677',
+        }),
+      });
+      assert.strictEqual(foreignReg.status, 201);
+      const foreignData = await foreignReg.json();
+      p39ForeignVendorToken = foreignData.token;
+      const foreignUserId = foreignData.user?.id || foreignData.user?._id;
+      p39ForeignVendor = await VendorProfile.findOne({ user: foreignUserId });
+      if (!p39ForeignVendor) {
+        p39ForeignVendor = await VendorProfile.create({
+          user: foreignUserId,
+          storeName: 'Foreign Store Hub',
+          storeSlug: `foreign-hub-${Date.now()}`,
+          status: 'approved',
+          phone: '+91 98445 56677',
+        });
+      } else {
+        p39ForeignVendor.status = 'approved';
+        await p39ForeignVendor.save();
+      }
+
+      // 3. Sub-staff 1: Packager (PACKAGING_DISPATCH)
+      const packagerEmail = `packager.${Date.now()}@auramarket.com`;
+      const packagerRes = await fetch(`${baseUrl}/vendor/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p39VendorToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Sunil Packager',
+          email: packagerEmail,
+          phone: '9877112233',
+          password: 'password123',
+          staffRoleTitle: 'Packaging Specialist',
+          department: 'Fulfillment',
+          permissions: ['PACKAGING_DISPATCH'],
+        }),
+      });
+      assert.strictEqual(packagerRes.status, 201);
+
+      const packagerLogin = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: packagerEmail, password: 'password123' }),
+      });
+      assert.strictEqual(packagerLogin.status, 200);
+      const packagerLoginData = await packagerLogin.json();
+      p39PackagerToken = packagerLoginData.token;
+
+      // 4. Sub-staff 2: Accountant (WALLET_FINANCE only - NO dispatch or packaging perms)
+      const accountantEmail = `accountant.${Date.now()}@auramarket.com`;
+      const accountantRes = await fetch(`${baseUrl}/vendor/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p39VendorToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Meena Accountant',
+          email: accountantEmail,
+          phone: '9877334455',
+          password: 'password123',
+          staffRoleTitle: 'Store Accountant',
+          department: 'Finance',
+          permissions: ['WALLET_FINANCE', 'ACCOUNTING_TAX'],
+        }),
+      });
+      assert.strictEqual(accountantRes.status, 201);
+
+      const accountantLogin = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: accountantEmail, password: 'password123' }),
+      });
+      assert.strictEqual(accountantLogin.status, 200);
+      const accountantLoginData = await accountantLogin.json();
+      p39AccountantToken = accountantLoginData.token;
+
+      // 5. Test Customer & Order
+      const testCustomer = (await User.findOne({ role: 'customer' })) || (await User.create({
+        name: 'Arjun Verma',
+        email: `arjun.customer.${Date.now()}@auramarket.com`,
+        password: 'password123',
+        role: 'customer',
+        phone: '9876543210',
+      }));
+
+      p39Order = await Order.create({
+        orderNumber: `ORD-P39-${Date.now().toString().slice(-6)}`,
+        customer: testCustomer._id,
+        items: [
+          {
+            product: new mongoose.Types.ObjectId(),
+            title: 'Wireless Smart Thermal Barcode Scanner',
+            quantity: 2,
+            price: 2500,
+            totalPrice: 5000,
+            vendor: p39Vendor._id,
+          },
+        ],
+        shippingAddress: {
+          recipientName: 'Arjun Verma',
+          phone: '9876543210',
+          street: 'Flat 502, Silicon Heights, HSR Layout Sector 2',
+          city: 'Bangalore',
+          state: 'Karnataka',
+          pincode: '560102',
+        },
+        paymentMethod: 'COD',
+        paymentStatus: 'PENDING',
+        totalAmount: 5000,
+      });
+
+      const p39PrepaidOrder = await Order.create({
+        orderNumber: `ORD-P39-PRE-${Date.now().toString().slice(-6)}`,
+        customer: testCustomer._id,
+        items: [
+          {
+            product: new mongoose.Types.ObjectId(),
+            title: 'Thermal 4x6 Adhesive Roll Pack (500 Labels)',
+            quantity: 1,
+            price: 1200,
+            totalPrice: 1200,
+            vendor: p39Vendor._id,
+          },
+        ],
+        shippingAddress: {
+          recipientName: 'Arjun Verma',
+          phone: '9876543210',
+          street: 'Flat 502, Silicon Heights, HSR Layout Sector 2',
+          city: 'Bangalore',
+          state: 'Karnataka',
+          pincode: '560102',
+        },
+        paymentMethod: 'PREPAID',
+        paymentStatus: 'PAID',
+        totalAmount: 1200,
+      });
+
+      // 6. SubOrder 1 (COD - Confirmed)
+      p39SubOrder1 = await SubOrder.create({
+        parentOrder: p39Order._id,
+        vendor: p39Vendor._id,
+        customer: testCustomer._id,
+        status: 'confirmed',
+        items: [
+          {
+            product: new mongoose.Types.ObjectId(),
+            title: 'Wireless Smart Thermal Barcode Scanner',
+            variantSku: 'WLS-SCAN-PRO',
+            variantName: 'Matte Black',
+            hsnCode: '8471',
+            quantity: 2,
+            price: 2500,
+            totalPrice: 5000,
+          },
+        ],
+        subTotal: 5000,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 500,
+        vendorEarning: 4500,
+        shippingAddress: p39Order.shippingAddress,
+      });
+
+      // 7. SubOrder 2 (Prepaid - Packaging)
+      p39SubOrder2 = await SubOrder.create({
+        parentOrder: p39PrepaidOrder._id,
+        vendor: p39Vendor._id,
+        customer: testCustomer._id,
+        status: 'packaging',
+        items: [
+          {
+            product: new mongoose.Types.ObjectId(),
+            title: 'Thermal 4x6 Adhesive Roll Pack (500 Labels)',
+            variantSku: 'THM-ROLL-4X6',
+            variantName: 'Direct Thermal / Perforated',
+            hsnCode: '4811',
+            quantity: 1,
+            price: 1200,
+            totalPrice: 1200,
+          },
+        ],
+        subTotal: 1200,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 120,
+        vendorEarning: 1080,
+        shippingAddress: p39PrepaidOrder.shippingAddress,
+      });
+
+      // 8. Foreign SubOrder (Owned by p39ForeignVendor)
+      p39ForeignSubOrder = await SubOrder.create({
+        parentOrder: p39Order._id,
+        vendor: p39ForeignVendor._id,
+        customer: testCustomer._id,
+        status: 'confirmed',
+        items: [
+          {
+            product: new mongoose.Types.ObjectId(),
+            title: 'Foreign Merchant Gadget',
+            variantSku: 'FRG-001',
+            quantity: 1,
+            price: 999,
+            totalPrice: 999,
+          },
+        ],
+        subTotal: 999,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 99.9,
+        vendorEarning: 899.1,
+        shippingAddress: p39Order.shippingAddress,
+      });
+    });
+
+    await test('Point 39: GET /api/vendor/orders/:id/shipping-label returns single shipping label with store branding and phone masking', async () => {
+      // 1. JSON format with phone masking enabled
+      const res = await fetch(`${baseUrl}/vendor/orders/${p39SubOrder1._id}/shipping-label?maskPhone=true`, {
+        headers: { Authorization: `Bearer ${p39VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.ok(json.data.subOrderNumber.startsWith('SUB-'));
+      assert.strictEqual(json.data.orderNumber, p39Order.orderNumber);
+      assert.ok(json.data.routingCode.includes('560'));
+      assert.strictEqual(json.data.isCOD, true);
+      assert.strictEqual(json.data.amountToCollect, 5000);
+      assert.strictEqual(json.data.seller.logo, 'https://cdn.auramarket.com/stores/apex-logistics-logo.png');
+      assert.strictEqual(json.data.customer.phone, '98XXXXXX10', 'Phone number must be masked when maskPhone=true');
+
+      // 2. HTML printable thermal label format
+      const resHtml = await fetch(`${baseUrl}/vendor/orders/${p39SubOrder1._id}/shipping-label?format=html&type=thermal`, {
+        headers: { Authorization: `Bearer ${p39VendorToken}` },
+      });
+      assert.strictEqual(resHtml.status, 200);
+      const htmlText = await resHtml.text();
+      assert.ok(htmlText.includes('<!DOCTYPE html>'));
+      assert.ok(htmlText.includes('AuraMarket Express'));
+    });
+
+    await test('Point 39: POST /api/vendor/orders/bulk-shipping-labels generates batch thermal labels with phone masking & metrics', async () => {
+      const res = await fetch(`${baseUrl}/vendor/orders/bulk-shipping-labels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p39VendorToken}`,
+        },
+        body: JSON.stringify({
+          subOrderIds: [p39SubOrder1._id, p39SubOrder2._id],
+          maskPhone: true,
+          paperSize: '4x6',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.count, 2);
+      assert.strictEqual(json.manifestSummary.totalOrders, 2);
+      assert.strictEqual(json.manifestSummary.totalCodOrders, 1);
+      assert.strictEqual(json.manifestSummary.totalCodAmount, 5000);
+      assert.strictEqual(json.manifestSummary.totalPrepaidOrders, 1);
+      assert.strictEqual(json.labels[0].seller.logo, 'https://cdn.auramarket.com/stores/apex-logistics-logo.png');
+      assert.strictEqual(json.labels[0].recipient.phone, '98XXXXXX10');
+
+      // Test HTML bulk format
+      const resHtml = await fetch(`${baseUrl}/vendor/orders/bulk-shipping-labels?format=html&subOrderIds=${p39SubOrder1._id},${p39SubOrder2._id}`, {
+        headers: { Authorization: `Bearer ${p39VendorToken}` },
+      });
+      assert.strictEqual(resHtml.status, 200);
+      const htmlText = await resHtml.text();
+      assert.ok(htmlText.includes('AuraMarket Enterprise 4x6 Thermal Shipping Labels'));
+    });
+
+    await test('Point 39: GET /api/vendor/orders/:id/split-packing-slip returns branded split packing slip and supports SubOrder._id lookup', async () => {
+      // Lookup using SubOrder._id directly
+      const res = await fetch(`${baseUrl}/vendor/orders/${p39SubOrder1._id}/split-packing-slip`, {
+        headers: { Authorization: `Bearer ${p39VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.count, 1);
+      assert.ok(json.data[0].slipId.includes('SUB-'));
+      assert.strictEqual(json.data[0].seller.logo, 'https://cdn.auramarket.com/stores/apex-logistics-logo.png');
+      assert.ok(json.data[0].items.length > 0);
+      assert.strictEqual(json.data[0].items[0].hsnCode, '8471');
+    });
+
+    await test('Point 39: POST /api/vendor/orders/dispatch-manifest compiles courier handover sheet, computes totals, advances status to ready_for_pickup, and writes audit trail', async () => {
+      const res = await fetch(`${baseUrl}/vendor/orders/dispatch-manifest`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p39VendorToken}`,
+        },
+        body: JSON.stringify({
+          subOrderIds: [p39SubOrder1._id, p39SubOrder2._id],
+          courierPartner: 'BlueDart Express',
+          driverName: 'Vikram Singh',
+          driverPhone: '9811223344',
+          vehicleNumber: 'KA-01-MJ-5566',
+          remarks: 'All security tamper seals inspected and intact.',
+          maskPhone: true,
+          advanceStatus: true,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.ok(json.data.manifest.manifestNumber.startsWith('MAN-'));
+      assert.strictEqual(json.data.manifest.totalPackages, 2);
+      assert.strictEqual(json.data.manifest.courierPartner, 'BlueDart Express');
+      assert.strictEqual(json.data.manifest.totalCodAmount, 5000);
+      assert.strictEqual(json.data.manifest.totalPrepaidOrders, 1);
+      assert.strictEqual(json.data.signOff.driverName, 'Vikram Singh');
+      assert.strictEqual(json.data.signOff.vehicleNumber, 'KA-01-MJ-5566');
+      assert.strictEqual(json.data.shipments[0].recipient.phone, '98XXXXXX10');
+
+      // Verify DB subOrders transitioned to ready_for_pickup
+      const fresh1 = await SubOrder.findById(p39SubOrder1._id);
+      assert.strictEqual(fresh1.status, 'ready_for_pickup');
+      assert.ok(fresh1.readyForPickupAt !== null);
+      assert.strictEqual(fresh1.carrier, 'BlueDart Express');
+
+      const fresh2 = await SubOrder.findById(p39SubOrder2._id);
+      assert.strictEqual(fresh2.status, 'ready_for_pickup');
+      assert.ok(fresh2.readyForPickupAt !== null);
+
+      // Verify AuditLog written
+      const auditEntry = await AuditLog.findOne({
+        action: 'COURIER_DISPATCH_MANIFEST_GENERATED',
+        targetId: json.data.manifest.manifestNumber,
+      });
+      assert.ok(auditEntry, 'Audit log must record manifest creation');
+      assert.strictEqual(auditEntry.module, 'SHIPPING_LOGISTICS');
+
+      // Verify printable HTML format
+      const resHtml = await fetch(`${baseUrl}/vendor/orders/dispatch-manifest?format=html&subOrderIds=${p39SubOrder1._id},${p39SubOrder2._id}&courierPartner=BlueDart Express`, {
+        headers: { Authorization: `Bearer ${p39VendorToken}` },
+      });
+      assert.strictEqual(resHtml.status, 200);
+      const htmlContent = await resHtml.text();
+      assert.ok(htmlContent.includes('<!DOCTYPE html>'));
+      assert.ok(htmlContent.includes('AuraMarket Dispatch Manifest'));
+      assert.ok(htmlContent.includes('BlueDart Express'));
+    });
+
+    await test('Point 39: Validation & Merchant Isolation: rejects empty inputs and prevents accessing foreign merchant orders', async () => {
+      // 1. Validation: empty subOrderIds
+      const resEmpty = await fetch(`${baseUrl}/vendor/orders/dispatch-manifest`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p39VendorToken}`,
+        },
+        body: JSON.stringify({ subOrderIds: [] }),
+      });
+      assert.strictEqual(resEmpty.status, 400);
+
+      // 2. Merchant Isolation: Primary vendor attempts to manifest foreignSubOrder
+      const resForeign = await fetch(`${baseUrl}/vendor/orders/dispatch-manifest`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p39VendorToken}`,
+        },
+        body: JSON.stringify({ subOrderIds: [p39ForeignSubOrder._id] }),
+      });
+      assert.strictEqual(resForeign.status, 404, 'Foreign sub-orders must not be accessible by other vendors');
+
+      // 3. Foreign merchant shipping label isolation
+      const resLabelForeign = await fetch(`${baseUrl}/vendor/orders/${p39ForeignSubOrder._id}/shipping-label`, {
+        headers: { Authorization: `Bearer ${p39VendorToken}` },
+      });
+      assert.strictEqual(resLabelForeign.status, 404);
+    });
+
+    await test('Point 39: Granular Sub-Staff RBAC: Packager sub-staff succeeds, Accountant sub-staff is forbidden (403)', async () => {
+      // 1. Packager sub-staff (PACKAGING_DISPATCH) generates shipping label successfully
+      const resPackagerLabel = await fetch(`${baseUrl}/vendor/orders/${p39SubOrder1._id}/shipping-label`, {
+        headers: { Authorization: `Bearer ${p39PackagerToken}` },
+      });
+      assert.strictEqual(resPackagerLabel.status, 200);
+
+      // 2. Packager sub-staff generates dispatch manifest successfully
+      const resPackagerManifest = await fetch(`${baseUrl}/vendor/orders/dispatch-manifest`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p39PackagerToken}`,
+        },
+        body: JSON.stringify({
+          subOrderIds: [p39SubOrder1._id],
+          courierPartner: 'Shadowfax Technologies',
+        }),
+      });
+      assert.strictEqual(resPackagerManifest.status, 200);
+
+      // 3. Accountant sub-staff (WALLET_FINANCE only) attempts shipping label -> 403 Forbidden
+      const resAccountantLabel = await fetch(`${baseUrl}/vendor/orders/${p39SubOrder1._id}/shipping-label`, {
+        headers: { Authorization: `Bearer ${p39AccountantToken}` },
+      });
+      assert.strictEqual(resAccountantLabel.status, 403);
+      const jsonAccountantLabel = await resAccountantLabel.json();
+      assert.ok(jsonAccountantLabel.message.includes('lacks required permission'));
+
+      // 4. Accountant sub-staff attempts dispatch manifest -> 403 Forbidden
+      const resAccountantManifest = await fetch(`${baseUrl}/vendor/orders/dispatch-manifest`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p39AccountantToken}`,
+        },
+        body: JSON.stringify({
+          subOrderIds: [p39SubOrder1._id],
+        }),
+      });
+      assert.strictEqual(resAccountantManifest.status, 403);
+    });
+
+    await test('Point 39: Role Security: Customer, rider, and unauthenticated requests to shipping labels & manifest are rejected (401 / 403)', async () => {
+      // 1. Unauthenticated request to dispatch-manifest
+      const resUnauth = await fetch(`${baseUrl}/vendor/orders/dispatch-manifest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subOrderIds: [p39SubOrder1._id] }),
+      });
+      assert.strictEqual(resUnauth.status, 401);
+
+      // 2. Customer token accessing vendor dispatch-manifest
+      const resCustomer = await fetch(`${baseUrl}/vendor/orders/dispatch-manifest`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ subOrderIds: [p39SubOrder1._id] }),
+      });
+      assert.strictEqual(resCustomer.status, 403);
+
+      // 3. Delivery rider token accessing bulk shipping labels
+      const resRider = await fetch(`${baseUrl}/vendor/orders/bulk-shipping-labels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ subOrderIds: [p39SubOrder1._id] }),
+      });
+      assert.strictEqual(resRider.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

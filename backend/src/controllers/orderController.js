@@ -2107,12 +2107,27 @@ exports.getSplitPackingSlips = async (req, res, next) => {
     const isMongoId = mongoose.Types.ObjectId.isValid(id);
     const query = isMongoId ? { _id: id } : { orderNumber: id };
 
-    const order = await Order.findOne(query)
+    let order = await Order.findOne(query)
       .populate('customer', 'name email phone')
       .populate({
         path: 'items.product',
         select: 'title sku hsnCode category images mrp sellingPrice',
       });
+
+    let matchedSubOrderId = null;
+    if (!order && isMongoId) {
+      // Allow looking up by SubOrder._id if :id matches a sub-order
+      const subOrderDoc = await SubOrder.findById(id);
+      if (subOrderDoc && subOrderDoc.parentOrder) {
+        matchedSubOrderId = subOrderDoc._id;
+        order = await Order.findById(subOrderDoc.parentOrder)
+          .populate('customer', 'name email phone')
+          .populate({
+            path: 'items.product',
+            select: 'title sku hsnCode category images mrp sellingPrice',
+          });
+      }
+    }
 
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found for split packing slips' });
@@ -2126,8 +2141,10 @@ exports.getSplitPackingSlips = async (req, res, next) => {
       if (!order.customer._id.equals(req.user._id)) {
         return res.status(403).json({ success: false, message: 'Unauthorized to view packing slips for this order' });
       }
-    } else if (userRole === 'vendor') {
-      const vendorProfile = await VendorProfile.findOne({ user: req.user._id });
+    } else if (userRole === 'vendor' || userRole === 'vendor_staff' || req.user?.isVendorStaff) {
+      const vendorProfile = req.vendorProfile || await VendorProfile.findOne({
+        $or: [{ user: req.user._id }, { _id: req.user.vendorProfile }],
+      });
       if (!vendorProfile) {
         return res.status(403).json({ success: false, message: 'Vendor profile not found' });
       }
@@ -2135,7 +2152,11 @@ exports.getSplitPackingSlips = async (req, res, next) => {
     }
 
     // Fetch all SubOrders for this order
-    let subOrders = await SubOrder.find({ parentOrder: order._id })
+    const subOrderFilter = { parentOrder: order._id };
+    if (matchedSubOrderId) {
+      subOrderFilter._id = matchedSubOrderId;
+    }
+    let subOrders = await SubOrder.find(subOrderFilter)
       .populate('vendor')
       .populate('customer', 'name email phone')
       .populate('deliveryPartner', 'name phone');

@@ -37,6 +37,7 @@ import ProductGalleryUploader from '../components/ProductGalleryUploader';
 import BulkProductExcelModal from '../components/BulkProductExcelModal';
 import ShippingLabelPrinterModal from '../components/ShippingLabelPrinterModal';
 import BulkThermalLabelPrinterModal from '../components/BulkThermalLabelPrinterModal';
+import VendorDispatchManifestModal from '../components/VendorDispatchManifestModal';
 import SmartSplitPackingSlipModal from '../components/SmartSplitPackingSlipModal';
 import ThermalReceiptPrinterModal from '../components/ThermalReceiptPrinterModal';
 import AiProductCopyModal from '../components/AiProductCopyModal';
@@ -175,6 +176,8 @@ export const VendorPortal = () => {
   const [selectedOrderForLabel, setSelectedOrderForLabel] = useState(null);
   const [selectedOrderIdsForLabels, setSelectedOrderIdsForLabels] = useState([]); // Point 9: Bulk Orders Selection
   const [isBulkLabelsModalOpen, setIsBulkLabelsModalOpen] = useState(false); // Point 9: Bulk 4x6 Thermal Label Modal
+  const [isManifestModalOpen, setIsManifestModalOpen] = useState(false); // Point #39: Courier Dispatch Manifest Modal
+  const [selectedOrderForManifest, setSelectedOrderForManifest] = useState(null);
   const [isSplitSlipModalOpen, setIsSplitSlipModalOpen] = useState(false); // Point #73: Smart Multi-Vendor Split Packing Slip with QR Codes
   const [selectedOrderForSplitSlip, setSelectedOrderForSplitSlip] = useState(null);
   const [isThermalModalOpen, setIsThermalModalOpen] = useState(false); // Point #75: Thermal Receipt Printer Modal
@@ -1013,6 +1016,19 @@ export const VendorPortal = () => {
                 <span>Generate 4x6 Thermal Labels ({selectedOrderIdsForLabels.length})</span>
                 <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-amber-400">#9</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedOrderForManifest(null);
+                  setIsManifestModalOpen(true);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-black transition-all flex items-center gap-2 shadow-lg shadow-blue-500/20"
+              >
+                <FileText className="w-4 h-4" />
+                <span>Generate Courier Manifest (Point #39) ({selectedOrderIdsForLabels.length})</span>
+                <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-blue-300">#39</span>
+              </button>
             </div>
           </div>
         )}
@@ -1222,6 +1238,19 @@ export const VendorPortal = () => {
                       >
                         <Printer className="w-3.5 h-3.5 text-amber-600" />
                         <span>Thermal POS</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedOrderForManifest(order.rawId || order.id);
+                          setIsManifestModalOpen(true);
+                        }}
+                        className="px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs border border-blue-200"
+                        title="Generate Official Courier Dispatch Handover Manifest (Point #39)"
+                      >
+                        <Truck className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Manifest</span>
                       </button>
 
                       {isPending && (
@@ -1903,6 +1932,25 @@ export const VendorPortal = () => {
         onClose={() => setIsBulkLabelsModalOpen(false)}
         selectedOrderIds={selectedOrderIdsForLabels}
         role="vendor"
+      />
+
+      {/* Point 39: Self-Service Courier Dispatch Manifest Modal */}
+      <VendorDispatchManifestModal
+        isOpen={isManifestModalOpen}
+        onClose={() => {
+          setIsManifestModalOpen(false);
+          setSelectedOrderForManifest(null);
+        }}
+        selectedOrderIds={
+          selectedOrderForManifest
+            ? [selectedOrderForManifest]
+            : selectedOrderIdsForLabels
+        }
+        onSuccess={() => {
+          fetchVendorData();
+          setSelectedOrderIdsForLabels([]);
+          setSelectedOrderForManifest(null);
+        }}
       />
 
       {/* Point 73: Smart Multi-Vendor Split Packing Slip with QR Codes Modal */}

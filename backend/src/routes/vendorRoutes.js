@@ -15,6 +15,7 @@ const {
   updateSubOrderStatus,
   getShippingLabelData,
   generateBulkShippingLabels,
+  generateDispatchManifest,
   requestPayout,
   getVendorProfile,
   updateVendorProfile,
@@ -162,10 +163,12 @@ router.put('/products/:id/media', updateProductMedia);
 router.patch('/products/:id/stock', updateProductStock);
 router.delete('/products/:id', deleteProduct);
 router.get('/orders', getVendorOrders);
-router.get('/orders/:id/shipping-label', getShippingLabelData);
-router.post('/orders/bulk-shipping-labels', generateBulkShippingLabels);
-router.get('/orders/bulk-shipping-labels', generateBulkShippingLabels);
-router.get('/orders/:id/split-packing-slip', getSplitPackingSlips);
+router.get('/orders/:id/shipping-label', requireVendorPermission('ORDERS_MANAGE', 'PACKAGING_DISPATCH'), getShippingLabelData);
+router.post('/orders/bulk-shipping-labels', requireVendorPermission('ORDERS_MANAGE', 'PACKAGING_DISPATCH'), generateBulkShippingLabels);
+router.get('/orders/bulk-shipping-labels', requireVendorPermission('ORDERS_MANAGE', 'PACKAGING_DISPATCH'), generateBulkShippingLabels);
+router.get('/orders/:id/split-packing-slip', requireVendorPermission('ORDERS_MANAGE', 'PACKAGING_DISPATCH'), getSplitPackingSlips);
+router.post('/orders/dispatch-manifest', requireVendorPermission('ORDERS_MANAGE', 'PACKAGING_DISPATCH'), generateDispatchManifest);
+router.get('/orders/dispatch-manifest', requireVendorPermission('ORDERS_MANAGE', 'PACKAGING_DISPATCH'), generateDispatchManifest);
 router.get('/orders/:id/thermal-receipt', getThermalReceipt);
 router.put('/orders/:id/status', updateSubOrderStatus);
 router.post('/payout', requireVendorPermission('WALLET_FINANCE'), requestPayout);

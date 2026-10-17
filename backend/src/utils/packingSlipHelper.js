@@ -81,6 +81,7 @@ function buildSplitPackingSlipData({ order, subOrder, vendor, customer, items, t
       id: vendor._id,
       storeName: vendor.storeName || 'Apex Tech Hub',
       storeSlug: vendor.storeSlug || 'apex-tech',
+      logo: vendor.logo || vendor.storeLogo || null,
       gstin: vendor.gstin || '07AAAAA0000A1Z5',
       phone: vendor.phone || '+91 98765 43210',
       email: vendor.supportEmail || 'merchant@auramarket.com',

@@ -23,6 +23,10 @@ const vendorProfileSchema = new mongoose.Schema(
       type: String,
       default: 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=150',
     },
+    logo: {
+      type: String,
+      default: '',
+    },
     storeBanner: {
       type: String,
       default: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800',

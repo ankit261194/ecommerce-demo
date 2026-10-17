@@ -128,7 +128,7 @@ const orderSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['COD', 'RAZORPAY', 'STRIPE', 'UPI', 'WALLET', 'SPLIT_WALLET_ONLINE', 'PARTIAL_COD', 'ONLINE', 'REPLACEMENT_FREE'],
+      enum: ['COD', 'RAZORPAY', 'STRIPE', 'UPI', 'WALLET', 'SPLIT_WALLET_ONLINE', 'PARTIAL_COD', 'ONLINE', 'PREPAID', 'REPLACEMENT_FREE'],
       default: 'COD',
     },
     paymentStatus: {

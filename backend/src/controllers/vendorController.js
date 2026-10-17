@@ -652,7 +652,9 @@ function generatePrintableHtml(d, type) {
 // @route   GET /api/vendor/orders/:id/shipping-label
 exports.getShippingLabelData = async (req, res, next) => {
   try {
-    const vendor = await VendorProfile.findOne({ user: req.user._id });
+    const vendor = req.vendorProfile || await VendorProfile.findOne({
+      $or: [{ user: req.user._id }, { _id: req.user.vendorProfile }]
+    });
     if (!vendor) {
       return res.status(404).json({ success: false, message: 'Vendor profile not found' });
     }
@@ -675,6 +677,12 @@ exports.getShippingLabelData = async (req, res, next) => {
     const totalWeightKg = (subOrder.items.reduce((acc, i) => acc + (i.quantity * 0.45), 0)).toFixed(2);
     const invoiceNumber = `INV-${new Date().getFullYear()}-${subOrder._id.toString().slice(-6).toUpperCase()}`;
 
+    const maskPhone = req.query.maskPhone === 'true' || req.body?.maskPhone === true;
+    let custPhone = subOrder.shippingAddress?.phone || subOrder.customer?.phone || '9876543210';
+    if (maskPhone && custPhone.length >= 10) {
+      custPhone = `${custPhone.slice(0, 2)}XXXXXX${custPhone.slice(-2)}`;
+    }
+
     const labelData = {
       orderId: subOrder.parentOrder?._id || subOrder.parentOrder,
       orderNumber: orderRef,
@@ -685,7 +693,7 @@ exports.getShippingLabelData = async (req, res, next) => {
       routingCode,
       barcodeValue,
       qrValue: trackingUrl,
-      courierPartner: subOrder.deliveryPartner?.name || 'AuraMarket Express Courier',
+      courierPartner: subOrder.carrier || subOrder.deliveryPartner?.name || 'AuraMarket Express Courier',
       paymentMethod: subOrder.parentOrder?.paymentMethod || 'PREPAID',
       paymentStatus: subOrder.parentOrder?.paymentStatus || 'PAID',
       isCOD: (subOrder.parentOrder?.paymentMethod || '').toUpperCase() === 'COD',
@@ -695,6 +703,7 @@ exports.getShippingLabelData = async (req, res, next) => {
       seller: {
         storeName: vendor.storeName || 'Apex Tech Hub',
         storeSlug: vendor.storeSlug || 'apex-tech',
+        logo: vendor.logo || vendor.storeLogo || null,
         email: vendor.supportEmail || 'seller@auramarket.com',
         phone: vendor.phone || '+91 98765 43210',
         address: vendor.address || 'Plot 42, Tech Hub Logistics Center, Sector 62, Noida, UP, 201301',
@@ -702,7 +711,7 @@ exports.getShippingLabelData = async (req, res, next) => {
       },
       customer: {
         name: subOrder.shippingAddress?.recipientName || subOrder.customer?.name || 'Valued Customer',
-        phone: subOrder.shippingAddress?.phone || subOrder.customer?.phone || '9876543210',
+        phone: custPhone,
         address: `${subOrder.shippingAddress?.street || 'Flat 402, Green Valley Apartments'}, ${subOrder.shippingAddress?.city || 'New Delhi'}, ${subOrder.shippingAddress?.state || 'Delhi'} - ${subOrder.shippingAddress?.pincode || '110001'}`,
         deliveryInstructions: subOrder.deliveryInstructions || 'Leave at reception / doorstep',
       },
@@ -1243,7 +1252,9 @@ exports.generateBulkShippingLabels = async (req, res, next) => {
         vendor = (await VendorProfile.findOne({ status: 'approved' })) || (await VendorProfile.findOne({}));
       }
     } else {
-      vendor = await VendorProfile.findOne({ user: req.user._id });
+      vendor = req.vendorProfile || await VendorProfile.findOne({
+        $or: [{ user: req.user._id }, { _id: req.user.vendorProfile }],
+      });
     }
 
     if (!vendor && !isAdmin) {
@@ -1280,7 +1291,7 @@ exports.generateBulkShippingLabels = async (req, res, next) => {
     const subOrders = await SubOrder.find(query)
       .populate('customer', 'name email phone')
       .populate('deliveryPartner', 'name phone')
-      .populate('vendor', 'storeName storeSlug phone supportEmail address gstin')
+      .populate('vendor', 'storeName storeSlug phone supportEmail address gstin logo')
       .populate('parentOrder', 'orderNumber paymentMethod paymentStatus totalAmount createdAt');
 
     if (!subOrders || subOrders.length === 0) {
@@ -1353,6 +1364,7 @@ exports.generateBulkShippingLabels = async (req, res, next) => {
         seller: {
           storeName: v.storeName || 'Apex Tech Hub',
           storeSlug: v.storeSlug || 'apex-tech',
+          logo: v.logo || v.storeLogo || null,
           email: v.supportEmail || 'seller@auramarket.com',
           phone: v.phone || '+91 98765 43210',
           address: v.address || 'Plot 42, Tech Hub Logistics Center, Sector 62, Noida, UP, 201301',
@@ -1434,6 +1446,658 @@ exports.generateBulkShippingLabels = async (req, res, next) => {
     next(error);
   }
 };
+
+// =========================================================================
+// Point 39: Self-Service Shipping Label & Branded Packing Slip / Manifest Generator
+// =========================================================================
+
+function generateDispatchManifestHtml({ manifest, seller, shipments, signOff }) {
+  const pageTitle = `AuraMarket Dispatch Manifest - ${manifest.manifestNumber} (${shipments.length} Parcels)`;
+  const printDate = new Date(manifest.manifestDate || Date.now()).toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const rowsHtml = shipments
+    .map(
+      (s, idx) => `
+    <tr>
+      <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
+      <td class="font-mono"><strong>${s.subOrderNumber}</strong><br><small style="color: #64748b;">${s.orderNumber}</small></td>
+      <td class="font-mono"><strong>${s.awbCode}</strong><br><small style="color: #0284c7;">${s.routingCode}</small></td>
+      <td>
+        <strong>${s.recipient.name}</strong><br>
+        <span style="font-size: 8.5px; color: #334155;">${s.recipient.city}, ${s.recipient.state} - ${s.recipient.pincode}</span><br>
+        <small style="color: #64748b;">Ph: ${s.recipient.phone}</small>
+      </td>
+      <td style="text-align: center;">
+        <strong>${s.itemsCount}</strong><br>
+        <small style="color: #64748b;">${s.weightKg} kg</small>
+      </td>
+      <td style="text-align: center;">
+        <span class="badge ${s.isCOD ? 'badge-cod' : 'badge-prepaid'}">
+          ${s.paymentMethod}
+        </span>
+      </td>
+      <td style="text-align: right; font-weight: 800;">
+        ${s.isCOD ? '₹' + Number(s.amountToCollect).toLocaleString('en-IN') : '₹0.00'}
+      </td>
+      <td style="text-align: center;">
+        <div class="checkbox-box"></div>
+      </td>
+    </tr>
+  `
+    )
+    .join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${pageTitle}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 10mm;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #0f172a;
+      background: #f8fafc;
+      font-size: 9.5px;
+      line-height: 1.3;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .no-print {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    }
+    .no-print .title {
+      font-size: 14px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .no-print .badge {
+      background: #3b82f6;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 9999px;
+    }
+    .btn-print {
+      background: #22c55e;
+      color: #052e16;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-weight: 800;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-print:hover { background: #16a34a; color: #fff; }
+
+    .manifest-sheet {
+      max-width: 210mm;
+      margin: 0 auto;
+      background: #fff;
+      padding: 8mm;
+      border: 1px solid #cbd5e1;
+    }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+    }
+    .brand-title {
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+      color: #0f172a;
+    }
+    .brand-sub {
+      font-size: 9px;
+      color: #475569;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .manifest-tag {
+      text-align: right;
+    }
+    .manifest-tag .number {
+      font-family: monospace;
+      font-size: 14px;
+      font-weight: 900;
+      color: #1e40af;
+    }
+    .manifest-tag .date {
+      font-size: 8.5px;
+      color: #64748b;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .meta-box {
+      border: 1px solid #94a3b8;
+      border-radius: 4px;
+      padding: 6px 8px;
+    }
+    .meta-box h4 {
+      font-size: 8px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #475569;
+      margin-bottom: 2px;
+      border-bottom: 1px dashed #cbd5e1;
+      padding-bottom: 2px;
+    }
+
+    .stats-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .stat-card {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 5px 8px;
+      text-align: center;
+    }
+    .stat-label {
+      font-size: 7.5px;
+      text-transform: uppercase;
+      font-weight: 800;
+      color: #64748b;
+    }
+    .stat-val {
+      font-size: 13px;
+      font-weight: 900;
+      color: #0f172a;
+    }
+
+    .manifest-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 10px;
+      font-size: 8.5px;
+    }
+    .manifest-table th, .manifest-table td {
+      border: 1px solid #94a3b8;
+      padding: 4px 6px;
+      vertical-align: middle;
+    }
+    .manifest-table th {
+      background: #0f172a;
+      color: #fff;
+      font-size: 8px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .manifest-table tr:nth-child(even) {
+      background: #f8fafc;
+    }
+
+    .font-mono { font-family: monospace; }
+    .badge {
+      display: inline-block;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 7.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .badge-cod { background: #fee2e2; color: #991b1b; border: 1px solid #f87171; }
+    .badge-prepaid { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+    .checkbox-box {
+      width: 14px;
+      height: 14px;
+      border: 1.5px solid #0f172a;
+      margin: 0 auto;
+      border-radius: 2px;
+    }
+
+    .sign-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 8px;
+      page-break-inside: avoid;
+    }
+    .sign-box {
+      border: 1px solid #94a3b8;
+      border-radius: 4px;
+      padding: 6px 8px;
+      background: #fafafa;
+    }
+    .sign-box h5 {
+      font-size: 8.5px;
+      font-weight: 900;
+      text-transform: uppercase;
+      color: #0f172a;
+      border-bottom: 1px solid #cbd5e1;
+      padding-bottom: 2px;
+      margin-bottom: 4px;
+    }
+    .sign-line {
+      margin-top: 25px;
+      border-top: 1px dashed #64748b;
+      padding-top: 3px;
+      font-size: 8px;
+      color: #475569;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .legal-footer {
+      margin-top: 8px;
+      font-size: 7.5px;
+      color: #64748b;
+      text-align: center;
+      border-top: 1px dashed #cbd5e1;
+      padding-top: 4px;
+    }
+
+    @media print {
+      body { background: #fff; margin: 0; padding: 0; }
+      .no-print { display: none !important; }
+      .manifest-sheet { border: none; padding: 0; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <div class="title">
+      <span>&#128229; AuraMarket Dispatch Manifest</span>
+      <span class="badge">${shipments.length} Consignments</span>
+    </div>
+    <button onclick="window.print()" class="btn-print">
+      &#128424; Print Manifest (Ctrl+P)
+    </button>
+  </div>
+
+  <div class="manifest-sheet">
+    <div class="header-bar">
+      <div>
+        <div class="brand-title">AuraMarket Express Logistics</div>
+        <div class="brand-sub">Official Courier Handover & Dispatch Manifest &bull; Point #39</div>
+      </div>
+      <div class="manifest-tag">
+        <div class="number">${manifest.manifestNumber}</div>
+        <div class="date">Generated: ${printDate}</div>
+        <div style="font-weight: 800; font-size: 10px; color: #0f172a; margin-top: 2px;">
+          Courier: <u>${manifest.courierPartner}</u>
+        </div>
+      </div>
+    </div>
+
+    <div class="meta-grid">
+      <div class="meta-box">
+        <h4>Seller / Dispatch Origin Facility</h4>
+        <div style="font-size: 11px; font-weight: 800; color: #0f172a;">${seller.storeName}</div>
+        <div>GSTIN: <strong>${seller.gstin || '07AAAAA0000A1Z5'}</strong> | Phone: ${seller.phone}</div>
+        <div style="color: #475569; margin-top: 1px;">${seller.address}</div>
+      </div>
+      <div class="meta-box">
+        <h4>Logistics & Courier Assignment</h4>
+        <div>Assigned Carrier: <strong>${manifest.courierPartner}</strong></div>
+        <div>Total Packages: <strong>${manifest.totalPackages}</strong> | Total Deadweight: <strong>${manifest.totalWeightKg} KG</strong></div>
+        <div>Payment Breakdown: <strong>${manifest.totalCodOrders} COD</strong> | <strong>${manifest.totalPrepaidOrders} Prepaid</strong></div>
+      </div>
+    </div>
+
+    <div class="stats-strip">
+      <div class="stat-card">
+        <div class="stat-label">Total Shipments</div>
+        <div class="stat-val">${manifest.totalPackages}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Gross Deadweight</div>
+        <div class="stat-val">${manifest.totalWeightKg} <span style="font-size: 9px;">KG</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">COD Collectable</div>
+        <div class="stat-val" style="color: #991b1b;">₹${Number(manifest.totalCodAmount).toLocaleString('en-IN')}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Prepaid Consignments</div>
+        <div class="stat-val" style="color: #166534;">${manifest.totalPrepaidOrders}</div>
+      </div>
+    </div>
+
+    <table class="manifest-table">
+      <thead>
+        <tr>
+          <th style="width: 25px; text-align: center;">#</th>
+          <th style="width: 100px;">Sub-Order / Ref</th>
+          <th style="width: 120px;">AWB / Routing Code</th>
+          <th>Destination & Recipient</th>
+          <th style="width: 65px; text-align: center;">Qty / Wt</th>
+          <th style="width: 70px; text-align: center;">Mode</th>
+          <th style="width: 80px; text-align: right;">COD Amount</th>
+          <th style="width: 40px; text-align: center;">Pickup</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+      <tfoot>
+        <tr style="background: #f1f5f9; font-weight: 900;">
+          <td colspan="4" style="text-align: right;">TOTAL SUMMARY (${shipments.length} Packages):</td>
+          <td style="text-align: center;">${manifest.totalWeightKg} kg</td>
+          <td style="text-align: center;">${manifest.totalCodOrders} COD</td>
+          <td style="text-align: right; color: #991b1b;">₹${Number(manifest.totalCodAmount).toLocaleString('en-IN')}</td>
+          <td style="text-align: center;">[ ${shipments.length} ]</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="sign-section">
+      <div class="sign-box">
+        <h5>1. Seller Handover Confirmation</h5>
+        <p style="font-size: 7.8px; color: #475569; margin-bottom: 4px;">
+          I certify that all ${shipments.length} packages above are packaged with tamper-evident security tape and handed over intact to the courier driver.
+        </p>
+        <div style="font-size: 8px; margin-top: 2px;">
+          Authorized Representative: <strong>${signOff.sellerName || seller.storeName}</strong>
+        </div>
+        <div class="sign-line">
+          <span>Seller Signature & Official Stamp</span>
+          <span>Date: ${printDate}</span>
+        </div>
+      </div>
+
+      <div class="sign-box">
+        <h5>2. Courier Pickup Agent Acknowledgement</h5>
+        <p style="font-size: 7.8px; color: #475569; margin-bottom: 4px;">
+          Received the above ${shipments.length} sealed packages without damage. Agreed to deliver as per SLA.
+        </p>
+        <div style="font-size: 8px; margin-top: 2px;">
+          Pickup Driver: <strong>${signOff.driverName || '____________________'}</strong> | Ph: <strong>${signOff.driverPhone || '____________________'}</strong>
+        </div>
+        <div class="sign-line">
+          <span>Courier Agent Signature & Seal</span>
+          <span>Vehicle #: ${signOff.vehicleNumber || '____________________'}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="legal-footer">
+      Computer-generated courier dispatch manifest issued by AuraMarket Multi-Vendor Platform.
+      Valid legal document for transport handover, transit liability, and logistics insurance verification.
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+// @desc    Generate Courier Dispatch Handover Manifest for Selected Orders (Point #39)
+// @route   POST /api/vendor/orders/dispatch-manifest
+// @route   GET /api/vendor/orders/dispatch-manifest
+exports.generateDispatchManifest = async (req, res, next) => {
+  try {
+    let vendor;
+    const isAdmin = req.user && (req.user.role === 'superadmin' || req.user.role === 'admin');
+
+    if (isAdmin) {
+      const targetVendorId = req.body?.vendorId || req.query?.vendorId;
+      if (targetVendorId) {
+        vendor = await VendorProfile.findById(targetVendorId);
+      } else {
+        vendor = (await VendorProfile.findOne({ status: 'approved' })) || (await VendorProfile.findOne({}));
+      }
+    } else {
+      vendor = req.vendorProfile || await VendorProfile.findOne({
+        $or: [{ user: req.user._id }, { _id: req.user.vendorProfile }],
+      });
+    }
+
+    if (!vendor && !isAdmin) {
+      return res.status(404).json({ success: false, message: 'Vendor profile not found' });
+    }
+
+    let subOrderIds = req.body?.subOrderIds || req.query?.subOrderIds;
+    if (typeof subOrderIds === 'string') {
+      subOrderIds = subOrderIds
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+    }
+
+    if (!Array.isArray(subOrderIds) || subOrderIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide an array of subOrderIds to generate dispatch manifest.',
+      });
+    }
+
+    if (subOrderIds.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Maximum 100 orders can be included in a single dispatch manifest.',
+      });
+    }
+
+    const query = { _id: { $in: subOrderIds } };
+    if (!isAdmin && vendor) {
+      query.vendor = vendor._id;
+    }
+
+    const subOrders = await SubOrder.find(query)
+      .populate('customer', 'name email phone')
+      .populate('deliveryPartner', 'name phone')
+      .populate('vendor', 'storeName storeSlug phone supportEmail address gstin logo')
+      .populate('parentOrder', 'orderNumber paymentMethod paymentStatus totalAmount createdAt');
+
+    if (!subOrders || subOrders.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No matching sub-orders found for dispatch manifest generation.',
+      });
+    }
+
+    const courierPartner = req.body?.courierPartner || req.query?.courierPartner || 'AuraMarket Express';
+    const maskPhone = req.body?.maskPhone === true || req.query?.maskPhone === 'true';
+    const advanceStatus = req.body?.advanceStatus !== false && req.query?.advanceStatus !== 'false';
+
+    const manifestNumber = `MAN-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const now = new Date();
+
+    let totalCodAmount = 0;
+    let totalCodOrders = 0;
+    let totalPrepaidOrders = 0;
+    let totalPrepaidAmount = 0;
+    let totalWeightKg = 0;
+
+    const shipments = [];
+
+    for (const so of subOrders) {
+      const parent = so.parentOrder || {};
+      const orderRef = parent.orderNumber || `ORD-${so._id.toString().slice(-8).toUpperCase()}`;
+      const subOrderRef = `SUB-${so._id.toString().slice(-6).toUpperCase()}`;
+      const routingPincode = so.shippingAddress?.pincode || '110001';
+      const routingCode = `EXP-${routingPincode.slice(0, 3)}-${so._id.toString().slice(-4).toUpperCase()}`;
+      const awbCode = so.trackingNumber || `AWB-${so._id.toString().slice(-8).toUpperCase()}`;
+      const weight = parseFloat((so.items.reduce((acc, i) => acc + (i.quantity * 0.45), 0)).toFixed(2));
+      totalWeightKg += weight;
+
+      const isCOD = (parent.paymentMethod || '').toUpperCase() === 'COD';
+      const amountToCollect = isCOD ? so.subTotal : 0;
+      if (isCOD) {
+        totalCodOrders++;
+        totalCodAmount += amountToCollect;
+      } else {
+        totalPrepaidOrders++;
+        totalPrepaidAmount += so.subTotal;
+      }
+
+      let custPhone = so.shippingAddress?.phone || so.customer?.phone || '9876543210';
+      if (maskPhone && custPhone.length >= 10) {
+        custPhone = `${custPhone.slice(0, 2)}XXXXXX${custPhone.slice(-2)}`;
+      }
+
+      // Status advance to ready_for_pickup
+      if (advanceStatus) {
+        if (!['dispatched', 'handed_to_courier', 'out_for_delivery', 'delivered'].includes(so.status)) {
+          so.status = 'ready_for_pickup';
+          if (!so.readyForPickupAt) {
+            so.readyForPickupAt = now;
+          }
+        }
+        if (!so.carrier) {
+          so.carrier = courierPartner;
+        }
+        if (!so.trackingNumber) {
+          so.trackingNumber = awbCode;
+        }
+        so.trackingHistory.push({
+          status: 'ready_for_pickup',
+          timestamp: now,
+          note: `Included in Courier Dispatch Manifest ${manifestNumber} (${courierPartner})`,
+        });
+        await so.save();
+      }
+
+      shipments.push({
+        subOrderId: so._id,
+        subOrderNumber: subOrderRef,
+        orderNumber: orderRef,
+        awbCode,
+        routingCode,
+        routingPincode,
+        carrier: courierPartner,
+        paymentMethod: (parent.paymentMethod || 'PREPAID').toUpperCase(),
+        isCOD,
+        amountToCollect,
+        weightKg: weight,
+        itemsCount: (so.items || []).reduce((acc, i) => acc + i.quantity, 0),
+        itemsSummary: (so.items || []).map(i => `${i.title} (${i.quantity}x)`).join(', '),
+        recipient: {
+          name: so.shippingAddress?.recipientName || so.customer?.name || 'Valued Customer',
+          phone: custPhone,
+          city: so.shippingAddress?.city || 'New Delhi',
+          state: so.shippingAddress?.state || 'Delhi',
+          pincode: routingPincode,
+          address: `${so.shippingAddress?.street || 'Flat 402, Green Valley Apartments'}, ${so.shippingAddress?.city || 'New Delhi'}, ${so.shippingAddress?.state || 'Delhi'} - ${routingPincode}`,
+        },
+      });
+    }
+
+    const sellerInfo = {
+      storeName: vendor?.storeName || 'Apex Tech Hub',
+      storeSlug: vendor?.storeSlug || 'apex-tech',
+      logo: vendor?.logo || vendor?.storeLogo || null,
+      email: vendor?.supportEmail || 'seller@auramarket.com',
+      phone: vendor?.phone || '+91 98765 43210',
+      address: vendor?.address || 'Plot 42, Tech Hub Logistics Center, Sector 62, Noida, UP, 201301',
+      gstin: vendor?.gstin || '07AAAAA0000A1Z5',
+    };
+
+    const manifestData = {
+      manifestNumber,
+      manifestDate: now,
+      courierPartner,
+      totalPackages: shipments.length,
+      totalWeightKg: parseFloat(totalWeightKg.toFixed(2)),
+      totalCodOrders,
+      totalCodAmount,
+      totalPrepaidOrders,
+      totalPrepaidAmount,
+      status: 'GENERATED',
+    };
+
+    const signOff = {
+      sellerName: req.user.name || sellerInfo.storeName,
+      driverName: req.body?.driverName || '',
+      driverPhone: req.body?.driverPhone || '',
+      vehicleNumber: req.body?.vehicleNumber || '',
+      handoverTimestamp: now,
+      remarks: req.body?.remarks || 'Handed over in tamper-evident sealed packaging.',
+    };
+
+    // Audit Logging
+    try {
+      await recordAuditLog({
+        action: 'COURIER_DISPATCH_MANIFEST_GENERATED',
+        module: 'SHIPPING_LOGISTICS',
+        req,
+        user: req.user,
+        targetId: manifestNumber,
+        targetType: 'DispatchManifest',
+        description: `Generated courier dispatch manifest ${manifestNumber} for ${shipments.length} consignments (${courierPartner})`,
+        details: {
+          manifestNumber,
+          courierPartner,
+          totalPackages: shipments.length,
+          totalWeightKg: manifestData.totalWeightKg,
+          totalCodAmount,
+          totalCodOrders,
+          totalPrepaidOrders,
+        },
+        severity: 'LOW',
+      });
+    } catch (auditErr) {
+      console.warn('AuditLog record failed for manifest (non-fatal):', auditErr?.message);
+    }
+
+    if (req.query?.format === 'html' || req.body?.format === 'html' || req.headers?.accept?.includes('text/html')) {
+      const html = generateDispatchManifestHtml({
+        manifest: manifestData,
+        seller: sellerInfo,
+        shipments,
+        signOff,
+      });
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(200).send(html);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Courier dispatch manifest generated successfully',
+      data: {
+        manifest: manifestData,
+        seller: sellerInfo,
+        shipments,
+        signOff,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+exports.generateDispatchManifestHtml = generateDispatchManifestHtml;
 
 // @desc    Request Wallet Payout (Point #62: Bank NEFT / IMPS / Direct UPI)
 // @route   POST /api/vendor/payout

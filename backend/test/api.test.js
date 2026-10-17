@@ -27045,6 +27045,552 @@ const runTests = async () => {
       assert.strictEqual(resCustomer.status, 403);
     });
 
+
+    // =========================================================================
+    // PILLAR 3 - POINT 41: INVENTORY AGING & DEAD-STOCK VELOCITY RADAR
+    // =========================================================================
+    console.log('\n--- PILLAR 3 - POINT 41: INVENTORY AGING & DEAD-STOCK VELOCITY RADAR ---');
+
+    let p41Vendor, p41VendorUser, p41VendorToken;
+    let p41FreshProduct, p41NormalProduct, p41SlowProduct, p41DeadStockProduct;
+    let p41ForeignProduct;
+    let p41WarehouseStaff, p41WarehouseToken;
+    let p41CatalogStaff, p41CatalogToken;
+    let p41AccountantStaff, p41AccountantToken;
+
+    await test('Point 41: Setup dedicated merchant accounts, multi-bracket inventory & velocity orders', async () => {
+      const uniqueSuffix = Date.now();
+
+      // 1. Primary Merchant
+      p41VendorUser = await User.create({
+        name: 'Velocity Merchant ' + uniqueSuffix,
+        email: 'velocity.merchant.' + uniqueSuffix + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'vendor',
+        isActive: true,
+      });
+
+      p41Vendor = await VendorProfile.create({
+        user: p41VendorUser._id,
+        storeName: 'Velocity ElectroStore ' + uniqueSuffix,
+        storeSlug: 'velocity-electro-' + uniqueSuffix,
+        status: 'approved',
+        walletBalance: 20000,
+        inventoryVelocitySettings: {
+          holdingCostMonthlyRate: 2.0,
+          freshThresholdDays: 30,
+          slowMovingThresholdDays: 60,
+          deadStockThresholdDays: 90,
+          autoNudgeEnabled: false,
+          slowMovingDiscountPercent: 15,
+          deadStockDiscountPercent: 35,
+        },
+      });
+
+      p41VendorUser.vendorProfile = p41Vendor._id;
+      await p41VendorUser.save();
+      p41VendorToken = generateToken(p41VendorUser._id);
+
+      // 2. Foreign Merchant for isolation tests
+      const foreignUser = await User.create({
+        name: 'Foreign Velocity Seller ' + uniqueSuffix,
+        email: 'foreign.velocity.' + uniqueSuffix + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'vendor',
+        isActive: true,
+      });
+      const foreignVendor = await VendorProfile.create({
+        user: foreignUser._id,
+        storeName: 'Foreign Stagnant Store ' + uniqueSuffix,
+        storeSlug: 'foreign-stagnant-' + uniqueSuffix,
+        status: 'approved',
+        walletBalance: 8000,
+      });
+      foreignUser.vendorProfile = foreignVendor._id;
+      await foreignUser.save();
+
+      // 3. Category
+      let velCategory = await Category.findOne({ slug: 'audio' });
+      if (!velCategory) {
+        velCategory = await Category.create({
+          name: 'Audio & Acoustics',
+          slug: 'audio-acoustics-' + uniqueSuffix,
+          icon: 'speaker',
+          isActive: true,
+        });
+      }
+
+      // 4. Products across the 4 aging brackets
+      const dayMs = 24 * 60 * 60 * 1000;
+
+      // FRESH: Age 5 days, stock 40, MRP 3000, Selling 2000
+      p41FreshProduct = await Product.create({
+        vendor: p41Vendor._id,
+        title: 'Velocity Pro True Wireless Earbuds',
+        slug: 'velocity-tws-earbuds-' + uniqueSuffix,
+        sku: 'VEL-FRESH-' + uniqueSuffix + '-1',
+        description: 'Ultra fast selling true wireless earbuds with active noise cancellation.',
+        category: velCategory._id,
+        mrp: 3000,
+        sellingPrice: 2000,
+        stock: 40,
+        status: 'published',
+        isPublished: true,
+        createdAt: new Date(Date.now() - 5 * dayMs),
+      });
+
+      // NORMAL: Age 45 days, stock 25, MRP 4500, Selling 3000
+      p41NormalProduct = await Product.create({
+        vendor: p41Vendor._id,
+        title: 'Velocity Studio Over-Ear Monitoring Headphones',
+        slug: 'velocity-studio-headphones-' + uniqueSuffix,
+        sku: 'VEL-NORMAL-' + uniqueSuffix + '-2',
+        description: 'Professional monitor headphones for studio recording and mixing.',
+        category: velCategory._id,
+        mrp: 4500,
+        sellingPrice: 3000,
+        stock: 25,
+        status: 'published',
+        isPublished: true,
+        createdAt: new Date(Date.now() - 45 * dayMs),
+      });
+
+      // SLOW: Age 75 days, stock 30, MRP 6000, Selling 4000
+      p41SlowProduct = await Product.create({
+        vendor: p41Vendor._id,
+        title: 'Velocity Retro Bluetooth Radio Speaker',
+        slug: 'velocity-retro-radio-' + uniqueSuffix,
+        sku: 'VEL-SLOW-' + uniqueSuffix + '-3',
+        description: 'Vintage wood finish FM radio and Bluetooth desktop speaker.',
+        category: velCategory._id,
+        mrp: 6000,
+        sellingPrice: 4000,
+        stock: 30,
+        status: 'published',
+        isPublished: true,
+        createdAt: new Date(Date.now() - 75 * dayMs),
+      });
+
+      // DEAD STOCK: Age 120 days, stock 50, MRP 8000, Selling 5000, ZERO sales in 60+ days
+      p41DeadStockProduct = await Product.create({
+        vendor: p41Vendor._id,
+        title: 'Velocity DJ Mixer Console 8-Channel',
+        slug: 'velocity-dj-mixer-' + uniqueSuffix,
+        sku: 'VEL-DEAD-' + uniqueSuffix + '-4',
+        description: 'Heavy duty 8-channel analog audio mixer with crossfader.',
+        category: velCategory._id,
+        mrp: 8000,
+        sellingPrice: 5000,
+        stock: 50,
+        status: 'published',
+        isPublished: true,
+        createdAt: new Date(Date.now() - 120 * dayMs),
+      });
+
+      // Foreign product for isolation tests
+      p41ForeignProduct = await Product.create({
+        vendor: foreignVendor._id,
+        title: 'Foreign Competitor Audio Amplifier',
+        slug: 'foreign-amp-' + uniqueSuffix,
+        sku: 'VEL-FOR-' + uniqueSuffix + '-5',
+        description: 'Foreign store amplifier.',
+        category: velCategory._id,
+        mrp: 10000,
+        sellingPrice: 7000,
+        stock: 20,
+        status: 'published',
+        isPublished: true,
+        createdAt: new Date(Date.now() - 110 * dayMs),
+      });
+
+      // 5. Customer & Sub-orders for velocity computation
+      const testCustomer = await User.create({
+        name: 'Velocity Shopper ' + uniqueSuffix,
+        email: 'shopper.velocity.' + uniqueSuffix + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'customer',
+        isActive: true,
+      });
+
+      const dummyParentOrderId = new mongoose.Types.ObjectId();
+
+      // Sub-order 1: 15 units of Fresh Product (Sold 5 days ago)
+      await SubOrder.create({
+        parentOrder: dummyParentOrderId,
+        vendor: p41Vendor._id,
+        customer: testCustomer._id,
+        items: [
+          {
+            product: p41FreshProduct._id,
+            title: p41FreshProduct.title,
+            quantity: 15,
+            price: 2000,
+            totalPrice: 30000,
+          },
+        ],
+        subTotal: 30000,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 3000,
+        vendorEarning: 27000,
+        status: 'delivered',
+        createdAt: new Date(Date.now() - 5 * dayMs),
+      });
+
+      // Sub-order 2: 1 unit of Slow Product (Sold 40 days ago)
+      await SubOrder.create({
+        parentOrder: dummyParentOrderId,
+        vendor: p41Vendor._id,
+        customer: testCustomer._id,
+        items: [
+          {
+            product: p41SlowProduct._id,
+            title: p41SlowProduct.title,
+            quantity: 1,
+            price: 4000,
+            totalPrice: 4000,
+          },
+        ],
+        subTotal: 4000,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 400,
+        vendorEarning: 3600,
+        status: 'delivered',
+        createdAt: new Date(Date.now() - 40 * dayMs),
+      });
+
+      // 6. Sub-staff accounts for Point 37/Point 41 RBAC
+      p41WarehouseStaff = await User.create({
+        name: 'Warehouse Lead ' + uniqueSuffix,
+        email: 'wh.lead.' + uniqueSuffix + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'vendor_staff',
+        isVendorStaff: true,
+        vendorProfile: p41Vendor._id,
+        permissions: ['WAREHOUSE_INVENTORY'], // Can VIEW radar, cannot discount prices
+        isActive: true,
+      });
+      p41WarehouseToken = generateToken(p41WarehouseStaff._id);
+
+      p41CatalogStaff = await User.create({
+        name: 'Catalog Manager ' + uniqueSuffix,
+        email: 'cat.manager.' + uniqueSuffix + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'vendor_staff',
+        isVendorStaff: true,
+        vendorProfile: p41Vendor._id,
+        permissions: ['PRODUCTS_MANAGE'], // Can apply price discount nudges
+        isActive: true,
+      });
+      p41CatalogToken = generateToken(p41CatalogStaff._id);
+
+      p41AccountantStaff = await User.create({
+        name: 'Store Accountant ' + uniqueSuffix,
+        email: 'acct.' + uniqueSuffix + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'vendor_staff',
+        isVendorStaff: true,
+        vendorProfile: p41Vendor._id,
+        permissions: ['WALLET_FINANCE'], // Lacks inventory perms
+        isActive: true,
+      });
+      p41AccountantToken = generateToken(p41AccountantStaff._id);
+
+      assert.ok(p41VendorToken);
+      assert.ok(p41WarehouseToken);
+      assert.ok(p41CatalogToken);
+      assert.ok(p41AccountantToken);
+    });
+
+    await test('Point 41: GET /api/vendor/inventory/aging-radar returns comprehensive portfolio metrics, velocity calculations & aging brackets', async () => {
+      const res = await fetch(baseUrl + '/vendor/inventory/aging-radar', {
+        headers: { Authorization: 'Bearer ' + p41VendorToken },
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+
+      // Verify Summary Bento KPIs
+      const summary = json.summary;
+      assert.strictEqual(summary.totalSkus, 4);
+      assert.strictEqual(summary.totalUnitsInStock, 145); // 40 + 25 + 30 + 50
+      assert.strictEqual(summary.deadStockCapital, 50 * 5000); // 250,000
+      assert.strictEqual(summary.slowMovingCapital, 30 * 4000); // 120,000
+      assert.ok(summary.totalTiedUpCapital >= 525000);
+      assert.ok(summary.capitalAtRisk >= 370000);
+      assert.ok(summary.estimatedMonthlyHoldingCost > 0);
+      assert.ok(summary.inventoryHealthScore >= 0 && summary.inventoryHealthScore <= 100);
+
+      // Verify Bracket Breakdown
+      assert.strictEqual(summary.breakdown.fresh.count, 1);
+      assert.strictEqual(summary.breakdown.normal.count, 1);
+      assert.strictEqual(summary.breakdown.slow.count, 1);
+      assert.strictEqual(summary.breakdown.deadStock.count, 1);
+
+      // Verify Dead Stock item classification
+      const deadItem = json.data.find(i => i._id.toString() === p41DeadStockProduct._id.toString());
+      assert.ok(deadItem);
+      assert.strictEqual(deadItem.bracket, 'DEAD_STOCK');
+      assert.strictEqual(deadItem.urgency, 'CRITICAL');
+      assert.strictEqual(deadItem.recommendedDiscount, 35);
+      assert.strictEqual(deadItem.daysOfSupply, 999);
+      assert.strictEqual(deadItem.unitsSold30d, 0);
+
+      // Verify Fresh item velocity
+      const freshItem = json.data.find(i => i._id.toString() === p41FreshProduct._id.toString());
+      assert.ok(freshItem);
+      assert.strictEqual(freshItem.bracket, 'FRESH');
+      assert.strictEqual(freshItem.unitsSold30d, 15);
+      assert.strictEqual(freshItem.dailySalesVelocity, 0.5);
+      assert.strictEqual(freshItem.weeklySalesVelocity, 3.5);
+    });
+
+    await test('Point 41: GET /api/vendor/inventory/aging-radar supports bracket filtering, keyword search, and sorting', async () => {
+      // 1. Filter by DEAD_STOCK
+      const resDead = await fetch(baseUrl + '/vendor/inventory/aging-radar?bracket=DEAD_STOCK', {
+        headers: { Authorization: 'Bearer ' + p41VendorToken },
+      });
+      assert.strictEqual(resDead.status, 200);
+      const jsonDead = await resDead.json();
+      assert.strictEqual(jsonDead.data.length, 1);
+      assert.strictEqual(jsonDead.data[0]._id.toString(), p41DeadStockProduct._id.toString());
+
+      // 2. Filter by FRESH
+      const resFresh = await fetch(baseUrl + '/vendor/inventory/aging-radar?bracket=FRESH', {
+        headers: { Authorization: 'Bearer ' + p41VendorToken },
+      });
+      assert.strictEqual(resFresh.status, 200);
+      const jsonFresh = await resFresh.json();
+      assert.strictEqual(jsonFresh.data.length, 1);
+      assert.strictEqual(jsonFresh.data[0]._id.toString(), p41FreshProduct._id.toString());
+
+      // 3. Search query
+      const resSearch = await fetch(baseUrl + '/vendor/inventory/aging-radar?search=Retro', {
+        headers: { Authorization: 'Bearer ' + p41VendorToken },
+      });
+      assert.strictEqual(resSearch.status, 200);
+      const jsonSearch = await resSearch.json();
+      assert.strictEqual(jsonSearch.data.length, 1);
+      assert.strictEqual(jsonSearch.data[0]._id.toString(), p41SlowProduct._id.toString());
+
+      // 4. Sorting by capital descending
+      const resSort = await fetch(baseUrl + '/vendor/inventory/aging-radar?sortBy=capital_desc', {
+        headers: { Authorization: 'Bearer ' + p41VendorToken },
+      });
+      assert.strictEqual(resSort.status, 200);
+      const jsonSort = await resSort.json();
+      assert.strictEqual(jsonSort.data[0]._id.toString(), p41DeadStockProduct._id.toString());
+    });
+
+    await test('Point 41: POST /api/vendor/inventory/apply-discount-nudge applies clearance discount, updates sellingPrice, and writes audit trail', async () => {
+      const resNudge = await fetch(baseUrl + '/vendor/inventory/apply-discount-nudge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p41VendorToken,
+        },
+        body: JSON.stringify({
+          productId: p41DeadStockProduct._id,
+          discountPercent: 40,
+          enrollClearance: true,
+        }),
+      });
+
+      assert.strictEqual(resNudge.status, 200);
+      const jsonNudge = await resNudge.json();
+      assert.strictEqual(jsonNudge.success, true);
+      assert.strictEqual(jsonNudge.data.product.newSellingPrice, 4800); // 8000 * 0.6
+      assert.strictEqual(jsonNudge.data.product.discountPercentage, 40);
+
+      // Verify in MongoDB
+      const freshDeadDoc = await Product.findById(p41DeadStockProduct._id);
+      assert.strictEqual(freshDeadDoc.sellingPrice, 4800);
+      assert.ok(freshDeadDoc.tags.includes('clearance'));
+    });
+
+    await test('Point 41: POST /api/vendor/inventory/bulk-apply-discount-nudges applies batch discount across multiple dead-stock products', async () => {
+      const resBulk = await fetch(baseUrl + '/vendor/inventory/bulk-apply-discount-nudges', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p41VendorToken,
+        },
+        body: JSON.stringify({
+          productIds: [p41SlowProduct._id],
+          discountPercent: 25,
+          enrollClearance: true,
+        }),
+      });
+
+      assert.strictEqual(resBulk.status, 200);
+      const jsonBulk = await resBulk.json();
+      assert.strictEqual(jsonBulk.success, true);
+      assert.strictEqual(jsonBulk.data.updatedCount, 1);
+      assert.strictEqual(jsonBulk.data.products[0].newSellingPrice, 4500); // 6000 * 0.75
+
+      const freshSlowDoc = await Product.findById(p41SlowProduct._id);
+      assert.strictEqual(freshSlowDoc.sellingPrice, 4500);
+      assert.ok(freshSlowDoc.tags.includes('clearance'));
+    });
+
+    await test('Point 41: Validation & Merchant Isolation: rejects invalid discount ranges, non-existent products, and foreign merchant items (400 / 404)', async () => {
+      // 1. Discount < 1%
+      const resBadLow = await fetch(baseUrl + '/vendor/inventory/apply-discount-nudge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p41VendorToken,
+        },
+        body: JSON.stringify({
+          productId: p41SlowProduct._id,
+          discountPercent: 0,
+        }),
+      });
+      assert.strictEqual(resBadLow.status, 400);
+
+      // 2. Discount > 90%
+      const resBadHigh = await fetch(baseUrl + '/vendor/inventory/apply-discount-nudge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p41VendorToken,
+        },
+        body: JSON.stringify({
+          productId: p41SlowProduct._id,
+          discountPercent: 95,
+        }),
+      });
+      assert.strictEqual(resBadHigh.status, 400);
+
+      // 3. Foreign merchant product
+      const resForeign = await fetch(baseUrl + '/vendor/inventory/apply-discount-nudge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p41VendorToken,
+        },
+        body: JSON.stringify({
+          productId: p41ForeignProduct._id,
+          discountPercent: 30,
+        }),
+      });
+      assert.strictEqual(resForeign.status, 404);
+    });
+
+    await test('Point 41: GET & PUT /api/vendor/inventory/aging-settings updates custom holding cost rate and threshold days', async () => {
+      // 1. Update settings
+      const resUpdate = await fetch(baseUrl + '/vendor/inventory/aging-settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p41VendorToken,
+        },
+        body: JSON.stringify({
+          holdingCostMonthlyRate: 2.5,
+          deadStockThresholdDays: 80,
+          slowMovingDiscountPercent: 20,
+        }),
+      });
+      assert.strictEqual(resUpdate.status, 200);
+      const jsonUpdate = await resUpdate.json();
+      assert.strictEqual(jsonUpdate.success, true);
+      assert.strictEqual(jsonUpdate.data.holdingCostMonthlyRate, 2.5);
+      assert.strictEqual(jsonUpdate.data.deadStockThresholdDays, 80);
+      assert.strictEqual(jsonUpdate.data.slowMovingDiscountPercent, 20);
+
+      // 2. Fetch updated settings
+      const resGet = await fetch(baseUrl + '/vendor/inventory/aging-settings', {
+        headers: { Authorization: 'Bearer ' + p41VendorToken },
+      });
+      assert.strictEqual(resGet.status, 200);
+      const jsonGet = await resGet.json();
+      assert.strictEqual(jsonGet.data.holdingCostMonthlyRate, 2.5);
+      assert.strictEqual(jsonGet.data.deadStockThresholdDays, 80);
+    });
+
+    await test('Point 41: GET /api/vendor/inventory/aging-radar/export-csv generates RFC-4180 CSV export with UTF-8 BOM', async () => {
+      const resCsv = await fetch(baseUrl + '/vendor/inventory/aging-radar/export-csv', {
+        headers: { Authorization: 'Bearer ' + p41VendorToken },
+      });
+      assert.strictEqual(resCsv.status, 200);
+      assert.ok(resCsv.headers.get('content-type').includes('text/csv'));
+
+      const buf = Buffer.from(await resCsv.arrayBuffer());
+      assert.ok(buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf, 'Must start with UTF-8 BOM bytes (EF BB BF)');
+      const csvText = buf.toString('utf8');
+      assert.ok(csvText.includes('SKU,Product Title,Category'));
+      assert.ok(csvText.includes('Aging Radar Bracket'));
+      assert.ok(csvText.includes('DEAD_STOCK'));
+      assert.ok(csvText.includes('Velocity Pro True Wireless Earbuds'));
+    });
+
+    await test('Point 41: Granular Sub-Staff RBAC: Warehouse Manager can view radar, but price nudges require PRODUCTS_MANAGE (403)', async () => {
+      // 1. Warehouse Manager (WAREHOUSE_INVENTORY) can view radar
+      const resWhView = await fetch(baseUrl + '/vendor/inventory/aging-radar', {
+        headers: { Authorization: 'Bearer ' + p41WarehouseToken },
+      });
+      assert.strictEqual(resWhView.status, 200);
+
+      // 2. Warehouse Manager CANNOT apply price discount nudges (requires PRODUCTS_MANAGE)
+      const resWhNudge = await fetch(baseUrl + '/vendor/inventory/apply-discount-nudge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p41WarehouseToken,
+        },
+        body: JSON.stringify({
+          productId: p41SlowProduct._id,
+          discountPercent: 20,
+        }),
+      });
+      assert.strictEqual(resWhNudge.status, 403);
+      const jsonWhNudge = await resWhNudge.json();
+      assert.ok(jsonWhNudge.message.includes('lacks required permission'));
+
+      // 3. Catalog Staff (PRODUCTS_MANAGE) can successfully apply price discount nudges
+      const resCatNudge = await fetch(baseUrl + '/vendor/inventory/apply-discount-nudge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p41CatalogToken,
+        },
+        body: JSON.stringify({
+          productId: p41SlowProduct._id,
+          discountPercent: 20,
+        }),
+      });
+      assert.strictEqual(resCatNudge.status, 200);
+
+      // 4. Accountant Staff (WALLET_FINANCE only) is forbidden from viewing radar
+      const resAcctView = await fetch(baseUrl + '/vendor/inventory/aging-radar', {
+        headers: { Authorization: 'Bearer ' + p41AccountantToken },
+      });
+      assert.strictEqual(resAcctView.status, 403);
+    });
+
+    await test('Point 41: Role Security: Customer, delivery rider, and unauthenticated requests to inventory aging radar are rejected (401 / 403)', async () => {
+      // 1. Unauthenticated request
+      const resUnauth = await fetch(baseUrl + '/vendor/inventory/aging-radar');
+      assert.strictEqual(resUnauth.status, 401);
+
+      // 2. Customer request
+      const resCustomer = await fetch(baseUrl + '/vendor/inventory/aging-radar', {
+        headers: { Authorization: 'Bearer ' + customerToken },
+      });
+      assert.strictEqual(resCustomer.status, 403);
+
+      // 3. Delivery rider request
+      const resRider = await fetch(baseUrl + '/vendor/inventory/aging-radar', {
+        headers: { Authorization: 'Bearer ' + riderToken },
+      });
+      assert.strictEqual(resRider.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

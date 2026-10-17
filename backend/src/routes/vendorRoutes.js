@@ -86,6 +86,14 @@ const {
   deleteCampaign,
   getKeywordSuggestions,
 } = require('../controllers/sponsoredAdController');
+const {
+  getInventoryAgingRadar,
+  applyDiscountNudge,
+  bulkApplyDiscountNudges,
+  getAgingRadarSettings,
+  updateAgingRadarSettings,
+  exportInventoryAgingCSV,
+} = require('../controllers/inventoryAgingController');
 const { protect, authorize, requireVendorPermission } = require('../middlewares/auth');
 
 // Point 58: Public Storefront Vendor Showcase (Accessible by any customer/visitor)
@@ -152,6 +160,14 @@ router.get('/inventory/low-stock', getLowStockInventory);
 router.put('/inventory/thresholds', updateInventoryThresholds);
 router.post('/inventory/trigger-restock-alert', triggerRestockAlert);
 router.patch('/inventory/quick-restock', quickRestockInventory);
+
+// Point 41: Inventory Aging & Dead-Stock Velocity Radar with automated discount nudges
+router.get('/inventory/aging-radar', requireVendorPermission('WAREHOUSE_INVENTORY', 'PRODUCTS_MANAGE'), getInventoryAgingRadar);
+router.get('/inventory/aging-radar/export-csv', requireVendorPermission('WAREHOUSE_INVENTORY', 'PRODUCTS_MANAGE'), exportInventoryAgingCSV);
+router.get('/inventory/aging-settings', requireVendorPermission('WAREHOUSE_INVENTORY', 'PRODUCTS_MANAGE'), getAgingRadarSettings);
+router.put('/inventory/aging-settings', requireVendorPermission('STORE_SETTINGS', 'PRODUCTS_MANAGE'), updateAgingRadarSettings);
+router.post('/inventory/apply-discount-nudge', requireVendorPermission('PRODUCTS_MANAGE'), applyDiscountNudge);
+router.post('/inventory/bulk-apply-discount-nudges', requireVendorPermission('PRODUCTS_MANAGE'), bulkApplyDiscountNudges);
 
 // Point 11: Vendor-Funded Custom Promotions & BOGO Engine
 router.get('/promotions', getVendorPromotions);

@@ -30,6 +30,7 @@ import {
   Sparkles,
   Table,
   Megaphone,
+  Activity,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -60,6 +61,7 @@ import VendorVerificationManager from '../components/VendorVerificationManager';
 import VendorStorefrontBuilderModal from '../components/VendorStorefrontBuilderModal';
 import BulkInlineCatalogEditorModal from '../components/BulkInlineCatalogEditorModal';
 import SponsoredAdsManagerModal from '../components/SponsoredAdsManagerModal';
+import InventoryAgingRadarModal from '../components/InventoryAgingRadarModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -190,6 +192,7 @@ export const VendorPortal = () => {
   const [isStorefrontBuilderOpen, setIsStorefrontBuilderOpen] = useState(false); // Point #36: Vendor Custom Micro-Storefront Builder
   const [isSpreadsheetEditorOpen, setIsSpreadsheetEditorOpen] = useState(false); // Point #38: Bulk Inline Spreadsheet Catalog Editor
   const [isSponsoredAdsOpen, setIsSponsoredAdsOpen] = useState(false); // Point #40: Seller Sponsored Ads & CPC Keyword Bidding
+  const [isInventoryAgingRadarOpen, setIsInventoryAgingRadarOpen] = useState(false); // Point #41: Inventory Aging & Dead-Stock Velocity Radar
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // Point #58: Store Profile Customization
   const [isPublicStorePreviewOpen, setIsPublicStorePreviewOpen] = useState(false); // Point #58: Public Storefront Preview
   const [isVacationModalOpen, setIsVacationModalOpen] = useState(false); // Point #59: Vacation Mode Toggle
@@ -667,6 +670,19 @@ export const VendorPortal = () => {
             <span>Sponsored Ads & CPC</span>
             <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-amber-400">
               Point #40
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsInventoryAgingRadarOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 via-orange-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white text-xs font-black shadow-md transition-all active:scale-95"
+            title="Point 41: Inventory Aging & Dead-Stock Velocity Radar with automated discount nudges"
+          >
+            <Activity className="w-4 h-4 text-orange-200" />
+            <span>Dead-Stock Radar</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-rose-300">
+              Point #41
             </span>
           </button>
 
@@ -2175,6 +2191,13 @@ export const VendorPortal = () => {
       <SponsoredAdsManagerModal
         isOpen={isSponsoredAdsOpen}
         onClose={() => setIsSponsoredAdsOpen(false)}
+      />
+
+      {/* Point 41: Inventory Aging & Dead-Stock Velocity Radar with automated discount nudges */}
+      <InventoryAgingRadarModal
+        isOpen={isInventoryAgingRadarOpen}
+        onClose={() => setIsInventoryAgingRadarOpen(false)}
+        token={localStorage.getItem('token')}
       />
     </div>
   );

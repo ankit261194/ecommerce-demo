@@ -365,6 +365,15 @@ const vendorProfileSchema = new mongoose.Schema(
       isPublished: { type: Boolean, default: true },
       lastPublishedAt: { type: Date, default: Date.now },
     },
+    inventoryVelocitySettings: {
+      holdingCostMonthlyRate: { type: Number, default: 2.0 }, // 2.0% of inventory value per month
+      freshThresholdDays: { type: Number, default: 30 },
+      slowMovingThresholdDays: { type: Number, default: 60 },
+      deadStockThresholdDays: { type: Number, default: 90 },
+      autoNudgeEnabled: { type: Boolean, default: false },
+      slowMovingDiscountPercent: { type: Number, default: 15 },
+      deadStockDiscountPercent: { type: Number, default: 35 },
+    },
   },
   { timestamps: true }
 );

@@ -28381,6 +28381,480 @@ const runTests = async () => {
       assert.strictEqual(resCustOpt.status, 403);
     });
 
+    // =========================================================================
+    // PILLAR 4 - POINT 44: DIGITAL PROOF OF DELIVERY (OTP, CUSTOMER SIGNATURE & GEO-STAMPED PHOTO UPLOAD)
+    // =========================================================================
+    console.log('\n--- PILLAR 4 - POINT 44: DIGITAL PROOF OF DELIVERY (OTP, SIGNATURE & GEO-STAMPED PHOTO) ---');
+
+    let p44Unique;
+    let p44AdminUser, p44AdminToken;
+    let p44CustomerUser, p44CustomerToken;
+    let p44ForeignCustomerUser, p44ForeignCustomerToken;
+    let p44VendorUser, p44VendorProfile, p44VendorToken;
+    let p44RiderUser, p44RiderToken;
+    let p44Order, p44SubOrder, p44Task;
+    let p44TaskFar;
+
+    await test('Point 44: Setup dedicated merchant, rider, customer & delivery task for Digital POD testing', async () => {
+      p44Unique = Date.now() + '_' + Math.floor(Math.random() * 10000);
+
+      // 1. Super Admin
+      p44AdminUser = await User.create({
+        name: 'POD Super Admin ' + p44Unique,
+        email: 'admin.pod.' + p44Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'superadmin',
+      });
+      p44AdminToken = generateToken(p44AdminUser._id);
+
+      // 2. Customer
+      p44CustomerUser = await User.create({
+        name: 'Rohan Deshmukh ' + p44Unique,
+        email: 'customer.pod.' + p44Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'customer',
+      });
+      p44CustomerToken = generateToken(p44CustomerUser._id);
+
+      // Foreign Customer
+      p44ForeignCustomerUser = await User.create({
+        name: 'Foreign Customer ' + p44Unique,
+        email: 'foreign.pod.' + p44Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'customer',
+      });
+      p44ForeignCustomerToken = generateToken(p44ForeignCustomerUser._id);
+
+      // 3. Merchant & Store
+      p44VendorUser = await User.create({
+        name: 'Vendor POD Owner ' + p44Unique,
+        email: 'vendor.pod.' + p44Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'vendor',
+      });
+      p44VendorProfile = await VendorProfile.create({
+        user: p44VendorUser._id,
+        storeName: 'Artisan Gourmet Spices ' + p44Unique,
+        storeSlug: 'artisan-gourmet-' + p44Unique,
+        phone: '9876543210',
+        businessEmail: 'contact@artisangourmet.com',
+        isVerified: true,
+      });
+      p44VendorUser.vendorProfile = p44VendorProfile._id;
+      await p44VendorUser.save();
+      p44VendorToken = generateToken(p44VendorUser._id);
+
+      // 4. Delivery Courier Rider
+      p44RiderUser = await User.create({
+        name: 'Rider Arjun Reddy ' + p44Unique,
+        email: 'rider.arjun.' + p44Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'delivery',
+        dutyStatus: 'ON_DUTY',
+        isAvailable: true,
+        lastLocation: { lat: 28.535517, lng: 77.391029, updatedAt: new Date() },
+      });
+      p44RiderToken = generateToken(p44RiderUser._id);
+
+      // 5. Parent Order & SubOrder
+      p44Order = await Order.create({
+        customer: p44CustomerUser._id,
+        orderNumber: 'ORD-POD-' + p44Unique,
+        totalAmount: 1499,
+        paymentMethod: 'COD',
+        paymentStatus: 'PENDING',
+        deliveryOtp: '7492',
+        shippingAddress: {
+          fullName: 'Rohan Deshmukh',
+          recipientName: 'Rohan Deshmukh',
+          phone: '9876543210',
+          street: 'B-104, Sunrise Residency, Sector 62',
+          addressLine1: 'B-104, Sunrise Residency, Sector 62',
+          city: 'Noida',
+          state: 'Uttar Pradesh',
+          pincode: '201309',
+        },
+      });
+
+      p44SubOrder = await SubOrder.create({
+        parentOrder: p44Order._id,
+        vendor: p44VendorProfile._id,
+        customer: p44CustomerUser._id,
+        orderNumber: 'ORD-POD-' + p44Unique,
+        subOrderId: 'SUB-POD-' + p44Unique,
+        status: 'out_for_delivery',
+        deliveryOtp: '7492',
+        items: [
+          {
+            product: new mongoose.Types.ObjectId(),
+            title: 'Organic Kashmiri Saffron 5g',
+            quantity: 1,
+            price: 1499,
+            totalPrice: 1499,
+          },
+        ],
+        subTotal: 1499,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 150,
+        vendorEarning: 1349,
+        shippingAddress: p44Order.shippingAddress,
+      });
+
+      p44Order.subOrders = [p44SubOrder._id];
+      await p44Order.save();
+
+      // 6. DeliveryTask linked to SubOrder
+      p44Task = await DeliveryTask.create({
+        subOrder: p44SubOrder._id,
+        deliveryPartner: p44RiderUser._id,
+        status: 'OUT_FOR_DELIVERY',
+        dispatchStatus: 'OUT_FOR_DELIVERY',
+        isCod: true,
+        amountToCollect: 1499,
+        pickupLocation: {
+          storeName: p44VendorProfile.storeName,
+          address: 'G-12, Sector 18',
+          city: 'Noida',
+          pincode: '201301',
+        },
+        dropLocation: {
+          recipientName: 'Rohan Deshmukh',
+          phone: '9876543210',
+          address: 'B-104, Sunrise Residency, Sector 62',
+          city: 'Noida',
+          pincode: '201309',
+          coordinates: { lat: 28.535517, lng: 77.391029 },
+        },
+        riderLocation: {
+          lat: 28.535600,
+          lng: 77.391050,
+          accuracy: 5,
+        },
+      });
+
+      // 7. Second Task for far proximity testing
+      p44TaskFar = await DeliveryTask.create({
+        subOrder: p44SubOrder._id,
+        deliveryPartner: p44RiderUser._id,
+        status: 'OUT_FOR_DELIVERY',
+        dispatchStatus: 'OUT_FOR_DELIVERY',
+        pickupLocation: { storeName: 'Test Hub' },
+        dropLocation: {
+          recipientName: 'Rohan Deshmukh',
+          phone: '9876543210',
+          address: 'B-104, Sunrise Residency, Sector 62',
+          city: 'Noida',
+          pincode: '201309',
+          coordinates: { lat: 28.535517, lng: 77.391029 },
+        },
+      });
+
+      assert.ok(p44AdminToken);
+      assert.ok(p44CustomerToken);
+      assert.ok(p44RiderToken);
+      assert.ok(p44Task._id);
+      assert.ok(p44SubOrder._id);
+    });
+
+    await test('Point 44: POST /api/delivery/tasks/:id/validate-geofence validates doorstep proximity radius (200m)', async () => {
+      // 1. Within doorstep radius (< 50m)
+      const resNear = await fetch(baseUrl + '/delivery/tasks/' + p44Task._id + '/validate-geofence', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p44RiderToken,
+        },
+        body: JSON.stringify({
+          riderLat: 28.535600,
+          riderLng: 77.391050,
+          accuracy: 4,
+        }),
+      });
+      assert.strictEqual(resNear.status, 200);
+      const dataNear = await resNear.json();
+      assert.strictEqual(dataNear.success, true);
+      assert.strictEqual(dataNear.data.isWithinRadius, true);
+      assert.strictEqual(dataNear.data.status, 'VERIFIED_DOORSTEP');
+      assert.ok(dataNear.data.distanceMeters < 50);
+
+      // 2. Proximity warning (> 800m away)
+      const resFar = await fetch(baseUrl + '/delivery/tasks/' + p44Task._id + '/validate-geofence', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p44RiderToken,
+        },
+        body: JSON.stringify({
+          riderLat: 28.545000,
+          riderLng: 77.391029,
+          accuracy: 5,
+        }),
+      });
+      assert.strictEqual(resFar.status, 200);
+      const dataFar = await resFar.json();
+      assert.strictEqual(dataFar.success, true);
+      assert.strictEqual(dataFar.data.isWithinRadius, false);
+      assert.strictEqual(dataFar.data.status, 'PROXIMITY_WARNING');
+      assert.ok(dataFar.data.distanceMeters > 500);
+      assert.ok(dataFar.data.discrepancyReason.includes('200m'));
+
+      // 3. Validation rejection on missing coordinates
+      const resMissing = await fetch(baseUrl + '/delivery/tasks/' + p44Task._id + '/validate-geofence', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p44RiderToken,
+        },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(resMissing.status, 400);
+    });
+
+    await test('Point 44: Anti-Brute-Force: POST /api/delivery/tasks/:id/complete-pod tracks failed attempts and enforces security lock after 5 invalid attempts', async () => {
+      // 1. Send invalid OTP 4 times
+      for (let attempt = 1; attempt <= 4; attempt++) {
+        const resInvalid = await fetch(baseUrl + '/delivery/tasks/' + p44TaskFar._id + '/complete-pod', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + p44RiderToken,
+          },
+          body: JSON.stringify({ otp: '1111' }),
+        });
+        assert.strictEqual(resInvalid.status, 400);
+        const dataInvalid = await resInvalid.json();
+        assert.strictEqual(dataInvalid.attempts, attempt);
+        assert.strictEqual(dataInvalid.isLocked, false);
+      }
+
+      // 2. 5th invalid attempt triggers security lock
+      const resLock = await fetch(baseUrl + '/delivery/tasks/' + p44TaskFar._id + '/complete-pod', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p44RiderToken,
+        },
+        body: JSON.stringify({ otp: '1111' }),
+      });
+      assert.strictEqual(resLock.status, 400);
+      const dataLock = await resLock.json();
+      assert.strictEqual(dataLock.attempts, 5);
+      assert.strictEqual(dataLock.isLocked, true);
+
+      // 3. Attempt while locked is immediately rejected
+      const resLockedAttempt = await fetch(baseUrl + '/delivery/tasks/' + p44TaskFar._id + '/complete-pod', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p44RiderToken,
+        },
+        body: JSON.stringify({ otp: '7492' }),
+      });
+      assert.strictEqual(resLockedAttempt.status, 400);
+      const dataLockedAttempt = await resLockedAttempt.json();
+      assert.ok(dataLockedAttempt.message.toLowerCase().includes('locked'));
+    });
+
+    await test('Point 44: Security Reset: POST /api/delivery/tasks/:id/resend-otp & /unlock-otp unfreezes locked task', async () => {
+      // 1. Resend OTP unfreezes lock & resets attempts
+      const resResend = await fetch(baseUrl + '/delivery/tasks/' + p44TaskFar._id + '/resend-otp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p44RiderToken,
+        },
+      });
+      assert.strictEqual(resResend.status, 200);
+      const dataResend = await resResend.json();
+      assert.strictEqual(dataResend.success, true);
+
+      const taskAfterResend = await DeliveryTask.findById(p44TaskFar._id);
+      assert.strictEqual(taskAfterResend.otpVerificationLog.isLocked, false);
+      assert.strictEqual(taskAfterResend.otpVerificationLog.attempts, 0);
+
+      // 2. Manually lock task again to test Admin Unlock
+      taskAfterResend.otpVerificationLog.isLocked = true;
+      taskAfterResend.otpVerificationLog.attempts = 5;
+      await taskAfterResend.save();
+
+      // 3. Super Admin calls unlock-otp
+      const resUnlock = await fetch(baseUrl + '/delivery/tasks/' + p44TaskFar._id + '/unlock-otp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p44AdminToken,
+        },
+      });
+      assert.strictEqual(resUnlock.status, 200);
+      const dataUnlock = await resUnlock.json();
+      assert.strictEqual(dataUnlock.success, true);
+      assert.strictEqual(dataUnlock.data.isLocked, false);
+
+      // Verify AuditLog was recorded
+      const auditLog = await AuditLog.findOne({
+        targetId: p44TaskFar._id.toString(),
+        action: 'POD_OTP_UNLOCKED',
+      });
+      assert.ok(auditLog);
+      assert.strictEqual(auditLog.module, 'LOGISTICS');
+    });
+
+    await test('Point 44: POST /api/delivery/tasks/:id/complete-pod certifies delivery with OTP, signature, geo-stamp photo & SHA-256 certificate', async () => {
+      const dummySig = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const dummyPhoto = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP...';
+
+      const res = await fetch(baseUrl + '/delivery/tasks/' + p44Task._id + '/complete-pod', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p44RiderToken,
+        },
+        body: JSON.stringify({
+          otp: '7492',
+          amountCollected: 1499,
+          customerSignature: dummySig,
+          signerName: 'Kavita Deshmukh',
+          signerRelation: 'Family Member',
+          proofPhoto: dummyPhoto,
+          photoTag: 'DOORSTEP_DROP',
+          riderLocation: { lat: 28.535580, lng: 77.391040, accuracy: 4 },
+          podNotes: 'Handed directly to recipient family member at doorstep.',
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.data.task.status, 'DELIVERED');
+      assert.strictEqual(json.data.task.otpVerified, true);
+
+      // Verify Cryptographic SHA-256 Certificate
+      assert.ok(json.data.certificateId);
+      assert.ok(json.data.certificateId.startsWith('CERT-POD-'));
+      assert.ok(json.data.proofHash);
+      assert.strictEqual(json.data.proofHash.length, 64, 'SHA-256 hash must be 64 characters hex');
+      assert.ok(json.data.verificationCode);
+      assert.ok(json.data.verificationCode.startsWith('POD-'));
+      assert.strictEqual(json.data.geoFence.status, 'VERIFIED_DOORSTEP');
+      assert.strictEqual(json.data.geoFence.isWithinRadius, true);
+
+      // Verify SubOrder & Parent Order Cascades
+      const subOrderInDb = await SubOrder.findById(p44SubOrder._id);
+      assert.strictEqual(subOrderInDb.status, 'delivered');
+      assert.strictEqual(subOrderInDb.proofOfDelivery.hasSignature, true);
+      assert.strictEqual(subOrderInDb.proofOfDelivery.certificateId, json.data.certificateId);
+      assert.strictEqual(subOrderInDb.proofOfDelivery.signerName, 'Kavita Deshmukh');
+      assert.strictEqual(subOrderInDb.proofOfDelivery.signerRelation, 'Family Member');
+
+      const parentOrderInDb = await Order.findById(p44Order._id);
+      assert.strictEqual(parentOrderInDb.paymentStatus, 'PAID', 'COD parent order must be marked PAID once all suborders are delivered');
+      assert.strictEqual(parentOrderInDb.proofOfDelivery.certificateId, json.data.certificateId);
+
+      // Verify AuditLog was recorded
+      const auditEntry = await AuditLog.findOne({
+        targetId: p44Task._id.toString(),
+        action: 'DIGITAL_POD_VERIFIED',
+      });
+      assert.ok(auditEntry);
+      assert.strictEqual(auditEntry.module, 'LOGISTICS');
+    });
+
+    await test('Point 44: GET /api/delivery/tasks/:id/pod-certificate returns complete verifiable certificate dossier', async () => {
+      // 1. Courier Rider view
+      const resRider = await fetch(baseUrl + '/delivery/tasks/' + p44Task._id + '/pod-certificate', {
+        headers: { Authorization: 'Bearer ' + p44RiderToken },
+      });
+      assert.strictEqual(resRider.status, 200);
+      const jsonRider = await resRider.json();
+      assert.strictEqual(jsonRider.success, true);
+      assert.ok(jsonRider.data.certificateId.startsWith('CERT-POD-'));
+      assert.strictEqual(jsonRider.data.proofHash.length, 64);
+      assert.strictEqual(jsonRider.data.signature.signerName, 'Kavita Deshmukh');
+      assert.strictEqual(jsonRider.data.signature.signerRelation, 'Family Member');
+      assert.ok(jsonRider.data.photos.length >= 1);
+      assert.ok(jsonRider.data.printableUrl.includes('/pod-certificate/print'));
+
+      // 2. Customer view (owns order)
+      const resCustomer = await fetch(baseUrl + '/delivery/tasks/' + p44Task._id + '/pod-certificate', {
+        headers: { Authorization: 'Bearer ' + p44CustomerToken },
+      });
+      assert.strictEqual(resCustomer.status, 200);
+
+      // 3. Super Admin view
+      const resAdmin = await fetch(baseUrl + '/delivery/tasks/' + p44Task._id + '/pod-certificate', {
+        headers: { Authorization: 'Bearer ' + p44AdminToken },
+      });
+      assert.strictEqual(resAdmin.status, 200);
+
+      // 4. Foreign customer forbidden (403)
+      const resForeign = await fetch(baseUrl + '/delivery/tasks/' + p44Task._id + '/pod-certificate', {
+        headers: { Authorization: 'Bearer ' + p44ForeignCustomerToken },
+      });
+      assert.strictEqual(resForeign.status, 403);
+    });
+
+    await test('Point 44: GET /api/delivery/tasks/:id/pod-certificate/print generates official printable A4 / PDF HTML certificate', async () => {
+      const res = await fetch(baseUrl + '/delivery/tasks/' + p44Task._id + '/pod-certificate/print', {
+        headers: { Authorization: 'Bearer ' + p44RiderToken },
+      });
+      assert.strictEqual(res.status, 200);
+      assert.ok(res.headers.get('content-type').includes('text/html'));
+      const html = await res.text();
+      assert.ok(html.includes('Digital Proof of Delivery Certificate'));
+      assert.ok(html.includes('SHA-256 Tamper-Proof Cryptographic Hash'));
+      assert.ok(html.includes('Kavita Deshmukh'));
+      assert.ok(html.includes('CERT-POD-'));
+      assert.ok(html.includes('@media print'));
+      assert.ok(html.includes('print-btn'));
+    });
+
+    await test('Point 44: Validation & Role Security: Rejects re-delivery on delivered task, rejects unauthenticated and unauthorized requests (400 / 401 / 403)', async () => {
+      // 1. Re-delivery on already DELIVERED task rejected (400)
+      const resReDeliver = await fetch(baseUrl + '/delivery/tasks/' + p44Task._id + '/complete-pod', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p44RiderToken,
+        },
+        body: JSON.stringify({ otp: '7492' }),
+      });
+      assert.strictEqual(resReDeliver.status, 400);
+
+      // 2. Unauthenticated request to complete-pod (401)
+      const resUnauth = await fetch(baseUrl + '/delivery/tasks/' + p44Task._id + '/complete-pod', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otp: '7492' }),
+      });
+      assert.strictEqual(resUnauth.status, 401);
+
+      // 3. Customer calling rider endpoint complete-pod (403)
+      const resCustPod = await fetch(baseUrl + '/delivery/tasks/' + p44Task._id + '/complete-pod', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p44CustomerToken,
+        },
+        body: JSON.stringify({ otp: '7492' }),
+      });
+      assert.strictEqual(resCustPod.status, 403);
+
+      // 4. Rider calling superadmin-only unlock-otp (403)
+      const resRiderUnlock = await fetch(baseUrl + '/delivery/tasks/' + p44Task._id + '/unlock-otp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + p44RiderToken,
+        },
+      });
+      assert.strictEqual(resRiderUnlock.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

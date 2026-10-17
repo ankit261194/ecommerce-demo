@@ -27,6 +27,11 @@ const {
   getOptimizedRoute,
   applyRouteSequence,
   getRiderTipsSummary,
+  validateDropoffGeofence,
+  completeDigitalPodDelivery,
+  getPodCertificate,
+  getPodCertificatePrintHtml,
+  unlockOtpAttempts,
 } = require('../controllers/deliveryController');
 const { protect, authorize } = require('../middlewares/auth');
 
@@ -37,6 +42,11 @@ router.post('/live-tracking/:identifier/simulate-step', simulateTrackingStep);
 router.get('/live-tracking/:identifier/telemetry-history', getTelemetryHistory);
 
 router.use(protect);
+
+// Point 44: Verifiable Digital POD Certificate dossier & printable slip (Accessible by customer, vendor, delivery rider, superadmin)
+router.get('/tasks/:id/pod-certificate', authorize('delivery', 'superadmin', 'customer', 'vendor'), getPodCertificate);
+router.get('/tasks/:id/pod-certificate/print', authorize('delivery', 'superadmin', 'customer', 'vendor'), getPodCertificatePrintHtml);
+
 router.use(authorize('delivery', 'superadmin'));
 
 // Point 14: Rider Delivery Tips & Earnings Summary
@@ -62,6 +72,11 @@ router.post('/tasks/:id/signature', saveCustomerSignature);
 router.get('/tasks/:id/signature', getTaskSignature);
 router.post('/tasks/:id/proof-photo', uploadProofPhoto);
 router.get('/tasks/:id/proof-photo', getTaskProofPhoto);
+
+// Point 44: Digital Proof of Delivery (OTP, Customer Signature & Geo-stamped Photo Upload)
+router.post('/tasks/:id/validate-geofence', validateDropoffGeofence);
+router.post('/tasks/:id/complete-pod', completeDigitalPodDelivery);
+router.post('/tasks/:id/unlock-otp', authorize('superadmin'), unlockOtpAttempts);
 
 // Point #69: COD Cash Collection Reconciliation Routes
 router.get('/cod/summary', getCodReconciliationSummary);

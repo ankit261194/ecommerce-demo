@@ -157,6 +157,12 @@ const subOrderSchema = new mongoose.Schema(
       deliveredBy: { type: String, default: 'AuraMarket Express Courier' },
       riderPhone: { type: String, default: '+919876543210' },
       podNotes: { type: String, default: '' },
+      certificateId: { type: String, default: null },
+      proofHash: { type: String, default: null },
+      geoFenceVerified: { type: Boolean, default: true },
+      distanceFromDropoffMeters: { type: Number, default: null },
+      geoFenceStatus: { type: String, default: 'VERIFIED_DOORSTEP' },
+      photos: [{ type: String }],
     },
     // Point #28: 1-Click Self-Cancel SubOrder Reason
     cancellationReason: {

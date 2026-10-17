@@ -700,6 +700,33 @@ export default function HyperlocalDispatchSchedulerModal({ isOpen, onClose, toke
                           </td>
 
                           <td className="py-3 px-4 text-right space-x-2">
+                            {task.otpVerificationLog?.isLocked && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await api.post(`/delivery/tasks/${task._id}/unlock-otp`);
+                                    fetchRadarData();
+                                  } catch (err) {
+                                    alert(err.response?.data?.message || 'Failed to unlock OTP');
+                                  }
+                                }}
+                                className="px-2 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-semibold transition"
+                                title="Unlock OTP Attempts (Point #44 Anti-Brute-Force Reset)"
+                              >
+                                Unlock OTP
+                              </button>
+                            )}
+
+                            {task.status === 'DELIVERED' && (
+                              <button
+                                onClick={() => window.open(`/api/delivery/tasks/${task._id}/pod-certificate/print`, '_blank')}
+                                className="px-2.5 py-1 rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-[11px] font-semibold transition"
+                                title="View & Print Official Digital POD Certificate (Point #44)"
+                              >
+                                POD Cert (#44)
+                              </button>
+                            )}
+
                             {!task.deliveryPartner && (
                               <button
                                 onClick={() => handleSingleAutoAssign(task._id)}

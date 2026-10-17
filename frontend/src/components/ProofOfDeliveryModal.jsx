@@ -268,7 +268,7 @@ export default function ProofOfDeliveryModal({
                   Digital Proof of Delivery (POD)
                 </h2>
                 <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Point #21
+                  Point #21 • #44
                 </span>
               </div>
               <p className="text-xs text-slate-300">
@@ -508,6 +508,24 @@ export default function ProofOfDeliveryModal({
                     {pod.verificationCode || 'POD-PENDING'}
                   </span>
                 </div>
+
+                {pod.certificateId && (
+                  <div className="p-3.5 rounded-xl bg-indigo-50/60 border border-indigo-200 space-y-1 sm:col-span-2">
+                    <span className="text-[10px] uppercase font-black tracking-wider text-indigo-700 block">
+                      Cryptographic POD Certificate (Point #44)
+                    </span>
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-black text-indigo-950 text-xs">
+                        {pod.certificateId}
+                      </span>
+                      {pod.proofHash && (
+                        <span className="text-[10px] font-mono text-indigo-600 truncate max-w-xs">
+                          Hash: {pod.proofHash.slice(0, 16)}...
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
                   <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 block">

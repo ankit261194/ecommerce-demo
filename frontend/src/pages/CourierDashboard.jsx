@@ -35,6 +35,7 @@ import CourierCodReconciliationModal from '../components/CourierCodReconciliatio
 import CourierDeliveryFailureModal from '../components/CourierDeliveryFailureModal';
 import RiderRouteOptimizerModal from '../components/RiderRouteOptimizerModal';
 import CameraBarcodeScannerModal from '../components/CameraBarcodeScannerModal';
+import DigitalProofOfDeliveryModal from '../components/DigitalProofOfDeliveryModal';
 import api from '../api/client';
 
 export const CourierDashboard = () => {
@@ -42,6 +43,7 @@ export const CourierDashboard = () => {
   const [selectedTaskForContact, setSelectedTaskForContact] = useState(null);
   const [selectedTaskForSignature, setSelectedTaskForSignature] = useState(null);
   const [selectedTaskForPhoto, setSelectedTaskForPhoto] = useState(null);
+  const [selectedTaskForDigitalPod, setSelectedTaskForDigitalPod] = useState(null);
   const [selectedTaskForFailure, setSelectedTaskForFailure] = useState(null);
   const [isCodReconModalOpen, setIsCodReconModalOpen] = useState(false);
   const [isRouteOptimizerModalOpen, setIsRouteOptimizerModalOpen] = useState(false); // Point #17: Multi-Stop Route Optimizer
@@ -930,17 +932,31 @@ export const CourierDashboard = () => {
                   )}
 
                   {task.status === 'OUT_FOR_DELIVERY' && (
-                    <button
-                      onClick={() => {
-                        setSelectedTaskForOtp(task);
-                        setErrorMessage('');
-                        setEnteredOtp('');
-                      }}
-                      className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-2 shadow-md hover:shadow-lg transition-all"
-                    >
-                      <KeyRound className="w-4 h-4" />
-                      <span>Verify Customer OTP & Deliver</span>
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedTaskForDigitalPod(task);
+                          setErrorMessage('');
+                        }}
+                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-700 hover:to-indigo-700 text-white text-xs font-black flex items-center gap-2 shadow-md hover:shadow-lg transition-all"
+                        title="Comprehensive Digital POD: Doorstep Geo-Fence, Parcel Photo, Recipient Signature, and 4-Digit OTP"
+                      >
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Digital POD Handover (Point #44)</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedTaskForOtp(task);
+                          setErrorMessage('');
+                          setEnteredOtp('');
+                        }}
+                        className="px-3 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold flex items-center gap-1.5 transition-all"
+                        title="Direct 4-Digit Delivery OTP PIN input"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>Quick OTP</span>
+                      </button>
+                    </div>
                   )}
 
                   {/* Point #70: Reschedule & Resume Failed Delivery */}
@@ -963,10 +979,20 @@ export const CourierDashboard = () => {
                   )}
 
                   {task.status === 'DELIVERED' && (
-                    <span className="text-xs font-black text-emerald-700 flex items-center gap-1.5 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      <span>Delivered & OTP Verified</span>
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-black text-emerald-700 flex items-center gap-1.5 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span>Delivered & Verified</span>
+                      </span>
+                      <button
+                        onClick={() => setSelectedTaskForDigitalPod(task)}
+                        className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs"
+                        title="View Verifiable Cryptographic POD Certificate"
+                      >
+                        <FileCheck className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>POD Certificate (Point #44)</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -974,6 +1000,19 @@ export const CourierDashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Point #44: Digital Proof of Delivery (OTP, Customer Signature & Geo-stamped Photo) Modal */}
+      {selectedTaskForDigitalPod && (
+        <DigitalProofOfDeliveryModal
+          task={selectedTaskForDigitalPod}
+          isOpen={Boolean(selectedTaskForDigitalPod)}
+          onClose={() => setSelectedTaskForDigitalPod(null)}
+          onSuccess={(taskId, amountCollected, data) => {
+            handleVerifyOtpSuccess(taskId, amountCollected);
+            setSelectedTaskForDigitalPod(null);
+          }}
+        />
+      )}
 
       {/* Point #67: Digital Customer Signature Modal */}
       {selectedTaskForSignature && (

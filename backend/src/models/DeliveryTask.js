@@ -171,6 +171,9 @@ const deliveryTaskSchema = new mongoose.Schema(
     },
     otpVerificationLog: {
       attempts: { type: Number, default: 0 },
+      maxAttempts: { type: Number, default: 5 },
+      isLocked: { type: Boolean, default: false },
+      lockedAt: { type: Date, default: null },
       lastAttemptAt: Date,
       verifiedAt: Date,
       method: { type: String, default: 'PINPAD' },
@@ -220,6 +223,66 @@ const deliveryTaskSchema = new mongoose.Schema(
         lat: Number,
         lng: Number,
       },
+    },
+    // Point 44: Digital Proof of Delivery (OTP, Customer Signature & Geo-stamped Photo Upload)
+    digitalPod: {
+      certificateId: { type: String, default: null, index: true },
+      proofHash: { type: String, default: null },
+      verificationCode: { type: String, default: null },
+      isFullyVerified: { type: Boolean, default: false },
+      geoFence: {
+        riderLat: { type: Number, default: null },
+        riderLng: { type: Number, default: null },
+        dropLat: { type: Number, default: null },
+        dropLng: { type: Number, default: null },
+        distanceMeters: { type: Number, default: null },
+        isWithinRadius: { type: Boolean, default: true },
+        status: {
+          type: String,
+          enum: ['VERIFIED_DOORSTEP', 'PROXIMITY_WARNING', 'GEO_COORDINATES_UNAVAILABLE'],
+          default: 'VERIFIED_DOORSTEP',
+        },
+        discrepancyReason: { type: String, default: '' },
+      },
+      photos: [
+        {
+          photoUrl: { type: String, default: '' },
+          tag: {
+            type: String,
+            enum: ['DOORSTEP_DROP', 'HANDOVER', 'BUILDING_GATE', 'PACKAGE_LABEL', 'OTHER'],
+            default: 'DOORSTEP_DROP',
+          },
+          geoTag: {
+            lat: { type: Number, default: null },
+            lng: { type: Number, default: null },
+            accuracy: { type: Number, default: null },
+          },
+          uploadedAt: { type: Date, default: Date.now },
+          fileSize: { type: String, default: '' },
+          watermarkNote: { type: String, default: '' },
+        },
+      ],
+      signature: {
+        dataUrl: { type: String, default: null },
+        signerName: { type: String, default: '' },
+        signerRelation: { type: String, default: 'Self' },
+        signedAt: { type: Date, default: null },
+        ipAddress: { type: String, default: '' },
+        userAgent: { type: String, default: '' },
+      },
+      otpVerification: {
+        verified: { type: Boolean, default: false },
+        verifiedAt: { type: Date, default: null },
+        attempts: { type: Number, default: 0 },
+        maxAttempts: { type: Number, default: 5 },
+        isLocked: { type: Boolean, default: false },
+        lockedAt: { type: Date, default: null },
+        lastAttemptAt: { type: Date, default: null },
+        lastResentAt: { type: Date, default: null },
+        resendCount: { type: Number, default: 0 },
+      },
+      generatedAt: { type: Date, default: null },
+      generatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     },
     // Point #69: Cash on Delivery (COD) Cash Collection Reconciliation
     codReconciliation: {

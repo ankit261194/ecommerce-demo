@@ -27,6 +27,8 @@ const AffiliateProgramSetting = require('../src/models/AffiliateProgramSetting')
 const LoyaltyTierConfig = require('../src/models/LoyaltyTierConfig');
 const LoyaltyActivityLog = require('../src/models/LoyaltyActivityLog');
 const FlashDeal = require('../src/models/FlashDeal');
+const AbandonedCart = require('../src/models/AbandonedCart');
+const AbandonedCartRecoveryConfig = require('../src/models/AbandonedCartRecoveryConfig');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -23233,6 +23235,253 @@ const runTests = async () => {
       });
       assert.strictEqual(resRider.status, 403, 'Rider token must return 403 Forbidden');
     });
+  
+    // =========================================================================
+    // PILLAR 2 - POINT 29: AUTOMATED ABANDONED CART RECOVERY SEQUENCES
+    // =========================================================================
+    console.log('\n--- PILLAR 2 - POINT 29: AUTOMATED ABANDONED CART RECOVERY SEQUENCES ---');
+
+    let point29TestCart;
+
+    await test('Point 29: GET /api/admin/abandoned-carts/sequences/config retrieves default 3-stage drip configuration with enabled channels and delays', async () => {
+      const res = await fetch(`${baseUrl}/admin/abandoned-carts/sequences/config`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200, 'Config retrieval must succeed with 200');
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.config);
+      assert.strictEqual(data.config.isEnabled, true);
+      assert.strictEqual(data.config.emailEnabled, true);
+      assert.strictEqual(data.config.whatsappEnabled, true);
+      assert.strictEqual(data.config.stages.length, 3);
+      assert.strictEqual(data.config.stages[0].delayHours, 1);
+      assert.strictEqual(data.config.stages[1].delayHours, 24);
+      assert.strictEqual(data.config.stages[2].delayHours, 72);
+    });
+
+    await test('Point 29: PUT /api/admin/abandoned-carts/sequences/config updates drip thresholds, discounts, and template copy', async () => {
+      const res = await fetch(`${baseUrl}/admin/abandoned-carts/sequences/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          minCartValue: 499,
+          maxRemindersPerCart: 4,
+          autoExpireDays: 10,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.config.minCartValue, 499);
+      assert.strictEqual(data.config.maxRemindersPerCart, 4);
+      assert.strictEqual(data.config.autoExpireDays, 10);
+    });
+
+    await test('Point 29: Setup: Create eligible test abandoned cart for automated drip pipeline', async () => {
+      const targetProd = (await Product.findOne({ isPublished: { $ne: false } })) || point28TestProduct;
+      assert.ok(targetProd, 'Product must exist for cart');
+
+      point29TestCart = await AbandonedCart.create({
+        customerName: 'Ananya Sharma',
+        customerEmail: 'ananya.sharma@auramarket.com',
+        customerPhone: '+91 98111 22334',
+        cartTotal: 4999,
+        items: [
+          {
+            product: targetProd._id,
+            title: targetProd.title,
+            price: targetProd.sellingPrice,
+            quantity: 1,
+            image: targetProd.images?.[0] || '',
+          },
+        ],
+        abandonedAt: new Date(Date.now() - 2 * 3600 * 1000),
+        status: 'ABANDONED',
+        sequenceStage: 0,
+      });
+
+      assert.ok(point29TestCart._id);
+      assert.strictEqual(point29TestCart.sequenceStage, 0);
+    });
+
+    await test('Point 29: POST /api/admin/abandoned-carts/sequences/run executes Stage 1 gentle reminder with recovery link and log entry', async () => {
+      const res = await fetch(`${baseUrl}/admin/abandoned-carts/sequences/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ forceStage: 1 }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.stats.stage1Dispatched >= 1, 'Stage 1 must dispatch to eligible cart');
+
+      const updatedCart = await AbandonedCart.findById(point29TestCart._id);
+      assert.strictEqual(updatedCart.sequenceStage, 1);
+      assert.strictEqual(updatedCart.status, 'REMINDER_SENT');
+      assert.strictEqual(updatedCart.reminderCount, 1);
+      assert.ok(updatedCart.recoveryToken);
+      assert.ok(updatedCart.recoveryLogs.length >= 1);
+      assert.strictEqual(updatedCart.recoveryLogs[0].stage, 1);
+    });
+
+    await test('Point 29: POST /api/admin/abandoned-carts/sequences/run executes Stage 2 sweet incentive generating single-use dynamic coupon', async () => {
+      await AbandonedCart.findByIdAndUpdate(point29TestCart._id, {
+        abandonedAt: new Date(Date.now() - 26 * 3600 * 1000),
+      });
+
+      const res = await fetch(`${baseUrl}/admin/abandoned-carts/sequences/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ forceStage: 2 }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.stats.stage2Dispatched >= 1);
+
+      const updatedCart = await AbandonedCart.findById(point29TestCart._id);
+      assert.strictEqual(updatedCart.sequenceStage, 2);
+      assert.strictEqual(updatedCart.reminderCount, 2);
+      assert.ok(updatedCart.dynamicCoupon, 'Dynamic coupon voucher must be generated');
+      assert.ok(updatedCart.dynamicCoupon.includes('CART15_'));
+      assert.ok(updatedCart.recoveryLogs.some(l => l.stage === 2));
+    });
+
+    await test('Point 29: POST /api/admin/abandoned-carts/sequences/run executes Stage 3 urgency warning before inventory release', async () => {
+      await AbandonedCart.findByIdAndUpdate(point29TestCart._id, {
+        abandonedAt: new Date(Date.now() - 76 * 3600 * 1000),
+      });
+
+      const res = await fetch(`${baseUrl}/admin/abandoned-carts/sequences/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ forceStage: 3 }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.stats.stage3Dispatched >= 1);
+
+      const updatedCart = await AbandonedCart.findById(point29TestCart._id);
+      assert.strictEqual(updatedCart.sequenceStage, 3);
+      assert.strictEqual(updatedCart.reminderCount, 3);
+      assert.ok(updatedCart.recoveryLogs.some(l => l.stage === 3));
+    });
+
+    await test('Point 29: POST /api/admin/abandoned-carts/:id/drip-nudge dispatches on-demand 1-click manual WhatsApp or Email nudge', async () => {
+      const res = await fetch(`${baseUrl}/admin/abandoned-carts/${point29TestCart._id}/drip-nudge`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          stage: 2,
+          channel: 'WHATSAPP',
+          customNote: 'Quick personal check-in from VIP Support',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.log.channel, 'WHATSAPP');
+      assert.strictEqual(data.log.stage, 2);
+    });
+
+    await test('Point 29: POST /api/admin/abandoned-carts/sequences/test-dispatch sends test recovery alert to specified admin email or phone', async () => {
+      const resEmail = await fetch(`${baseUrl}/admin/abandoned-carts/sequences/test-dispatch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          channel: 'EMAIL',
+          target: 'admin.recovery@auramarket.com',
+          stageNumber: 2,
+        }),
+      });
+      assert.strictEqual(resEmail.status, 200);
+      const dataEmail = await resEmail.json();
+      assert.strictEqual(dataEmail.success, true);
+
+      const resWA = await fetch(`${baseUrl}/admin/abandoned-carts/sequences/test-dispatch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          channel: 'WHATSAPP',
+          target: '+91 98765 00000',
+          stageNumber: 1,
+        }),
+      });
+      assert.strictEqual(resWA.status, 200);
+      const dataWA = await resWA.json();
+      assert.strictEqual(dataWA.success, true);
+    });
+
+    await test('Point 29: Guardrail: POST /api/admin/abandoned-carts/sequences/test-dispatch rejects missing target (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/admin/abandoned-carts/sequences/test-dispatch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          channel: 'EMAIL',
+        }),
+      });
+      assert.strictEqual(res.status, 400, 'Must return 400 for missing target');
+    });
+
+    await test('Point 29: GET /api/admin/abandoned-carts/sequences/analytics computes funnel stages, conversion rate, and channel revenue attribution', async () => {
+      const res = await fetch(`${baseUrl}/admin/abandoned-carts/sequences/analytics`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.analytics);
+      assert.ok(data.analytics.totalCarts >= 1);
+      assert.ok(typeof data.analytics.totalAbandonedGMV === 'number');
+      assert.ok(typeof data.analytics.totalRecoveredGMV === 'number');
+      assert.ok(data.analytics.stageFunnel);
+      assert.ok(data.analytics.channelPerformance);
+      assert.ok(data.analytics.configStatus);
+      assert.strictEqual(typeof data.analytics.configStatus.totalAutomatedDispatches, 'number');
+    });
+
+    await test('Point 29: Role Security: Customer and unauthenticated requests to sequence admin routes are rejected (401 / 403)', async () => {
+      const resUnauth = await fetch(`${baseUrl}/admin/abandoned-carts/sequences/config`);
+      assert.strictEqual(resUnauth.status, 401, 'Unauthenticated request must return 401');
+
+      const resCust = await fetch(`${baseUrl}/admin/abandoned-carts/sequences/config`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403, 'Customer token must return 403 Forbidden');
+
+      const resRider = await fetch(`${baseUrl}/admin/abandoned-carts/sequences/run`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resRider.status, 403, 'Rider token must return 403 Forbidden');
+    });
+
   } finally {
     if (server) {
       server.close();

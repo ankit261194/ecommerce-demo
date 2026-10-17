@@ -1,4 +1,5 @@
 const AbandonedCart = require('../models/AbandonedCart');
+const AbandonedCartRecoveryConfig = require('../models/AbandonedCartRecoveryConfig');
 const Coupon = require('../models/Coupon');
 const UIConfig = require('../models/UIConfig');
 const smsService = require('../services/smsService');
@@ -893,4 +894,548 @@ exports.getAbandonedRevenueAnalytics = async (req, res, next) => {
     next(error);
   }
 };
+
+// =========================================================================
+// POINT 29: AUTOMATED ABANDONED CART RECOVERY SEQUENCES (Email + WhatsApp)
+// =========================================================================
+
+// Helper for template interpolation
+const interpolateTemplate = (template, data) => {
+  if (!template) return '';
+  return template
+    .replace(/\{customerName\}/g, data.customerName || 'Shopper')
+    .replace(/\{cartTotal\}/g, (data.cartTotal || 0).toLocaleString('en-IN'))
+    .replace(/\{itemsCount\}/g, String(data.itemsCount || 1))
+    .replace(/\{itemsList\}/g, data.itemsList || 'Cart items')
+    .replace(/\{recoveryLink\}/g, data.recoveryLink || '')
+    .replace(/\{couponCode\}/g, data.couponCode || 'RECOVER10')
+    .replace(/\{discountPercent\}/g, String(data.discountPercent || 10));
+};
+
+// @desc    Get Automated Abandoned Cart Drip Recovery Configuration (Point 29)
+// @route   GET /api/admin/abandoned-carts/sequences/config
+// @access  Private (Super Admin)
+exports.getRecoverySequenceConfig = async (req, res, next) => {
+  try {
+    const config = await AbandonedCartRecoveryConfig.getOrCreateDefault();
+    res.status(200).json({
+      success: true,
+      config,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update Automated Abandoned Cart Drip Recovery Configuration (Point 29)
+// @route   PUT /api/admin/abandoned-carts/sequences/config
+// @access  Private (Super Admin)
+exports.updateRecoverySequenceConfig = async (req, res, next) => {
+  try {
+    const config = await AbandonedCartRecoveryConfig.getOrCreateDefault();
+    const {
+      isEnabled,
+      emailEnabled,
+      whatsappEnabled,
+      smsEnabled,
+      minCartValue,
+      maxRemindersPerCart,
+      autoExpireDays,
+      stages,
+    } = req.body;
+
+    if (isEnabled !== undefined) config.isEnabled = Boolean(isEnabled);
+    if (emailEnabled !== undefined) config.emailEnabled = Boolean(emailEnabled);
+    if (whatsappEnabled !== undefined) config.whatsappEnabled = Boolean(whatsappEnabled);
+    if (smsEnabled !== undefined) config.smsEnabled = Boolean(smsEnabled);
+    if (minCartValue !== undefined) config.minCartValue = Math.max(0, Number(minCartValue));
+    if (maxRemindersPerCart !== undefined)
+      config.maxRemindersPerCart = Math.max(1, Number(maxRemindersPerCart));
+    if (autoExpireDays !== undefined) config.autoExpireDays = Math.max(1, Number(autoExpireDays));
+
+    if (stages && Array.isArray(stages)) {
+      config.stages = stages;
+    }
+
+    await config.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Automated abandoned cart recovery sequence settings updated successfully',
+      config,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Trigger Automated Recovery Drip Sequence Engine (Point 29)
+// @route   POST /api/admin/abandoned-carts/sequences/run
+// @access  Private (Super Admin / Cron Worker)
+exports.triggerAutomatedRecoveryDrip = async (req, res, next) => {
+  try {
+    const config = await AbandonedCartRecoveryConfig.getOrCreateDefault();
+    const { forceStage } = req.body || {};
+    const now = Date.now();
+
+    const activeCarts = await AbandonedCart.find({
+      status: { $in: ['ABANDONED', 'REMINDER_SENT'] },
+      cartTotal: { $gte: config.minCartValue || 0 },
+    });
+
+    let stage1Dispatched = 0;
+    let stage2Dispatched = 0;
+    let stage3Dispatched = 0;
+    let expiredCartsCount = 0;
+
+    const demoBaseUrl = process.env.DEMO_URL || 'https://shribalajikripadham.online/ecommerce-demo';
+
+    for (const cart of activeCarts) {
+      const elapsedMs = now - new Date(cart.abandonedAt).getTime();
+      const elapsedHours = elapsedMs / (3600 * 1000);
+
+      // Check auto-expiry
+      if (elapsedHours >= (config.autoExpireDays || 7) * 24) {
+        cart.status = 'EXPIRED';
+        await cart.save();
+        expiredCartsCount++;
+        continue;
+      }
+
+      // Check reminder limit
+      if (cart.reminderCount >= (config.maxRemindersPerCart || 3)) {
+        continue;
+      }
+
+      if (!cart.recoveryToken) {
+        cart.recoveryToken = `rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+      }
+
+      const itemsList =
+        (cart.items || []).map((i) => `${i.quantity}x ${i.title}`).join(', ') || 'Cart items';
+
+      // STAGE 1: 1-hour nudge
+      const stage1 = config.stages.find((s) => s.stageNumber === 1);
+      if (
+        stage1 &&
+        stage1.isActive &&
+        cart.sequenceStage === 0 &&
+        (elapsedHours >= stage1.delayHours || forceStage === 1)
+      ) {
+        const restoreLink = `${demoBaseUrl}/#recover-cart?token=${cart.recoveryToken}`;
+        const templateData = {
+          customerName: cart.customerName,
+          cartTotal: cart.cartTotal,
+          itemsCount: cart.items?.length || 1,
+          itemsList,
+          recoveryLink: restoreLink,
+          couponCode: 'RECOVER10',
+          discountPercent: 10,
+        };
+
+        const subject = interpolateTemplate(stage1.emailSubject, templateData);
+        const emailBody = interpolateTemplate(stage1.emailBodyTemplate, templateData);
+        const waText = interpolateTemplate(stage1.whatsappTemplate, templateData);
+
+        if (config.emailEnabled && stage1.channels.includes('EMAIL') && cart.customerEmail) {
+          await mailService.sendMail({
+            to: cart.customerEmail,
+            subject,
+            text: emailBody,
+            html: `<p>${emailBody.replace(
+              /\n/g,
+              '<br/>'
+            )}</p><p><a href="${restoreLink}" style="padding:10px 20px;background:#E11D48;color:#fff;text-decoration:none;border-radius:6px;display:inline-block;">Restore My Cart</a></p>`,
+          });
+        }
+
+        if (config.whatsappEnabled && stage1.channels.includes('WHATSAPP') && cart.customerPhone) {
+          await smsService.sendSMS({
+            to: cart.customerPhone,
+            message: waText,
+          });
+          cart.whatsappSentCount = (cart.whatsappSentCount || 0) + 1;
+          cart.lastWhatsappSentAt = new Date();
+        }
+
+        cart.sequenceStage = 1;
+        cart.status = 'REMINDER_SENT';
+        cart.reminderCount = (cart.reminderCount || 0) + 1;
+        cart.lastReminderSentAt = new Date();
+        cart.recoveryLogs.push({
+          stage: 1,
+          channel: stage1.channels.includes('WHATSAPP') ? 'WHATSAPP' : 'EMAIL',
+          dispatchedAt: new Date(),
+          recipient: cart.customerEmail || cart.customerPhone,
+          couponOffered: 'RECOVER10',
+          status: 'DELIVERED',
+        });
+        await cart.save();
+        stage1Dispatched++;
+      }
+      // STAGE 2: 24-hour sweet incentive offer
+      else if (
+        cart.sequenceStage === 1 &&
+        (elapsedHours >= (config.stages.find((s) => s.stageNumber === 2)?.delayHours || 24) ||
+          forceStage === 2)
+      ) {
+        const stage2 = config.stages.find((s) => s.stageNumber === 2);
+        const discountPct = stage2?.discountPercentage || 15;
+        const dynCoupon = await generateDynamicRecoveryVoucher(cart, discountPct);
+        const restoreLink = `${demoBaseUrl}/#recover-cart?token=${cart.recoveryToken}&coupon=${dynCoupon}`;
+
+        const templateData = {
+          customerName: cart.customerName,
+          cartTotal: cart.cartTotal,
+          itemsCount: cart.items?.length || 1,
+          itemsList,
+          recoveryLink: restoreLink,
+          couponCode: dynCoupon,
+          discountPercent: discountPct,
+        };
+
+        const subject = interpolateTemplate(stage2?.emailSubject, templateData);
+        const emailBody = interpolateTemplate(stage2?.emailBodyTemplate, templateData);
+        const waText = interpolateTemplate(stage2?.whatsappTemplate, templateData);
+
+        if (config.emailEnabled && stage2?.channels.includes('EMAIL') && cart.customerEmail) {
+          await mailService.sendMail({
+            to: cart.customerEmail,
+            subject,
+            text: emailBody,
+            html: `<p>${emailBody.replace(
+              /\n/g,
+              '<br/>'
+            )}</p><p>Use coupon <strong>${dynCoupon}</strong> to get ${discountPct}% OFF!</p><p><a href="${restoreLink}" style="padding:10px 20px;background:#E11D48;color:#fff;text-decoration:none;border-radius:6px;display:inline-block;">Claim ${discountPct}% OFF & Checkout</a></p>`,
+          });
+        }
+
+        if (config.whatsappEnabled && stage2?.channels.includes('WHATSAPP') && cart.customerPhone) {
+          await smsService.sendSMS({
+            to: cart.customerPhone,
+            message: waText,
+          });
+          cart.whatsappSentCount = (cart.whatsappSentCount || 0) + 1;
+          cart.lastWhatsappSentAt = new Date();
+        }
+
+        cart.sequenceStage = 2;
+        cart.dynamicCoupon = dynCoupon;
+        cart.recoveryCoupon = dynCoupon;
+        cart.reminderCount = (cart.reminderCount || 0) + 1;
+        cart.lastReminderSentAt = new Date();
+        cart.recoveryLogs.push({
+          stage: 2,
+          channel: stage2?.channels.includes('WHATSAPP') ? 'WHATSAPP' : 'EMAIL',
+          dispatchedAt: new Date(),
+          recipient: cart.customerEmail || cart.customerPhone,
+          couponOffered: dynCoupon,
+          status: 'DELIVERED',
+        });
+        await cart.save();
+        stage2Dispatched++;
+      }
+      // STAGE 3: 72-hour urgency warning
+      else if (
+        cart.sequenceStage === 2 &&
+        (elapsedHours >= (config.stages.find((s) => s.stageNumber === 3)?.delayHours || 72) ||
+          forceStage === 3)
+      ) {
+        const stage3 = config.stages.find((s) => s.stageNumber === 3);
+        const discountPct = stage3?.discountPercentage || 10;
+        const couponToUse = cart.dynamicCoupon || 'RECOVER10';
+        const restoreLink = `${demoBaseUrl}/#recover-cart?token=${cart.recoveryToken}&coupon=${couponToUse}`;
+
+        const templateData = {
+          customerName: cart.customerName,
+          cartTotal: cart.cartTotal,
+          itemsCount: cart.items?.length || 1,
+          itemsList,
+          recoveryLink: restoreLink,
+          couponCode: couponToUse,
+          discountPercent: discountPct,
+        };
+
+        const subject = interpolateTemplate(stage3?.emailSubject, templateData);
+        const emailBody = interpolateTemplate(stage3?.emailBodyTemplate, templateData);
+        const waText = interpolateTemplate(stage3?.whatsappTemplate, templateData);
+
+        if (config.emailEnabled && stage3?.channels.includes('EMAIL') && cart.customerEmail) {
+          await mailService.sendMail({
+            to: cart.customerEmail,
+            subject,
+            text: emailBody,
+            html: `<p>${emailBody.replace(
+              /\n/g,
+              '<br/>'
+            )}</p><p><a href="${restoreLink}" style="padding:10px 20px;background:#DC2626;color:#fff;text-decoration:none;border-radius:6px;display:inline-block;">Final Chance to Complete Order</a></p>`,
+          });
+        }
+
+        if (config.whatsappEnabled && stage3?.channels.includes('WHATSAPP') && cart.customerPhone) {
+          await smsService.sendSMS({
+            to: cart.customerPhone,
+            message: waText,
+          });
+          cart.whatsappSentCount = (cart.whatsappSentCount || 0) + 1;
+          cart.lastWhatsappSentAt = new Date();
+        }
+
+        cart.sequenceStage = 3;
+        cart.reminderCount = (cart.reminderCount || 0) + 1;
+        cart.lastReminderSentAt = new Date();
+        cart.recoveryLogs.push({
+          stage: 3,
+          channel: stage3?.channels.includes('WHATSAPP') ? 'WHATSAPP' : 'EMAIL',
+          dispatchedAt: new Date(),
+          recipient: cart.customerEmail || cart.customerPhone,
+          couponOffered: couponToUse,
+          status: 'DELIVERED',
+        });
+        await cart.save();
+        stage3Dispatched++;
+      }
+    }
+
+    const totalDispatched = stage1Dispatched + stage2Dispatched + stage3Dispatched;
+    config.lastSchedulerRunAt = new Date();
+    config.totalAutomatedDispatches = (config.totalAutomatedDispatches || 0) + totalDispatched;
+    await config.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Automated recovery drip executed: ${totalDispatched} messages dispatched across 3 stages`,
+      stats: {
+        stage1Dispatched,
+        stage2Dispatched,
+        stage3Dispatched,
+        totalDispatched,
+        expiredCartsCount,
+        activeCartsScanned: activeCarts.length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Send Manual 1-Click Drip Nudge to Abandoned Cart (Point 29)
+// @route   POST /api/admin/abandoned-carts/:id/drip-nudge
+// @access  Private (Super Admin)
+exports.sendManualDripNudge = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { stage = 1, channel = 'WHATSAPP', customNote = '' } = req.body;
+
+    const cart = await AbandonedCart.findById(id);
+    if (!cart) {
+      return res.status(404).json({ success: false, message: 'Abandoned cart not found' });
+    }
+
+    const config = await AbandonedCartRecoveryConfig.getOrCreateDefault();
+    const stageConfig =
+      config.stages.find((s) => s.stageNumber === Number(stage)) || config.stages[0];
+
+    if (!cart.recoveryToken) {
+      cart.recoveryToken = `rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+    }
+
+    let couponCode = cart.recoveryCoupon || 'RECOVER10';
+    if (stageConfig.offerDiscount) {
+      couponCode = await generateDynamicRecoveryVoucher(cart, stageConfig.discountPercentage || 15);
+      cart.dynamicCoupon = couponCode;
+      cart.recoveryCoupon = couponCode;
+    }
+
+    const demoBaseUrl = process.env.DEMO_URL || 'https://shribalajikripadham.online/ecommerce-demo';
+    const restoreLink = `${demoBaseUrl}/#recover-cart?token=${cart.recoveryToken}&coupon=${couponCode}`;
+    const itemsList = (cart.items || []).map((i) => `${i.quantity}x ${i.title}`).join(', ');
+
+    const templateData = {
+      customerName: cart.customerName,
+      cartTotal: cart.cartTotal,
+      itemsCount: cart.items?.length || 1,
+      itemsList,
+      recoveryLink: restoreLink,
+      couponCode,
+      discountPercent: stageConfig.discountPercentage || 10,
+    };
+
+    let dispatchStatus = 'DELIVERED';
+    let cleanPhone = (cart.customerPhone || '').replace(/[^0-9]/g, '');
+    if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
+
+    if (channel === 'EMAIL' && cart.customerEmail) {
+      const subject = interpolateTemplate(stageConfig.emailSubject, templateData);
+      const emailBody = interpolateTemplate(stageConfig.emailBodyTemplate, templateData);
+      await mailService.sendMail({
+        to: cart.customerEmail,
+        subject,
+        text: emailBody,
+        html: `<p>${emailBody.replace(
+          /\n/g,
+          '<br/>'
+        )}</p><p><a href="${restoreLink}">Click here to restore your cart</a></p>`,
+      });
+    } else if (channel === 'WHATSAPP') {
+      const waText = interpolateTemplate(stageConfig.whatsappTemplate, templateData);
+      if (cart.customerPhone) {
+        await smsService.sendSMS({ to: cart.customerPhone, message: waText });
+      }
+      cart.whatsappSentCount = (cart.whatsappSentCount || 0) + 1;
+      cart.lastWhatsappSentAt = new Date();
+    }
+
+    cart.reminderCount = (cart.reminderCount || 0) + 1;
+    cart.lastReminderSentAt = new Date();
+    cart.status = 'REMINDER_SENT';
+    cart.sequenceStage = Number(stage);
+
+    const logEntry = {
+      stage: Number(stage),
+      channel,
+      dispatchedAt: new Date(),
+      recipient: channel === 'EMAIL' ? cart.customerEmail : cart.customerPhone,
+      couponOffered: couponCode,
+      status: dispatchStatus,
+    };
+    cart.recoveryLogs.push(logEntry);
+    await cart.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Stage ${stage} drip nudge dispatched via ${channel} successfully!`,
+      log: logEntry,
+      cart,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Dry-run / Test Channel Dispatch for Recovery Templates (Point 29)
+// @route   POST /api/admin/abandoned-carts/sequences/test-dispatch
+// @access  Private (Super Admin)
+exports.testChannelDispatch = async (req, res, next) => {
+  try {
+    const { channel = 'EMAIL', target, stageNumber = 1 } = req.body;
+
+    if (!target) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Target email or phone number is required' });
+    }
+
+    const config = await AbandonedCartRecoveryConfig.getOrCreateDefault();
+    const stage =
+      config.stages.find((s) => s.stageNumber === Number(stageNumber)) || config.stages[0];
+
+    const templateData = {
+      customerName: 'AuraMarket Tester',
+      cartTotal: 4999,
+      itemsCount: 2,
+      itemsList: '2x Aura Pro ANC Headphones',
+      recoveryLink:
+        'https://shribalajikripadham.online/ecommerce-demo/#recover-cart?token=rec_test_sample',
+      couponCode: 'TESTRECOVER15',
+      discountPercent: stage.discountPercentage || 15,
+    };
+
+    if (channel === 'EMAIL') {
+      const subject = `[TEST] ${interpolateTemplate(stage.emailSubject, templateData)}`;
+      const body = interpolateTemplate(stage.emailBodyTemplate, templateData);
+      await mailService.sendMail({
+        to: target,
+        subject,
+        text: body,
+      });
+    } else {
+      const waText = `[TEST] ${interpolateTemplate(stage.whatsappTemplate, templateData)}`;
+      await smsService.sendSMS({
+        to: target,
+        message: waText,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Test Stage ${stageNumber} recovery alert dispatched to ${target} via ${channel}!`,
+      channel,
+      target,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Detailed Recovery Sequence Funnel Analytics (Point 29)
+// @route   GET /api/admin/abandoned-carts/sequences/analytics
+// @access  Private (Super Admin)
+exports.getSequenceAnalytics = async (req, res, next) => {
+  try {
+    const config = await AbandonedCartRecoveryConfig.getOrCreateDefault();
+    const allCarts = await AbandonedCart.find({});
+
+    const totalCarts = allCarts.length;
+    const recoveredCarts = allCarts.filter((c) => c.status === 'RECOVERED');
+    const recoveredCount = recoveredCarts.length;
+    const totalAbandonedGMV = allCarts.reduce((acc, c) => acc + (c.cartTotal || 0), 0);
+    const totalRecoveredGMV = recoveredCarts.reduce((acc, c) => acc + (c.cartTotal || 0), 0);
+    const atRiskGMV = totalAbandonedGMV - totalRecoveredGMV;
+    const recoveryRate = totalCarts > 0 ? Math.round((recoveredCount / totalCarts) * 100) : 0;
+
+    // Funnel distribution
+    const stageFunnel = {
+      stage0_uncontacted: allCarts.filter((c) => c.sequenceStage === 0 && c.status !== 'RECOVERED')
+        .length,
+      stage1_sent: allCarts.filter((c) => c.sequenceStage >= 1).length,
+      stage2_sent: allCarts.filter((c) => c.sequenceStage >= 2).length,
+      stage3_sent: allCarts.filter((c) => c.sequenceStage >= 3).length,
+      recovered: recoveredCount,
+    };
+
+    // Channel attribution
+    const channelPerformance = {
+      WHATSAPP: { count: 0, revenue: 0 },
+      EMAIL: { count: 0, revenue: 0 },
+      SMS: { count: 0, revenue: 0 },
+      DIRECT: { count: 0, revenue: 0 },
+    };
+
+    recoveredCarts.forEach((c) => {
+      const ch =
+        c.channelAttribution ||
+        (c.whatsappSentCount > 0 ? 'WHATSAPP' : c.reminderCount > 0 ? 'EMAIL' : 'DIRECT');
+      if (channelPerformance[ch]) {
+        channelPerformance[ch].count++;
+        channelPerformance[ch].revenue += c.cartTotal || 0;
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      analytics: {
+        totalCarts,
+        recoveredCount,
+        recoveryRate,
+        totalAbandonedGMV,
+        totalRecoveredGMV,
+        atRiskGMV,
+        stageFunnel,
+        channelPerformance,
+        configStatus: {
+          isEnabled: config.isEnabled,
+          emailEnabled: config.emailEnabled,
+          whatsappEnabled: config.whatsappEnabled,
+          smsEnabled: config.smsEnabled,
+          lastSchedulerRunAt: config.lastSchedulerRunAt,
+          totalAutomatedDispatches: config.totalAutomatedDispatches || 0,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 

@@ -15,6 +15,12 @@ const {
   updateExitIntentConfig,
   recordExitIntentEvent,
   getAbandonedRevenueAnalytics,
+  getRecoverySequenceConfig,
+  updateRecoverySequenceConfig,
+  triggerAutomatedRecoveryDrip,
+  sendManualDripNudge,
+  testChannelDispatch,
+  getSequenceAnalytics,
 } = require('../controllers/abandonedCartController');
 const { protect, authorize, optionalAuth } = require('../middlewares/auth');
 
@@ -28,6 +34,24 @@ router.post('/recover/:token/complete', completeCartRecovery);
 // Point 13: Exit-Intent Popup & Sequence Tracking Endpoints (Public)
 router.get('/exit-intent-config', getExitIntentConfig);
 router.post('/exit-intent-event', recordExitIntentEvent);
+
+// Point 29: Automated Abandoned Cart Recovery Sequences (Email + WhatsApp drip campaigns)
+router.get('/admin/sequences/config', protect, authorize('superadmin', 'admin'), getRecoverySequenceConfig);
+router.get('/sequences/config', protect, authorize('superadmin', 'admin'), getRecoverySequenceConfig);
+router.put('/admin/sequences/config', protect, authorize('superadmin', 'admin'), updateRecoverySequenceConfig);
+router.put('/sequences/config', protect, authorize('superadmin', 'admin'), updateRecoverySequenceConfig);
+
+router.post('/admin/sequences/run', protect, authorize('superadmin', 'admin'), triggerAutomatedRecoveryDrip);
+router.post('/sequences/run', protect, authorize('superadmin', 'admin'), triggerAutomatedRecoveryDrip);
+
+router.post('/admin/sequences/test-dispatch', protect, authorize('superadmin', 'admin'), testChannelDispatch);
+router.post('/sequences/test-dispatch', protect, authorize('superadmin', 'admin'), testChannelDispatch);
+
+router.get('/admin/sequences/analytics', protect, authorize('superadmin', 'admin'), getSequenceAnalytics);
+router.get('/sequences/analytics', protect, authorize('superadmin', 'admin'), getSequenceAnalytics);
+
+router.post('/admin/:id/drip-nudge', protect, authorize('superadmin', 'admin'), sendManualDripNudge);
+router.post('/:id/drip-nudge', protect, authorize('superadmin', 'admin'), sendManualDripNudge);
 
 // Super Admin & Vendor Management routes
 router.get('/', protect, authorize('superadmin', 'admin'), getAdminAbandonedCarts);
@@ -48,3 +72,4 @@ router.post('/admin/:id/mark-recovered', protect, authorize('superadmin', 'admin
 router.delete('/admin/:id', protect, authorize('superadmin', 'admin'), deleteAbandonedCart);
 
 module.exports = router;
+

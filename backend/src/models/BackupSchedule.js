@@ -15,11 +15,24 @@ const backupScheduleSchema = new mongoose.Schema(
       type: String,
       default: '02:00',
     },
+    cronExpression: {
+      type: String,
+      default: '0 2 * * *', // Daily at 02:00
+      trim: true,
+    },
     retentionDays: {
       type: Number,
       default: 14,
       min: 1,
       max: 365,
+    },
+    autoPruneOldBackups: {
+      type: Boolean,
+      default: true,
+    },
+    keepPinnedIndefinitely: {
+      type: Boolean,
+      default: true,
     },
     storageDestination: {
       type: String,

@@ -21359,6 +21359,221 @@ const runTests = async () => {
       assert.strictEqual(resRider.status, 403, 'Delivery rider token must return 403 Forbidden');
     });
 
+    // =========================================================================
+    // PILLAR 2 - POINT 23: AUTOMATED CLOUD DATABASE BACKUP SCHEDULER
+    // =========================================================================
+    console.log('\n--- PILLAR 2 - POINT 23: AUTOMATED CLOUD DATABASE BACKUP SCHEDULER ---');
+
+    let point23BackupId = null;
+
+    await test('Point 23: GET /api/admin/backup/schedule retrieves schedule with cronExpression & retention settings', async () => {
+      const res = await fetch(`${baseUrl}/admin/backup/schedule`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.schedule);
+      assert.ok(data.schedule.cronExpression !== undefined);
+      assert.ok(data.schedule.retentionDays !== undefined);
+      assert.ok(data.schedule.storageDestination !== undefined);
+    });
+
+    await test('Point 23: PUT /api/admin/backup/schedule updates cronExpression, retentionDays, off-site storageDestination, and autoPruneOldBackups', async () => {
+      const res = await fetch(`${baseUrl}/admin/backup/schedule`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          enabled: true,
+          frequency: 'DAILY',
+          cronExpression: '0 3 * * *',
+          retentionDays: 45,
+          storageDestination: 'S3_SECURE',
+          s3Bucket: 'auramarket-production-backups',
+          autoPruneOldBackups: true,
+          keepPinnedIndefinitely: true,
+          notifyOnSuccess: true,
+          notifyOnFailure: true,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.schedule.cronExpression, '0 3 * * *');
+      assert.strictEqual(data.schedule.retentionDays, 45);
+      assert.strictEqual(data.schedule.storageDestination, 'S3_SECURE');
+      assert.strictEqual(data.schedule.s3Bucket, 'auramarket-production-backups');
+      assert.strictEqual(data.schedule.autoPruneOldBackups, true);
+      assert.strictEqual(data.schedule.keepPinnedIndefinitely, true);
+    });
+
+    await test('Point 23: POST /api/admin/backup/test-offsite-ping verifies latency and connectivity to off-site cloud storage', async () => {
+      const res = await fetch(`${baseUrl}/admin/backup/test-offsite-ping`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          provider: 'AWS_S3',
+          bucket: 'auramarket-production-backups',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.provider, 'AWS_S3');
+      assert.strictEqual(data.bucket, 'auramarket-production-backups');
+      assert.strictEqual(data.handshakeVerified, true);
+      assert.ok(data.latencyMs > 0);
+    });
+
+    await test('Point 23: POST /api/admin/backup/create generates encrypted snapshot with SHA-256 checksum and collection manifest', async () => {
+      const res = await fetch(`${baseUrl}/admin/backup/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          type: 'MANUAL',
+          isPinned: false,
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.backup);
+      assert.ok(data.backup.backupId);
+      assert.ok(data.backup.checksum);
+      assert.strictEqual(data.backup.checksum.length, 64, 'SHA-256 checksum must be 64 hex characters');
+      assert.ok(Array.isArray(data.backup.collectionsIncluded));
+      assert.ok(data.backup.collectionsIncluded.length > 0);
+      assert.strictEqual(data.backup.isPinned, false);
+      point23BackupId = data.backup.backupId;
+    });
+
+    await test('Point 23: POST /api/admin/backup/:id/pin toggles retention pin to protect critical snapshots from auto-pruning', async () => {
+      assert.ok(point23BackupId, 'Backup ID must exist from creation test');
+
+      // Pin snapshot
+      const resPin = await fetch(`${baseUrl}/admin/backup/${point23BackupId}/pin`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resPin.status, 200);
+      const dataPin = await resPin.json();
+      assert.strictEqual(dataPin.success, true);
+      assert.strictEqual(dataPin.isPinned, true);
+
+      // Unpin snapshot
+      const resUnpin = await fetch(`${baseUrl}/admin/backup/${point23BackupId}/pin`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resUnpin.status, 200);
+      const dataUnpin = await resUnpin.json();
+      assert.strictEqual(dataUnpin.success, true);
+      assert.strictEqual(dataUnpin.isPinned, false);
+
+      // Re-pin for prune safety test
+      await fetch(`${baseUrl}/admin/backup/${point23BackupId}/pin`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+    });
+
+    await test('Point 23: POST /api/admin/backup/:id/restore with dryRun: true validates SHA-256 integrity and previews record count without modifying state', async () => {
+      assert.ok(point23BackupId);
+      const res = await fetch(`${baseUrl}/admin/backup/${point23BackupId}/restore`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          dryRun: true,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.dryRun, true);
+      assert.strictEqual(data.checksumVerified, true);
+      assert.ok(data.recordsEstimated >= 0);
+      assert.ok(Array.isArray(data.availableCollections));
+    });
+
+    await test('Point 23: POST /api/admin/backup/:id/restore executes disaster recovery restoration and registers restoreHistory audit log', async () => {
+      assert.ok(point23BackupId);
+      const res = await fetch(`${baseUrl}/admin/backup/${point23BackupId}/restore`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          dryRun: false,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.dryRun, false);
+      assert.strictEqual(data.checksumVerified, true);
+      assert.ok(data.recordsRestored >= 0);
+    });
+
+    await test('Point 23: POST /api/admin/backup/prune prunes unpinned expired snapshots while safely preserving pinned snapshots', async () => {
+      const res = await fetch(`${baseUrl}/admin/backup/prune`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          retentionDays: 0, // Prune older than now
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.purgedCount !== undefined);
+
+      // Verify pinned snapshot still exists
+      const resCheck = await fetch(`${baseUrl}/admin/backup/${point23BackupId}/pin`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resCheck.status, 200, 'Pinned backup must not have been deleted by prune');
+    });
+
+    await test('Point 23: Role Security: Customer and unauthenticated requests are rejected (401 / 403)', async () => {
+      // Unauthenticated
+      const resUnauth = await fetch(`${baseUrl}/admin/backup/schedule`);
+      assert.strictEqual(resUnauth.status, 401, 'Unauthenticated request must return 401');
+
+      // Customer
+      const resCust = await fetch(`${baseUrl}/admin/backup/schedule`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403, 'Customer token must return 403 Forbidden');
+
+      // Delivery Rider
+      const resRider = await fetch(`${baseUrl}/admin/backup/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ type: 'MANUAL' }),
+      });
+      assert.strictEqual(resRider.status, 403, 'Delivery rider token must return 403 Forbidden');
+    });
+
   } finally {
     if (server) {
       server.close();

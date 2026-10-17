@@ -29,6 +29,10 @@ import {
   Zap,
   CheckCircle2,
   Sliders,
+  Pin,
+  RotateCcw,
+  Copy,
+  Save,
 } from 'lucide-react';
 import api from '../api/client';
 import AuditTrailManager from './AuditTrailManager';
@@ -59,20 +63,31 @@ export default function SystemAuditBackupManager() {
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [selectedLog, setSelectedLog] = useState(null);
 
-  // Point 5: Automated Backup & Cloud Sync State
+  // Point 23: Automated Cloud Backup & Off-Site Sync State
   const [backups, setBackups] = useState([]);
   const [loadingBackups, setLoadingBackups] = useState(false);
   const [syncingId, setSyncingId] = useState(null);
+  const [pinningId, setPinningId] = useState(null);
   const [schedule, setSchedule] = useState({
     enabled: true,
     frequency: 'DAILY',
     scheduledTime: '02:00',
+    cronExpression: '0 2 * * *',
     retentionDays: 30,
     storageDestination: 'LOCAL_DISK',
     s3Bucket: 'auramarket-backups',
     gdriveFolderId: '',
+    autoPruneOldBackups: true,
+    keepPinnedIndefinitely: true,
   });
   const [savingSchedule, setSavingSchedule] = useState(false);
+  const [pingingOffsite, setPingingOffsite] = useState(false);
+  const [pruning, setPruning] = useState(false);
+  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+  const [targetRestoreBackup, setTargetRestoreBackup] = useState(null);
+  const [restoring, setRestoring] = useState(false);
+  const [dryRunResult, setDryRunResult] = useState(null);
+  const [copiedChecksum, setCopiedChecksum] = useState(null);
 
   const showNotification = (type, message) => {
     setNotification({ type, message });
@@ -232,6 +247,111 @@ export default function SystemAuditBackupManager() {
     }
   };
 
+  // Toggle Pin Status (Protect from retention auto-prune)
+  const handleTogglePin = async (backupId) => {
+    try {
+      setPinningId(backupId);
+      const res = await api.post(`/admin/backup/${backupId}/pin`);
+      if (res.data?.success) {
+        showNotification('success', res.data.message);
+        fetchBackupHistory();
+      }
+    } catch (err) {
+      showNotification('error', err.response?.data?.message || 'Failed to toggle pin');
+    } finally {
+      setPinningId(null);
+    }
+  };
+
+  // Test Offsite Cloud Ping
+  const handleTestOffsitePing = async () => {
+    try {
+      setPingingOffsite(true);
+      const res = await api.post('/admin/backup/test-offsite-ping', {
+        provider: schedule.storageDestination,
+        bucket: schedule.s3Bucket,
+        folderId: schedule.gdriveFolderId,
+      });
+      if (res.data?.success) {
+        showNotification('success', `⚡ Off-site Handshake Verified: ${res.data.provider} responded in ${res.data.latencyMs}ms!`);
+      }
+    } catch (err) {
+      showNotification('error', err.response?.data?.message || 'Failed to ping offsite cloud storage');
+    } finally {
+      setPingingOffsite(false);
+    }
+  };
+
+  // Auto-prune unpinned old backups
+  const handlePruneBackups = async () => {
+    if (!window.confirm(`Prune all unpinned backups older than ${schedule.retentionDays} days? Pinned backups will be preserved.`)) return;
+    try {
+      setPruning(true);
+      const res = await api.post('/admin/backup/prune', { retentionDays: schedule.retentionDays });
+      if (res.data?.success) {
+        showNotification('success', res.data.message);
+        fetchBackupHistory();
+      }
+    } catch (err) {
+      showNotification('error', err.response?.data?.message || 'Failed to prune backups');
+    } finally {
+      setPruning(false);
+    }
+  };
+
+  // Open Restore Modal
+  const handleOpenRestoreModal = (backup) => {
+    setTargetRestoreBackup(backup);
+    setDryRunResult(null);
+    setIsRestoreModalOpen(true);
+  };
+
+  // Dry-run restore
+  const handleDryRunRestore = async () => {
+    if (!targetRestoreBackup) return;
+    try {
+      setRestoring(true);
+      const res = await api.post(`/admin/backup/${targetRestoreBackup.backupId}/restore`, { dryRun: true });
+      if (res.data?.success) {
+        setDryRunResult(res.data);
+        showNotification('success', res.data.message);
+      }
+    } catch (err) {
+      showNotification('error', err.response?.data?.message || 'Dry-run restore failed');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  // Execute Real Disaster Recovery Restore
+  const handleExecuteRestore = async () => {
+    if (!targetRestoreBackup) return;
+    if (!window.confirm(`⚠️ CRITICAL ACTION: Restore database from backup '${targetRestoreBackup.backupId}'? This will restore documents to your database.`)) {
+      return;
+    }
+    try {
+      setRestoring(true);
+      const res = await api.post(`/admin/backup/${targetRestoreBackup.backupId}/restore`, { dryRun: false });
+      if (res.data?.success) {
+        showNotification('success', res.data.message);
+        setIsRestoreModalOpen(false);
+        fetchAuditData();
+        fetchBackupHistory();
+      }
+    } catch (err) {
+      showNotification('error', err.response?.data?.message || 'Restore failed');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  // Copy Checksum
+  const handleCopyChecksum = (checksum) => {
+    navigator.clipboard.writeText(checksum);
+    setCopiedChecksum(checksum);
+    setTimeout(() => setCopiedChecksum(null), 2000);
+  };
+
   const getModuleBadgeColor = (mod) => {
     switch (mod) {
       case 'ORDERS':
@@ -289,7 +409,7 @@ export default function SystemAuditBackupManager() {
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/30 text-indigo-300 border border-indigo-400/30">
-              Point #5 Automated Backup & Cloud Sync
+              Pillar 2 • Point 23: Automated Cloud Database Backup Scheduler (Off-site daily cron backup to S3/Drive)
             </span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
               <Database className="w-3.5 h-3.5" /> DB Health: Optimal
@@ -297,10 +417,10 @@ export default function SystemAuditBackupManager() {
           </div>
           <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
             <Activity className="w-7 h-7 text-indigo-400" />
-            Automated Scheduled Database Backup & Cloud Sync
+            Automated Cloud Database Backup Scheduler & Off-Site Sync
           </h2>
           <p className="text-slate-300 text-sm mt-1 max-w-2xl">
-            1-Click full JSON database snapshots, automated nightly cron schedules, backup history, and direct sync to AWS S3 & Google Drive.
+            Automated nightly cron jobs, SHA-256 integrity verification, 1-click disaster recovery restore with dry-run sandbox, pinned snapshot protection, and off-site cloud sync to AWS S3 & Google Drive.
           </p>
         </div>
 
@@ -454,6 +574,44 @@ export default function SystemAuditBackupManager() {
 
           <div>
             <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+              Cron Expression
+            </label>
+            <input
+              type="text"
+              value={schedule.cronExpression || '0 2 * * *'}
+              onChange={(e) => setSchedule({ ...schedule, cronExpression: e.target.value })}
+              placeholder="e.g. 0 2 * * *"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-mono font-bold text-indigo-700"
+            />
+            <div className="flex gap-1.5 mt-1">
+              <button
+                type="button"
+                onClick={() => setSchedule({ ...schedule, cronExpression: '0 2 * * *', frequency: 'DAILY' })}
+                className="text-[10px] font-bold text-indigo-600 hover:underline"
+              >
+                Daily 2AM
+              </button>
+              <span className="text-slate-300">•</span>
+              <button
+                type="button"
+                onClick={() => setSchedule({ ...schedule, cronExpression: '0 */12 * * *' })}
+                className="text-[10px] font-bold text-indigo-600 hover:underline"
+              >
+                Every 12h
+              </button>
+              <span className="text-slate-300">•</span>
+              <button
+                type="button"
+                onClick={() => setSchedule({ ...schedule, cronExpression: '0 3 * * 0', frequency: 'WEEKLY' })}
+                className="text-[10px] font-bold text-indigo-600 hover:underline"
+              >
+                Weekly Sun
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
               Cloud Sync Destination
             </label>
             <select
@@ -466,24 +624,24 @@ export default function SystemAuditBackupManager() {
               <option value="GOOGLE_DRIVE">Google Drive Enterprise</option>
               <option value="CLOUDFLARE_R2">Cloudflare R2 (Zero Egress)</option>
             </select>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-              AWS S3 Bucket / Folder
-            </label>
             <input
               type="text"
-              placeholder="auramarket-backups"
-              value={schedule.s3Bucket}
-              onChange={(e) => setSchedule({ ...schedule, s3Bucket: e.target.value })}
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-medium text-slate-900"
+              placeholder={schedule.storageDestination === 'GOOGLE_DRIVE' ? 'GDrive Folder ID' : 'S3 / R2 Bucket Name'}
+              value={schedule.storageDestination === 'GOOGLE_DRIVE' ? schedule.gdriveFolderId : schedule.s3Bucket}
+              onChange={(e) => {
+                if (schedule.storageDestination === 'GOOGLE_DRIVE') {
+                  setSchedule({ ...schedule, gdriveFolderId: e.target.value });
+                } else {
+                  setSchedule({ ...schedule, s3Bucket: e.target.value });
+                }
+              }}
+              className="w-full mt-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-800"
             />
           </div>
 
           <div>
             <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-              Retention Days ({schedule.retentionDays} Days)
+              Retention Policy ({schedule.retentionDays} Days)
             </label>
             <div className="flex items-center gap-2">
               <input
@@ -498,16 +656,61 @@ export default function SystemAuditBackupManager() {
                 {schedule.retentionDays}d
               </span>
             </div>
+
+            <div className="mt-2 space-y-1">
+              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={schedule.autoPruneOldBackups !== false}
+                  onChange={(e) => setSchedule({ ...schedule, autoPruneOldBackups: e.target.checked })}
+                  className="rounded text-blue-600"
+                />
+                <span>Auto-prune old snapshots</span>
+              </label>
+              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={schedule.keepPinnedIndefinitely !== false}
+                  onChange={(e) => setSchedule({ ...schedule, keepPinnedIndefinitely: e.target.checked })}
+                  className="rounded text-blue-600"
+                />
+                <span>Preserve Pinned snapshots</span>
+              </label>
+            </div>
           </div>
         </div>
 
-        <div className="flex justify-end pt-2 border-t border-slate-100">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleTestOffsitePing}
+              disabled={pingingOffsite}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all"
+              title="Test handshake latency to off-site cloud storage destination"
+            >
+              <Zap className={`w-3.5 h-3.5 text-amber-500 ${pingingOffsite ? 'animate-bounce' : ''}`} />
+              <span>{pingingOffsite ? 'Pinging Cloud...' : 'Test Off-site Cloud Ping'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePruneBackups}
+              disabled={pruning}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs transition-all"
+              title="Purge unpinned backups older than retention days"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{pruning ? 'Pruning...' : 'Prune Old Backups'}</span>
+            </button>
+          </div>
+
           <button
             onClick={handleSaveSchedule}
             disabled={savingSchedule}
             className="flex items-center gap-2 px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-black text-xs shadow-md transition-all"
           >
-            {savingSchedule ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" /> : <SaveIcon className="w-3.5 h-3.5 text-amber-400" />}
+            {savingSchedule ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" /> : <Save className="w-3.5 h-3.5 text-amber-400" />}
             <span>{savingSchedule ? 'Saving...' : 'Apply Backup Schedule Live'}</span>
           </button>
         </div>
@@ -569,8 +772,28 @@ export default function SystemAuditBackupManager() {
                 {backups.map((b) => (
                   <tr key={b._id} className="hover:bg-slate-50/70 transition-all">
                     <td className="py-3 px-4">
-                      <div className="font-bold text-slate-900 font-mono text-xs">{b.backupId}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 font-mono text-xs">{b.backupId}</span>
+                        {b.isPinned && (
+                          <span className="flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-300">
+                            <Pin className="w-2.5 h-2.5 fill-amber-700 text-amber-700" />
+                            PINNED
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[11px] text-slate-400 font-mono truncate max-w-xs">{b.fileName}</div>
+                      {b.checksum && (
+                        <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-400 font-mono">
+                          <span>SHA: {b.checksum.slice(0, 10)}...</span>
+                          <button
+                            onClick={() => handleCopyChecksum(b.checksum)}
+                            className="p-0.5 hover:text-slate-700"
+                            title="Copy SHA-256 Checksum"
+                          >
+                            {copiedChecksum === b.checksum ? <Check className="w-2.5 h-2.5 text-emerald-600" /> : <Copy className="w-2.5 h-2.5" />}
+                          </button>
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <div className="font-bold text-slate-900">{b.fileSizeFormatted}</div>
@@ -601,6 +824,30 @@ export default function SystemAuditBackupManager() {
                     </td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        {/* Pin / Protect */}
+                        <button
+                          onClick={() => handleTogglePin(b.backupId)}
+                          disabled={pinningId === b.backupId}
+                          className={`p-1.5 rounded-lg transition-all ${
+                            b.isPinned
+                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                              : 'bg-slate-100 text-slate-400 hover:text-slate-600 hover:bg-slate-200'
+                          }`}
+                          title={b.isPinned ? 'Pinned (Protected from auto-pruning)' : 'Click to Pin & Protect'}
+                        >
+                          <Pin className={`w-3.5 h-3.5 ${b.isPinned ? 'fill-amber-600 text-amber-700' : ''}`} />
+                        </button>
+
+                        {/* Disaster Recovery Restore */}
+                        <button
+                          onClick={() => handleOpenRestoreModal(b)}
+                          className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-all"
+                          title="1-Click Disaster Recovery Restore"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 text-emerald-700" />
+                        </button>
+
+                        {/* Download JSON */}
                         <a
                           href={api.defaults.baseURL + `/admin/backup/${b.backupId}/download`}
                           target="_blank"
@@ -611,6 +858,7 @@ export default function SystemAuditBackupManager() {
                           <Download className="w-3.5 h-3.5" />
                         </a>
 
+                        {/* Cloud Sync S3 */}
                         <button
                           onClick={() => handleSyncToCloud(b.backupId, 'AWS_S3')}
                           disabled={syncingId === b.backupId}
@@ -621,6 +869,7 @@ export default function SystemAuditBackupManager() {
                           <span>{syncingId === b.backupId ? 'Syncing...' : 'Sync S3'}</span>
                         </button>
 
+                        {/* Cloud Sync GDrive */}
                         <button
                           onClick={() => handleSyncToCloud(b.backupId, 'GOOGLE_DRIVE')}
                           disabled={syncingId === b.backupId}
@@ -631,6 +880,7 @@ export default function SystemAuditBackupManager() {
                           <span>GDrive</span>
                         </button>
 
+                        {/* Delete */}
                         <button
                           onClick={() => handleDeleteBackup(b.backupId)}
                           className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition-all"
@@ -644,6 +894,91 @@ export default function SystemAuditBackupManager() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* 1-Click Disaster Recovery Restore Modal */}
+        {isRestoreModalOpen && targetRestoreBackup && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200 relative">
+              <button
+                onClick={() => setIsRestoreModalOpen(false)}
+                className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:bg-slate-100 transition-all"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600">
+                  <RotateCcw className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">Disaster Recovery Restore</h3>
+                  <p className="text-xs text-slate-500">Restore database state from verified snapshot</p>
+                </div>
+              </div>
+
+              <div className="space-y-3.5 text-xs">
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-bold">Snapshot ID:</span>
+                    <span className="font-mono font-bold text-slate-800">{targetRestoreBackup.backupId}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-bold">Size & Records:</span>
+                    <span className="font-bold text-slate-800">{targetRestoreBackup.fileSizeFormatted} ({targetRestoreBackup.totalRecords} records)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-bold">Created Date:</span>
+                    <span className="text-slate-700">{new Date(targetRestoreBackup.createdAt).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1 border-t border-slate-200">
+                    <span className="text-slate-500 font-bold">SHA-256 Cryptoseal:</span>
+                    <span className="font-mono text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-bold">
+                      {targetRestoreBackup.checksum ? targetRestoreBackup.checksum.slice(0, 16) + '...' : 'Verified'}
+                    </span>
+                  </div>
+                </div>
+
+                {dryRunResult && (
+                  <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900">
+                    <div className="flex items-center gap-1.5 font-bold mb-1">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Dry-Run Simulation Passed</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-800">
+                      Validated checksum. {dryRunResult.recordsEstimated} documents ready across {dryRunResult.targetCollections?.length} collections ({dryRunResult.durationMs}ms check).
+                    </p>
+                  </div>
+                )}
+
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px]">
+                  <strong>Notice:</strong> Restoring this snapshot will sync collections to this restore point. Run a Dry-Run first to inspect document counts safely.
+                </div>
+
+                <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={handleDryRunRestore}
+                    disabled={restoring}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-all"
+                  >
+                    <CheckCircle className="w-4 h-4 text-slate-500" />
+                    <span>Run Dry-Run Check</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExecuteRestore}
+                    disabled={restoring}
+                    className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black shadow-md transition-all"
+                  >
+                    <RotateCcw className={`w-4 h-4 ${restoring ? 'animate-spin' : ''}`} />
+                    <span>{restoring ? 'Restoring...' : 'Execute Full Restore'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

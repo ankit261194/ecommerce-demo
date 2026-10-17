@@ -72,6 +72,26 @@ const systemBackupSchema = new mongoose.Schema(
       type: String,
       default: 'SYSTEM',
     },
+    isPinned: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    collectionsIncluded: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    restoreHistory: [
+      {
+        restoredAt: { type: Date, default: Date.now },
+        restoredBy: String,
+        recordsRestored: Number,
+        durationMs: Number,
+        isDryRun: Boolean,
+      },
+    ],
   },
   {
     timestamps: true,

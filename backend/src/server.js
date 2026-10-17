@@ -156,6 +156,7 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/brands', brandRoutes);
 app.use('/api/banners', bannerRoutes);
 app.use('/api/flash-deals', flashDealRoutes);
+app.use('/api/admin/flash-deals', flashDealRoutes);
 app.use('/api/abandoned-carts', abandonedCartRoutes);
 app.use('/api/admin/abandoned-carts', abandonedCartRoutes);
 app.use('/api/whatsapp', whatsappRoutes);

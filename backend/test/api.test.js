@@ -26,6 +26,7 @@ const AffiliatePayout = require('../src/models/AffiliatePayout');
 const AffiliateProgramSetting = require('../src/models/AffiliateProgramSetting');
 const LoyaltyTierConfig = require('../src/models/LoyaltyTierConfig');
 const LoyaltyActivityLog = require('../src/models/LoyaltyActivityLog');
+const FlashDeal = require('../src/models/FlashDeal');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -22900,6 +22901,338 @@ const runTests = async () => {
       assert.strictEqual(resRider.status, 403, 'Delivery rider token must return 403 Forbidden');
     });
 
+  
+    // =========================================================================
+    // PILLAR 2 - POINT 28: SCHEDULED FLASH SALE MEGA CAMPAIGN BUILDER
+    // =========================================================================
+    console.log('\n--- PILLAR 2 - POINT 28: SCHEDULED FLASH SALE MEGA CAMPAIGN BUILDER ---');
+
+    let point28TestProduct;
+    let point28ActiveDealId;
+    let point28ScheduledDealId;
+    let point28ConcludedDealId;
+
+    await test('Point 28: Setup: Obtain active product for flash sale drop tests', async () => {
+      point28TestProduct = await Product.findOne({ isPublished: { $ne: false } });
+      assert.ok(point28TestProduct, 'Product must exist for flash deal campaigns');
+    });
+
+    await test('Point 28: POST /api/admin/flash-deals/mega creates multi-slot scheduled mega campaign with VIP early access, anti-hoarding limits, and allocated inventory', async () => {
+      const now = new Date();
+      const tomorrow = new Date(now.getTime() + 24 * 3600 * 1000);
+
+      const res = await fetch(`${baseUrl}/admin/flash-deals/mega`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: '🔥 Midnight Electronics Flash Mega Drop',
+          slotName: 'Midnight Drop 00:00',
+          campaignType: 'MEGA_CAMPAIGN',
+          badgeText: '⚡ 60% OFF LIGHTNING DROP',
+          bannerImage: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=1200&q=80',
+          startDate: now.toISOString(),
+          endDate: tomorrow.toISOString(),
+          vipEarlyAccessMinutes: 30,
+          maxUnitsPerCustomer: 2,
+          backgroundColor: '#E11D48',
+          textColor: '#FFFFFF',
+          products: [
+            {
+              product: point28TestProduct._id,
+              discountPercentage: 50,
+              dealPrice: 4999,
+              allocatedStock: 25,
+              maxPerCustomer: 2,
+            },
+          ],
+        }),
+      });
+
+      assert.strictEqual(res.status, 201, 'Mega campaign should be created with 201');
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.title, '🔥 Midnight Electronics Flash Mega Drop');
+      assert.strictEqual(data.data.status, 'ACTIVE');
+      assert.strictEqual(data.data.vipEarlyAccessMinutes, 30);
+      assert.strictEqual(data.data.maxUnitsPerCustomer, 2);
+      assert.strictEqual(data.data.totalAllocatedStock, 25);
+      assert.strictEqual(data.data.products.length, 1);
+      assert.strictEqual(data.data.products[0].dealPrice, 4999);
+      assert.strictEqual(data.data.products[0].allocatedStock, 25);
+      point28ActiveDealId = data.data._id;
+    });
+
+    await test('Point 28: Validation: rejects creation with missing title, end date, or end date before start date (400 Bad Request)', async () => {
+      const resMissing = await fetch(`${baseUrl}/admin/flash-deals/mega`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          slotName: 'Invalid Slot',
+        }),
+      });
+      assert.strictEqual(resMissing.status, 400, 'Must return 400 for missing title');
+
+      const resInvalidDates = await fetch(`${baseUrl}/admin/flash-deals/mega`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Invalid Date Range Campaign',
+          startDate: new Date(Date.now() + 1000000).toISOString(),
+          endDate: new Date(Date.now() + 500000).toISOString(),
+        }),
+      });
+      assert.strictEqual(resInvalidDates.status, 400, 'Must return 400 when end date is before start date');
+    });
+
+    await test('Point 28: POST /api/admin/flash-deals/mega schedules future upcoming drop with UPCOMING status', async () => {
+      const futureStart = new Date(Date.now() + 3600 * 1000 * 2);
+      const futureEnd = new Date(Date.now() + 3600 * 1000 * 8);
+
+      const res = await fetch(`${baseUrl}/admin/flash-deals/mega`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: '🚀 Diwali Fest Golden Hour Mega Drop',
+          slotName: '6:00 PM Golden Hour',
+          campaignType: 'FESTIVAL_SPECIAL',
+          badgeText: '🌟 DIWALI SPECIAL',
+          startDate: futureStart.toISOString(),
+          endDate: futureEnd.toISOString(),
+          vipEarlyAccessMinutes: 15,
+          maxUnitsPerCustomer: 1,
+          products: [
+            {
+              product: point28TestProduct._id,
+              discountPercentage: 60,
+              dealPrice: 3999,
+              allocatedStock: 50,
+              maxPerCustomer: 1,
+            },
+          ],
+        }),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'UPCOMING', 'Future drop must have UPCOMING status');
+      point28ScheduledDealId = data.data._id;
+    });
+
+    await test('Point 28: GET /api/admin/flash-deals/mega lists campaigns with status, type, slot filters, and computed pipeline metrics', async () => {
+      const res = await fetch(`${baseUrl}/admin/flash-deals/mega`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.count >= 2);
+      assert.ok(data.stats);
+      assert.ok(data.stats.total >= 2);
+      assert.ok(data.stats.active >= 1);
+      assert.ok(data.stats.upcoming >= 1);
+      assert.ok(data.stats.totalStockAllocated >= 75);
+
+      const resFilter = await fetch(`${baseUrl}/admin/flash-deals/mega?slotName=Midnight`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const dataFilter = await resFilter.json();
+      assert.ok(dataFilter.data.some(d => d.slotName.includes('Midnight')));
+    });
+
+    await test('Point 28: GET /api/admin/flash-deals/mega/analytics aggregates GMV revenue, total units allocated vs sold, depletion rate, and top performers', async () => {
+      const res = await fetch(`${baseUrl}/admin/flash-deals/mega/analytics`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.analytics);
+      assert.ok(typeof data.analytics.totalRevenue === 'number');
+      assert.ok(typeof data.analytics.totalAllocatedStock === 'number');
+      assert.ok(typeof data.analytics.totalSoldUnits === 'number');
+      assert.ok(typeof data.analytics.stockDepletionRate === 'number');
+      assert.ok(typeof data.analytics.averageDiscount === 'number');
+      assert.ok(Array.isArray(data.analytics.topSellingProducts));
+    });
+
+    await test('Point 28: GET /api/flash-deals/slots/today returns today\'s multi-slot timeline with real-time LIVE / UPCOMING / CONCLUDED countdowns', async () => {
+      const res = await fetch(`${baseUrl}/flash-deals/slots/today`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.slots));
+      assert.ok(data.slots.length >= 1);
+
+      const liveSlot = data.slots.find(s => s._id.toString() === point28ActiveDealId.toString());
+      assert.ok(liveSlot, 'Active deal must be present in slots');
+      assert.strictEqual(liveSlot.status, 'LIVE');
+      assert.ok(liveSlot.secondsRemaining > 0);
+      assert.strictEqual(liveSlot.slotName, 'Midnight Drop 00:00');
+    });
+
+    await test('Point 28: POST /api/flash-deals/:id/remind registers customer "Notify Me" opt-in for drop alerts and handles duplicates idempotently', async () => {
+      const res = await fetch(`${baseUrl}/flash-deals/${point28ScheduledDealId}/remind`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          email: 'vipbuyer@auramarket.com',
+          phone: '+91 98765 43210',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.totalSubscribers, 1);
+
+      const resDup = await fetch(`${baseUrl}/flash-deals/${point28ScheduledDealId}/remind`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          email: 'vipbuyer@auramarket.com',
+          phone: '+91 98765 43210',
+        }),
+      });
+      assert.strictEqual(resDup.status, 200);
+      const dataDup = await resDup.json();
+      assert.strictEqual(dataDup.success, true);
+      assert.strictEqual(dataDup.totalSubscribers, 1);
+    });
+
+    await test('Point 28: Guardrail: POST /api/flash-deals/:id/remind validates required email or phone (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/flash-deals/${point28ScheduledDealId}/remind`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(res.status, 400, 'Must return 400 when both email and phone are missing');
+    });
+
+    await test('Point 28: POST /api/admin/flash-deals/trigger-scheduler auto-launches eligible scheduled drops (startDate <= now) and sets isFlashDeal: true on products', async () => {
+      await FlashDeal.findByIdAndUpdate(point28ScheduledDealId, {
+        startDate: new Date(Date.now() - 5 * 60 * 1000),
+      });
+
+      const resTrigger = await fetch(`${baseUrl}/admin/flash-deals/trigger-scheduler`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resTrigger.status, 200);
+      const dataTrigger = await resTrigger.json();
+      assert.strictEqual(dataTrigger.success, true);
+      assert.ok(dataTrigger.activatedCount >= 1, 'At least 1 drop should be auto-activated');
+      assert.ok(dataTrigger.activatedDeals.some(d => d.id.toString() === point28ScheduledDealId.toString()));
+
+      const updatedDeal = await FlashDeal.findById(point28ScheduledDealId);
+      assert.strictEqual(updatedDeal.status, 'ACTIVE');
+      assert.ok(updatedDeal.autoActivatedAt);
+      assert.strictEqual(updatedDeal.schedulerTriggered, true);
+
+      const prod = await Product.findById(point28TestProduct._id);
+      assert.strictEqual(prod.isFlashDeal, true);
+    });
+
+    await test('Point 28: POST /api/admin/flash-deals/trigger-scheduler auto-concludes expired drops (endDate <= now) and resets product isFlashDeal flag', async () => {
+      const expiredDeal = await FlashDeal.create({
+        title: 'Expired Yesterday Flash Sale',
+        slug: `expired-flash-${Date.now()}`,
+        startDate: new Date(Date.now() - 2 * 3600 * 1000),
+        endDate: new Date(Date.now() - 60 * 1000),
+        status: 'ACTIVE',
+        isActive: true,
+        products: [],
+      });
+      point28ConcludedDealId = expiredDeal._id;
+
+      const resTrigger = await fetch(`${baseUrl}/admin/flash-deals/trigger-scheduler`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resTrigger.status, 200);
+      const dataTrigger = await resTrigger.json();
+      assert.strictEqual(dataTrigger.success, true);
+      assert.ok(dataTrigger.concludedCount >= 1, 'At least 1 drop should be auto-concluded');
+      assert.ok(dataTrigger.concludedDeals.some(d => d.id.toString() === point28ConcludedDealId.toString()));
+
+      const concludedDoc = await FlashDeal.findById(point28ConcludedDealId);
+      assert.strictEqual(concludedDoc.status, 'CONCLUDED');
+      assert.ok(concludedDoc.autoConcludedAt);
+    });
+
+    await test('Point 28: POST /api/flash-deals/:id/purchase reserves flash item, decrements allocated inventory, increments GMV, and enforces anti-hoarding limit (maxUnitsPerCustomer)', async () => {
+      const resPurchase = await fetch(`${baseUrl}/flash-deals/${point28ActiveDealId}/purchase`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          productId: point28TestProduct._id,
+          quantity: 1,
+        }),
+      });
+      assert.strictEqual(resPurchase.status, 200, 'Purchase must succeed with 200');
+      const dataPurchase = await resPurchase.json();
+      assert.strictEqual(dataPurchase.success, true);
+      assert.strictEqual(dataPurchase.data.purchasedQuantity, 1);
+      assert.strictEqual(dataPurchase.data.dealPrice, 4999);
+      assert.strictEqual(dataPurchase.data.remainingStock, 24);
+
+      const dealDoc = await FlashDeal.findById(point28ActiveDealId);
+      assert.strictEqual(dealDoc.totalSoldUnits, 1);
+      assert.strictEqual(dealDoc.totalRevenue, 4999);
+
+      const resHoard = await fetch(`${baseUrl}/flash-deals/${point28ActiveDealId}/purchase`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          productId: point28TestProduct._id,
+          quantity: 5,
+        }),
+      });
+      assert.strictEqual(resHoard.status, 400, 'Must reject order exceeding maxUnitsPerCustomer anti-hoarding limit');
+      const dataHoard = await resHoard.json();
+      assert.ok(dataHoard.message.includes('Anti-hoarding'));
+    });
+
+    await test('Point 28: Role Security: Customer and unauthenticated requests to admin flash deal endpoints are rejected (401 / 403)', async () => {
+      const resUnauth = await fetch(`${baseUrl}/admin/flash-deals/mega`);
+      assert.strictEqual(resUnauth.status, 401, 'Unauthenticated request must return 401');
+
+      const resCust = await fetch(`${baseUrl}/admin/flash-deals/mega`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403, 'Customer token must return 403 Forbidden');
+
+      const resRider = await fetch(`${baseUrl}/admin/flash-deals/trigger-scheduler`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resRider.status, 403, 'Rider token must return 403 Forbidden');
+    });
   } finally {
     if (server) {
       server.close();

@@ -123,6 +123,7 @@ import MultiWarehouseRoutingHub from '../components/MultiWarehouseRoutingHub';
 import StockTransferOrderManager from '../components/StockTransferOrderManager';
 import AffiliateProgramManager from '../components/AffiliateProgramManager';
 import LoyaltyTierManager from '../components/LoyaltyTierManager';
+import FlashSaleMegaCampaignManager from '../components/FlashSaleMegaCampaignManager';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1934,6 +1935,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('flash-sales-mega')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'flash-sales-mega'
+                ? 'bg-rose-600 text-white shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Zap className="w-4 h-4 text-rose-400" />
+            <span>Mega Flash Sales</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-rose-500/30 text-rose-200 ml-1">
+              Point #28
+            </span>
+          </button>
+
+          <button
             onClick={() => setIsInventoryAlertsModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition-all"
             title="Point 10: Multi-Vendor Inventory Low-Stock Radar & Automated Alerts"
@@ -2959,6 +2975,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {/* ========================================================================= */}
       {activeDashboardTab === 'loyalty' && (
         <LoyaltyTierManager />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 29: SCHEDULED FLASH SALE MEGA CAMPAIGN BUILDER (Pillar 2 • Point 28) */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'flash-sales-mega' && (
+        <FlashSaleMegaCampaignManager />
       )}
 
       {/* ========================================================================= */}

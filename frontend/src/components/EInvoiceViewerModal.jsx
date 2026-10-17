@@ -31,6 +31,7 @@ export default function EInvoiceViewerModal({
   apiUrl = '/api',
 }) {
   const [invoice, setInvoice] = useState(null);
+  const [vendorInvoices, setVendorInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
@@ -40,11 +41,14 @@ export default function EInvoiceViewerModal({
   const [cancelRemarks, setCancelRemarks] = useState('');
   const [cancelling, setCancelling] = useState(false);
 
+  const isVendorListMode = !invoiceId && !subOrderId && !orderId;
+
   useEffect(() => {
     if (isOpen) {
       fetchInvoice();
     } else {
       setInvoice(null);
+      setVendorInvoices([]);
       setError(null);
       setShowCancelModal(false);
     }
@@ -57,6 +61,17 @@ export default function EInvoiceViewerModal({
       const token = localStorage.getItem('token') || localStorage.getItem('auramarket_token') || '';
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
+      if (isVendorListMode) {
+        const res = await fetch(`${apiUrl}/vendor/tax/e-invoices`, { headers });
+        const json = await res.json();
+        if (res.ok && json.success && Array.isArray(json.data)) {
+          setVendorInvoices(json.data);
+        } else {
+          setVendorInvoices([]);
+        }
+        return;
+      }
+
       let endpoint = '';
       if (invoiceId) {
         endpoint = `${apiUrl}/tax/e-invoicing/${invoiceId}`;
@@ -67,7 +82,8 @@ export default function EInvoiceViewerModal({
       }
 
       if (!endpoint) {
-        throw new Error('No order or invoice reference provided.');
+        setInvoice(null);
+        return;
       }
 
       const res = await fetch(endpoint, { headers });
@@ -88,6 +104,12 @@ export default function EInvoiceViewerModal({
   };
 
   const handleGenerateInvoice = async () => {
+    const targetId = subOrderId || orderId;
+    if (!targetId) {
+      setError('No valid order or suborder identifier provided to generate an invoice.');
+      return;
+    }
+
     setGenerating(true);
     setError(null);
     try {
@@ -97,7 +119,6 @@ export default function EInvoiceViewerModal({
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       };
 
-      const targetId = subOrderId || orderId;
       const res = await fetch(`${apiUrl}/tax/e-invoicing/generate/${targetId}`, {
         method: 'POST',
         headers,
@@ -202,6 +223,15 @@ export default function EInvoiceViewerModal({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {isVendorListMode && invoice && (
+              <button
+                onClick={() => setInvoice(null)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold transition"
+                title="Back to all vendor tax invoices"
+              >
+                ← Back to Invoices
+              </button>
+            )}
             {invoice && (
               <button
                 onClick={handlePrint}
@@ -238,6 +268,79 @@ export default function EInvoiceViewerModal({
               <p className="text-sm font-medium">Fetching verified GST E-Invoice dossier...</p>
             </div>
           ) : !invoice ? (
+            isVendorListMode ? (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-slate-900 text-white">
+                  <div>
+                    <h4 className="font-bold text-sm">Merchant Tax Invoices & TDS/TCS Ledger</h4>
+                    <p className="text-xs text-slate-400 mt-0.5">Official GST E-Invoicing repository with Section 194O TDS and Section 52 TCS withholdings</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs px-2.5 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                      Total: <strong>{vendorInvoices.length}</strong> Invoices
+                    </span>
+                  </div>
+                </div>
+
+                {vendorInvoices.length === 0 ? (
+                  <div className="py-12 text-center text-slate-500">
+                    <FileText className="w-10 h-10 mx-auto text-slate-400 mb-2" />
+                    <p className="text-sm font-semibold text-slate-700">No GST E-Invoices found</p>
+                    <p className="text-xs text-slate-500 mt-1">Invoices are automatically generated when customer orders are placed or dispatched.</p>
+                  </div>
+                ) : (
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                        <tr>
+                          <th className="px-4 py-2.5">Invoice #</th>
+                          <th className="px-4 py-2.5">Date</th>
+                          <th className="px-4 py-2.5">Supply</th>
+                          <th className="px-4 py-2.5 text-right">Taxable (₹)</th>
+                          <th className="px-4 py-2.5 text-right">Total (₹)</th>
+                          <th className="px-4 py-2.5 text-right">194O TDS</th>
+                          <th className="px-4 py-2.5 text-right">52 TCS</th>
+                          <th className="px-4 py-2.5 text-center">Status</th>
+                          <th className="px-4 py-2.5 text-center">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {vendorInvoices.map((inv) => (
+                          <tr key={inv._id} className="hover:bg-slate-50">
+                            <td className="px-4 py-2.5 font-bold font-mono text-blue-700">{inv.invoiceNumber}</td>
+                            <td className="px-4 py-2.5 text-slate-600">
+                              {new Date(inv.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+                                {inv.supplyType}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-medium">₹{inv.totalTaxableAmount?.toFixed(2)}</td>
+                            <td className="px-4 py-2.5 text-right font-bold text-slate-900">₹{inv.grandTotal?.toFixed(2)}</td>
+                            <td className="px-4 py-2.5 text-right text-amber-700 font-mono">₹{inv.tdsSection194O?.tdsAmount?.toFixed(2) || '0.00'}</td>
+                            <td className="px-4 py-2.5 text-right text-violet-700 font-mono">₹{inv.tcsSection52?.tcsAmount?.toFixed(2) || '0.00'}</td>
+                            <td className="px-4 py-2.5 text-center">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${inv.status === 'GENERATED' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                                {inv.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5 text-center">
+                              <button
+                                onClick={() => setInvoice(inv)}
+                                className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold transition"
+                              >
+                                View
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ) : (
             /* Not yet generated state */
             <div className="py-16 text-center max-w-md mx-auto space-y-4">
               <div className="w-16 h-16 mx-auto rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100">
@@ -268,6 +371,7 @@ export default function EInvoiceViewerModal({
                 )}
               </button>
             </div>
+            )
           ) : (
             /* Active Invoice Viewer */
             <div className="space-y-6">

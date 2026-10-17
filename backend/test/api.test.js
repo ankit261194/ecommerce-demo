@@ -31968,6 +31968,226 @@ const runTests = async () => {
       assert.ok(vendorListBody.data.length >= 1);
     });
 
+    // Test 12: Direct SubOrder E-Invoice generation, auto-generation lookup, and printable HTML isolation
+    await test('Point 49: Test 12 - Direct SubOrder E-Invoice generation, auto-generation lookup, and printable HTML isolation', async () => {
+      // Create dedicated second vendor
+      const mvVendorUser2 = await User.create({
+        name: 'Vendor Two Enterprise ' + Date.now(),
+        email: 'vend2.tax.' + Date.now() + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'vendor',
+      });
+      const mvVendorProfile2 = await VendorProfile.create({
+        user: mvVendorUser2._id,
+        storeName: 'Vendor Two Enterprise ' + Date.now(),
+        storeSlug: 'vendor-two-enterprise-' + Date.now(),
+        gstin: '27AABCT2345C1ZC',
+        stateCode: '27',
+      });
+
+      // Create multi-vendor order with 2 separate sub-orders
+      const mvOrder = await Order.create({
+        orderNumber: 'ORD-MV-' + Date.now(),
+        customer: p49CustomerUser._id,
+        totalAmount: 5000,
+        finalAmount: 5000,
+        paymentStatus: 'PAID',
+        paymentMethod: 'ONLINE',
+        shippingAddress: {
+          recipientName: 'Sneha Patil',
+          phone: '9876543215',
+          street: 'Bandra West',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          stateCode: '27',
+          pincode: '400050',
+        },
+        items: [
+          {
+            product: p49Product1._id,
+            title: 'Vendor 1 Dedicated Acoustic Headset',
+            quantity: 1,
+            price: 2000,
+            totalPrice: 2000,
+            hsnCode: '85183000',
+            vendor: p49VendorProfile1._id,
+          },
+          {
+            product: p49ProductHighVal._id,
+            title: 'Vendor 2 Distinct Wireless Tower',
+            quantity: 1,
+            price: 3000,
+            totalPrice: 3000,
+            hsnCode: '85182200',
+            vendor: mvVendorProfile2._id,
+          },
+        ],
+      });
+
+      const mvSubOrder1 = await SubOrder.create({
+        parentOrder: mvOrder._id,
+        vendor: p49VendorProfile1._id,
+        customer: p49CustomerUser._id,
+        items: [mvOrder.items[0]],
+        subTotal: 2000,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 200,
+        vendorEarning: 1800,
+        status: 'placed',
+      });
+
+      const mvSubOrder2 = await SubOrder.create({
+        parentOrder: mvOrder._id,
+        vendor: mvVendorProfile2._id,
+        customer: p49CustomerUser._id,
+        items: [mvOrder.items[1]],
+        subTotal: 3000,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 300,
+        vendorEarning: 2700,
+        status: 'placed',
+      });
+
+      mvOrder.subOrders = [mvSubOrder1._id, mvSubOrder2._id];
+      await mvOrder.save();
+
+      // 1. Auto-generate and fetch e-invoice by SubOrder 1 ID
+      const resSubOrder1 = await fetch(`${baseUrl}/tax/e-invoicing/order/${mvSubOrder1._id}`, {
+        headers: { Authorization: `Bearer ${p49CustomerToken}` },
+      });
+      assert.strictEqual(resSubOrder1.status, 200);
+      const sub1Data = await resSubOrder1.json();
+      assert.strictEqual(sub1Data.success, true);
+      assert.strictEqual(sub1Data.data.grandTotal, 2000);
+      assert.strictEqual((sub1Data.data.subOrder._id || sub1Data.data.subOrder).toString(), mvSubOrder1._id.toString());
+      assert.strictEqual((sub1Data.data.vendor._id || sub1Data.data.vendor).toString(), p49VendorProfile1._id.toString());
+
+      // 2. Printable HTML for SubOrder 1 invoice isolates Vendor 1's items
+      const resPrintSub1 = await fetch(`${baseUrl}/tax/e-invoicing/${sub1Data.data._id}/print`);
+      assert.strictEqual(resPrintSub1.status, 200);
+      const printHtml = await resPrintSub1.text();
+      assert.ok(printHtml.includes('Vendor 1 Dedicated Acoustic Headset'), 'Printable HTML must display Vendor 1 items');
+      assert.ok(!printHtml.includes('Vendor 2 Distinct Wireless Tower'), 'Printable HTML must NOT leak Vendor 2 items');
+
+      // 3. Printable HTML directly by subOrderId
+      const resPrintBySubId = await fetch(`${baseUrl}/tax/e-invoicing/${mvSubOrder1._id}/print`);
+      assert.strictEqual(resPrintBySubId.status, 200);
+      const printHtmlBySubId = await resPrintBySubId.text();
+      assert.ok(printHtmlBySubId.includes('Vendor 1 Dedicated Acoustic Headset'));
+    });
+
+    // Test 13: Multi-rate GST consignment (5% apparel + 18% electronics)
+    await test('Point 49: Test 13 - Multi-rate GST consignment calculates accurate HSN slabs and dynamic tax rates', async () => {
+      const multiRateOrder = await Order.create({
+        orderNumber: 'ORD-MR-' + Date.now(),
+        customer: p49CustomerUser._id,
+        totalAmount: 2230,
+        finalAmount: 2230,
+        paymentStatus: 'PAID',
+        paymentMethod: 'ONLINE',
+        shippingAddress: {
+          recipientName: 'Arjun Verma',
+          phone: '9876543211',
+          street: 'Connaught Place',
+          city: 'New Delhi',
+          state: 'Delhi',
+          stateCode: '07',
+          pincode: '110001',
+        },
+        items: [
+          {
+            product: p49Product1._id,
+            title: 'Organic Cotton Polo T-Shirt',
+            quantity: 1,
+            price: 1050,
+            totalPrice: 1050,
+            hsnCode: '61091000',
+            gstRate: 5,
+            vendor: p49VendorProfile1._id,
+          },
+          {
+            product: p49Product1._id,
+            title: 'Stereo Sound Earphones',
+            quantity: 1,
+            price: 1180,
+            totalPrice: 1180,
+            hsnCode: '85183000',
+            gstRate: 18,
+            vendor: p49VendorProfile1._id,
+          },
+        ],
+      });
+
+      const resMR = await fetch(`${baseUrl}/tax/e-invoicing/generate/${multiRateOrder._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p49AdminToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+
+      assert.strictEqual(resMR.status, 201);
+      const mrBody = await resMR.json();
+      assert.strictEqual(mrBody.success, true);
+      const invMR = mrBody.data;
+
+      // Intra-state Delivery in Delhi (07)
+      assert.strictEqual(invMR.taxType, 'INTRA_STATE');
+      assert.strictEqual(invMR.grandTotal, 2230);
+      assert.strictEqual(invMR.totalTaxableAmount, 2000); // 1000 (from 5%) + 1000 (from 18%)
+      assert.strictEqual(invMR.totalCgst, 115); // 25 (from 5%) + 90 (from 18%)
+      assert.strictEqual(invMR.totalSgst, 115); // 25 (from 5%) + 90 (from 18%)
+      assert.strictEqual(invMR.totalIgst, 0);
+
+      // Verify 2 distinct HSN slabs in summary
+      assert.strictEqual(invMR.hsnSummary.length, 2);
+      const hsn5 = invMR.hsnSummary.find(h => h.hsnCode === '61091000');
+      assert.ok(hsn5);
+      assert.strictEqual(hsn5.gstRate, 5);
+      assert.strictEqual(hsn5.taxableAmount, 1000);
+      assert.strictEqual(hsn5.cgstAmount, 25);
+      assert.strictEqual(hsn5.sgstAmount, 25);
+      assert.strictEqual(hsn5.totalTax, 50);
+
+      const hsn18 = invMR.hsnSummary.find(h => h.hsnCode === '85183000');
+      assert.ok(hsn18);
+      assert.strictEqual(hsn18.gstRate, 18);
+      assert.strictEqual(hsn18.taxableAmount, 1000);
+      assert.strictEqual(hsn18.cgstAmount, 90);
+      assert.strictEqual(hsn18.sgstAmount, 90);
+      assert.strictEqual(hsn18.totalTax, 180);
+    });
+
+    // Test 14: Comprehensive GSTR-1 CSV Multi-Section export and GSTR-8 Return Reconciliation
+    await test('Point 49: Test 14 - Comprehensive GSTR-1 CSV Multi-Section export and GSTR-8 Return Reconciliation', async () => {
+      // 1. GSTR-1 CSV Multi-Section Verification
+      const resGstr1Csv = await fetch(`${baseUrl}/tax/reports/gstr1?format=csv`, {
+        headers: { Authorization: `Bearer ${p49AdminToken}` },
+      });
+      assert.strictEqual(resGstr1Csv.status, 200);
+      const csvContent = await resGstr1Csv.text();
+      assert.ok(csvContent.includes('--- GSTR-1 TABLE 4A: TAXABLE B2B SUPPLIES ---'));
+      assert.ok(csvContent.includes('--- GSTR-1 TABLE 5A: B2C LARGE INTER-STATE INVOICES ---'));
+      assert.ok(csvContent.includes('--- GSTR-1 TABLE 7: B2C OTHER RETAIL SUPPLIES ---'));
+      assert.ok(csvContent.includes('--- GSTR-1 TABLE 12: HSN SUMMARY OF OUTWARD SUPPLIES ---'));
+
+      // 2. GSTR-8 Return Reconciliation with cancelled supplies
+      const resGstr8 = await fetch(`${baseUrl}/tax/reports/gstr8`, {
+        headers: { Authorization: `Bearer ${p49AdminToken}` },
+      });
+      assert.strictEqual(resGstr8.status, 200);
+      const gstr8Body = await resGstr8.json();
+      assert.strictEqual(gstr8Body.success, true);
+      assert.ok(gstr8Body.data.summary.totalReturns > 0, 'Cancelled invoices must be factored into totalReturns');
+      assert.strictEqual(
+        gstr8Body.data.summary.netTaxableSupplies,
+        Math.round((gstr8Body.data.summary.totalGrossSupplies - gstr8Body.data.summary.totalReturns) * 100) / 100,
+        'Net taxable supplies must equal gross minus returns'
+      );
+    });
+
   } finally {
     if (server) {
       server.close();

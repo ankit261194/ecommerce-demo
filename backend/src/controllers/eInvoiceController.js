@@ -94,34 +94,61 @@ const getEInvoiceByOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
     let order = null;
+    let subOrder = null;
 
     if (mongoose.Types.ObjectId.isValid(orderId)) {
       order = await Order.findById(orderId);
+      if (!order) {
+        subOrder = await SubOrder.findById(orderId);
+        if (subOrder) {
+          order = await Order.findById(subOrder.parentOrder);
+        }
+      }
     }
-    if (!order) {
+    if (!order && !subOrder) {
       order = await Order.findOne({ orderNumber: orderId });
     }
 
     let einvoice = null;
-    if (order) {
+    if (subOrder) {
+      einvoice = await EInvoice.findOne({ subOrder: subOrder._id, status: 'GENERATED' })
+        .populate('order')
+        .populate('subOrder')
+        .populate('vendor')
+        .populate('customer');
+    }
+    if (!einvoice && order) {
       einvoice = await EInvoice.findOne({ order: order._id, status: 'GENERATED' })
+        .populate('order')
+        .populate('subOrder')
         .populate('vendor')
         .populate('customer');
     }
 
     if (!einvoice && mongoose.Types.ObjectId.isValid(orderId)) {
       einvoice = await EInvoice.findOne({ subOrder: orderId, status: 'GENERATED' })
+        .populate('order')
+        .populate('subOrder')
         .populate('vendor')
         .populate('customer');
     }
 
-    // Auto-generate if not yet generated and order exists
-    if (!einvoice && order) {
-      einvoice = await generateEInvoiceForOrder(order._id, {
+    // Auto-generate if not yet generated and order or subOrder exists
+    if (!einvoice && (subOrder || order)) {
+      const targetId = subOrder ? subOrder._id : order._id;
+      einvoice = await generateEInvoiceForOrder(targetId, {
         userId: req.user?._id,
         userName: req.user?.name,
         userRole: req.user?.role,
       });
+
+      if (einvoice) {
+        einvoice = await EInvoice.findById(einvoice._id)
+          .populate('order')
+          .populate('subOrder')
+          .populate('vendor')
+          .populate('customer');
+      }
     }
 
     if (!einvoice) {
@@ -155,12 +182,24 @@ const getPrintableTaxInvoiceHtml = async (req, res) => {
 
     if (mongoose.Types.ObjectId.isValid(id)) {
       einvoice = await EInvoice.findById(id);
+      if (!einvoice) {
+        einvoice = await EInvoice.findOne({ subOrder: id, status: 'GENERATED' });
+      }
+      if (!einvoice) {
+        einvoice = await EInvoice.findOne({ order: id, status: 'GENERATED' });
+      }
+      if (!einvoice) {
+        const subOrd = await SubOrder.findById(id);
+        if (subOrd) {
+          einvoice = await generateEInvoiceForOrder(subOrd._id);
+        }
+      }
     }
     if (!einvoice) {
       einvoice = await EInvoice.findOne({ invoiceNumber: id });
     }
-    if (!einvoice && mongoose.Types.ObjectId.isValid(id)) {
-      einvoice = await EInvoice.findOne({ order: id, status: 'GENERATED' });
+    if (!einvoice) {
+      einvoice = await EInvoice.findOne({ irn: id });
     }
     if (!einvoice) {
       const ord = await Order.findOne({ orderNumber: id });
@@ -197,9 +236,18 @@ const cancelEInvoice = async (req, res) => {
     let einvoice = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
       einvoice = await EInvoice.findById(id);
+      if (!einvoice) {
+        einvoice = await EInvoice.findOne({ order: id, status: 'GENERATED' });
+      }
+      if (!einvoice) {
+        einvoice = await EInvoice.findOne({ subOrder: id, status: 'GENERATED' });
+      }
     }
     if (!einvoice) {
       einvoice = await EInvoice.findOne({ invoiceNumber: id });
+    }
+    if (!einvoice) {
+      einvoice = await EInvoice.findOne({ irn: id });
     }
     if (!einvoice) {
       return res.status(404).json({
@@ -240,10 +288,36 @@ const getGstr1Report = async (req, res) => {
 
     if (format === 'csv') {
       let csv = '\uFEFF'; // UTF-8 BOM
+      
+      // Table 4A: B2B Invoices
+      csv += '--- GSTR-1 TABLE 4A: TAXABLE B2B SUPPLIES ---\n';
       csv += 'GSTIN,Receiver Name,Invoice Number,Invoice Date,Invoice Value,Place of Supply,Reverse Charge,Rate,Taxable Value,CGST,SGST,IGST,IRN\n';
-
-      for (const inv of report.tables.b2b) {
+      for (const inv of (report.tables.b2b || [])) {
         csv += `"${inv.gstin}","${inv.receiverName}","${inv.invoiceNumber}","${inv.invoiceDate}",${inv.invoiceValue},"${inv.placeOfSupply}","${inv.reverseCharge}",${inv.applicableTaxRate},${inv.taxableValue},${inv.cgst},${inv.sgst},${inv.igst},"${inv.irn}"\n`;
+      }
+      csv += '\n';
+
+      // Table 5A: B2C Large (> ₹2.5 Lakh Inter-State)
+      csv += '--- GSTR-1 TABLE 5A: B2C LARGE INTER-STATE INVOICES ---\n';
+      csv += 'Invoice Number,Invoice Date,Invoice Value,Place of Supply,Rate,Taxable Value,IGST\n';
+      for (const inv of (report.tables.b2cLarge || [])) {
+        csv += `"${inv.invoiceNumber}","${inv.invoiceDate}",${inv.invoiceValue},"${inv.placeOfSupply}",${inv.applicableTaxRate || 18},${inv.taxableValue},${inv.igst}\n`;
+      }
+      csv += '\n';
+
+      // Table 7: B2C Small (Retail Other Supplies)
+      csv += '--- GSTR-1 TABLE 7: B2C OTHER RETAIL SUPPLIES ---\n';
+      csv += 'Place of Supply,Supply Type,Rate,Taxable Value,CGST,SGST,IGST\n';
+      for (const inv of (report.tables.b2cSmall || [])) {
+        csv += `"${inv.placeOfSupply}","${inv.supplyType}",${inv.applicableTaxRate || 18},${inv.taxableValue},${inv.cgst},${inv.sgst},${inv.igst}\n`;
+      }
+      csv += '\n';
+
+      // Table 12: HSN Summary of Outward Supplies
+      csv += '--- GSTR-1 TABLE 12: HSN SUMMARY OF OUTWARD SUPPLIES ---\n';
+      csv += 'HSN Code,Description,UQC,Total Taxable Value,CGST,SGST,IGST,Total Tax\n';
+      for (const h of (report.tables.hsnSummary || [])) {
+        csv += `"${h.hsnCode}","${h.description}","${h.uqc || 'NOS'}",${h.totalTaxableValue},${h.cgst},${h.sgst},${h.igst},${h.totalTax}\n`;
       }
 
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');

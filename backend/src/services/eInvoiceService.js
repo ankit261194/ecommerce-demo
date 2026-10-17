@@ -51,6 +51,47 @@ const STATE_CODE_MAP = {
 
 const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
+const DEFAULT_HSN_RATES = {
+  '85183000': 18,
+  '85176290': 18,
+  '85044090': 18,
+  '85182200': 18,
+  '61091000': 5,
+  '64039990': 12,
+  '91021100': 18,
+  '85287219': 28,
+  '04090000': 0,
+};
+
+async function resolveItemGstRate(item) {
+  if (item && item.gstRate !== undefined && item.gstRate !== null) {
+    return Number(item.gstRate);
+  }
+  if (item && item.taxRate !== undefined && item.taxRate !== null) {
+    return Number(item.taxRate);
+  }
+  if (item && item.product && item.product.gstRate !== undefined && item.product.gstRate !== null) {
+    return Number(item.product.gstRate);
+  }
+  const hsnCode = item?.hsnCode || '85183000';
+  if (DEFAULT_HSN_RATES[hsnCode] !== undefined) {
+    return DEFAULT_HSN_RATES[hsnCode];
+  }
+  try {
+    const TaxMatrix = mongoose.models.TaxMatrix || require('../models/TaxMatrix');
+    const matrix = await TaxMatrix.findOne();
+    if (matrix && Array.isArray(matrix.hsnMappings)) {
+      const mapping = matrix.hsnMappings.find(m => m.hsnCode === hsnCode);
+      if (mapping && mapping.gstRate !== undefined) {
+        return Number(mapping.gstRate);
+      }
+    }
+  } catch (e) {
+    // Fallback to standard 18% slab
+  }
+  return 18;
+}
+
 function getStateCodeByName(stateName) {
   if (!stateName) return '07';
   const clean = stateName.trim().toLowerCase();
@@ -249,7 +290,7 @@ async function generateEInvoiceForOrder(orderIdOrSubOrderId, options = {}) {
   for (const item of items) {
     const qty = item.quantity || 1;
     const itemTotal = (item.price || 0) * qty;
-    const gstRate = 18; // Standard 18% slab
+    const gstRate = await resolveItemGstRate(item);
     const hsnCode = item.hsnCode || '85183000';
     const itemDesc = item.title || 'Consumer Merchandise';
 
@@ -273,9 +314,10 @@ async function generateEInvoiceForOrder(orderIdOrSubOrderId, options = {}) {
     totalSgst += sgstVal;
     totalIgst += igstVal;
 
-    // HSN aggregation
-    if (!hsnMap.has(hsnCode)) {
-      hsnMap.set(hsnCode, {
+    // HSN aggregation key
+    const hsnKey = `${hsnCode}_${gstRate}`;
+    if (!hsnMap.has(hsnKey)) {
+      hsnMap.set(hsnKey, {
         hsnCode,
         description: itemDesc,
         taxableAmount: 0,
@@ -288,7 +330,7 @@ async function generateEInvoiceForOrder(orderIdOrSubOrderId, options = {}) {
       });
     }
 
-    const currentHsn = hsnMap.get(hsnCode);
+    const currentHsn = hsnMap.get(hsnKey);
     currentHsn.taxableAmount = Math.round((currentHsn.taxableAmount + taxableVal) * 100) / 100;
     currentHsn.cgstAmount = Math.round((currentHsn.cgstAmount + cgstVal) * 100) / 100;
     currentHsn.sgstAmount = Math.round((currentHsn.sgstAmount + sgstVal) * 100) / 100;
@@ -484,14 +526,17 @@ async function cancelEInvoiceById(invoiceId, reason, remarks, user = {}) {
     return invoice; // Idempotent return
   }
 
-  // Statutory 24-hour government cancellation window check
+  // Statutory government cancellation window check
+  const config = await getOrCreateConfig();
+  const maxHours = config?.cancellationWindowHours || 24;
+
   const now = Date.now();
   const ackTime = new Date(invoice.ackDate).getTime();
   const diffHours = (now - ackTime) / (1000 * 60 * 60);
 
-  if (diffHours > 24) {
+  if (diffHours > maxHours) {
     const error = new Error(
-      `Statutory 24-hour IRP cancellation window has expired (${diffHours.toFixed(1)} hours elapsed). Government E-Invoicing portal prohibits online cancellation after 24 hours. Please issue a GST Credit Note via GSTR-1.`
+      `Statutory ${maxHours}-hour IRP cancellation window has expired (${diffHours.toFixed(1)} hours elapsed). Government E-Invoicing portal prohibits online cancellation after ${maxHours} hours. Please issue a GST Credit Note via GSTR-1.`
     );
     error.statusCode = 400;
     throw error;
@@ -576,7 +621,7 @@ async function generateGstr1Report(filters = {}) {
         invoiceValue: inv.grandTotal,
         placeOfSupply: `${inv.buyerDetails.stateCode}-${inv.buyerDetails.state}`,
         reverseCharge: 'N',
-        applicableTaxRate: 18,
+        applicableTaxRate: (inv.hsnSummary && inv.hsnSummary.length > 0 && inv.hsnSummary[0].gstRate) ? inv.hsnSummary[0].gstRate : 18,
         taxableValue: inv.totalTaxableAmount,
         cgst: inv.totalCgst,
         sgst: inv.totalSgst,
@@ -591,6 +636,7 @@ async function generateGstr1Report(filters = {}) {
         invoiceDate: inv.invoiceDate.toISOString().split('T')[0],
         invoiceValue: inv.grandTotal,
         placeOfSupply: `${inv.buyerDetails.stateCode}-${inv.buyerDetails.state}`,
+        applicableTaxRate: (inv.hsnSummary && inv.hsnSummary.length > 0 && inv.hsnSummary[0].gstRate) ? inv.hsnSummary[0].gstRate : 18,
         taxableValue: inv.totalTaxableAmount,
         igst: inv.totalIgst,
       });
@@ -598,6 +644,7 @@ async function generateGstr1Report(filters = {}) {
       b2cSmall.push({
         placeOfSupply: `${inv.buyerDetails.stateCode}-${inv.buyerDetails.state}`,
         supplyType: inv.taxType === 'INTRA_STATE' ? 'INTRA' : 'INTER',
+        applicableTaxRate: (inv.hsnSummary && inv.hsnSummary.length > 0 && inv.hsnSummary[0].gstRate) ? inv.hsnSummary[0].gstRate : 18,
         taxableValue: inv.totalTaxableAmount,
         cgst: inv.totalCgst,
         sgst: inv.totalSgst,
@@ -664,16 +711,17 @@ async function generateGstr1Report(filters = {}) {
  * Generate GSTR-8 return dataset for E-commerce Operator collecting TCS under Section 52.
  */
 async function generateGstr8Report(filters = {}) {
-  const query = { status: 'GENERATED' };
+  const query = {};
   if (filters.startDate && filters.endDate) {
     query.invoiceDate = { $gte: new Date(filters.startDate), $lte: new Date(filters.endDate) };
   }
 
-  const invoices = await EInvoice.find(query).populate('vendor');
+  const allInvoices = await EInvoice.find(query).populate('vendor');
+  const invoices = allInvoices.filter(inv => inv.status === 'GENERATED');
+  const cancelledInvoices = allInvoices.filter(inv => inv.status === 'CANCELLED');
 
   let totalGrossSupplies = 0;
   let totalReturns = 0;
-  let totalNetTaxableSupplies = 0;
   let totalCgstTcs = 0;
   let totalSgstTcs = 0;
   let totalIgstTcs = 0;
@@ -690,7 +738,6 @@ async function generateGstr8Report(filters = {}) {
     const vendorGstin = inv.supplierDetails?.gstin || inv.vendor?.gstin || '07AAAAA0000A1Z5';
 
     totalGrossSupplies += gross;
-    totalNetTaxableSupplies += gross;
     totalCgstTcs += cgstTcs;
     totalSgstTcs += sgstTcs;
     totalIgstTcs += igstTcs;
@@ -713,7 +760,6 @@ async function generateGstr8Report(filters = {}) {
 
     const v = vendorTcsMap.get(vendorId);
     v.grossSupplies = Math.round((v.grossSupplies + gross) * 100) / 100;
-    v.netTaxableAmount = Math.round((v.netTaxableAmount + gross) * 100) / 100;
     v.cgstTcs = Math.round((v.cgstTcs + cgstTcs) * 100) / 100;
     v.sgstTcs = Math.round((v.sgstTcs + sgstTcs) * 100) / 100;
     v.igstTcs = Math.round((v.igstTcs + igstTcs) * 100) / 100;
@@ -721,6 +767,22 @@ async function generateGstr8Report(filters = {}) {
     v.tds194OWithheld = Math.round((v.tds194OWithheld + (inv.tdsSection194O?.tdsAmount || 0)) * 100) / 100;
   }
 
+  // Account for cancelled supplies as statutory returns
+  for (const cinv of cancelledInvoices) {
+    const returnVal = cinv.totalTaxableAmount;
+    totalReturns += returnVal;
+    const vendorId = cinv.vendor?._id ? cinv.vendor._id.toString() : 'platform';
+    if (vendorTcsMap.has(vendorId)) {
+      const v = vendorTcsMap.get(vendorId);
+      v.returns = Math.round((v.returns + returnVal) * 100) / 100;
+    }
+  }
+
+  for (const v of vendorTcsMap.values()) {
+    v.netTaxableAmount = Math.max(0, Math.round((v.grossSupplies - v.returns) * 100) / 100);
+  }
+
+  const totalNetTaxableSupplies = Math.max(0, Math.round((totalGrossSupplies - totalReturns) * 100) / 100);
   const totalTcsCollected = Math.round((totalCgstTcs + totalSgstTcs + totalIgstTcs) * 100) / 100;
 
   return {
@@ -746,6 +808,7 @@ async function generateGstr8Report(filters = {}) {
 async function generatePrintableTaxInvoiceHtml(invoiceId) {
   const invoice = await EInvoice.findById(invoiceId)
     .populate('order')
+    .populate('subOrder')
     .populate('vendor')
     .populate('customer');
 
@@ -767,7 +830,22 @@ async function generatePrintableTaxInvoiceHtml(invoiceId) {
     qrCodeDataUrl = await QRCode.toDataURL(invoice.irn, { width: 140 });
   }
 
-  const items = invoice.order?.items || [];
+  let items = [];
+  if (invoice.subOrder && invoice.subOrder.items && invoice.subOrder.items.length > 0) {
+    items = invoice.subOrder.items;
+  } else if (invoice.order && invoice.order.items && invoice.order.items.length > 0) {
+    items = invoice.order.items;
+  } else {
+    items = [
+      {
+        title: 'Consignment Merchandise Items',
+        price: invoice.grandTotal,
+        quantity: 1,
+        hsnCode: invoice.hsnSummary?.[0]?.hsnCode || '85183000',
+        gstRate: invoice.hsnSummary?.[0]?.gstRate || 18,
+      },
+    ];
+  }
   const grandTotalWords = numberToWords(invoice.grandTotal);
   const formattedInvoiceDate = new Date(invoice.invoiceDate).toLocaleDateString('en-IN', {
     day: '2-digit',
@@ -950,12 +1028,13 @@ async function generatePrintableTaxInvoiceHtml(invoiceId) {
           <th class="text-center" style="width: 30px;">#</th>
           <th>Description of Goods</th>
           <th class="text-center">HSN/SAC</th>
-          <th class="text-center" style="width: 40px;">Qty</th>
+          <th class="text-center" style="width: 45px;">GST%</th>
+          <th class="text-center" style="width: 35px;">Qty</th>
           <th class="text-right">Unit Price</th>
           <th class="text-right">Taxable Val</th>
           ${invoice.taxType === 'INTRA_STATE'
-            ? `<th class="text-right">CGST (9%)</th><th class="text-right">SGST (9%)</th>`
-            : `<th class="text-right">IGST (18%)</th>`
+            ? `<th class="text-right">CGST</th><th class="text-right">SGST</th>`
+            : `<th class="text-right">IGST</th>`
           }
           <th class="text-right">Total (₹)</th>
         </tr>
@@ -964,7 +1043,10 @@ async function generatePrintableTaxInvoiceHtml(invoiceId) {
         ${items.map((item, idx) => {
           const qty = item.quantity || 1;
           const total = (item.price || 0) * qty;
-          const taxable = Math.round((total / 1.18) * 100) / 100;
+          const rate = (item.gstRate !== undefined && item.gstRate !== null)
+            ? Number(item.gstRate)
+            : (DEFAULT_HSN_RATES[item.hsnCode] !== undefined ? DEFAULT_HSN_RATES[item.hsnCode] : 18);
+          const taxable = Math.round((total / (1 + rate / 100)) * 100) / 100;
           const tax = Math.round((total - taxable) * 100) / 100;
           const halfTax = Math.round((tax / 2) * 100) / 100;
 
@@ -972,12 +1054,13 @@ async function generatePrintableTaxInvoiceHtml(invoiceId) {
             <td class="text-center">${idx + 1}</td>
             <td><strong>${item.title || 'Consumer Product'}</strong></td>
             <td class="text-center" style="font-family: monospace;">${item.hsnCode || '85183000'}</td>
+            <td class="text-center font-bold" style="color: #0284c7;">${rate}%</td>
             <td class="text-center">${qty}</td>
-            <td class="text-right">₹${item.price.toFixed(2)}</td>
+            <td class="text-right">₹${Number(item.price || 0).toFixed(2)}</td>
             <td class="text-right">₹${taxable.toFixed(2)}</td>
             ${invoice.taxType === 'INTRA_STATE'
-              ? `<td class="text-right">₹${halfTax.toFixed(2)}</td><td class="text-right">₹${halfTax.toFixed(2)}</td>`
-              : `<td class="text-right">₹${tax.toFixed(2)}</td>`
+              ? `<td class="text-right">₹${halfTax.toFixed(2)} <span style="font-size: 8px; color: #64748b;">(${rate/2}%)</span></td><td class="text-right">₹${halfTax.toFixed(2)} <span style="font-size: 8px; color: #64748b;">(${rate/2}%)</span></td>`
+              : `<td class="text-right">₹${tax.toFixed(2)} <span style="font-size: 8px; color: #64748b;">(${rate}%)</span></td>`
             }
             <td class="text-right"><strong>₹${total.toFixed(2)}</strong></td>
           </tr>`;
@@ -993,6 +1076,7 @@ async function generatePrintableTaxInvoiceHtml(invoiceId) {
           <thead>
             <tr>
               <th>HSN Code</th>
+              <th class="text-center">Rate</th>
               <th class="text-right">Taxable (₹)</th>
               ${invoice.taxType === 'INTRA_STATE'
                 ? `<th class="text-right">CGST (₹)</th><th class="text-right">SGST (₹)</th>`
@@ -1004,6 +1088,7 @@ async function generatePrintableTaxInvoiceHtml(invoiceId) {
           <tbody>
             ${invoice.hsnSummary.map(h => `<tr>
               <td style="font-family: monospace; font-weight: 700;">${h.hsnCode}</td>
+              <td class="text-center font-bold" style="color: #0284c7;">${h.gstRate}%</td>
               <td class="text-right">₹${h.taxableAmount.toFixed(2)}</td>
               ${invoice.taxType === 'INTRA_STATE'
                 ? `<td class="text-right">₹${h.cgstAmount.toFixed(2)}</td><td class="text-right">₹${h.sgstAmount.toFixed(2)}</td>`
@@ -1022,16 +1107,16 @@ async function generatePrintableTaxInvoiceHtml(invoiceId) {
         </div>
         ${invoice.taxType === 'INTRA_STATE' ? `
           <div class="total-row">
-            <span>Central Tax (CGST 9%):</span>
+            <span>Central Tax (CGST):</span>
             <span>₹${invoice.totalCgst.toFixed(2)}</span>
           </div>
           <div class="total-row">
-            <span>State Tax (SGST 9%):</span>
+            <span>State Tax (SGST):</span>
             <span>₹${invoice.totalSgst.toFixed(2)}</span>
           </div>
         ` : `
           <div class="total-row">
-            <span>Integrated Tax (IGST 18%):</span>
+            <span>Integrated Tax (IGST):</span>
             <span>₹${invoice.totalIgst.toFixed(2)}</span>
           </div>
         `}

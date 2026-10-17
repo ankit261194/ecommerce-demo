@@ -96,6 +96,13 @@ const vendorProfileSchema = new mongoose.Schema(
       type: String,
       trim: true,
       uppercase: true,
+      validate: {
+        validator: function (v) {
+          if (!v) return true;
+          return /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(v);
+        },
+        message: 'Invalid PAN format. Must be 10 alphanumeric characters conforming to Income Tax standard (e.g., ABCDE1234F).',
+      },
     },
     // Point 34: Self-Service 4-Step Vendor Registration & Onboarding Wizard
     onboardingStep: {

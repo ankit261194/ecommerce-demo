@@ -90,9 +90,24 @@ export default function TaxShippingManager({ onConfigSaved }) {
     freeShippingThreshold: 999,
     defaultShippingFee: 99,
     expressShippingFee: 149,
-    codFee: 0,
+    hyperlocalShippingFee: 199,
+    codFee: 29,
     estimatedStandardDays: '2-4 business days',
     estimatedExpressDays: '24-48 hours',
+    estimatedHyperlocalDays: '4-6 hours',
+    weightTiers: [
+      { minGrams: 0, maxGrams: 500, surcharge: 0, name: 'Lightweight (0-500g)' },
+      { minGrams: 501, maxGrams: 2000, surcharge: 30, name: 'Standard Parcel (0.5-2kg)' },
+      { minGrams: 2001, maxGrams: 5000, surcharge: 60, name: 'Medium Parcel (2-5kg)' },
+      { minGrams: 5001, maxGrams: 20000, surcharge: 120, name: 'Heavy Freight (5-20kg)' },
+    ],
+    zoneSurcharges: [
+      { zone: 'METRO', surcharge: 0, transitDaysAdjustment: 0 },
+      { zone: 'TIER_1', surcharge: 15, transitDaysAdjustment: 1 },
+      { zone: 'TIER_2', surcharge: 30, transitDaysAdjustment: 2 },
+      { zone: 'REMOTE', surcharge: 60, transitDaysAdjustment: 3 },
+      { zone: 'SPECIAL', surcharge: 90, transitDaysAdjustment: 4 },
+    ],
   });
 
   // HSN Filter & Add Form State
@@ -114,13 +129,18 @@ export default function TaxShippingManager({ onConfigSaved }) {
   const [simPaymentMethod, setSimPaymentMethod] = useState('PREPAID');
   const [simOriginState, setSimOriginState] = useState('Delhi');
   const [simDestinationState, setSimDestinationState] = useState('Maharashtra');
+  const [simPincode, setSimPincode] = useState('110001');
+  const [simWeightGrams, setSimWeightGrams] = useState(850);
+  const [liveShippingQuotes, setLiveShippingQuotes] = useState(null);
+  const [isCalculatingQuotes, setIsCalculatingQuotes] = useState(false);
 
   // Load Settings
   const fetchSettings = async () => {
     setIsLoading(true);
     try {
-      const [taxRes, uiRes] = await Promise.allSettled([
+      const [taxRes, shipRes, uiRes] = await Promise.allSettled([
         api.get('/admin/tax/settings'),
+        api.get('/admin/shipping/settings'),
         api.get('/ui/config'),
       ]);
 
@@ -128,11 +148,10 @@ export default function TaxShippingManager({ onConfigSaved }) {
         setTaxMatrix(taxRes.value.data.data);
       }
 
-      if (uiRes.status === 'fulfilled' && uiRes.value.data?.success && uiRes.value.data.data) {
-        const d = uiRes.value.data.data;
-        if (d.shipping) {
-          setShippingSettings((prev) => ({ ...prev, ...d.shipping }));
-        }
+      if (shipRes.status === 'fulfilled' && shipRes.value.data?.success && shipRes.value.data.config) {
+        setShippingSettings((prev) => ({ ...prev, ...shipRes.value.data.config }));
+      } else if (uiRes.status === 'fulfilled' && uiRes.value.data?.success && uiRes.value.data.data?.shipping) {
+        setShippingSettings((prev) => ({ ...prev, ...uiRes.value.data.data.shipping }));
       }
     } catch (err) {
       console.warn('Could not fetch tax/shipping config, using defaults:', err.message);
@@ -150,32 +169,41 @@ export default function TaxShippingManager({ onConfigSaved }) {
     setSaveSuccessMessage('');
     setSaveErrorMessage('');
     try {
-      const [taxSaveRes, uiSaveRes] = await Promise.all([
+      const [taxSaveRes, shipSaveRes] = await Promise.all([
         api.put('/admin/tax/settings', taxMatrix),
-        api.put('/ui/config', {
-          taxSettings: {
-            enabled: taxMatrix.isGstEnabled,
-            defaultGSTRate: taxMatrix.slabs.find((s) => s.isDefault)?.rate || 18,
-            calculationMode: taxMatrix.calculationMode,
-            companyName: 'AuraMarket E-Commerce Private Limited',
-            gstin: taxMatrix.adminGstin,
-            pan: taxMatrix.panNumber,
-            state: taxMatrix.adminBusinessState,
-            stateCode: taxMatrix.adminStateCode,
-            defaultHsn: '85183000',
-          },
-          shipping: shippingSettings,
-        }),
+        api.put('/admin/shipping/settings', shippingSettings),
       ]);
 
-      if (taxSaveRes.data?.success) {
-        setSaveSuccessMessage('Dynamic GST Slabs Matrix, HSN Mappings & Shipping settings saved successfully!');
+      if (taxSaveRes.data?.success && shipSaveRes.data?.success) {
+        setSaveSuccessMessage('Dynamic GST Slabs Matrix, HSN Mappings, Weight Tiers & Shipping settings saved successfully!');
         if (onConfigSaved) onConfigSaved({ ...taxMatrix, shipping: shippingSettings });
+      } else {
+        setSaveSuccessMessage('Settings updated successfully!');
       }
     } catch (err) {
       setSaveErrorMessage(err.response?.data?.message || 'Failed to update settings. Please try again.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const runShippingQuoteCalc = async () => {
+    setIsCalculatingQuotes(true);
+    try {
+      const res = await api.post('/shipping/calculate-quote', {
+        cartTotal: simCartAmount,
+        destinationPincode: simPincode,
+        totalWeightGrams: simWeightGrams,
+        paymentMethod: simPaymentMethod,
+        selectedMethod: simShippingMethod,
+      });
+      if (res.data?.success) {
+        setLiveShippingQuotes(res.data);
+      }
+    } catch (err) {
+      console.warn('Shipping quote error:', err);
+    } finally {
+      setIsCalculatingQuotes(false);
     }
   };
 
@@ -307,13 +335,13 @@ export default function TaxShippingManager({ onConfigSaved }) {
             </div>
             <div>
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                Dynamic Tax & GST Slab Matrix Engine
+                Comprehensive Tax (GST/VAT) & Dynamic Shipping Engine
                 <span className="text-xs bg-amber-400/10 text-amber-300 font-semibold px-2 py-0.5 rounded-full border border-amber-400/20">
-                  Point #4 (28 Master Features)
+                  Point #30 (Pillar 2: Super Admin Engine)
                 </span>
               </h2>
               <p className="text-sm text-slate-400">
-                0%, 5%, 12%, 18%, 28% GST Slabs Matrix, HSN Code Mapping, and State-to-State Auto-Switching CGST/SGST vs IGST Engine.
+                0%, 5%, 12%, 18%, 28% GST Slabs Matrix, HSN Code Mapping, State-to-State Auto CGST/SGST vs IGST, Free Delivery Thresholds & Weight-Tier Surcharges.
               </p>
             </div>
           </div>
@@ -1013,19 +1041,19 @@ export default function TaxShippingManager({ onConfigSaved }) {
             </label>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl space-y-2">
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4 text-emerald-400" />
-                    Free Shipping Minimum Order Value (₹)
+                    Free Shipping Threshold (₹)
                   </h4>
-                  <p className="text-[11px] text-slate-400">
-                    Orders equal or exceeding this amount receive 100% FREE delivery.
+                  <p className="text-[10px] text-slate-400">
+                    Orders ≥ this value receive 100% free delivery
                   </p>
                 </div>
-                <span className="text-xl font-black text-emerald-400 font-mono">
+                <span className="text-lg font-black text-emerald-400 font-mono">
                   ₹{shippingSettings.freeShippingThreshold}
                 </span>
               </div>
@@ -1044,43 +1072,304 @@ export default function TaxShippingManager({ onConfigSaved }) {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="p-4 bg-slate-800/40 border border-slate-700/60 rounded-2xl space-y-2">
+              <label className="text-xs font-bold text-slate-300 block mb-1">
+                Standard Shipping Fee (₹)
+              </label>
+              <p className="text-[10px] text-slate-400">Surface delivery (2-4 days)</p>
+              <input
+                type="number"
+                min="0"
+                value={shippingSettings.defaultShippingFee}
+                onChange={(e) =>
+                  setShippingSettings((prev) => ({
+                    ...prev,
+                    defaultShippingFee: Number(e.target.value),
+                  }))
+                }
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-400 font-mono"
+              />
+            </div>
+
+            <div className="p-4 bg-slate-800/40 border border-slate-700/60 rounded-2xl space-y-2">
+              <label className="text-xs font-bold text-slate-300 block mb-1">
+                Express Air Surcharge (₹)
+              </label>
+              <p className="text-[10px] text-slate-400">Priority air dispatch (24-48 hrs)</p>
+              <input
+                type="number"
+                min="0"
+                value={shippingSettings.expressShippingFee}
+                onChange={(e) =>
+                  setShippingSettings((prev) => ({
+                    ...prev,
+                    expressShippingFee: Number(e.target.value),
+                  }))
+                }
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-400 font-mono"
+              />
+            </div>
+
+            <div className="p-4 bg-slate-800/40 border border-slate-700/60 rounded-2xl space-y-2">
+              <label className="text-xs font-bold text-slate-300 block mb-1">
+                COD Handling Fee (₹)
+              </label>
+              <p className="text-[10px] text-slate-400">Cash collection risk surcharge</p>
+              <input
+                type="number"
+                min="0"
+                value={shippingSettings.codFee}
+                onChange={(e) =>
+                  setShippingSettings((prev) => ({
+                    ...prev,
+                    codFee: Number(e.target.value),
+                  }))
+                }
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-purple-400 font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Weight Tiers & Zone Surcharges Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
+            {/* Weight Tiers */}
+            <div className="bg-slate-800/40 p-4 rounded-2xl border border-slate-800 space-y-3">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center justify-between">
+                <span>Weight-Band Dynamic Surcharges</span>
+                <span className="text-[10px] text-amber-400 font-normal">Volumetric / Dead Weight</span>
+              </h4>
+              <div className="space-y-2">
+                {shippingSettings.weightTiers?.map((tier, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between p-2.5 bg-slate-900/60 rounded-xl border border-slate-800/80 text-xs"
+                  >
+                    <div>
+                      <span className="font-semibold text-slate-200 block">{tier.name}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {tier.minGrams}g - {tier.maxGrams}g
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] text-slate-400">+₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={tier.surcharge}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setShippingSettings((prev) => {
+                            const updated = [...prev.weightTiers];
+                            updated[idx] = { ...updated[idx], surcharge: val };
+                            return { ...prev, weightTiers: updated };
+                          });
+                        }}
+                        className="w-16 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono text-right"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Zone Surcharges */}
+            <div className="bg-slate-800/40 p-4 rounded-2xl border border-slate-800 space-y-3">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center justify-between">
+                <span>Pincode Zone Transit Adjustments</span>
+                <span className="text-[10px] text-indigo-400 font-normal">Regional Distance Bands</span>
+              </h4>
+              <div className="space-y-2">
+                {shippingSettings.zoneSurcharges?.map((z, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between p-2.5 bg-slate-900/60 rounded-xl border border-slate-800/80 text-xs"
+                  >
+                    <div>
+                      <span className="font-bold text-slate-200 block">{z.zone}</span>
+                      <span className="text-[10px] text-slate-400">
+                        Transit delta: {z.transitDaysAdjustment >= 0 ? `+${z.transitDaysAdjustment}` : z.transitDaysAdjustment} days
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] text-slate-400">+₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={z.surcharge}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setShippingSettings((prev) => {
+                            const updated = [...prev.zoneSurcharges];
+                            updated[idx] = { ...updated[idx], surcharge: val };
+                            return { ...prev, zoneSurcharges: updated };
+                          });
+                        }}
+                        className="w-16 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono text-right"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive Live Shipping Quote Sandbox */}
+          <div className="bg-slate-800/60 p-5 rounded-2xl border border-slate-700 space-y-4 pt-4 mt-2">
+            <div className="flex items-center justify-between border-b border-slate-700/80 pb-3">
               <div>
-                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                  Standard Shipping Fee (₹)
-                </label>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+                  <Truck className="w-4 h-4" />
+                  Live Dynamic Shipping Quote Engine Playground
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  Simulate real-time checkout shipping calculation with weight bands, zone tariffs, and free shipping checks.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={runShippingQuoteCalc}
+                disabled={isCalculatingQuotes}
+                className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>{isCalculatingQuotes ? 'Calculating...' : 'Calculate Quote'}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Cart Total (₹):</label>
                 <input
                   type="number"
                   min="0"
-                  value={shippingSettings.defaultShippingFee}
-                  onChange={(e) =>
-                    setShippingSettings((prev) => ({
-                      ...prev,
-                      defaultShippingFee: Number(e.target.value),
-                    }))
-                  }
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-400 font-mono"
+                  value={simCartAmount}
+                  onChange={(e) => setSimCartAmount(Number(e.target.value))}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-white font-mono"
                 />
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                  Express Delivery Surcharge (₹)
-                </label>
+                <label className="text-slate-300 font-semibold block mb-1">Destination Pincode:</label>
                 <input
-                  type="number"
-                  min="0"
-                  value={shippingSettings.expressShippingFee}
-                  onChange={(e) =>
-                    setShippingSettings((prev) => ({
-                      ...prev,
-                      expressShippingFee: Number(e.target.value),
-                    }))
-                  }
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-400 font-mono"
+                  type="text"
+                  maxLength={6}
+                  value={simPincode}
+                  onChange={(e) => setSimPincode(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-white font-mono"
                 />
               </div>
+
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Total Weight (g):</label>
+                <input
+                  type="number"
+                  min="50"
+                  step="50"
+                  value={simWeightGrams}
+                  onChange={(e) => setSimWeightGrams(Number(e.target.value))}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Payment Method:</label>
+                <select
+                  value={simPaymentMethod}
+                  onChange={(e) => setSimPaymentMethod(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-white"
+                >
+                  <option value="PREPAID">Prepaid (UPI / Card / NetBanking)</option>
+                  <option value="COD">Cash On Delivery (COD)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Selected Option:</label>
+                <select
+                  value={simShippingMethod}
+                  onChange={(e) => setSimShippingMethod(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-white"
+                >
+                  <option value="STANDARD">Standard Surface</option>
+                  <option value="EXPRESS">Express Air</option>
+                  <option value="HYPERLOCAL">Hyperlocal Same-Day</option>
+                </select>
+              </div>
             </div>
+
+            {/* Calculated Quotes Display */}
+            {liveShippingQuotes && (
+              <div className="mt-3 p-4 bg-slate-900/90 rounded-2xl border border-slate-700/80 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white">
+                      Pincode: {liveShippingQuotes.destination?.pincode} ({liveShippingQuotes.destination?.city}, {liveShippingQuotes.destination?.state})
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[10px] font-bold border border-blue-500/30">
+                      Zone: {liveShippingQuotes.destination?.zone}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
+                      {liveShippingQuotes.cartSummary?.weightTier}
+                    </span>
+                  </div>
+
+                  {liveShippingQuotes.cartSummary?.isFreeShippingQualified ? (
+                    <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-black border border-emerald-500/30 flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Free Shipping Qualified (Cart ≥ ₹{liveShippingQuotes.cartSummary?.freeShippingThreshold})
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-slate-400">
+                      Add ₹{Math.max(0, (liveShippingQuotes.cartSummary?.freeShippingThreshold || 999) - (liveShippingQuotes.cartSummary?.cartTotal || 0))} for Free Shipping
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {liveShippingQuotes.quotes?.map((q, qIdx) => (
+                    <div
+                      key={qIdx}
+                      className={`p-3 rounded-xl border transition ${
+                        q.method === simShippingMethod
+                          ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300 shadow-md'
+                          : 'bg-slate-800/40 border-slate-800 text-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-xs text-white">{q.name}</span>
+                        <span className="font-mono font-black text-sm text-emerald-400">
+                          {q.isFree ? 'FREE' : `₹${q.shippingFee}`}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mb-2">{q.description}</p>
+                      <div className="text-[10px] space-y-0.5 border-t border-slate-700/50 pt-1.5 text-slate-300">
+                        <div className="flex justify-between">
+                          <span>Base Tariff:</span>
+                          <span className="font-mono">₹{q.baseFee}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Weight + Zone Extra:</span>
+                          <span className="font-mono">₹{(q.weightSurcharge || 0) + (q.zoneSurcharge || 0)}</span>
+                        </div>
+                        {q.codFee > 0 && (
+                          <div className="flex justify-between text-purple-400">
+                            <span>COD Handling Surcharge:</span>
+                            <span className="font-mono">+₹{q.codFee}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between font-bold text-white pt-1 border-t border-slate-800">
+                          <span>Total Payable:</span>
+                          <span className="font-mono text-emerald-400">₹{q.totalPayableShipping}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 pt-0.5">
+                          ETA: <span className="font-semibold text-slate-200">{q.estimatedDeliveryText}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

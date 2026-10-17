@@ -1496,7 +1496,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
             <Receipt className="w-4 h-4 text-blue-300" />
             <span>Tax & Shipping Engine</span>
             <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-blue-500/30 text-blue-200 ml-1">
-              Point #48
+              Point #30
             </span>
           </button>
 
@@ -2778,7 +2778,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 13: TAX (GST) & DYNAMIC SHIPPING ENGINE (Point #48) */}
+      {/* TAB 13: TAX (GST) & DYNAMIC SHIPPING ENGINE (Point #30 - Pillar 2) */}
       {/* ========================================================================= */}
       {activeDashboardTab === 'tax-shipping' && (
         <TaxShippingManager uiConfig={uiConfig} setUiConfig={setUiConfig} />

@@ -29,6 +29,9 @@ const LoyaltyActivityLog = require('../src/models/LoyaltyActivityLog');
 const FlashDeal = require('../src/models/FlashDeal');
 const AbandonedCart = require('../src/models/AbandonedCart');
 const AbandonedCartRecoveryConfig = require('../src/models/AbandonedCartRecoveryConfig');
+const TaxMatrix = require('../src/models/TaxMatrix');
+const ShippingConfig = require('../src/models/ShippingConfig');
+const PincodeZone = require('../src/models/PincodeZone');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -23480,6 +23483,391 @@ const runTests = async () => {
         headers: { Authorization: `Bearer ${riderToken}` },
       });
       assert.strictEqual(resRider.status, 403, 'Rider token must return 403 Forbidden');
+    });
+
+  
+    // =========================================================================
+    // PILLAR 2 - POINT 30: COMPREHENSIVE TAX (GST/VAT) & DYNAMIC SHIPPING ENGINE
+    // =========================================================================
+    console.log('\n--- PILLAR 2 - POINT 30: COMPREHENSIVE TAX (GST/VAT) & DYNAMIC SHIPPING ENGINE ---');
+
+    await test('Point 30: GET /api/admin/tax/settings retrieves GST tax matrix, slabs (0, 5, 12, 18, 28%), calculation mode, and default HSN directory', async () => {
+      const res = await fetch(`${baseUrl}/admin/tax/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200, 'Tax settings retrieval must succeed with 200');
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data);
+      assert.strictEqual(data.data.isGstEnabled, true);
+      assert.ok(Array.isArray(data.data.slabs));
+      assert.strictEqual(data.data.slabs.length, 5, 'Must have 5 GST slabs (0, 5, 12, 18, 28%)');
+      assert.ok(data.data.slabs.some(s => s.rate === 18 && s.isDefault === true));
+      assert.ok(Array.isArray(data.data.hsnMappings));
+      assert.ok(data.data.hsnMappings.length >= 4, 'Must include pre-configured standard HSN codes');
+    });
+
+    await test('Point 30: PUT /api/admin/tax/settings updates GST calculation mode, admin GSTIN, and custom HSN mapping', async () => {
+      const res = await fetch(`${baseUrl}/admin/tax/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          adminGstin: '07BBBBB1111B2Z6',
+          calculationMode: 'EXCLUSIVE',
+          autoInterstateIgst: true,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.adminGstin, '07BBBBB1111B2Z6');
+      assert.strictEqual(data.data.calculationMode, 'EXCLUSIVE');
+    });
+
+    await test('Point 30: POST /api/tax/calculate computes Intra-State CGST + SGST split for identical origin and destination states', async () => {
+      const res = await fetch(`${baseUrl}/tax/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [
+            {
+              name: 'Studio Wireless Headphones',
+              price: 1000,
+              quantity: 2,
+              hsnCode: '85183000', // 18% standard rate
+            },
+          ],
+          originState: 'Delhi',
+          destinationState: 'Delhi',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.summary.supplyType, 'INTRA_STATE');
+      assert.strictEqual(data.summary.subTotal, 2000);
+      assert.strictEqual(data.summary.totalTaxableAmount, 2000);
+      assert.strictEqual(data.summary.totalTax, 360, '18% GST on 2000 EXCLUSIVE must be 360');
+      assert.strictEqual(data.summary.totalCgst, 180, 'CGST must be exactly 50% of 360 = 180');
+      assert.strictEqual(data.summary.totalSgst, 180, 'SGST must be exactly 50% of 360 = 180');
+      assert.strictEqual(data.summary.totalIgst, 0, 'Intra-state IGST must be 0');
+      assert.strictEqual(data.summary.grandTotal, 2360);
+    });
+
+    await test('Point 30: POST /api/tax/calculate computes Inter-State 100% IGST for interstate supply', async () => {
+      const res = await fetch(`${baseUrl}/tax/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [
+            {
+              name: 'Smart Fitness Tracker',
+              price: 3000,
+              quantity: 1,
+              hsnCode: '85176290', // 18% GST
+            },
+          ],
+          originState: 'Delhi',
+          destinationState: 'Karnataka',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.summary.supplyType, 'INTER_STATE');
+      assert.strictEqual(data.summary.totalTax, 540, '18% IGST on 3000 EXCLUSIVE must be 540');
+      assert.strictEqual(data.summary.totalIgst, 540, 'Inter-state must apply 100% to IGST');
+      assert.strictEqual(data.summary.totalCgst, 0);
+      assert.strictEqual(data.summary.totalSgst, 0);
+    });
+
+    await test('Point 30: POST /api/tax/calculate handles Tax-Exempt HSN commodities with 0% GST', async () => {
+      const res = await fetch(`${baseUrl}/tax/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [
+            {
+              name: 'Pure Organic Honey',
+              price: 450,
+              quantity: 2,
+              hsnCode: '04090000', // 0% Exempt
+            },
+          ],
+          originState: 'Delhi',
+          destinationState: 'Maharashtra',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.summary.totalTax, 0, 'Exempt items must have 0 tax');
+      assert.strictEqual(data.itemized[0].gstRate, 0);
+      assert.strictEqual(data.itemized[0].totalTaxAmount, 0);
+    });
+
+    await test('Point 30: POST /api/admin/tax/test-matrix executes admin tax sandbox simulation with itemized breakdown', async () => {
+      const res = await fetch(`${baseUrl}/admin/tax/test-matrix`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          amount: 2500,
+          hsnCode: '85287219', // 28% Luxury
+          originState: 'Delhi',
+          destinationState: 'Haryana',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.simulation);
+      assert.ok(data.simulation.summary);
+      assert.strictEqual(data.simulation.summary.supplyType, 'INTER_STATE');
+      assert.strictEqual(data.simulation.summary.totalIgst, 700, '28% of 2500 must be 700');
+    });
+
+    await test('Point 30: GET /api/admin/shipping/settings retrieves dynamic shipping parameters, thresholds, weight tiers, and zone surcharges', async () => {
+      const res = await fetch(`${baseUrl}/admin/shipping/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.config);
+      assert.strictEqual(data.config.enabled, true);
+      assert.strictEqual(data.config.freeShippingThreshold, 999);
+      assert.strictEqual(data.config.defaultShippingFee, 99);
+      assert.strictEqual(data.config.expressShippingFee, 149);
+      assert.ok(Array.isArray(data.config.weightTiers));
+      assert.strictEqual(data.config.weightTiers.length, 4);
+      assert.ok(Array.isArray(data.config.zoneSurcharges));
+      assert.strictEqual(data.config.zoneSurcharges.length, 5);
+    });
+
+    await test('Point 30: PUT /api/admin/shipping/settings updates free shipping threshold, express surcharge, and COD handling fee', async () => {
+      const res = await fetch(`${baseUrl}/admin/shipping/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          freeShippingThreshold: 1200,
+          defaultShippingFee: 79,
+          expressShippingFee: 169,
+          codFee: 39,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.config.freeShippingThreshold, 1200);
+      assert.strictEqual(data.config.defaultShippingFee, 79);
+      assert.strictEqual(data.config.expressShippingFee, 169);
+      assert.strictEqual(data.config.codFee, 39);
+    });
+
+    await test('Point 30: POST /api/shipping/calculate-quote calculates free shipping qualification when cartTotal >= threshold', async () => {
+      // Ensure Delhi Metro pincode exists
+      await PincodeZone.findOneAndUpdate(
+        { pincode: '110001' },
+        {
+          pincode: '110001',
+          city: 'New Delhi',
+          state: 'Delhi',
+          zone: 'METRO',
+          isDeliverable: true,
+          isCodAvailable: true,
+          standardShippingFee: 79,
+          expressShippingFee: 169,
+          estimatedDays: 2,
+        },
+        { upsert: true, new: true }
+      );
+
+      const res = await fetch(`${baseUrl}/shipping/calculate-quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cartTotal: 1500, // Exceeds threshold of 1200
+          destinationPincode: '110001',
+          totalWeightGrams: 400,
+          paymentMethod: 'PREPAID',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.isDeliverable, true);
+      assert.strictEqual(data.cartSummary.isFreeShippingQualified, true);
+
+      const standardQuote = data.quotes.find(q => q.method === 'STANDARD');
+      assert.ok(standardQuote);
+      assert.strictEqual(standardQuote.isFree, true);
+      assert.strictEqual(standardQuote.shippingFee, 0, 'Standard shipping must be FREE (0)');
+      assert.strictEqual(standardQuote.totalPayableShipping, 0);
+
+      // Hyperlocal Same-Day option must be available for METRO zone
+      const hyperlocalQuote = data.quotes.find(q => q.method === 'HYPERLOCAL');
+      assert.ok(hyperlocalQuote, 'Hyperlocal option must be present for METRO zone');
+    });
+
+    await test('Point 30: POST /api/shipping/calculate-quote applies dynamic weight tier and zone surcharges when cartTotal < threshold', async () => {
+      // Ensure Mumbai Tier 1 pincode exists
+      await PincodeZone.findOneAndUpdate(
+        { pincode: '400050' },
+        {
+          pincode: '400050',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          zone: 'TIER_1',
+          isDeliverable: true,
+          isCodAvailable: true,
+          standardShippingFee: 79,
+          expressShippingFee: 169,
+          estimatedDays: 3,
+        },
+        { upsert: true, new: true }
+      );
+
+      const res = await fetch(`${baseUrl}/shipping/calculate-quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cartTotal: 600, // Below threshold 1200
+          destinationPincode: '400050',
+          totalWeightGrams: 3500, // Medium Parcel 2001-5000g (+60 surcharge)
+          paymentMethod: 'PREPAID',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.cartSummary.isFreeShippingQualified, false);
+
+      const standardQuote = data.quotes.find(q => q.method === 'STANDARD');
+      assert.ok(standardQuote);
+      assert.strictEqual(standardQuote.isFree, false);
+      assert.strictEqual(standardQuote.weightSurcharge, 60, 'Medium parcel (3500g) surcharge must be 60');
+      assert.strictEqual(standardQuote.zoneSurcharge, 15, 'TIER_1 zone surcharge must be 15');
+      assert.strictEqual(standardQuote.shippingFee, 79 + 60 + 15, '79 base + 60 weight + 15 zone = 154');
+    });
+
+    await test('Point 30: POST /api/shipping/calculate-quote applies COD handling surcharge for Cash on Delivery', async () => {
+      const res = await fetch(`${baseUrl}/shipping/calculate-quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cartTotal: 800,
+          destinationPincode: '110001',
+          totalWeightGrams: 400,
+          paymentMethod: 'COD',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+
+      const standardQuote = data.quotes.find(q => q.method === 'STANDARD');
+      assert.ok(standardQuote);
+      assert.strictEqual(standardQuote.codFee, 39, 'COD fee must be 39');
+      assert.strictEqual(standardQuote.totalPayableShipping, standardQuote.shippingFee + 39);
+    });
+
+    await test('Point 30: POST /api/shipping/calculate-quote validates required pincode and handles non-serviceable pincode', async () => {
+      // 1. Missing pincode must return 400
+      const resMissing = await fetch(`${baseUrl}/shipping/calculate-quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cartTotal: 500 }),
+      });
+      assert.strictEqual(resMissing.status, 400, 'Missing pincode must return 400 Bad Request');
+
+      // 2. Non-serviceable pincode
+      await PincodeZone.findOneAndUpdate(
+        { pincode: '999999' },
+        {
+          pincode: '999999',
+          city: 'Restricted Military Zone',
+          state: 'Border Area',
+          zone: 'REMOTE',
+          isDeliverable: false,
+          isCodAvailable: false,
+        },
+        { upsert: true, new: true }
+      );
+
+      const resUnserviceable = await fetch(`${baseUrl}/shipping/calculate-quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cartTotal: 1000,
+          destinationPincode: '999999',
+        }),
+      });
+      assert.strictEqual(resUnserviceable.status, 200);
+      const dataUnserviceable = await resUnserviceable.json();
+      assert.strictEqual(dataUnserviceable.success, true);
+      assert.strictEqual(dataUnserviceable.isDeliverable, false);
+      assert.strictEqual(dataUnserviceable.serviceable, false);
+    });
+
+    await test('Point 30: POST /api/admin/shipping/test-quote executes admin shipping engine simulation', async () => {
+      const res = await fetch(`${baseUrl}/admin/shipping/test-quote`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          cartTotal: 1400,
+          destinationPincode: '110001',
+          totalWeightGrams: 900,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.simulation);
+      assert.strictEqual(data.simulation.isDeliverable, true);
+      assert.ok(data.simulation.quotes.length >= 2);
+    });
+
+    await test('Point 30: Role Security: Customer and unauthenticated requests to admin tax & shipping endpoints are rejected (401 / 403)', async () => {
+      // Unauthenticated
+      const resUnauthTax = await fetch(`${baseUrl}/admin/tax/settings`);
+      assert.strictEqual(resUnauthTax.status, 401);
+
+      const resUnauthShip = await fetch(`${baseUrl}/admin/shipping/settings`);
+      assert.strictEqual(resUnauthShip.status, 401);
+
+      // Customer
+      const resCustTax = await fetch(`${baseUrl}/admin/tax/settings`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustTax.status, 403);
+
+      const resCustShip = await fetch(`${baseUrl}/admin/shipping/settings`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustShip.status, 403);
+
+      // Rider
+      const resRiderShip = await fetch(`${baseUrl}/admin/shipping/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ freeShippingThreshold: 500 }),
+      });
+      assert.strictEqual(resRiderShip.status, 403);
     });
 
   } finally {

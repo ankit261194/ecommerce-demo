@@ -157,9 +157,10 @@ exports.getVendorEscrowSummary = async (req, res, next) => {
  */
 exports.releaseMaturedEscrowFunds = async (req, res, next) => {
   try {
+    const body = req.body || {};
     let vendor = null;
-    if (req.user.role === 'superadmin' && req.body.vendorId) {
-      vendor = await VendorProfile.findById(req.body.vendorId);
+    if (req.user.role === 'superadmin' && body.vendorId) {
+      vendor = await VendorProfile.findById(body.vendorId);
     } else {
       vendor = await VendorProfile.findOne({ user: req.user._id });
     }
@@ -171,7 +172,7 @@ exports.releaseMaturedEscrowFunds = async (req, res, next) => {
       });
     }
 
-    const { subOrderId, subOrderIds } = req.body;
+    const { subOrderId, subOrderIds } = body;
     const now = new Date();
 
     // Case 1: Targeted single SubOrder release
@@ -435,7 +436,7 @@ exports.getAdminEscrowRadar = async (req, res, next) => {
  */
 exports.adminBatchReleaseEscrow = async (req, res, next) => {
   try {
-    const { vendorIds, subOrderIds } = req.body;
+    const { vendorIds, subOrderIds } = req.body || {};
     const now = new Date();
 
     const query = {
@@ -529,7 +530,7 @@ exports.adminBatchReleaseEscrow = async (req, res, next) => {
 exports.disputeEscrowHold = async (req, res, next) => {
   try {
     const { subOrderId } = req.params;
-    const { reason, notes } = req.body;
+    const { reason, notes } = req.body || {};
 
     const subOrder = await SubOrder.findById(subOrderId).populate('vendor');
     if (!subOrder) {
@@ -539,10 +540,17 @@ exports.disputeEscrowHold = async (req, res, next) => {
       });
     }
 
-    if (subOrder.escrowDetails?.escrowStatus === 'RELEASED_TO_WALLET') {
+    if (['RELEASED_TO_WALLET', 'REFUNDED_TO_CUSTOMER'].includes(subOrder.escrowDetails?.escrowStatus)) {
       return res.status(400).json({
         success: false,
-        message: 'Cannot dispute an escrow hold that has already been released to vendor wallet.',
+        message: `Cannot dispute an escrow hold that has already been settled (${subOrder.escrowDetails.escrowStatus}).`,
+      });
+    }
+
+    if (subOrder.status === 'cancelled') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot dispute an escrow hold for a cancelled sub-order.',
       });
     }
 
@@ -592,7 +600,7 @@ exports.disputeEscrowHold = async (req, res, next) => {
 exports.resolveEscrowDispute = async (req, res, next) => {
   try {
     const { subOrderId } = req.params;
-    const { decision, notes } = req.body;
+    const { decision, notes } = req.body || {};
 
     if (!['RELEASE_TO_VENDOR', 'REFUND_TO_CUSTOMER'].includes(decision)) {
       return res.status(400).json({
@@ -638,10 +646,18 @@ exports.resolveEscrowDispute = async (req, res, next) => {
         vendor.escrowBalance = Math.max(0, (vendor.escrowBalance || 0) - vendorEarning);
         await vendor.save();
 
-        const vendorUser = vendor.user?._id ? vendor.user : await User.findById(vendor.user);
-        if (vendorUser) {
+        const vendorUserId = vendor.user?._id || vendor.user;
+        if (vendorUserId) {
+          try {
+            await User.findByIdAndUpdate(vendorUserId, {
+              $inc: { walletBalance: vendorEarning },
+            });
+          } catch (e) {
+            // User update best effort
+          }
+
           await WalletTransaction.create({
-            user: vendorUser._id || vendor.user,
+            user: vendorUserId,
             type: 'CREDIT',
             currency: 'INR',
             amount: vendorEarning,
@@ -694,6 +710,16 @@ exports.resolveEscrowDispute = async (req, res, next) => {
       if (vendor) {
         vendor.escrowBalance = Math.max(0, (vendor.escrowBalance || 0) - vendorEarning);
         await vendor.save();
+
+        await Ledger.create({
+          vendor: vendor._id,
+          subOrder: subOrder._id,
+          type: 'REFUND',
+          amount: vendorEarning,
+          description: `Dispute resolved in customer's favor: ₹${vendorEarning} refunded from escrow hold`,
+          balanceAfter: vendor.walletBalance || 0,
+          status: 'COMPLETED',
+        });
       }
 
       // Credit customer wallet with refund
@@ -783,7 +809,7 @@ exports.updateEscrowConfig = async (req, res, next) => {
       autoReleaseEnabled,
       disputeFreezeWindowDays,
       notes,
-    } = req.body;
+    } = req.body || {};
 
     const previousConfig = config.toObject();
 

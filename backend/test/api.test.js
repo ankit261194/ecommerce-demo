@@ -21260,7 +21260,8 @@ const runTests = async () => {
       for (let i = 0; i < 20; i++) {
         jobDoc = await JobQueue.findOne({ jobId: point22FailedJobId });
         if (jobDoc && jobDoc.attemptsMade >= 1) break;
-        await new Promise(r => setTimeout(r, 50));
+        await jobQueueService.processNextJobs();
+        await new Promise(r => setTimeout(r, 60));
       }
 
       assert.ok(jobDoc, 'Job document must exist');
@@ -31203,6 +31204,145 @@ const runTests = async () => {
         body: JSON.stringify({ defaultHoldDays: 1 }),
       });
       assert.strictEqual(resCustConfig.status, 403);
+    });
+
+    // Test 9: Webhook retry / duplicate delivery callback does NOT reset RELEASED_TO_WALLET or DISPUTED_HOLD
+    await test('Point 48: Test 9 - Webhook retry / duplicate delivery callback preserves terminal and disputed states', async () => {
+      const { onSubOrderDelivered } = require('../src/services/escrowService');
+
+      // 1. SubOrder 1 was already released to wallet in Test 3
+      const releasedSubOrder = await SubOrder.findById(p48SubOrder1._id);
+      assert.strictEqual(releasedSubOrder.escrowDetails.escrowStatus, 'RELEASED_TO_WALLET');
+
+      // Simulate duplicate courier webhook delivering again
+      const retryResult = await onSubOrderDelivered(p48SubOrder1._id, new Date());
+      assert.strictEqual(retryResult.success, true);
+      assert.strictEqual(retryResult.alreadyProcessed, true);
+      assert.strictEqual(retryResult.escrowStatus, 'RELEASED_TO_WALLET');
+
+      // Verify suborder document in DB was not overwritten
+      const checkSubOrder = await SubOrder.findById(p48SubOrder1._id);
+      assert.strictEqual(checkSubOrder.escrowDetails.escrowStatus, 'RELEASED_TO_WALLET');
+
+      // Verify cancelled suborder cannot be delivered into escrow
+      const cancelledSubOrder = await SubOrder.create({
+        parentOrder: p48Order1._id,
+        vendor: p48VendorProfile1._id,
+        customer: p48CustomerUser._id,
+        items: [{ product: p48Product1._id, quantity: 1, price: 500, totalPrice: 500 }],
+        subTotal: 500,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 50,
+        vendorEarning: 450,
+        status: 'cancelled',
+      });
+      const cancelResult = await onSubOrderDelivered(cancelledSubOrder._id, new Date());
+      assert.strictEqual(cancelResult.success, false);
+      assert.ok(cancelResult.message.includes('cancelled'));
+    });
+
+    // Test 10: Disputing an already refunded or cancelled sub-order is rejected with 400 Bad Request
+    await test('Point 48: Test 10 - Disputing an already settled or cancelled sub-order is rejected (400 Bad Request)', async () => {
+      // 1. SubOrder 1 is already released to wallet -> 400
+      const resDispReleased = await fetch(`${baseUrl}/admin/escrow/${p48SubOrder1._id}/dispute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48AdminToken}`,
+        },
+        body: JSON.stringify({ reason: 'Attempting freeze on released order' }),
+      });
+      assert.strictEqual(resDispReleased.status, 400);
+      const dataDispReleased = await resDispReleased.json();
+      assert.strictEqual(dataDispReleased.success, false);
+
+      // 2. Cancelled suborder -> 400
+      const cancelledSubOrder = await SubOrder.findOne({ status: 'cancelled', parentOrder: p48Order1._id });
+      assert.ok(cancelledSubOrder);
+      const resDispCancelled = await fetch(`${baseUrl}/admin/escrow/${cancelledSubOrder._id}/dispute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48AdminToken}`,
+        },
+        body: JSON.stringify({ reason: 'Attempting freeze on cancelled order' }),
+      });
+      assert.strictEqual(resDispCancelled.status, 400);
+    });
+
+    // Test 11: Dispute resolution to customer refund generates double-entry Ledger entry
+    await test('Point 48: Test 11 - Dispute resolution to customer refund creates WalletTransaction and Ledger entries', async () => {
+      // Create a delivered order in dispute hold
+      const dispSubOrder = await SubOrder.create({
+        parentOrder: p48Order1._id,
+        vendor: p48VendorProfile1._id,
+        customer: p48CustomerUser._id,
+        items: [{ product: p48Product1._id, quantity: 1, price: 800, totalPrice: 800 }],
+        subTotal: 800,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 80,
+        vendorEarning: 720,
+        status: 'delivered',
+        deliveredAt: new Date(),
+        escrowDetails: {
+          escrowStatus: 'DISPUTED_HOLD',
+          isDisputed: true,
+          disputeReason: 'Customer claims empty box',
+          disputedAt: new Date(),
+          disputedBy: p48AdminUser._id,
+          escrowAmount: 720,
+          platformCommissionHeld: 80,
+          isEscrowAccounted: true,
+        },
+      });
+
+      // Freeze vendor escrow balance
+      p48VendorProfile1.escrowBalance = (p48VendorProfile1.escrowBalance || 0) + 720;
+      await p48VendorProfile1.save();
+
+      const custInitialWallet = (await User.findById(p48CustomerUser._id)).walletBalance || 0;
+
+      // Super Admin resolves dispute in customer's favor (REFUND_TO_CUSTOMER)
+      const resResolve = await fetch(`${baseUrl}/admin/escrow/${dispSubOrder._id}/resolve-dispute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p48AdminToken}`,
+        },
+        body: JSON.stringify({
+          decision: 'REFUND_TO_CUSTOMER',
+          notes: 'Customer CCTV unboxing video verified fraud. 100% refund approved.',
+        }),
+      });
+      assert.strictEqual(resResolve.status, 200);
+
+      // Verify Customer Wallet balance updated
+      const custUpdated = await User.findById(p48CustomerUser._id);
+      assert.strictEqual(custUpdated.walletBalance, custInitialWallet + 800);
+
+      // Verify WalletTransaction created
+      const walletTx = await WalletTransaction.findOne({
+        user: p48CustomerUser._id,
+        category: 'ORDER_REFUND',
+        order: p48Order1._id,
+      }).sort({ createdAt: -1 });
+      assert.ok(walletTx, 'Customer WalletTransaction must be generated');
+      assert.strictEqual(walletTx.amount, 800);
+
+      // Verify Ledger REFUND entry created for vendor
+      const ledgerEntry = await Ledger.findOne({
+        vendor: p48VendorProfile1._id,
+        subOrder: dispSubOrder._id,
+        type: 'REFUND',
+      });
+      assert.ok(ledgerEntry, 'Double-entry Ledger record of type REFUND must be created');
+      assert.strictEqual(ledgerEntry.amount, 720);
+
+      // Verify SubOrder escrow status updated
+      const subUpdated = await SubOrder.findById(dispSubOrder._id);
+      assert.strictEqual(subUpdated.escrowDetails.escrowStatus, 'REFUNDED_TO_CUSTOMER');
+      assert.strictEqual(subUpdated.escrowDetails.isDisputed, false);
+      assert.strictEqual(subUpdated.escrowDetails.disputeResolution, 'REFUND_TO_CUSTOMER');
     });
 
   } finally {

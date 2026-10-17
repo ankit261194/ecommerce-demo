@@ -46,6 +46,20 @@ exports.onSubOrderDelivered = async (subOrderId, deliveredAt = new Date()) => {
       return { success: false, message: `SubOrder ${subOrderId} not found` };
     }
 
+    if (subOrder.status === 'cancelled') {
+      return { success: false, message: 'Cannot initialize escrow hold for a cancelled sub-order.' };
+    }
+
+    // Guard against terminal or frozen states (webhook retries / duplicate callbacks)
+    if (['RELEASED_TO_WALLET', 'REFUNDED_TO_CUSTOMER', 'DISPUTED_HOLD'].includes(subOrder.escrowDetails?.escrowStatus)) {
+      return {
+        success: true,
+        alreadyProcessed: true,
+        escrowStatus: subOrder.escrowDetails.escrowStatus,
+        subOrder,
+      };
+    }
+
     const config = await exports.getOrCreateEscrowConfig();
     let vendor = await VendorProfile.findById(subOrder.vendor);
     if (!vendor) {
@@ -162,12 +176,20 @@ exports.executeSubOrderEscrowRelease = async (subOrder, vendor, userRef, release
   vendor.escrowBalance = Math.max(0, (vendor.escrowBalance || 0) - releaseAmount);
   await vendor.save();
 
-  // 1. Create WalletTransaction
-  const vendorUser = vendor.user?._id ? vendor.user : await User.findById(vendor.user);
+  // 1. Create WalletTransaction & sync vendor user wallet
+  const vendorUserId = vendor.user?._id || vendor.user;
   let walletTx = null;
-  if (vendorUser) {
+  if (vendorUserId) {
+    try {
+      await User.findByIdAndUpdate(vendorUserId, {
+        $inc: { walletBalance: releaseAmount },
+      });
+    } catch (e) {
+      // User update best effort
+    }
+
     walletTx = await WalletTransaction.create({
-      user: vendorUser._id || vendor.user,
+      user: vendorUserId,
       type: 'CREDIT',
       currency: 'INR',
       amount: releaseAmount,

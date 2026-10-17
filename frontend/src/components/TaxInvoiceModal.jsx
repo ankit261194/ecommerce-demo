@@ -37,7 +37,9 @@ export default function TaxInvoiceModal({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${apiUrl}/orders/${orderId}/invoice`);
+      const token = localStorage.getItem('token') || localStorage.getItem('auramarket_token') || '';
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch(`${apiUrl}/orders/${orderId}/invoice`, { headers });
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.message || 'Failed to fetch tax invoice.');
@@ -51,7 +53,12 @@ export default function TaxInvoiceModal({
   };
 
   const handleDownloadPdf = () => {
-    const downloadUrl = invoiceData?.pdfDownloadUrl || `${apiUrl}/orders/${orderId}/invoice/pdf?download=true`;
+    const token = localStorage.getItem('token') || localStorage.getItem('auramarket_token') || '';
+    const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+    let downloadUrl = invoiceData?.pdfDownloadUrl || `${apiUrl}/orders/${orderId}/invoice/pdf?download=true`;
+    if (token && !downloadUrl.includes('token=')) {
+      downloadUrl += `${downloadUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+    }
     window.open(downloadUrl, '_blank');
   };
 

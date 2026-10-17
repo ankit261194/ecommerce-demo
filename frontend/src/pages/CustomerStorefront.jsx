@@ -47,6 +47,8 @@ import {
   Rotate3d,
   LifeBuoy,
   Download,
+  Package,
+  RefreshCw,
 } from 'lucide-react';
 import SupportHelpdeskModal from '../components/SupportHelpdeskModal';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -114,6 +116,10 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [trackedOrderId, setTrackedOrderId] = useState(null);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [invoiceOrderId, setInvoiceOrderId] = useState(null);
+  // Point #20: Order History & 1-Click GST Invoice Download State
+  const [isOrderHistoryOpen, setIsOrderHistoryOpen] = useState(false);
+  const [customerOrderHistory, setCustomerOrderHistory] = useState([]);
+  const [loadingOrderHistory, setLoadingOrderHistory] = useState(false);
   const [selectedVendorForModal, setSelectedVendorForModal] = useState(null); // Point #58: Public Storefront Showcase
   const [isWhatsAppBotOpen, setIsWhatsAppBotOpen] = useState(false); // Point #71: WhatsApp Order Bot
   const [whatsAppBotOrder, setWhatsAppBotOrder] = useState(null);
@@ -474,6 +480,20 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     }
   };
 
+  const fetchOrderHistory = async () => {
+    setLoadingOrderHistory(true);
+    try {
+      const res = await api.get('/orders/my');
+      if (res.data?.success) {
+        setCustomerOrderHistory(res.data.data || []);
+      }
+    } catch (err) {
+      console.warn('Could not fetch online order history:', err?.message);
+    } finally {
+      setLoadingOrderHistory(false);
+    }
+  };
+
   useEffect(() => {
     const handleOpenWishlist = () => {
       setIsWishlistDrawerOpen(true);
@@ -506,12 +526,18 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       setIsOrderTrackerOpen(true);
     };
 
+    const handleOpenOrderHistory = () => {
+      fetchOrderHistory();
+      setIsOrderHistoryOpen(true);
+    };
+
     const handleOpenVoiceAssistant = () => {
       setIsVoiceAssistantOpen(true);
     };
 
     window.addEventListener('auramarket_open_wishlist', handleOpenWishlist);
     window.addEventListener('auramarket_open_order_tracker', handleOpenOrderTracker);
+    window.addEventListener('auramarket_open_order_history', handleOpenOrderHistory);
     window.addEventListener('auramarket_open_voice_assistant', handleOpenVoiceAssistant);
     window.addEventListener('auramarket_select_category', handleSelectCategory);
     window.addEventListener('auramarket_select_brand', handleSelectBrand);
@@ -520,6 +546,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     return () => {
       window.removeEventListener('auramarket_open_wishlist', handleOpenWishlist);
       window.removeEventListener('auramarket_open_order_tracker', handleOpenOrderTracker);
+      window.removeEventListener('auramarket_open_order_history', handleOpenOrderHistory);
       window.removeEventListener('auramarket_open_voice_assistant', handleOpenVoiceAssistant);
       window.removeEventListener('auramarket_select_category', handleSelectCategory);
       window.removeEventListener('auramarket_select_brand', handleSelectBrand);
@@ -3500,7 +3527,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             {/* Point #20: 1-Click Download Official GST Tax Invoice PDF */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <a
-                href={`/api/orders/${activeOrderConfirmation.orderId}/invoice/pdf?download=true`}
+                href={`/api/orders/${activeOrderConfirmation.orderId}/invoice/pdf?download=true${(localStorage.getItem('auramarket_token') || localStorage.getItem('token')) ? `&token=${encodeURIComponent(localStorage.getItem('auramarket_token') || localStorage.getItem('token'))}` : ''}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-95 shadow-sm"
@@ -3755,6 +3782,139 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         orderId={invoiceOrderId}
         apiUrl="/api"
       />
+
+      {/* Point #20: Order History & 1-Click GST Invoices Drawer */}
+      <SlideOverDrawer
+        isOpen={isOrderHistoryOpen}
+        onClose={() => setIsOrderHistoryOpen(false)}
+        title="My Orders & Tax Invoices"
+        width="max-w-xl"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <p className="text-xs text-slate-500">
+                View order status, fulfillment tracking, and 1-click official GST Tax Invoices.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={fetchOrderHistory}
+              disabled={loadingOrderHistory}
+              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition active:scale-95 disabled:opacity-50"
+              title="Refresh Orders"
+            >
+              <RefreshCw className={`w-4 h-4 ${loadingOrderHistory ? 'animate-spin text-indigo-600' : ''}`} />
+            </button>
+          </div>
+
+          {loadingOrderHistory ? (
+            <div className="py-16 text-center text-slate-500 space-y-2">
+              <RefreshCw className="w-8 h-8 animate-spin mx-auto text-indigo-600" />
+              <p className="text-sm font-semibold">Loading orders & tax invoices...</p>
+            </div>
+          ) : customerOrderHistory.length === 0 ? (
+            <div className="py-16 text-center text-slate-500 space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                <Package className="w-7 h-7" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-700">No Orders Found</p>
+                <p className="text-xs text-slate-400 mt-1">Start shopping or track an order using your Order ID.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOrderHistoryOpen(false);
+                  setIsOrderTrackerOpen(true);
+                }}
+                className="mt-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition"
+              >
+                Track Guest Order
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3.5">
+              {customerOrderHistory.map((order) => {
+                const oNum = order.orderNumber || (order._id ? order._id.toString() : 'ORD-UNKNOWN');
+                const token = localStorage.getItem('auramarket_token') || localStorage.getItem('token') || '';
+                const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+                const downloadUrl = `/api/orders/${oNum}/invoice/pdf?download=true${tokenParam}`;
+                const itemsCount = (order.items || order.subOrders?.flatMap(s => s.items) || []).length;
+                const orderDate = order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric'
+                }) : 'Recently';
+
+                return (
+                  <div
+                    key={order._id || oNum}
+                    className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-indigo-200 hover:shadow-md transition-all space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-xs text-slate-900">#{oNum}</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                            {order.orderStatus || order.status || 'Confirmed'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Placed on {orderDate} • {itemsCount} items</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs font-bold text-slate-400 block">Total</span>
+                        <span className="text-sm font-black text-slate-900 font-mono">
+                          {formatPrice(order.totalAmount || 0)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 grid grid-cols-3 gap-2">
+                      <a
+                        href={downloadUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="py-2 px-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-[11px] flex items-center justify-center gap-1 shadow-sm transition active:scale-95"
+                        title="Direct 1-Click Download Official GST Tax Invoice PDF with QR code & digital cryptoseal"
+                      >
+                        <Download className="w-3 h-3" />
+                        <span>GST PDF</span>
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInvoiceOrderId(oNum);
+                          setIsInvoiceModalOpen(true);
+                        }}
+                        className="py-2 px-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[11px] border border-indigo-200 flex items-center justify-center gap-1 transition active:scale-95 shadow-sm"
+                        title="Preview GST Compliant Tax Invoice Sheet"
+                      >
+                        <Printer className="w-3 h-3 text-indigo-600" />
+                        <span>View Invoice</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTrackedOrderId(oNum);
+                          setIsOrderTrackerOpen(true);
+                        }}
+                        className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] border border-slate-200 flex items-center justify-center gap-1 transition active:scale-95 shadow-sm"
+                        title="Live Order Tracking"
+                      >
+                        <Truck className="w-3 h-3 text-slate-600" />
+                        <span>Track</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </SlideOverDrawer>
 
       {/* Point #31: Customer In-App Wallet & Reward Coins Drawer */}
       <WalletDrawer

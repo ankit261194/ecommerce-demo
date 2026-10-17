@@ -387,7 +387,9 @@ export default function LiveOrderTrackerModal({
                     type="button"
                     onClick={() => {
                       const oNum = orderData.orderNumber || orderData.orderId || orderData.rawOrderId;
-                      window.open(`${apiUrl}/orders/${oNum}/invoice/pdf?download=true`, '_blank');
+                      const token = localStorage.getItem('token') || localStorage.getItem('auramarket_token') || '';
+                      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+                      window.open(`${apiUrl}/orders/${oNum}/invoice/pdf?download=true${tokenParam}`, '_blank');
                     }}
                     className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold shadow-md shadow-emerald-500/20 flex items-center gap-1.5 transition active:scale-95"
                     title="Download Official GST Tax Invoice PDF with QR code & digital cryptoseal"
@@ -877,7 +879,9 @@ export default function LiveOrderTrackerModal({
                 onClick={() => {
                   const oNum = orderData.orderNumber || orderData.orderId || orderData.rawOrderId;
                   if (oNum) {
-                    window.open(`${apiUrl}/orders/${oNum}/invoice/pdf?download=true`, '_blank');
+                    const token = localStorage.getItem('token') || localStorage.getItem('auramarket_token') || '';
+                    const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+                    window.open(`${apiUrl}/orders/${oNum}/invoice/pdf?download=true${tokenParam}`, '_blank');
                   }
                 }}
                 className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-sm active:scale-95 flex items-center gap-1.5"

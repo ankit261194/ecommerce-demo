@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Search, MapPin, Sparkles, ChevronDown, Heart, X, Check, Truck, Wallet, Coins, Bell, LifeBuoy } from 'lucide-react';
+import { ShoppingBag, Search, MapPin, Sparkles, ChevronDown, Heart, X, Check, Truck, Wallet, Coins, Bell, LifeBuoy, FileText } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useLocalization } from '../context/LocalizationContext';
@@ -226,6 +226,17 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
                 <Truck className="w-4 h-4" />
               </button>
 
+              {/* Point #20: Orders & Invoices Link Mobile */}
+              <button
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('auramarket_open_order_history'));
+                }}
+                className="relative p-2 rounded-lg bg-white/10 text-teal-300 hover:text-white transition-colors"
+                title="My Orders & GST Invoices"
+              >
+                <FileText className="w-4 h-4" />
+              </button>
+
               {/* Point #19: Helpdesk Mobile */}
               <button
                 onClick={() => {
@@ -319,6 +330,18 @@ export const Navbar = ({ searchQuery, setSearchQuery, uiConfig, onCategorySelect
             >
               <Truck className="w-4 h-4 text-emerald-400" />
               <span className="text-xs font-bold hidden lg:inline">Track Order</span>
+            </button>
+
+            {/* Point #20: Orders & Invoices Desktop */}
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('auramarket_open_order_history'));
+              }}
+              className="relative p-2 rounded-xl bg-white/10 hover:bg-white/15 text-white transition-all flex items-center gap-1.5"
+              title="My Orders & Tax Invoices"
+            >
+              <FileText className="w-4 h-4 text-teal-400" />
+              <span className="text-xs font-bold hidden lg:inline">Orders & Invoices</span>
             </button>
 
             {/* Point #2: Desktop Notification Center Bell */}

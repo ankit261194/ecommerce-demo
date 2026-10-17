@@ -145,16 +145,20 @@ async function getInvoiceData(order, customTaxCfg = null) {
   const buyerState = order.shippingAddress?.state || 'Delhi';
   const buyerStateCode = getStateCode(buyerState, '07');
 
+  const buyerStreet = order.shippingAddress?.street || 'Customer Address';
+  const buyerCity = order.shippingAddress?.city || 'Delhi';
+  const buyerPin = order.shippingAddress?.pincode || '110001';
+
   const buyer = {
     name: order.shippingAddress?.recipientName || order.shippingAddress?.fullName || order.customer?.name || 'Valued Customer',
     phone: order.shippingAddress?.phone || order.customer?.phone || 'N/A',
     email: order.customer?.email || 'customer@auramarket.com',
-    street: order.shippingAddress?.street || 'Customer Address',
-    city: order.shippingAddress?.city || 'Delhi',
+    street: buyerStreet,
+    city: buyerCity,
     state: buyerState,
     stateCode: buyerStateCode,
-    pincode: order.shippingAddress?.pincode || '110001',
-    address: `${order.shippingAddress?.street || ''}, ${order.shippingAddress?.city || ''}, ${buyerState} - ${order.shippingAddress?.pincode || ''}`.replace(/^, /, ''),
+    pincode: buyerPin,
+    address: `${buyerStreet}, ${buyerCity}, ${buyerState} - ${buyerPin}`,
   };
 
   // Inter-State vs Intra-State logic:
@@ -277,6 +281,8 @@ async function getInvoiceData(order, customTaxCfg = null) {
     gstin: seller.gstin,
     cin: seller.cin,
     hash: digitalHash,
+    cryptographicHash: digitalHash,
+    algorithm: 'SHA-256 / Statutory GST Crypto-Seal',
     shortHash,
     certifiedAt: new Date().toISOString(),
     verified: true,
@@ -286,8 +292,8 @@ async function getInvoiceData(order, customTaxCfg = null) {
     subText: 'Authorized Signatory • Verified by Government GST Portal Guidelines',
   };
 
-  // Dynamic GST QR Code String conforming to GST e-Invoice guidelines
-  const qrString = `GSTIN:${seller.gstin}|INV:${invoiceNumber}|DATE:${invoiceDate}|TOTAL:${grandTotal}|TAX:${totalTax}|CGST:${cgstTotal}|SGST:${sgstTotal}|IGST:${igstTotal}|BUYER:${buyer.name.slice(0, 20)}|HASH:${shortHash}`;
+  // Dynamic GST QR Code String conforming to GST e-Invoice guidelines (Section 31 CGST Act)
+  const qrString = `GSTIN:${seller.gstin}|INV:${invoiceNumber}|DATE:${invoiceDate}|TOTAL:${grandTotal}|TAX:${totalTax}|CGST:${cgstTotal}|SGST:${sgstTotal}|IGST:${igstTotal}|BUYER:${buyer.name.slice(0, 20)}|HASH:${digitalHash}`;
 
   const [qrCodeDataUrl, qrCodeBuffer] = await Promise.all([
     QRCode.toDataURL(qrString, { width: 140, margin: 1, errorCorrectionLevel: 'M' }),
@@ -311,10 +317,12 @@ async function getInvoiceData(order, customTaxCfg = null) {
     amountInWords,
   };
 
+  const safeOrderNumber = order.orderNumber || (order._id ? order._id.toString() : (invoiceNumber.replace('INV-', '') || 'ORD-GENERIC'));
+
   return {
     invoiceNumber,
     invoiceDate,
-    orderNumber: order.orderNumber || order._id.toString(),
+    orderNumber: safeOrderNumber,
     placeOfSupply,
     reverseCharge,
     seller,
@@ -368,7 +376,7 @@ async function generateInvoicePdf(order, res = null, options = {}) {
     qrCodeDataUrl,
   } = data;
 
-  if (res) {
+  if (res && !res.headersSent) {
     res.setHeader('Content-Type', 'application/pdf');
     const disposition = download ? 'attachment' : 'inline';
     const filenameNumber = order.orderNumber || (order._id ? order._id.toString().slice(-8).toUpperCase() : invoiceNumber);
@@ -380,6 +388,7 @@ async function generateInvoicePdf(order, res = null, options = {}) {
       const doc = new PDFDocument({
         size: 'A4',
         margin: 36, // 0.5 inch margins
+        bufferPages: true,
         info: {
           Title: `GST Tax Invoice - ${invoiceNumber}`,
           Author: seller.companyName,
@@ -414,6 +423,53 @@ async function generateInvoicePdf(order, res = null, options = {}) {
       const pageWidth = 595.28;
       const leftMargin = 36;
       const contentWidth = pageWidth - (leftMargin * 2); // 523.28 pt
+      const bottomMargin = 36;
+      const pageHeight = 841.89;
+      const maxUsableY = pageHeight - bottomMargin; // 805.89 pt
+      const summaryHeight = 220; // Space needed for summary, totals, QR, seal, and legal note
+
+      // Table Column Definitions
+      const col = {
+        sno: { x: leftMargin, w: 22 },
+        desc: { x: leftMargin + 22, w: 165 },
+        hsn: { x: leftMargin + 187, w: 48 },
+        qty: { x: leftMargin + 235, w: 24 },
+        unitPrice: { x: leftMargin + 259, w: 50 },
+        discount: { x: leftMargin + 309, w: 42 },
+        taxable: { x: leftMargin + 351, w: 56 },
+        tax: { x: leftMargin + 407, w: 58 },
+        total: { x: leftMargin + 465, w: 58 },
+      };
+
+      const tableHeaderHeight = 16;
+      function drawTableHeader(y) {
+        doc.rect(leftMargin, y, contentWidth, tableHeaderHeight).fill('#0F2444');
+        doc.font('Helvetica-Bold').fontSize(7).fillColor('#FFFFFF')
+          .text('S.No', col.sno.x + 2, y + 4.5)
+          .text('Description of Goods', col.desc.x + 2, y + 4.5)
+          .text('HSN Code', col.hsn.x + 2, y + 4.5)
+          .text('Qty', col.qty.x, y + 4.5, { width: col.qty.w, align: 'center' })
+          .text('Unit Price', col.unitPrice.x, y + 4.5, { width: col.unitPrice.w - 3, align: 'right' })
+          .text('Disc.', col.discount.x, y + 4.5, { width: col.discount.w - 3, align: 'right' })
+          .text('Taxable', col.taxable.x, y + 4.5, { width: col.taxable.w - 3, align: 'right' })
+          .text(gstSummary.isInterState ? 'IGST (18%)' : 'GST (18%)', col.tax.x, y + 4.5, { width: col.tax.w - 3, align: 'right' })
+          .text('Total', col.total.x, y + 4.5, { width: col.total.w - 3, align: 'right' });
+      }
+
+      function renderContinuationHeader() {
+        doc.addPage();
+        const contTopY = 32;
+        doc.rect(leftMargin, contTopY, contentWidth, 2).fill('#0F2444');
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#0F2444')
+          .text('AuraMarket India Technologies Pvt. Ltd. — TAX INVOICE (Continuation Sheet)', leftMargin, contTopY + 6);
+        doc.font('Helvetica').fontSize(7.5).fillColor('#475569')
+          .text(`Invoice: ${invoiceNumber}  |  Order #${orderNumber}`, leftMargin + 250, contTopY + 6, { width: contentWidth - 250, align: 'right' });
+        doc.rect(leftMargin, contTopY + 18, contentWidth, 0.5).fill('#CBD5E1');
+
+        const thY = contTopY + 24;
+        drawTableHeader(thY);
+        return thY + tableHeaderHeight;
+      }
 
       // ==========================================
       // 1. TOP HEADER BRAND & TAX INVOICE BADGE
@@ -520,38 +576,20 @@ async function generateInvoicePdf(order, res = null, options = {}) {
       // 4. ITEMIZED GST TABLE
       // ==========================================
       const tableTopY = partyY + boxHeight + 8;
-      const col = {
-        sno: { x: leftMargin, w: 22 },
-        desc: { x: leftMargin + 22, w: 165 },
-        hsn: { x: leftMargin + 187, w: 48 },
-        qty: { x: leftMargin + 235, w: 24 },
-        unitPrice: { x: leftMargin + 259, w: 50 },
-        discount: { x: leftMargin + 309, w: 42 },
-        taxable: { x: leftMargin + 351, w: 56 },
-        tax: { x: leftMargin + 407, w: 58 },
-        total: { x: leftMargin + 465, w: 58 },
-      };
+      drawTableHeader(tableTopY);
 
-      // Table Header Row
-      const tableHeaderHeight = 16;
-      doc.rect(leftMargin, tableTopY, contentWidth, tableHeaderHeight).fill('#0F2444');
-
-      doc.font('Helvetica-Bold').fontSize(7).fillColor('#FFFFFF')
-        .text('S.No', col.sno.x + 2, tableTopY + 4.5)
-        .text('Description of Goods', col.desc.x + 2, tableTopY + 4.5)
-        .text('HSN Code', col.hsn.x + 2, tableTopY + 4.5)
-        .text('Qty', col.qty.x, tableTopY + 4.5, { width: col.qty.w, align: 'center' })
-        .text('Unit Price', col.unitPrice.x, tableTopY + 4.5, { width: col.unitPrice.w - 3, align: 'right' })
-        .text('Disc.', col.discount.x, tableTopY + 4.5, { width: col.discount.w - 3, align: 'right' })
-        .text('Taxable', col.taxable.x, tableTopY + 4.5, { width: col.taxable.w - 3, align: 'right' })
-        .text(gstSummary.isInterState ? 'IGST (18%)' : 'GST (18%)', col.tax.x, tableTopY + 4.5, { width: col.tax.w - 3, align: 'right' })
-        .text('Total', col.total.x, tableTopY + 4.5, { width: col.total.w - 3, align: 'right' });
-
-      // Rows
+      // Rows with Pagination Control
       let rowY = tableTopY + tableHeaderHeight;
       const rowHeight = 18;
 
       lineItems.forEach((item, i) => {
+        const isLastItem = (i === lineItems.length - 1);
+        const neededSpace = isLastItem ? (rowHeight + summaryHeight) : (rowHeight + 30);
+
+        if (rowY + neededSpace > maxUsableY) {
+          rowY = renderContinuationHeader();
+        }
+
         const bg = (i % 2 === 0) ? '#FFFFFF' : '#F8FAFC';
         doc.rect(leftMargin, rowY, contentWidth, rowHeight).fill(bg);
         doc.rect(leftMargin, rowY, contentWidth, rowHeight).stroke('#E2E8F0');
@@ -576,7 +614,19 @@ async function generateInvoicePdf(order, res = null, options = {}) {
       // ==========================================
       // 5. TOTALS & HSN SUMMARY SECTION
       // ==========================================
-      const summaryTopY = rowY + 6;
+      let summaryTopY = rowY + 6;
+      if (summaryTopY + summaryHeight > maxUsableY) {
+        doc.addPage();
+        const contTopY = 32;
+        doc.rect(leftMargin, contTopY, contentWidth, 2).fill('#0F2444');
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#0F2444')
+          .text('AuraMarket India Technologies Pvt. Ltd. — TAX INVOICE (Summary & Cryptoseal)', leftMargin, contTopY + 6);
+        doc.font('Helvetica').fontSize(7.5).fillColor('#475569')
+          .text(`Invoice: ${invoiceNumber}  |  Order #${orderNumber}`, leftMargin + 250, contTopY + 6, { width: contentWidth - 250, align: 'right' });
+        doc.rect(leftMargin, contTopY + 18, contentWidth, 0.5).fill('#CBD5E1');
+        summaryTopY = contTopY + 28;
+      }
+
       const leftSummaryWidth = 240;
       const totalsWidth = 230;
       const totalsX = leftMargin + contentWidth - totalsWidth;
@@ -629,7 +679,7 @@ async function generateInvoicePdf(order, res = null, options = {}) {
           doc.rect(totalsX, totY, totalsWidth, totLineH).stroke('#E2E8F0');
           doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica').fontSize(7).fillColor(isBold ? '#0F2444' : '#475569')
             .text(label, totalsX + 6, totY + 3)
-            .text(value, totalsX + 110, totY + 3, { width: totalsWidth - 116, align: 'right' });
+            .text(value, totalsX + 110, totY + 3.5, { width: totalsWidth - 116, align: 'right' });
           totY += totLineH;
         }
       }
@@ -703,7 +753,7 @@ async function generateInvoicePdf(order, res = null, options = {}) {
         .text(digitalSeal.actNotice, sealX + 8, bottomSectionY + 86);
 
       // ==========================================
-      // 7. LEGAL FOOTER
+      // 7. LEGAL FOOTER ON SUMMARY PAGE
       // ==========================================
       const footerY = bottomSectionY + sealHeight + 8;
       doc.rect(leftMargin, footerY, contentWidth, 0.75).fill('#CBD5E1');
@@ -714,8 +764,20 @@ async function generateInvoicePdf(order, res = null, options = {}) {
         .text(`• Subject to ${seller.state} Jurisdiction. Questions or Tax Disputes: ${seller.email} | Helpline: ${seller.phone}`,
           leftMargin, footerY + 12);
 
-      doc.font('Helvetica-Bold').fontSize(6.5).fillColor('#0F2444')
-        .text('Page 1 of 1 • AuraMarket Corporate Billing', leftMargin + 350, footerY + 8, { width: contentWidth - 350, align: 'right' });
+      // Dynamic Page Numbering across all buffered pages
+      const range = doc.bufferedPageRange();
+      const lastPageIdx = range.start + range.count - 1;
+      for (let pIdx = range.start; pIdx < range.start + range.count; pIdx++) {
+        doc.switchToPage(pIdx);
+        const pageFooterY = (pIdx === lastPageIdx) ? (footerY + 8) : 785;
+        if (pIdx !== lastPageIdx) {
+          doc.rect(leftMargin, 780, contentWidth, 0.5).fill('#CBD5E1');
+          doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
+            .text('• Continued on next sheet...', leftMargin, 785);
+        }
+        doc.font('Helvetica-Bold').fontSize(6.5).fillColor('#0F2444')
+          .text(`Page ${pIdx + 1} of ${range.count} • AuraMarket Corporate Billing`, leftMargin + 320, pageFooterY, { width: contentWidth - 320, align: 'right' });
+      }
 
       doc.end();
     } catch (err) {

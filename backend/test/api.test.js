@@ -20531,6 +20531,151 @@ const runTests = async () => {
       assert.strictEqual(gst.sgst, 0, 'Inter-State must have 0 SGST');
     });
 
+    await test('Point 20: Section 31 CGST Act QR code payload contains full 64-character SHA-256 digital cryptoseal hash', async () => {
+      const res = await fetch(`${baseUrl}/orders/${point20Order._id}/invoice`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      const invoiceData = data.data;
+      assert.ok(invoiceData.qrCodeDataUrl.startsWith('data:image/png;base64,'), 'QR data URL must be valid base64 PNG');
+      assert.strictEqual(invoiceData.digitalSeal.cryptographicHash.length, 64, 'SHA-256 hash must be 64 characters');
+      assert.strictEqual(invoiceData.digitalSeal.algorithm, 'SHA-256 / Statutory GST Crypto-Seal');
+    });
+
+    await test('Point 20: Role Security: Non-owner customer with valid JWT is strictly blocked with 403 Forbidden', async () => {
+      // Trying to download by orderNumber with another customer's token
+      const resPdf = await fetch(`${baseUrl}/orders/${point20Order.orderNumber}/invoice/pdf`, {
+        headers: { Authorization: `Bearer ${p20UnauthCustomerToken}` },
+      });
+      assert.strictEqual(resPdf.status, 403, 'Unauthorized customer must receive 403 Forbidden');
+      const dataPdf = await resPdf.json();
+      assert.strictEqual(dataPdf.success, false);
+
+      // Also for JSON invoice
+      const resJson = await fetch(`${baseUrl}/orders/${point20Order.orderNumber}/invoice`, {
+        headers: { Authorization: `Bearer ${p20UnauthCustomerToken}` },
+      });
+      assert.strictEqual(resJson.status, 403, 'Unauthorized customer must receive 403 Forbidden for JSON');
+      const dataJson = await resJson.json();
+      assert.strictEqual(dataJson.success, false);
+    });
+
+    await test('Point 20: Guest & tokenized tracking allows access by exact orderNumber or token', async () => {
+      // 1. By exact orderNumber without token (guest order tracking)
+      const resByOrderNumber = await fetch(`${baseUrl}/orders/${point20Order.orderNumber}/invoice/pdf`);
+      assert.strictEqual(resByOrderNumber.status, 200, 'Public guest lookup by exact orderNumber must succeed');
+      const arrayBuffer = await resByOrderNumber.arrayBuffer();
+      const buf = Buffer.from(arrayBuffer);
+      assert.strictEqual(buf.subarray(0, 4).toString(), '%PDF');
+
+      // 2. By token in query param (?token=...)
+      const resByToken = await fetch(`${baseUrl}/orders/${point20Order._id}/invoice/pdf?token=${encodeURIComponent(customerToken)}`);
+      assert.strictEqual(resByToken.status, 200, 'Access with query param token must succeed');
+    });
+
+    await test('Point 20: Multi-page stress pagination: 25 items and 50 items produce valid non-corrupt PDF buffers without runaway page breaks', async () => {
+      const { generateInvoicePdf } = require('../src/services/invoicePdfService');
+
+      // 25 items order
+      const items25 = Array.from({ length: 25 }, (_, idx) => ({
+        product: headphonesProduct._id,
+        vendor: headphonesProduct.vendor,
+        title: `Professional High-Fidelity Audio Unit Model #${idx + 1}`,
+        hsnCode: '85183000',
+        quantity: 1,
+        price: 1000,
+        totalPrice: 1000,
+      }));
+
+      const multiPageOrder25 = {
+        _id: new mongoose.Types.ObjectId(),
+        orderNumber: 'ORD-MULTI-25',
+        customer: p20Customer,
+        shippingAddress: {
+          recipientName: 'Dev Testing 25 Items',
+          phone: '9876543210',
+          street: 'Industrial Area Phase 2',
+          city: 'New Delhi',
+          state: 'Delhi',
+          pincode: '110020',
+        },
+        items: items25,
+        totalAmount: 25000,
+        paymentMethod: 'ONLINE',
+        paymentStatus: 'PAID',
+        createdAt: new Date(),
+      };
+
+      const res25 = await generateInvoicePdf(multiPageOrder25, null, { download: false });
+      const pdf25Buffer = res25.buffer;
+      assert.ok(Buffer.isBuffer(pdf25Buffer), 'Must return a Buffer');
+      assert.strictEqual(pdf25Buffer.subarray(0, 4).toString(), '%PDF', 'Must start with %PDF');
+      assert.ok(pdf25Buffer.length > 5000, 'PDF buffer must be non-trivial');
+
+      // 50 items order
+      const items50 = Array.from({ length: 50 }, (_, idx) => ({
+        product: headphonesProduct._id,
+        vendor: headphonesProduct.vendor,
+        title: `Enterprise Cloud Component SKU-${idx + 100} Extended Warranty Pack`,
+        hsnCode: '85183000',
+        quantity: 2,
+        price: 500,
+        totalPrice: 1000,
+      }));
+
+      const multiPageOrder50 = {
+        _id: new mongoose.Types.ObjectId(),
+        orderNumber: 'ORD-MULTI-50',
+        customer: p20Customer,
+        shippingAddress: {
+          recipientName: 'Dev Testing 50 Items',
+          phone: '9876543210',
+          street: 'Logistics Park',
+          city: 'New Delhi',
+          state: 'Delhi',
+          pincode: '110037',
+        },
+        items: items50,
+        totalAmount: 50000,
+        paymentMethod: 'ONLINE',
+        paymentStatus: 'PAID',
+        createdAt: new Date(),
+      };
+
+      const res50 = await generateInvoicePdf(multiPageOrder50, null, { download: false });
+      const pdf50Buffer = res50.buffer;
+      assert.ok(Buffer.isBuffer(pdf50Buffer), 'Must return a Buffer');
+      assert.strictEqual(pdf50Buffer.subarray(0, 4).toString(), '%PDF', 'Must start with %PDF');
+      assert.ok(pdf50Buffer.length > 10000, '50-item PDF buffer must be non-trivial');
+    });
+
+    await test('Point 20: Robustness: handles order with missing orderNumber, _id, or address fields safely without throwing', async () => {
+      const { generateInvoicePdf, getInvoiceData } = require('../src/services/invoicePdfService');
+
+      const sparseOrder = {
+        items: [
+          {
+            title: 'Fallback Generic Item',
+            quantity: 1,
+            price: 500,
+            totalPrice: 500,
+          },
+        ],
+        totalAmount: 500,
+      };
+
+      const invoiceData = await getInvoiceData(sparseOrder);
+      assert.ok(invoiceData.invoiceNumber, 'Must generate fallback invoice number');
+      assert.ok(invoiceData.orderNumber, 'Must generate fallback order number');
+      assert.strictEqual(invoiceData.buyer.city, 'Delhi');
+
+      const sparseRes = await generateInvoicePdf(sparseOrder, null, { download: false });
+      const sparsePdfBuffer = sparseRes.buffer;
+      assert.ok(Buffer.isBuffer(sparsePdfBuffer), 'Must return a Buffer for sparse order');
+      assert.strictEqual(sparsePdfBuffer.subarray(0, 4).toString(), '%PDF');
+    });
+
   } finally {
     if (server) {
       server.close();

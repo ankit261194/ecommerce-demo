@@ -20,6 +20,10 @@ const AuditLog = require('../src/models/AuditLog');
 const Warehouse = require('../src/models/Warehouse');
 const WarehouseInventory = require('../src/models/WarehouseInventory');
 const StockTransferOrder = require('../src/models/StockTransferOrder');
+const AffiliatePartner = require('../src/models/AffiliatePartner');
+const AffiliateReferral = require('../src/models/AffiliateReferral');
+const AffiliatePayout = require('../src/models/AffiliatePayout');
+const AffiliateProgramSetting = require('../src/models/AffiliateProgramSetting');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -21232,12 +21236,16 @@ const runTests = async () => {
       assert.strictEqual(resDispatch.status, 201);
       const dispatchData = await resDispatch.json();
       point22FailedJobId = dispatchData.data.jobId;
-
       // Attempt 1: Trigger worker
       await jobQueueService.processNextJobs();
-      await new Promise(r => setTimeout(r, 50));
+      let jobDoc;
+      for (let i = 0; i < 20; i++) {
+        jobDoc = await JobQueue.findOne({ jobId: point22FailedJobId });
+        if (jobDoc && jobDoc.attemptsMade >= 1) break;
+        await new Promise(r => setTimeout(r, 50));
+      }
 
-      let jobDoc = await JobQueue.findOne({ jobId: point22FailedJobId });
+      assert.ok(jobDoc, 'Job document must exist');
       assert.strictEqual(jobDoc.attemptsMade, 1);
       assert.strictEqual(jobDoc.status, 'delayed', 'Job should be in delayed status awaiting backoff');
       assert.strictEqual(jobDoc.isDeadLetter, false);
@@ -21248,9 +21256,12 @@ const runTests = async () => {
 
       // Attempt 2: Trigger worker again -> reaches maxAttempts (2)
       await jobQueueService.processNextJobs();
-      await new Promise(r => setTimeout(r, 50));
+      for (let i = 0; i < 20; i++) {
+        jobDoc = await JobQueue.findOne({ jobId: point22FailedJobId });
+        if (jobDoc && jobDoc.attemptsMade >= 2) break;
+        await new Promise(r => setTimeout(r, 50));
+      }
 
-      jobDoc = await JobQueue.findOne({ jobId: point22FailedJobId });
       assert.strictEqual(jobDoc.attemptsMade, 2);
       assert.strictEqual(jobDoc.status, 'failed', 'Job should transition to failed status');
       assert.strictEqual(jobDoc.isDeadLetter, true, 'Job must be archived to Dead-Letter Queue (DLQ)');
@@ -22231,6 +22242,303 @@ const runTests = async () => {
       const resRider = await fetch(`${baseUrl}/admin/stock-transfers/${point25TransferId}/approve`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resRider.status, 403, 'Delivery rider token must return 403 Forbidden');
+    });
+
+    // =========================================================================
+    // PILLAR 2 - POINT 26: FULL-FLEDGED AFFILIATE & INFLUENCER MARKETING PROGRAM
+    // =========================================================================
+    console.log('\n--- PILLAR 2 - POINT 26: AFFILIATE & INFLUENCER MARKETING PROGRAM ---');
+
+    let point26PartnerId = null;
+    let point26AffiliateCode = 'PRIYA_TECH_DEALS';
+    let point26ReferredOrderId = null;
+    let point26ReferralId = null;
+
+    await test('Point 26: Validation: Rejects affiliate creation without name or email (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/admin/affiliates`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          phone: '+91 98765 00112',
+          affiliateCode: 'INVALID_NO_NAME',
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('required'));
+    });
+
+    await test('Point 26: POST /api/admin/affiliates creates new influencer partner with custom code and GOLD tier', async () => {
+      const res = await fetch(`${baseUrl}/admin/affiliates`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Priya Sharma Tech',
+          email: 'priya.influencer@auramarket.com',
+          phone: '+91 98111 22334',
+          affiliateCode: point26AffiliateCode,
+          tier: 'GOLD',
+          commissionType: 'PERCENTAGE',
+          commissionRate: 10,
+          payoutDetails: {
+            method: 'UPI',
+            upiId: 'priyatech@okhdfcbank',
+            accountHolderName: 'Priya Sharma',
+          },
+          socialChannels: {
+            instagram: 'https://instagram.com/priyatech',
+            youtube: 'https://youtube.com/@priyatech',
+          },
+          notes: 'Top gadget reviewer with 250k subscribers',
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data._id);
+      assert.strictEqual(data.data.affiliateCode, point26AffiliateCode);
+      assert.strictEqual(data.data.tier, 'GOLD');
+      assert.strictEqual(data.data.commissionRate, 10);
+      assert.strictEqual(data.data.status, 'ACTIVE');
+      assert.strictEqual(data.data.stats.conversions, 0);
+      assert.strictEqual(data.data.stats.totalRevenue, 0);
+      point26PartnerId = data.data._id;
+    });
+
+    await test('Point 26: GET /api/affiliates/validate/:code validates referral link and increments click counter', async () => {
+      const res = await fetch(`${baseUrl}/affiliates/validate/${point26AffiliateCode}`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.valid, true);
+      assert.strictEqual(data.data.affiliateCode, point26AffiliateCode);
+      assert.strictEqual(data.data.tier, 'GOLD');
+
+      // Verify clicks count incremented
+      const partnerDoc = await AffiliatePartner.findById(point26PartnerId);
+      assert.ok(partnerDoc.stats.clicks >= 1);
+    });
+
+    await test('Point 26: Checkout Order Attribution: Placing order with affiliateCode attributes sale, calculates 10% commission, and generates AffiliateReferral', async () => {
+      // Fetch a valid product for cart
+      const testProd = await Product.findOne({ isPublished: { $ne: false } });
+      assert.ok(testProd, 'Product must exist for order');
+
+      const itemQty = 2;
+      const expectedItemTotal = testProd.sellingPrice * itemQty;
+      const expectedCommission = Math.round(((expectedItemTotal * 10) / 100) * 100) / 100;
+
+      const res = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({
+          items: [
+            {
+              product: testProd._id,
+              quantity: itemQty,
+              price: testProd.sellingPrice,
+            },
+          ],
+          shippingAddress: {
+            recipientName: 'Rahul Verma',
+            phone: '9876543214',
+            street: 'Flat 402, Lotus Towers',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          paymentMethod: 'COD',
+          affiliateCode: point26AffiliateCode,
+          affiliateSource: 'youtube_review_link',
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      const createdOrder = data.data || data.order;
+      assert.ok(createdOrder, 'Order must be returned in response');
+      assert.ok(createdOrder.affiliate, 'Affiliate attribution must be present');
+      assert.strictEqual(createdOrder.affiliate.code, point26AffiliateCode);
+      assert.strictEqual(createdOrder.affiliate.commissionRate, 10);
+      assert.strictEqual(createdOrder.affiliate.commissionAmount, expectedCommission);
+      assert.strictEqual(createdOrder.affiliate.status, 'PENDING');
+      point26ReferredOrderId = createdOrder._id;
+
+      // Verify AffiliateReferral document
+      const referral = await AffiliateReferral.findOne({ order: point26ReferredOrderId });
+      assert.ok(referral, 'AffiliateReferral record must be created');
+      assert.strictEqual(referral.affiliateCode, point26AffiliateCode);
+      assert.strictEqual(referral.commissionAmount, expectedCommission);
+      assert.strictEqual(referral.status, 'PENDING');
+      assert.strictEqual(referral.clickSource, 'youtube_review_link');
+      point26ReferralId = referral._id;
+
+      // Verify partner stats aggregated
+      const partnerAfter = await AffiliatePartner.findById(point26PartnerId);
+      assert.ok(partnerAfter.stats.conversions >= 1);
+      assert.ok(partnerAfter.stats.totalRevenue >= expectedItemTotal);
+      assert.ok(partnerAfter.stats.totalCommission >= expectedCommission);
+      assert.ok(partnerAfter.stats.pendingBalance >= expectedCommission);
+    });
+
+    await test('Point 26: GET /api/admin/affiliates lists partners with tier & status filters', async () => {
+      const res = await fetch(`${baseUrl}/admin/affiliates?tier=GOLD&status=ACTIVE`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      const found = data.data.find(p => p._id.toString() === point26PartnerId.toString());
+      assert.ok(found, 'Created partner must be in filtered list');
+      assert.strictEqual(found.tier, 'GOLD');
+    });
+
+    await test('Point 26: GET /api/admin/affiliates/referrals lists conversion orders with populated partner details', async () => {
+      const res = await fetch(`${baseUrl}/admin/affiliates/referrals?affiliateId=${point26PartnerId}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.data.length >= 1);
+      const found = data.data.find(r => r._id.toString() === point26ReferralId.toString());
+      assert.ok(found);
+      assert.strictEqual(found.affiliateCode, point26AffiliateCode);
+    });
+
+    await test('Point 26: GET /api/admin/affiliates/analytics aggregates GMV, pending liability, and top performers', async () => {
+      const res = await fetch(`${baseUrl}/admin/affiliates/analytics`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.totalPartners >= 1);
+      assert.ok(data.data.activePartners >= 1);
+      assert.ok(data.data.totalGmv > 0);
+      assert.ok(data.data.pendingLiability > 0);
+      assert.ok(Array.isArray(data.data.topPerformers));
+    });
+
+    await test('Point 26: GET & PUT /api/admin/affiliates/settings updates tier commission rules and cookie window', async () => {
+      // 1. Get
+      const resGet = await fetch(`${baseUrl}/admin/affiliates/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resGet.status, 200);
+      const dataGet = await resGet.json();
+      assert.strictEqual(dataGet.success, true);
+      assert.ok(Array.isArray(dataGet.data.tiers));
+
+      // 2. Put
+      const resPut = await fetch(`${baseUrl}/admin/affiliates/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          cookieDurationDays: 45,
+          minPayoutThreshold: 750,
+          autoApproveNewPartners: true,
+        }),
+      });
+      assert.strictEqual(resPut.status, 200);
+      const dataPut = await resPut.json();
+      assert.strictEqual(dataPut.success, true);
+      assert.strictEqual(dataPut.data.cookieDurationDays, 45);
+      assert.strictEqual(dataPut.data.minPayoutThreshold, 750);
+      assert.strictEqual(dataPut.data.autoApproveNewPartners, true);
+    });
+
+    await test('Point 26: POST /api/admin/affiliates/payouts settles partner commission with UTR reference, updates balance, and marks referrals PAID', async () => {
+      const partnerBefore = await AffiliatePartner.findById(point26PartnerId);
+      const settleAmount = Math.min(100, partnerBefore.stats.pendingBalance);
+
+      const res = await fetch(`${baseUrl}/admin/affiliates/payouts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          affiliateId: point26PartnerId,
+          amount: settleAmount,
+          payoutMethod: 'UPI',
+          transactionReference: 'UTR-HDFC-99281092',
+          adminNotes: 'October monthly influencer commission payout',
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.payoutNumber.startsWith('AFF-PAY-'));
+      assert.strictEqual(data.data.amount, settleAmount);
+      assert.strictEqual(data.data.transactionReference, 'UTR-HDFC-99281092');
+      assert.strictEqual(data.data.status, 'PAID');
+
+      // Verify balance deduction on partner
+      const partnerAfter = await AffiliatePartner.findById(point26PartnerId);
+      assert.strictEqual(partnerAfter.stats.pendingBalance, partnerBefore.stats.pendingBalance - settleAmount);
+      assert.strictEqual(partnerAfter.stats.paidCommission, partnerBefore.stats.paidCommission + settleAmount);
+
+      // Verify referrals marked PAID
+      const referralAfter = await AffiliateReferral.findById(point26ReferralId);
+      assert.strictEqual(referralAfter.status, 'PAID');
+    });
+
+    await test('Point 26: Guardrail: rejects payout exceeding pending commission balance (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/admin/affiliates/payouts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          affiliateId: point26PartnerId,
+          amount: 9999999, // Exceeds balance
+          transactionReference: 'FAIL-UTR',
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('exceeds pending balance'));
+    });
+
+    await test('Point 26: Role Security: Customer and unauthenticated requests are rejected (401 / 403)', async () => {
+      // Unauthenticated
+      const resUnauth = await fetch(`${baseUrl}/admin/affiliates`);
+      assert.strictEqual(resUnauth.status, 401, 'Unauthenticated request must return 401');
+
+      // Customer
+      const resCust = await fetch(`${baseUrl}/admin/affiliates`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403, 'Customer token must return 403 Forbidden');
+
+      // Delivery Rider
+      const resRider = await fetch(`${baseUrl}/admin/affiliates/payouts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${riderToken}`,
+        },
+        body: JSON.stringify({ affiliateId: point26PartnerId, amount: 50 }),
       });
       assert.strictEqual(resRider.status, 403, 'Delivery rider token must return 403 Forbidden');
     });

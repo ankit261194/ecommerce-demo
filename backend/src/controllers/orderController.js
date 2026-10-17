@@ -565,6 +565,45 @@ exports.createOrder = async (req, res, next) => {
       rtoStatus = 'PENDING';
     }
 
+    // Point 26: Full-Fledged Affiliate & Influencer Tracking
+    const rawAffiliateCode = req.body.affiliateCode || req.headers['x-affiliate-code'] || req.query.ref || null;
+    let affiliateData = {
+      partner: null,
+      code: null,
+      commissionRate: 0,
+      commissionAmount: 0,
+      status: 'NONE',
+    };
+    let affiliatePartnerDoc = null;
+
+    if (rawAffiliateCode) {
+      const cleanCode = String(rawAffiliateCode).trim().toUpperCase();
+      try {
+        const AffiliatePartner = require('../models/AffiliatePartner');
+        affiliatePartnerDoc = await AffiliatePartner.findOne({
+          affiliateCode: cleanCode,
+          status: 'ACTIVE',
+        });
+        if (affiliatePartnerDoc) {
+          const rate = affiliatePartnerDoc.commissionRate || 10;
+          const commAmt =
+            affiliatePartnerDoc.commissionType === 'FLAT'
+              ? rate
+              : Math.round(((totalOrderAmount * rate) / 100) * 100) / 100;
+
+          affiliateData = {
+            partner: affiliatePartnerDoc._id,
+            code: cleanCode,
+            commissionRate: rate,
+            commissionAmount: commAmt,
+            status: 'PENDING',
+          };
+        }
+      } catch (err) {
+        console.error('[Affiliate] Error resolving affiliate partner on checkout:', err.message);
+      }
+    }
+
     const masterOrder = await Order.create({
       customer: req.user._id,
       items: validatedItems,
@@ -633,7 +672,51 @@ exports.createOrder = async (req, res, next) => {
       guestEmail: shippingAddress.email || req.user.email || '',
       // Point 12: Split Payment & Partial COD Advance Details
       splitPayment: splitPaymentData,
+      // Point 26: Affiliate Attribution
+      affiliate: affiliateData,
     });
+
+    if (affiliatePartnerDoc && affiliateData.partner) {
+      try {
+        const AffiliateReferral = require('../models/AffiliateReferral');
+        await AffiliateReferral.create({
+          affiliate: affiliatePartnerDoc._id,
+          affiliateCode: affiliatePartnerDoc.affiliateCode,
+          order: masterOrder._id,
+          orderNumber: masterOrder.orderNumber,
+          customer: req.user?._id || null,
+          orderTotal: totalOrderAmount,
+          commissionRate: affiliateData.commissionRate,
+          commissionType: affiliatePartnerDoc.commissionType,
+          commissionAmount: affiliateData.commissionAmount,
+          status: 'PENDING',
+          clickSource: req.body.affiliateSource || 'checkout_referral',
+        });
+
+        // Update partner aggregate stats
+        affiliatePartnerDoc.stats.conversions = (affiliatePartnerDoc.stats.conversions || 0) + 1;
+        affiliatePartnerDoc.stats.totalRevenue = (affiliatePartnerDoc.stats.totalRevenue || 0) + totalOrderAmount;
+        affiliatePartnerDoc.stats.totalCommission =
+          (affiliatePartnerDoc.stats.totalCommission || 0) + affiliateData.commissionAmount;
+        affiliatePartnerDoc.stats.pendingBalance =
+          (affiliatePartnerDoc.stats.pendingBalance || 0) + affiliateData.commissionAmount;
+
+        // Auto tier upgrade check (promotions only, no downgrades)
+        const AffiliateProgramSetting = require('../models/AffiliateProgramSetting');
+        const settings = await AffiliateProgramSetting.getOrCreateSettings();
+        if (settings && settings.tiers) {
+          const tierRank = { STANDARD: 1, SILVER: 2, GOLD: 3, PLATINUM: 4, VIP_INFLUENCER: 5 };
+          const sortedTiers = [...settings.tiers].sort((a, b) => b.minSales - a.minSales);
+          const eligibleTier = sortedTiers.find((t) => affiliatePartnerDoc.stats.totalRevenue >= t.minSales);
+          if (eligibleTier && (tierRank[eligibleTier.name] || 0) > (tierRank[affiliatePartnerDoc.tier] || 0)) {
+            affiliatePartnerDoc.tier = eligibleTier.name;
+          }
+        }
+        await affiliatePartnerDoc.save();
+      } catch (err) {
+        console.error('[Affiliate] Failed to log affiliate referral:', err.message);
+      }
+    }
 
     if (walletTxnRecord) {
       walletTxnRecord.order = masterOrder._id;

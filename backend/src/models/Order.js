@@ -299,6 +299,31 @@ const orderSchema = new mongoose.Schema(
       ref: 'ReturnRequest',
       default: null,
     },
+    // Point 26: Full-Fledged Affiliate & Influencer Tracking
+    affiliate: {
+      partner: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'AffiliatePartner',
+        default: null,
+      },
+      code: {
+        type: String,
+        default: null,
+      },
+      commissionRate: {
+        type: Number,
+        default: 0,
+      },
+      commissionAmount: {
+        type: Number,
+        default: 0,
+      },
+      status: {
+        type: String,
+        enum: ['NONE', 'PENDING', 'APPROVED', 'PAID', 'CANCELLED'],
+        default: 'NONE',
+      },
+    },
   },
   { timestamps: true }
 );

@@ -65,6 +65,14 @@ const {
   verifyVendorGstin,
   verifyVendorBankPennyDrop,
 } = require('../controllers/vendorVerificationController');
+const {
+  getStorefrontCustomization,
+  updateStorefrontCustomization,
+  addHeroBanner,
+  deleteHeroBanner,
+  reorderHeroBanners,
+  updateBrandStory,
+} = require('../controllers/vendorStorefrontController');
 const { protect, authorize, requireVendorPermission } = require('../middlewares/auth');
 
 // Point 58: Public Storefront Vendor Showcase (Accessible by any customer/visitor)
@@ -89,6 +97,14 @@ router.post('/onboarding/submit', submitOnboarding);
 router.get('/verification/status', getVendorVerificationStatus);
 router.post('/verification/gstin', verifyVendorGstin);
 router.post('/verification/bank-penny-drop', verifyVendorBankPennyDrop);
+
+// Point 36: Vendor Custom Micro-Storefront Builder (Custom banners, stories & showcase)
+router.get('/storefront/customization', requireVendorPermission('STORE_SETTINGS'), getStorefrontCustomization);
+router.put('/storefront/customization', requireVendorPermission('STORE_SETTINGS'), updateStorefrontCustomization);
+router.post('/storefront/banner', requireVendorPermission('STORE_SETTINGS'), addHeroBanner);
+router.delete('/storefront/banner/:id', requireVendorPermission('STORE_SETTINGS'), deleteHeroBanner);
+router.patch('/storefront/banners/reorder', requireVendorPermission('STORE_SETTINGS'), reorderHeroBanners);
+router.put('/storefront/brand-story', requireVendorPermission('STORE_SETTINGS'), updateBrandStory);
 
 // Point 58: Vendor Profile & Branding Customization
 router.get('/profile', getVendorProfile);

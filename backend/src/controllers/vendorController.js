@@ -2120,6 +2120,7 @@ exports.getPublicVendorStore = async (req, res, next) => {
       createdAt: vendor.createdAt,
       productsCount: products.length,
       products,
+      storefrontCustomization: vendor.storefrontCustomization || {},
     };
 
     res.status(200).json({

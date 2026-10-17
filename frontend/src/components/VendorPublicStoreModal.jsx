@@ -21,6 +21,10 @@ import {
   BadgePercent,
   Clock,
   Palmtree,
+  Sparkles,
+  Megaphone,
+  Award,
+  Video,
 } from 'lucide-react';
 import api from '../api/client';
 
@@ -116,6 +120,34 @@ const VendorPublicStoreModal = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in overflow-y-auto">
       <div className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh]">
+        {/* Point 36: Merchant Custom Announcement Ticker */}
+        {storeData?.storefrontCustomization?.announcementBar?.isEnabled &&
+          storeData.storefrontCustomization.announcementBar.text && (
+            <div
+              style={{
+                backgroundColor: storeData.storefrontCustomization.announcementBar.bgColor || '#1E1B4B',
+                color: storeData.storefrontCustomization.announcementBar.textColor || '#E0E7FF',
+              }}
+              className="px-4 py-2 text-xs font-semibold flex items-center justify-between gap-3 shrink-0 shadow-xs border-b border-white/10 z-30"
+            >
+              <div className="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap">
+                <Megaphone className="w-3.5 h-3.5 shrink-0 animate-bounce" />
+                <span className="truncate">{storeData.storefrontCustomization.announcementBar.text}</span>
+              </div>
+              {storeData.storefrontCustomization.announcementBar.link && (
+                <a
+                  href={storeData.storefrontCustomization.announcementBar.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/20 hover:bg-white/30 text-[11px] font-black shrink-0 transition-all"
+                >
+                  <span>Learn More</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+          )}
+
         {/* Banner with Close Button */}
         <div className="relative h-44 sm:h-56 w-full bg-slate-900 shrink-0 overflow-hidden">
           <img
@@ -322,6 +354,130 @@ const VendorPublicStoreModal = ({
 
         {/* Store Catalog Content */}
         <div className="p-6 sm:p-8 overflow-y-auto space-y-6">
+          {/* Point 36: Custom Hero Showcase Banners */}
+          {storeData?.storefrontCustomization?.heroBanners?.filter((b) => b.isActive).length > 0 && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {storeData.storefrontCustomization.heroBanners
+                  .filter((b) => b.isActive)
+                  .map((banner, idx) => (
+                    <div
+                      key={banner.id || idx}
+                      className="relative rounded-2xl overflow-hidden shadow-md group border border-slate-200 aspect-[21/9] sm:aspect-[16/7]"
+                    >
+                      <img
+                        src={banner.imageUrl}
+                        alt={banner.title || 'Store Banner'}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent flex flex-col justify-end p-5 text-white">
+                        {banner.title && (
+                          <h3 className="text-base sm:text-lg font-black tracking-tight">{banner.title}</h3>
+                        )}
+                        {banner.subtitle && (
+                          <p className="text-xs text-slate-300 font-medium line-clamp-2 mt-0.5">
+                            {banner.subtitle}
+                          </p>
+                        )}
+                        {banner.buttonText && (
+                          <div className="mt-3">
+                            {banner.targetUrl ? (
+                              <a
+                                href={banner.targetUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black transition-all shadow-md"
+                              >
+                                <span>{banner.buttonText}</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 text-slate-950 text-xs font-black shadow-md">
+                                {banner.buttonText}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Point 36: Artisan Heritage & Founder Story */}
+          {storeData?.storefrontCustomization?.brandStory?.storyText && (
+            <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white shadow-xl border border-indigo-800/40 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="relative z-10 flex flex-col md:flex-row items-start gap-5">
+                {storeData.storefrontCustomization.brandStory.founderPhoto && (
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden shrink-0 border-2 border-amber-400/60 shadow-lg">
+                    <img
+                      src={storeData.storefrontCustomization.brandStory.founderPhoto}
+                      alt={storeData.storefrontCustomization.brandStory.founderName || 'Founder'}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-black uppercase tracking-wider border border-amber-400/30 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-300" />
+                      <span>Artisan Heritage</span>
+                    </span>
+                    {storeData.storefrontCustomization.brandStory.foundedYear && (
+                      <span className="text-[11px] text-slate-400 font-semibold">
+                        Est. {storeData.storefrontCustomization.brandStory.foundedYear}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-base sm:text-lg font-black tracking-tight text-white">
+                    {storeData.storefrontCustomization.brandStory.title || 'Our Craft & Heritage'}
+                  </h3>
+                  {storeData.storefrontCustomization.brandStory.founderName && (
+                    <p className="text-xs text-amber-400 font-bold">
+                      Narrated by {storeData.storefrontCustomization.brandStory.founderName}
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-300 leading-relaxed font-normal">
+                    {storeData.storefrontCustomization.brandStory.storyText}
+                  </p>
+
+                  {/* Badges */}
+                  {storeData.storefrontCustomization.brandStory.badges?.length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap pt-2">
+                      {storeData.storefrontCustomization.brandStory.badges.map((badge, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2.5 py-1 rounded-xl bg-white/10 text-white text-[11px] font-semibold border border-white/10 flex items-center gap-1"
+                        >
+                          <Award className="w-3 h-3 text-amber-400" />
+                          <span>{badge}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Video URL */}
+                  {storeData.storefrontCustomization.brandStory.videoUrl && (
+                    <div className="pt-2">
+                      <a
+                        href={storeData.storefrontCustomization.brandStory.videoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md"
+                      >
+                        <Video className="w-3.5 h-3.5" />
+                        <span>Watch Artisan Workshop Tour</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">

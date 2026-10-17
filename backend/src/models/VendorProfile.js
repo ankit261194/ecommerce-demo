@@ -307,6 +307,60 @@ const vendorProfileSchema = new mongoose.Schema(
         },
       ],
     },
+    // Point 36: Vendor Custom Micro-Storefront Builder (Custom banners, stories & showcase)
+    storefrontCustomization: {
+      themeColor: { type: String, default: '#4F46E5' },
+      accentColor: { type: String, default: '#F59E0B' },
+      layoutStyle: {
+        type: String,
+        enum: ['GRID', 'EDITORIAL', 'MINIMAL', 'BOUTIQUE'],
+        default: 'GRID',
+      },
+      heroBanners: [
+        {
+          id: { type: String, default: () => `banner_${Date.now()}_${Math.random().toString(36).substr(2, 6)}` },
+          title: { type: String, default: '' },
+          subtitle: { type: String, default: '' },
+          imageUrl: { type: String, required: true },
+          targetUrl: { type: String, default: '' },
+          buttonText: { type: String, default: 'Shop Collection' },
+          isActive: { type: Boolean, default: true },
+          sortOrder: { type: Number, default: 0 },
+        },
+      ],
+      announcementBar: {
+        isEnabled: { type: Boolean, default: false },
+        text: { type: String, default: '' },
+        link: { type: String, default: '' },
+        bgColor: { type: String, default: '#1E1B4B' },
+        textColor: { type: String, default: '#E0E7FF' },
+      },
+      brandStory: {
+        title: { type: String, default: 'Our Craft & Heritage' },
+        storyText: { type: String, default: '' },
+        founderName: { type: String, default: '' },
+        founderPhoto: { type: String, default: '' },
+        foundedYear: { type: Number, default: null },
+        videoUrl: { type: String, default: '' },
+        badges: [{ type: String }],
+      },
+      featuredSections: [
+        {
+          id: { type: String, default: () => `sec_${Date.now()}_${Math.random().toString(36).substr(2, 6)}` },
+          sectionTitle: { type: String, default: 'Featured Creations' },
+          type: {
+            type: String,
+            enum: ['PRODUCTS', 'CATEGORIES', 'BANNER_GRID', 'VIDEO'],
+            default: 'PRODUCTS',
+          },
+          itemIds: [{ type: String }],
+          isActive: { type: Boolean, default: true },
+          sortOrder: { type: Number, default: 0 },
+        },
+      ],
+      isPublished: { type: Boolean, default: true },
+      lastPublishedAt: { type: Date, default: Date.now },
+    },
   },
   { timestamps: true }
 );

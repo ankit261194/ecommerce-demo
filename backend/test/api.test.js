@@ -25070,6 +25070,260 @@ const runTests = async () => {
       assert.strictEqual(resCustToAdmin.status, 403);
     });
 
+    // =========================================================================
+    // Point 36: Vendor Custom Micro-Storefront Builder (Banners, Stories & Layout)
+    // =========================================================================
+    let p36Banner1Id = '';
+    let p36Banner2Id = '';
+    let p36VendorSlug = '';
+
+    await test('Point 36: GET /api/vendor/storefront/customization returns default micro-storefront settings for vendor', async () => {
+      const res = await fetch(`${baseUrl}/vendor/storefront/customization`, {
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.storeName);
+      assert.ok(data.data.storeSlug);
+      p36VendorSlug = data.data.storeSlug;
+      assert.ok(data.data.customization);
+      assert.strictEqual(data.data.customization.layoutStyle, 'GRID');
+      assert.ok(Array.isArray(data.data.customization.heroBanners));
+    });
+
+    await test('Point 36: PUT /api/vendor/storefront/customization updates theme colors, layout style and announcement bar', async () => {
+      const res = await fetch(`${baseUrl}/vendor/storefront/customization`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          themeColor: '#059669',
+          accentColor: '#D97706',
+          layoutStyle: 'BOUTIQUE',
+          announcementBar: {
+            isEnabled: true,
+            text: 'Festive Flash Sale: 20% Off All Handcrafted Items!',
+            bgColor: '#064E3B',
+            textColor: '#A7F3D0',
+            link: 'https://auramarket.com/sale',
+          },
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.themeColor, '#059669');
+      assert.strictEqual(data.data.accentColor, '#D97706');
+      assert.strictEqual(data.data.layoutStyle, 'BOUTIQUE');
+      assert.strictEqual(data.data.announcementBar.isEnabled, true);
+      assert.strictEqual(data.data.announcementBar.text, 'Festive Flash Sale: 20% Off All Handcrafted Items!');
+    });
+
+    await test('Point 36: PUT /api/vendor/storefront/customization validates hex colors and rejects invalid format (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/vendor/storefront/customization`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          themeColor: 'invalid-hex-color',
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Invalid theme color'));
+    });
+
+    await test('Point 36: PUT /api/vendor/storefront/customization validates layout style and rejects invalid options (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/vendor/storefront/customization`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          layoutStyle: 'CIRCULAR_CAROUSEL',
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('Invalid layout style'));
+    });
+
+    await test('Point 36: POST /api/vendor/storefront/banner validates required imageUrl and adds hero promotional banner', async () => {
+      // 1. Missing imageUrl
+      const resMissing = await fetch(`${baseUrl}/vendor/storefront/banner`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Diwali Festive Luxe',
+        }),
+      });
+      assert.strictEqual(resMissing.status, 400);
+
+      // 2. Valid banner creation
+      const res = await fetch(`${baseUrl}/vendor/storefront/banner`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Diwali Festive Luxe',
+          subtitle: 'Exclusive handcrafted heritage collection',
+          imageUrl: 'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=1200',
+          buttonText: 'Explore Now',
+          targetUrl: 'https://auramarket.com/diwali',
+          sortOrder: 0,
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.id);
+      p36Banner1Id = data.data.id;
+      assert.strictEqual(data.data.title, 'Diwali Festive Luxe');
+      assert.strictEqual(data.data.isActive, true);
+    });
+
+    await test('Point 36: POST /api/vendor/storefront/banner adds second banner for multi-banner slider', async () => {
+      const res = await fetch(`${baseUrl}/vendor/storefront/banner`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Winter Woolens & Pashminas',
+          subtitle: 'Pure Himalayan Cashmere Woven by Master Artisans',
+          imageUrl: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=1200',
+          buttonText: 'Shop Cashmere',
+          targetUrl: 'https://auramarket.com/cashmere',
+          sortOrder: 1,
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.id);
+      p36Banner2Id = data.data.id;
+    });
+
+    await test('Point 36: PATCH /api/vendor/storefront/banners/reorder adjusts banner sort sequence', async () => {
+      const res = await fetch(`${baseUrl}/vendor/storefront/banners/reorder`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          bannerIds: [p36Banner2Id, p36Banner1Id],
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.length >= 2);
+      assert.strictEqual(data.data[0].id, p36Banner2Id);
+      assert.strictEqual(data.data[0].sortOrder, 0);
+      assert.strictEqual(data.data[1].id, p36Banner1Id);
+      assert.strictEqual(data.data[1].sortOrder, 1);
+    });
+
+    await test('Point 36: DELETE /api/vendor/storefront/banner/:id removes banner successfully', async () => {
+      const res = await fetch(`${baseUrl}/vendor/storefront/banner/${p36Banner2Id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${p35VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      const exists = data.data.some((b) => b.id === p36Banner2Id);
+      assert.strictEqual(exists, false, 'Deleted banner must no longer exist in heroBanners array');
+    });
+
+    await test('Point 36: PUT /api/vendor/storefront/brand-story updates maker narrative, founder credentials and trust badges', async () => {
+      const res = await fetch(`${baseUrl}/vendor/storefront/brand-story`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p35VendorToken}`,
+        },
+        body: JSON.stringify({
+          title: 'The Royal Weaver Studio',
+          storyText: 'Handcrafted heritage textiles woven on traditional wooden pit looms across 3 generations of master artisans.',
+          founderName: 'Pandit Ram Narayan',
+          founderPhoto: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
+          foundedYear: 1985,
+          videoUrl: 'https://youtube.com/watch?v=sample-loom-heritage',
+          badges: ['Handloom Mark Certified', '100% Pure Mulberry Silk', 'GI Tagged Varanasi Heritage', 'Zero Chemical Dyes'],
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.title, 'The Royal Weaver Studio');
+      assert.strictEqual(data.data.founderName, 'Pandit Ram Narayan');
+      assert.strictEqual(data.data.foundedYear, 1985);
+      assert.strictEqual(data.data.badges.length, 4);
+      assert.ok(data.data.badges.includes('Handloom Mark Certified'));
+    });
+
+    await test('Point 36: GET /api/vendor/store/:slugOrId public storefront includes storefrontCustomization with bespoke branding', async () => {
+      const res = await fetch(`${baseUrl}/vendor/store/${p36VendorSlug}`);
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.storefrontCustomization);
+      assert.strictEqual(data.data.storefrontCustomization.themeColor, '#059669');
+      assert.strictEqual(data.data.storefrontCustomization.layoutStyle, 'BOUTIQUE');
+      assert.strictEqual(data.data.storefrontCustomization.announcementBar.isEnabled, true);
+      assert.strictEqual(data.data.storefrontCustomization.brandStory.founderName, 'Pandit Ram Narayan');
+      assert.strictEqual(data.data.storefrontCustomization.heroBanners.length, 1);
+      assert.strictEqual(data.data.storefrontCustomization.heroBanners[0].title, 'Diwali Festive Luxe');
+    });
+
+    await test('Point 36: Role Security: Customer and unauthenticated requests to storefront builder endpoints are rejected (401 / 403)', async () => {
+      // Unauthenticated
+      const resUnauth = await fetch(`${baseUrl}/vendor/storefront/customization`);
+      assert.strictEqual(resUnauth.status, 401);
+
+      // Customer forbidden
+      const resCustGet = await fetch(`${baseUrl}/vendor/storefront/customization`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustGet.status, 403);
+
+      const resCustPut = await fetch(`${baseUrl}/vendor/storefront/customization`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ themeColor: '#000000' }),
+      });
+      assert.strictEqual(resCustPut.status, 403);
+
+      const resCustBanner = await fetch(`${baseUrl}/vendor/storefront/banner`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({ imageUrl: 'https://example.com/banner.jpg' }),
+      });
+      assert.strictEqual(resCustBanner.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

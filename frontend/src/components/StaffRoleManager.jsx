@@ -479,7 +479,7 @@ export default function StaffRoleManager() {
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/30 text-indigo-300 border border-indigo-400/30">
-              Point #49 Master Engine
+              Point #31 (Pillar 2: Super Admin Engine)
             </span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5" /> Granular RBAC Active

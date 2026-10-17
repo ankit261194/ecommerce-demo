@@ -32,6 +32,7 @@ const AbandonedCartRecoveryConfig = require('../src/models/AbandonedCartRecovery
 const TaxMatrix = require('../src/models/TaxMatrix');
 const ShippingConfig = require('../src/models/ShippingConfig');
 const PincodeZone = require('../src/models/PincodeZone');
+const StaffRole = require('../src/models/StaffRole');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -23868,6 +23869,311 @@ const runTests = async () => {
         body: JSON.stringify({ freeShippingThreshold: 500 }),
       });
       assert.strictEqual(resRiderShip.status, 403);
+    });
+
+  
+    // =========================================================================
+    // PILLAR 2 - POINT 31: MULTI-TIER SUB-ADMIN STAFF ROLES & ACCESS CONTROL
+    // =========================================================================
+    console.log('\n--- PILLAR 2 - POINT 31: MULTI-TIER SUB-ADMIN STAFF ROLES & ACCESS CONTROL ---');
+
+    let point31CustomRoleId;
+    let point31StaffUserId;
+
+    await test('Point 31: GET /api/admin/staff/permissions returns complete permissions catalog across 8 enterprise categories and presets', async () => {
+      const res = await fetch(`${baseUrl}/admin/staff/permissions`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data.categories));
+      assert.ok(data.data.categories.length >= 7, 'Must have at least 7 operational permission categories');
+      assert.ok(data.data.categories.some(c => c.category.includes('Orders')));
+      assert.ok(data.data.categories.some(c => c.category.includes('Finance')));
+      assert.ok(Array.isArray(data.data.presets));
+      assert.ok(data.data.presets.length >= 5, 'Must have predefined role presets');
+    });
+
+    await test('Point 31: GET /api/admin/staff/roles lists system protected roles and custom role definitions with assigned member counts', async () => {
+      const res = await fetch(`${baseUrl}/admin/staff/roles`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.data.length >= 5);
+      const superAdminRole = data.data.find(r => r.code === 'SUPER_ADMIN');
+      assert.ok(superAdminRole);
+      assert.strictEqual(superAdminRole.isSystemRole, true);
+    });
+
+    await test('Point 31: POST /api/admin/staff/roles creates new custom operational role with granular permission matrix', async () => {
+      const res = await fetch(`${baseUrl}/admin/staff/roles`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Dispute & Fraud Investigator',
+          code: 'FRAUD_INVESTIGATOR',
+          title: 'Senior Fraud Analyst',
+          description: 'Monitors suspicious RTOs, reviews chargebacks, inspects return video proofs',
+          department: 'Operations',
+          permissions: ['orders:read', 'orders:write', 'customers:read', 'customers:write'],
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data._id);
+      assert.strictEqual(data.data.code, 'FRAUD_INVESTIGATOR');
+      assert.strictEqual(data.data.name, 'Dispute & Fraud Investigator');
+      assert.strictEqual(data.data.isSystemRole, false);
+      assert.strictEqual(data.data.permissions.length, 4);
+
+      point31CustomRoleId = data.data._id;
+    });
+
+    await test('Point 31: Validation: POST /api/admin/staff/roles rejects duplicate role code (400 Bad Request)', async () => {
+      const res = await fetch(`${baseUrl}/admin/staff/roles`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Duplicate Fraud Role',
+          code: 'FRAUD_INVESTIGATOR',
+        }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('already exists'));
+    });
+
+    await test('Point 31: PUT /api/admin/staff/roles/:id updates custom role description, title, and granted permissions', async () => {
+      const res = await fetch(`${baseUrl}/admin/staff/roles/${point31CustomRoleId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Lead Trust & Safety Officer',
+          permissions: ['orders:read', 'orders:write', 'customers:read', 'customers:write', 'logistics:read'],
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.title, 'Lead Trust & Safety Officer');
+      assert.ok(data.data.permissions.includes('logistics:read'));
+      assert.strictEqual(data.data.permissions.length, 5);
+    });
+
+    await test('Point 31: POST /api/admin/staff creates sub-admin employee account assigned to custom role with password hashing', async () => {
+      const res = await fetch(`${baseUrl}/admin/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Vikram Sethi',
+          email: 'vikram.sethi@auramarket.com',
+          phone: '+91 98111 88776',
+          password: 'secureStaffPassword456',
+          staffRoleTitle: 'Lead Trust & Safety Officer',
+          department: 'Operations',
+          permissions: ['orders:read', 'orders:write', 'customers:read', 'customers:write', 'logistics:read'],
+          isActive: true,
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data._id);
+      assert.strictEqual(data.data.name, 'Vikram Sethi');
+      assert.strictEqual(data.data.email, 'vikram.sethi@auramarket.com');
+      assert.strictEqual(data.data.role, 'subadmin');
+      assert.strictEqual(data.data.staffRoleTitle, 'Lead Trust & Safety Officer');
+      assert.strictEqual(data.data.password, undefined, 'Password hash must be excluded from response');
+
+      point31StaffUserId = data.data._id;
+    });
+
+    await test('Point 31: Validation: rejects staff creation with existing email or short password (400 Bad Request)', async () => {
+      // 1. Existing email
+      const resDup = await fetch(`${baseUrl}/admin/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Duplicate Vikram',
+          email: 'vikram.sethi@auramarket.com',
+          password: 'validPassword123',
+        }),
+      });
+      assert.strictEqual(resDup.status, 400);
+
+      // 2. Short password
+      const resShort = await fetch(`${baseUrl}/admin/staff`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'New Person',
+          email: 'new.person@auramarket.com',
+          password: '123',
+        }),
+      });
+      assert.strictEqual(resShort.status, 400);
+    });
+
+    await test('Point 31: GET /api/admin/staff lists all staff members with department, role title, and status badges', async () => {
+      const res = await fetch(`${baseUrl}/admin/staff`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(Array.isArray(data.data));
+      assert.ok(data.data.length >= 2, 'Must include Super Admin and newly created sub-admin');
+      const foundVikram = data.data.find(u => u.email === 'vikram.sethi@auramarket.com');
+      assert.ok(foundVikram);
+      assert.strictEqual(foundVikram.role, 'subadmin');
+      assert.strictEqual(foundVikram.isActive, true);
+    });
+
+    await test('Point 31: PUT /api/admin/staff/:id updates employee permissions, department, and phone', async () => {
+      const res = await fetch(`${baseUrl}/admin/staff/${point31StaffUserId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          phone: '+91 98111 99999',
+          department: 'Executive',
+          permissions: ['orders:read', 'orders:write', 'customers:read', 'customers:write', 'logistics:read', 'marketing:write'],
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.phone, '+91 98111 99999');
+      assert.strictEqual(data.data.department, 'Executive');
+      assert.ok(data.data.permissions.includes('marketing:write'));
+    });
+
+    await test('Point 31: PATCH /api/admin/staff/:id/toggle-status suspends and reactivates staff account', async () => {
+      // 1. Suspend staff
+      const resSuspend = await fetch(`${baseUrl}/admin/staff/${point31StaffUserId}/toggle-status`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resSuspend.status, 200);
+      const dataSuspend = await resSuspend.json();
+      assert.strictEqual(dataSuspend.success, true);
+      assert.strictEqual(dataSuspend.isActive, false);
+      assert.strictEqual(dataSuspend.status, 'SUSPENDED');
+
+      // 2. Reactivate staff
+      const resReactivate = await fetch(`${baseUrl}/admin/staff/${point31StaffUserId}/toggle-status`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resReactivate.status, 200);
+      const dataReactivate = await resReactivate.json();
+      assert.strictEqual(dataReactivate.success, true);
+      assert.strictEqual(dataReactivate.isActive, true);
+      assert.strictEqual(dataReactivate.status, 'ACTIVE');
+    });
+
+    await test('Point 31: GET /api/staff/me/permissions returns authenticated user effective permissions for UI gating', async () => {
+      const res = await fetch(`${baseUrl}/staff/me/permissions`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data);
+      assert.strictEqual(data.data.isSuperAdmin, true);
+      assert.ok(data.data.permissions.includes('all'));
+    });
+
+    await test('Point 31: DELETE /api/admin/staff/roles/:id prevents deletion of system protected roles (400 Bad Request)', async () => {
+      const systemRole = await StaffRole.findOne({ isSystemRole: true });
+      assert.ok(systemRole);
+
+      const res = await fetch(`${baseUrl}/admin/staff/roles/${systemRole._id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.ok(data.message.includes('System protected roles cannot be deleted'));
+    });
+
+    await test('Point 31: DELETE /api/admin/staff/:id removes sub-admin and prevents deletion of primary Super Admin', async () => {
+      // 1. Prevent Super Admin deletion
+      const superAdminUser = await User.findOne({ role: 'superadmin' });
+      assert.ok(superAdminUser);
+
+      const resSA = await fetch(`${baseUrl}/admin/staff/${superAdminUser._id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resSA.status, 400);
+
+      // 2. Delete custom sub-admin
+      const resStaff = await fetch(`${baseUrl}/admin/staff/${point31StaffUserId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resStaff.status, 200);
+      const dataStaff = await resStaff.json();
+      assert.strictEqual(dataStaff.success, true);
+
+      // Verify deletion from database
+      const deletedUser = await User.findById(point31StaffUserId);
+      assert.strictEqual(deletedUser, null);
+
+      // 3. Delete custom role now that no staff is assigned
+      const resRoleDel = await fetch(`${baseUrl}/admin/staff/roles/${point31CustomRoleId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resRoleDel.status, 200);
+      const dataRoleDel = await resRoleDel.json();
+      assert.strictEqual(dataRoleDel.success, true);
+    });
+
+    await test('Point 31: Role Security: Customer, delivery rider, and unauthenticated requests to /api/admin/staff/* are rejected (401 / 403)', async () => {
+      // Unauthenticated
+      const resUnauth = await fetch(`${baseUrl}/admin/staff`);
+      assert.strictEqual(resUnauth.status, 401);
+
+      // Customer
+      const resCust = await fetch(`${baseUrl}/admin/staff`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403);
+
+      // Rider
+      const resRider = await fetch(`${baseUrl}/admin/staff/roles`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resRider.status, 403);
     });
 
   } finally {

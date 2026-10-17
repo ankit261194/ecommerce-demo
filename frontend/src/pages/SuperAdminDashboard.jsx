@@ -1511,7 +1511,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
             <ShieldCheck className="w-4 h-4 text-indigo-300" />
             <span>Staff Roles & Permissions</span>
             <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 ml-1">
-              Point #49
+              Point #31
             </span>
           </button>
 
@@ -2785,7 +2785,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 14: SUB-ADMIN STAFF ROLES & PERMISSIONS (Point #49) */}
+      {/* TAB 14: SUB-ADMIN STAFF ROLES & PERMISSIONS (Point #31 - Pillar 2) */}
       {/* ========================================================================= */}
       {activeDashboardTab === 'staff-roles' && (
         <StaffRoleManager />

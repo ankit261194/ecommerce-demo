@@ -326,6 +326,18 @@ exports.optimizeImageSimulate = async (req, res, next) => {
   }
 };
 
+// Helper to format CDN and edge delivery URLs securely
+const formatCdnUrl = (baseUrl, fileKey, fallbackDomain) => {
+  if (baseUrl && baseUrl.trim()) {
+    let clean = baseUrl.trim().replace(/\/+$/, '');
+    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+      clean = `https://${clean}`;
+    }
+    return `${clean}/${fileKey}`;
+  }
+  return fallbackDomain.endsWith('/') ? `${fallbackDomain}${fileKey}` : `${fallbackDomain}/${fileKey}`;
+};
+
 // =============================================================================
 // PILLAR 2 - POINT 21: PRESIGNED DIRECT UPLOAD & URL SIGNER ENGINE
 // =============================================================================
@@ -335,10 +347,19 @@ exports.optimizeImageSimulate = async (req, res, next) => {
 // @access  Private (Super Admin)
 exports.getPresignedUploadUrl = async (req, res, next) => {
   try {
-    const { fileName, fileType, fileSize, folder = 'products', provider = null } = req.body;
+    const { fileName, fileType, fileSize, folder = 'products', provider = null } = req.body || {};
 
-    // 1. Validate File Name
+    // 1. Validate File Name & Traversal Protection
     if (!fileName || typeof fileName !== 'string' || !fileName.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid fileName is required',
+      });
+    }
+
+    const trimmedFileName = fileName.trim();
+    const rawBase = path.basename(trimmedFileName).trim();
+    if (!rawBase || rawBase === '.' || rawBase === '..') {
       return res.status(400).json({
         success: false,
         message: 'Valid fileName is required',
@@ -390,13 +411,20 @@ exports.getPresignedUploadUrl = async (req, res, next) => {
       targetProvider = provider.toLowerCase();
     }
 
-    // 5. Generate Unique Timestamped Object Key
+    // 5. Generate Unique Timestamped Object Key with robust filename sanitization
     const now = new Date();
     const year = now.getUTCFullYear();
     const month = String(now.getUTCMonth() + 1).padStart(2, '0');
     const cleanFolder = (folder || 'products').replace(/[^a-zA-Z0-9_-]/g, '') || 'products';
-    const sanitizedBase = path.basename(fileName).trim().replace(/[^a-zA-Z0-9._-]/g, '_');
     const randomHex = crypto.randomBytes(4).toString('hex');
+    const ext = path.extname(rawBase);
+    const nameWithoutExt = path.basename(rawBase, ext).trim();
+    let sanitizedName = nameWithoutExt.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+    let sanitizedExt = ext.replace(/[^a-zA-Z0-9.]/g, '').toLowerCase();
+    if (!sanitizedName) {
+      sanitizedName = `file-${randomHex}`;
+    }
+    const sanitizedBase = `${sanitizedName}${sanitizedExt}`;
     const fileKey = `uploads/${cleanFolder}/${year}/${month}/img-${Date.now()}-${randomHex}-${sanitizedBase}`;
 
     // 6. Generate Provider Specific Presigned URL & Public CDN URL
@@ -420,9 +448,7 @@ exports.getPresignedUploadUrl = async (req, res, next) => {
       const credential = `${accessKey}/${dateStamp}/${region}/s3/aws4_request`;
       const signature = crypto.createHmac('sha256', s3.secretKey || 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY').update(fileKey).digest('hex');
       uploadUrl = `https://${bucketName}.s3.${region}.amazonaws.com/${fileKey}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=${encodeURIComponent(credential)}&X-Amz-Date=${amzDate}&X-Amz-Expires=${expiresInSeconds}&X-Amz-SignedHeaders=content-type%3Bhost%3Bx-amz-acl&X-Amz-Signature=${signature}`;
-      publicUrl = s3.cdnUrl
-        ? `${s3.cdnUrl.replace(/\/$/, '')}/${fileKey}`
-        : `https://${bucketName}.s3.${region}.amazonaws.com/${fileKey}`;
+      publicUrl = formatCdnUrl(s3.cdnUrl, fileKey, `https://${bucketName}.s3.${region}.amazonaws.com`);
     } else if (targetProvider === 'r2') {
       const r2 = stConfig.r2 || {};
       bucketName = r2.bucket || 'auramarket-r2';
@@ -431,21 +457,17 @@ exports.getPresignedUploadUrl = async (req, res, next) => {
       const credential = `${accessKey}/${dateStamp}/auto/s3/aws4_request`;
       const signature = crypto.createHmac('sha256', r2.secretKey || 'r2_secret_key_2026').update(fileKey).digest('hex');
       uploadUrl = `https://${accountId}.r2.cloudflarestorage.com/${bucketName}/${fileKey}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=${encodeURIComponent(credential)}&X-Amz-Date=${amzDate}&X-Amz-Expires=${expiresInSeconds}&X-Amz-SignedHeaders=content-type%3Bhost%3Bx-amz-acl&X-Amz-Signature=${signature}`;
-      publicUrl = r2.publicCustomDomain
-        ? `${r2.publicCustomDomain.replace(/\/$/, '')}/${fileKey}`
-        : `https://pub-r2.auramarket.com/${fileKey}`;
+      publicUrl = formatCdnUrl(r2.publicCustomDomain, fileKey, 'https://pub-r2.auramarket.com');
     } else if (targetProvider === 'wasabi') {
       const wasabi = stConfig.wasabi || {};
       bucketName = wasabi.bucket || 'auramarket-wasabi';
-      const endpoint = (wasabi.endpoint || 'https://s3.wasabisys.com').replace(/\/$/, '');
+      const endpoint = (wasabi.endpoint || 'https://s3.wasabisys.com').replace(/\/+$/, '');
       const region = wasabi.region || 'us-east-1';
       const accessKey = wasabi.accessKey || 'wasabi_access_key';
       const credential = `${accessKey}/${dateStamp}/${region}/s3/aws4_request`;
       const signature = crypto.createHmac('sha256', wasabi.secretKey || 'wasabi_secret_key').update(fileKey).digest('hex');
       uploadUrl = `${endpoint}/${bucketName}/${fileKey}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=${encodeURIComponent(credential)}&X-Amz-Date=${amzDate}&X-Amz-Expires=${expiresInSeconds}&X-Amz-SignedHeaders=content-type%3Bhost%3Bx-amz-acl&X-Amz-Signature=${signature}`;
-      publicUrl = wasabi.cdnUrl
-        ? `${wasabi.cdnUrl.replace(/\/$/, '')}/${fileKey}`
-        : `${endpoint}/${bucketName}/${fileKey}`;
+      publicUrl = formatCdnUrl(wasabi.cdnUrl, fileKey, `${endpoint}/${bucketName}`);
     } else if (targetProvider === 'spaces') {
       const spaces = stConfig.spaces || {};
       bucketName = spaces.bucket || 'auramarket-spaces';
@@ -454,17 +476,22 @@ exports.getPresignedUploadUrl = async (req, res, next) => {
       const credential = `${accessKey}/${dateStamp}/${region}/s3/aws4_request`;
       const signature = crypto.createHmac('sha256', spaces.secret || 'spaces_secret').update(fileKey).digest('hex');
       uploadUrl = `https://${bucketName}.${region}.digitaloceanspaces.com/${fileKey}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=${encodeURIComponent(credential)}&X-Amz-Date=${amzDate}&X-Amz-Expires=${expiresInSeconds}&X-Amz-SignedHeaders=content-type%3Bhost%3Bx-amz-acl&X-Amz-Signature=${signature}`;
-      publicUrl = spaces.cdnUrl
-        ? `${spaces.cdnUrl.replace(/\/$/, '')}/${fileKey}`
-        : `https://${bucketName}.${region}.cdn.digitaloceanspaces.com/${fileKey}`;
+      publicUrl = formatCdnUrl(spaces.cdnUrl, fileKey, `https://${bucketName}.${region}.cdn.digitaloceanspaces.com`);
+    } else if (targetProvider === 'cloudinary') {
+      const cloudinary = stConfig.cloudinary || {};
+      bucketName = cloudinary.cloudName || 'auramarket';
+      uploadUrl = `https://api.cloudinary.com/v1_1/${bucketName}/auto/upload`;
+      publicUrl = `https://res.cloudinary.com/${bucketName}/image/upload/${fileKey}`;
     } else {
       // Local Disk
       bucketName = 'local-storage';
       uploadUrl = `/api/admin/storage/upload-direct/${fileKey}`;
-      publicUrl = `/uploads/${fileKey}`;
+      const uploadPath = (stConfig.local?.uploadPath || '/uploads').replace(/\/+$/, '');
+      publicUrl = `${uploadPath}/${fileKey}`;
     }
 
-    const curlExample = `curl -X PUT "${uploadUrl}" -H "Content-Type: ${normalizedMime}" -H "x-amz-acl: public-read" --upload-file "${fileName}"`;
+    const safeCurlFileName = sanitizedBase.replace(/"/g, '\\"');
+    const curlExample = `curl -X PUT "${uploadUrl}" -H "Content-Type: ${normalizedMime}" -H "x-amz-acl: public-read" --upload-file "${safeCurlFileName}"`;
 
     // 7. Register / Upsert asset into CloudAsset collection for instant vault visibility
     const asset = await CloudAsset.findOneAndUpdate(
@@ -583,7 +610,11 @@ exports.listCloudAssets = async (req, res, next) => {
           uploadedAt: new Date(Date.now() - 3600000 * 48),
         },
       ];
-      await CloudAsset.insertMany(seedAssets);
+      try {
+        await CloudAsset.insertMany(seedAssets, { ordered: false });
+      } catch (seedErr) {
+        // Ignore duplicate key collision during concurrent initialization
+      }
     }
 
     const filter = {};
@@ -594,10 +625,11 @@ exports.listCloudAssets = async (req, res, next) => {
       filter.provider = provider;
     }
     if (search && search.trim()) {
-      const q = search.trim();
+      // Escape regex special characters to prevent MongoDB syntax crashes and ReDoS
+      const safeSearch = search.trim().replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
       filter.$or = [
-        { fileKey: { $regex: q, $options: 'i' } },
-        { fileName: { $regex: q, $options: 'i' } },
+        { fileKey: { $regex: safeSearch, $options: 'i' } },
+        { fileName: { $regex: safeSearch, $options: 'i' } },
       ];
     }
 
@@ -629,7 +661,13 @@ exports.deleteCloudAsset = async (req, res, next) => {
       });
     }
 
-    const decodedKey = decodeURIComponent(rawKey).replace(/^\/+/, '');
+    let decodedKey = rawKey;
+    try {
+      decodedKey = decodeURIComponent(rawKey);
+    } catch (_) {
+      decodedKey = rawKey;
+    }
+    decodedKey = decodedKey.replace(/^\/+/, '');
 
     const deleted = await CloudAsset.findOneAndDelete({
       $or: [

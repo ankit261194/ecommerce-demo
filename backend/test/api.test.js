@@ -21033,6 +21033,92 @@ const runTests = async () => {
       assert.strictEqual(resUnauth.status, 401, 'Unauthenticated request must receive 401 Unauthorized');
     });
 
+    await test('Point 21: Search regex safety, path traversal protection, Unicode filenames, & Direct PUT local upload', async () => {
+      // 1. Regex characters in search query (?search=[) must NOT crash MongoDB or throw 500
+      const resRegex = await fetch(`${baseUrl}/admin/storage/assets?search=[`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resRegex.status, 200, 'Regex special characters in search must not throw 500');
+      const dataRegex = await resRegex.json();
+      assert.strictEqual(dataRegex.success, true);
+      assert.ok(Array.isArray(dataRegex.data));
+
+      // 2. Complex regex pattern search query (?search=(.*+?))
+      const resComplexRegex = await fetch(`${baseUrl}/admin/storage/assets?search=(.*+?)`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resComplexRegex.status, 200, 'Complex regex pattern search must not throw 500');
+
+      // 3. Path traversal defense: fileName with ../../etc/passwd.png must strip traversal
+      const resTraversal = await fetch(`${baseUrl}/admin/storage/presigned-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          fileName: '../../../../etc/secret-system-file.png',
+          fileType: 'image/png',
+          fileSize: 4096,
+          folder: 'kyc',
+        }),
+      });
+      assert.strictEqual(resTraversal.status, 200);
+      const dataTraversal = await resTraversal.json();
+      assert.strictEqual(dataTraversal.success, true);
+      const travFileKey = dataTraversal.fileKey || dataTraversal.data.fileKey;
+      assert.ok(!travFileKey.includes('..'), 'FileKey must not contain directory traversal sequences');
+      assert.ok(travFileKey.includes('secret-system-file.png'), 'FileKey must preserve sanitized base name');
+
+      // 4. Unicode / Non-ASCII filename resilience (e.g. Hindi or Asian script)
+      const resUnicode = await fetch(`${baseUrl}/admin/storage/presigned-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          fileName: 'तस्वीर.webp',
+          fileType: 'image/webp',
+          fileSize: 2048,
+        }),
+      });
+      assert.strictEqual(resUnicode.status, 200);
+      const dataUnicode = await resUnicode.json();
+      assert.strictEqual(dataUnicode.success, true);
+      const unicodeFileKey = dataUnicode.fileKey || dataUnicode.data.fileKey;
+      assert.ok(unicodeFileKey.endsWith('.webp'), 'Unicode filename must preserve valid extension');
+
+      // 5. Slash-only / dot-only filename must be rejected with 400 Bad Request
+      const resSlashOnly = await fetch(`${baseUrl}/admin/storage/presigned-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          fileName: '///',
+          fileType: 'image/webp',
+          fileSize: 2048,
+        }),
+      });
+      assert.strictEqual(resSlashOnly.status, 400, 'Slash-only fileName must be rejected with 400');
+
+      // 6. Direct PUT upload handler for local simulation (PUT /api/admin/storage/upload-direct/*)
+      const resDirectLocal = await fetch(`${baseUrl}/admin/storage/upload-direct/uploads/products/sample-test.png`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'image/png',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: 'SIMULATED_BINARY_IMAGE_BUFFER',
+      });
+      assert.strictEqual(resDirectLocal.status, 200);
+      const dataDirectLocal = await resDirectLocal.json();
+      assert.strictEqual(dataDirectLocal.success, true);
+      assert.ok(dataDirectLocal.message.includes('completed successfully'));
+    });
+
   } finally {
     if (server) {
       server.close();

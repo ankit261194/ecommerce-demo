@@ -344,9 +344,12 @@ export const StorageConfigManager = () => {
             mode: 'cors',
           });
         } else {
-          // Local direct handler
-          await api.put(signData.uploadUrl, selectedFile, {
-            headers: { 'Content-Type': selectedFile.type },
+          // Local direct handler - strip leading /api if present since api client baseURL is '/api'
+          const localUrl = signData.uploadUrl.startsWith('/api')
+            ? signData.uploadUrl.replace(/^\/api/, '')
+            : signData.uploadUrl;
+          await api.put(localUrl, selectedFile, {
+            headers: { 'Content-Type': selectedFile.type || 'application/octet-stream' },
           });
         }
       } catch (networkErr) {
@@ -433,11 +436,11 @@ export const StorageConfigManager = () => {
   };
 
   const formatBytes = (bytes) => {
-    if (!bytes || bytes === 0) return '0 B';
+    if (!bytes || isNaN(bytes) || Number(bytes) <= 0) return '0 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+    const i = Math.floor(Math.log(Number(bytes)) / Math.log(k));
+    return `${(Number(bytes) / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
   };
 
   const getProviderBadge = (p) => {
@@ -1084,7 +1087,7 @@ export const StorageConfigManager = () => {
                               <img
                                 src={asset.publicUrl}
                                 alt="Thumb"
-                                onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100'; }}
+                                onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100'; }}
                                 className="w-full h-full object-cover"
                               />
                             ) : asset.fileType?.startsWith('video/') || asset.fileKey.endsWith('.mp4') ? (

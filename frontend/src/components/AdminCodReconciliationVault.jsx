@@ -25,6 +25,11 @@ import {
   Phone,
   Truck,
   Plus,
+  Download,
+  Scale,
+  FileSpreadsheet,
+  Layers,
+  ShieldAlert,
 } from 'lucide-react';
 import api from '../api/client';
 
@@ -43,6 +48,7 @@ export const AdminCodReconciliationVault = () => {
 
   const [settlements, setSettlements] = useState([]);
   const [pendingRiders, setPendingRiders] = useState([]);
+  const [ridersLimitRadar, setRidersLimitRadar] = useState({ summary: {}, riders: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [actionMessage, setActionMessage] = useState(null);
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -80,14 +86,38 @@ export const AdminCodReconciliationVault = () => {
   const [handoverNotes, setHandoverNotes] = useState('');
   const [isInitiating, setIsInitiating] = useState(false);
 
+  // Point 45: Rider Cash Limit & Lock State Modal
+  const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
+  const [selectedRiderForLimit, setSelectedRiderForLimit] = useState(null);
+  const [newCashLimit, setNewCashLimit] = useState(10000);
+  const [isLimitLockedToggle, setIsLimitLockedToggle] = useState(false);
+  const [isUpdatingLimit, setIsUpdatingLimit] = useState(false);
+
+  // Point 45: Dispute Resolution Modal State
+  const [isDisputeModalOpen, setIsDisputeModalOpen] = useState(false);
+  const [selectedSettlementForDispute, setSelectedSettlementForDispute] = useState(null);
+  const [disputeResolution, setDisputeResolution] = useState('');
+  const [disputeAdjustmentAmount, setDisputeAdjustmentAmount] = useState(0);
+  const [disputeRecoveryMode, setDisputeRecoveryMode] = useState('SALARY_DEDUCTION');
+  const [isResolvingDispute, setIsResolvingDispute] = useState(false);
+
+  // Point 45: Hub Cashier Vault Remittance Drop Modal State
+  const [isVaultDropModalOpen, setIsVaultDropModalOpen] = useState(false);
+  const [selectedSettlementForVaultDrop, setSelectedSettlementForVaultDrop] = useState(null);
+  const [vaultDropSealNumber, setVaultDropSealNumber] = useState('');
+  const [vaultDropCashierName, setVaultDropCashierName] = useState('Chief Vault Cashier');
+  const [vaultDropLocation, setVaultDropLocation] = useState('CENTRAL-VAULT-MAIN');
+  const [isDroppingVault, setIsDroppingVault] = useState(false);
+
   // Fetch all Vault Data
   const fetchVaultData = async () => {
     setIsLoading(true);
     try {
-      const [sumRes, setRes, ridRes] = await Promise.all([
+      const [sumRes, setRes, ridRes, limRes] = await Promise.all([
         api.get('/cod-vault/summary').catch(() => ({ data: { data: {} } })),
         api.get('/cod-vault/settlements').catch(() => ({ data: { data: [] } })),
         api.get('/cod-vault/riders-pending-cash').catch(() => ({ data: { data: [] } })),
+        api.get('/cod-vault/riders-limit-monitor').catch(() => ({ data: { data: { summary: {}, riders: [] } } })),
       ]);
 
       if (sumRes.data?.success && sumRes.data.data) {
@@ -98,6 +128,9 @@ export const AdminCodReconciliationVault = () => {
       }
       if (ridRes.data?.success && Array.isArray(ridRes.data.data)) {
         setPendingRiders(ridRes.data.data);
+      }
+      if (limRes.data?.success && limRes.data.data) {
+        setRidersLimitRadar(limRes.data.data);
       }
     } catch (err) {
       console.warn('COD Vault fetch error:', err);
@@ -220,6 +253,82 @@ export const AdminCodReconciliationVault = () => {
     }
   };
 
+  // Point 45: Handle Update Rider Cash Limit & Lock State
+  const handleUpdateLimitSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedRiderForLimit) return;
+    setIsUpdatingLimit(true);
+    try {
+      const riderId = selectedRiderForLimit.riderId || selectedRiderForLimit._id;
+      const res = await api.put(`/cod-vault/riders/${riderId}/cash-limit`, {
+        cashInHandLimit: Number(newCashLimit),
+        isCashLimitLocked: Boolean(isLimitLockedToggle),
+      });
+      if (res.data?.success) {
+        showToast('success', res.data.message || 'Rider cash limit updated successfully!');
+        setIsLimitModalOpen(false);
+        fetchVaultData();
+      }
+    } catch (err) {
+      showToast('error', err.response?.data?.message || 'Failed to update rider cash limit.');
+    } finally {
+      setIsUpdatingLimit(false);
+    }
+  };
+
+  // Point 45: Handle Dispute Resolution & Variance Adjustment
+  const handleResolveDisputeSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedSettlementForDispute) return;
+    setIsResolvingDispute(true);
+    try {
+      const res = await api.post(`/cod-vault/settlements/${selectedSettlementForDispute.reconciliationId}/resolve-dispute`, {
+        resolution: disputeResolution,
+        adjustmentAmount: Number(disputeAdjustmentAmount) || 0,
+        recoveryMode: disputeRecoveryMode,
+      });
+      if (res.data?.success) {
+        showToast('success', res.data.message || 'Dispute resolved & settlement locked into vault!');
+        setIsDisputeModalOpen(false);
+        setDisputeResolution('');
+        fetchVaultData();
+      }
+    } catch (err) {
+      showToast('error', err.response?.data?.message || 'Failed to resolve dispute.');
+    } finally {
+      setIsResolvingDispute(false);
+    }
+  };
+
+  // Point 45: Handle Regional Hub Cashier Vault Remittance Drop
+  const handleVaultDropSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedSettlementForVaultDrop) return;
+    setIsDroppingVault(true);
+    try {
+      const res = await api.post('/cod-vault/handover/vault-drop', {
+        reconciliationId: selectedSettlementForVaultDrop.reconciliationId,
+        bagSealNumber: vaultDropSealNumber,
+        cashierName: vaultDropCashierName,
+        vaultLocation: vaultDropLocation,
+      });
+      if (res.data?.success) {
+        showToast('success', res.data.message || 'Cash remittance batch locked into vault!');
+        setIsVaultDropModalOpen(false);
+        fetchVaultData();
+      }
+    } catch (err) {
+      showToast('error', err.response?.data?.message || 'Failed to record vault drop.');
+    } finally {
+      setIsDroppingVault(false);
+    }
+  };
+
+  // Point 45: Export Settlements Audit CSV
+  const handleExportCsv = () => {
+    window.open('/api/cod-vault/export-csv', '_blank');
+  };
+
   // Filtered settlements list
   const filteredSettlements = useMemo(() => {
     return settlements.filter((s) => {
@@ -265,17 +374,25 @@ export const AdminCodReconciliationVault = () => {
           <div className="space-y-2 max-w-2xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-400/30 text-amber-300 text-xs font-black uppercase tracking-wider">
               <Coins className="w-3.5 h-3.5" />
-              <span>Point #23: COD Reconciliation Vault</span>
+              <span>Point #45: COD Reconciliation & Remittance Vault</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-              Rider Cash Handover & Admin Reconciliation Vault
+              Automated COD Reconciliation & Cash Remittance Vault
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
-              Daily Cash on Delivery (COD) collection audit system. Verify physical cash notes denomination breakdowns, enforce 4-digit handover OTP verification, catch shortages, and execute company bank account deposits.
+              Enterprise Cash on Delivery (COD) collection audit system. Manage rider cash-in-hand limits, monitor threshold breaches, process 4-digit handover OTP verification, resolve shortage disputes, and execute cashier vault drops.
             </p>
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={handleExportCsv}
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 transition-all shadow-sm"
+              title="Download RFC-4180 COD Settlements Audit Ledger CSV"
+            >
+              <Download className="w-4 h-4" />
+              <span>Export Audit CSV</span>
+            </button>
             <button
               onClick={fetchVaultData}
               disabled={isLoading}
@@ -336,6 +453,127 @@ export const AdminCodReconciliationVault = () => {
           </div>
         </div>
       </div>
+
+      {/* Point 45: Rider Cash-in-Hand (CIH) Threshold & Lockout Radar */}
+      {ridersLimitRadar.riders && ridersLimitRadar.riders.length > 0 && (
+        <div className="bg-slate-900 rounded-3xl border border-slate-800 p-6 shadow-xl space-y-4 text-white">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
+                <Scale className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-black text-white text-sm flex items-center gap-2">
+                  <span>Rider Cash-in-Hand (CIH) Threshold & Lockout Radar</span>
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                    Point #45
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400 font-medium">
+                  Enforces configurable cash holding limits per rider (default ₹10,000). Riders exceeding threshold are flagged and restricted from further COD assignments until vault remittance.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-400 font-bold">
+                Total on Road:{' '}
+                <span className="text-amber-400 font-mono font-black">
+                  ₹{(ridersLimitRadar.summary?.totalCashOnRoad || 0).toLocaleString('en-IN')}
+                </span>
+              </span>
+              {(ridersLimitRadar.summary?.breachedRidersCount || 0) > 0 && (
+                <span className="px-2.5 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 font-black text-xs flex items-center gap-1">
+                  <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+                  {ridersLimitRadar.summary.breachedRidersCount} Breached & Locked
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {ridersLimitRadar.riders.map((r) => {
+              const isBreached = r.status === 'BREACHED_LOCKED';
+              const isWarning = r.status === 'WARNING';
+              return (
+                <div
+                  key={r.riderId}
+                  className={`p-4 rounded-2xl border transition-all ${
+                    isBreached
+                      ? 'bg-rose-950/30 border-rose-800/80'
+                      : isWarning
+                      ? 'bg-amber-950/20 border-amber-800/60'
+                      : 'bg-slate-800/50 border-slate-700/60'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-black text-white text-sm">{r.name}</div>
+                      <div className="text-[11px] text-slate-400 font-mono">📞 {r.phone || 'N/A'}</div>
+                    </div>
+                    <span
+                      className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                        isBreached
+                          ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                          : isWarning
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                          : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                      }`}
+                    >
+                      {r.status}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 space-y-1.5">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Cash in Hand:</span>
+                      <span className="font-mono font-black text-white">
+                        ₹{r.currentCashInHand.toLocaleString('en-IN')}{' '}
+                        <span className="text-slate-500">/ ₹{r.cashInHandLimit.toLocaleString('en-IN')}</span>
+                      </span>
+                    </div>
+
+                    <div className="w-full bg-slate-700/60 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          isBreached
+                            ? 'bg-rose-500'
+                            : isWarning
+                            ? 'bg-amber-400'
+                            : 'bg-emerald-400'
+                        }`}
+                        style={{ width: `${Math.min(100, r.utilizationPercentage)}%` }}
+                      />
+                    </div>
+
+                    <div className="flex justify-between text-[10px] text-slate-400 pt-1">
+                      <span>{r.unremittedTasksCount} unremitted orders</span>
+                      <span className="font-bold">{r.utilizationPercentage}% of limit</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 mt-3 border-t border-slate-700/50 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {r.isCashLimitLocked ? '🔒 Dispatch Locked' : '🟢 Eligible for COD'}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setSelectedRiderForLimit(r);
+                        setNewCashLimit(r.cashInHandLimit || 10000);
+                        setIsLimitLockedToggle(Boolean(r.isCashLimitLocked));
+                        setIsLimitModalOpen(true);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold transition-colors"
+                    >
+                      Adjust Limit
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Section: Active Riders Carrying COD Cash */}
       {pendingRiders.length > 0 && (
@@ -532,14 +770,20 @@ export const AdminCodReconciliationVault = () => {
                       <td className="py-4 px-3 text-center">
                         <span
                           className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
-                            s.status === 'DEPOSITED_TO_BANK'
+                            s.status === 'DISPUTED'
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                              : s.status === 'DEPOSITED_TO_BANK'
                               ? 'bg-purple-100 text-purple-800 border border-purple-200'
                               : s.status === 'VERIFIED'
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                               : 'bg-amber-100 text-amber-800 border border-amber-200'
                           }`}
                         >
-                          {s.status === 'DEPOSITED_TO_BANK' ? (
+                          {s.status === 'DISPUTED' ? (
+                            <>
+                              <ShieldAlert className="w-3 h-3 text-rose-600" /> Disputed
+                            </>
+                          ) : s.status === 'DEPOSITED_TO_BANK' ? (
                             <>
                               <Building className="w-3 h-3" /> Bank Deposited
                             </>
@@ -553,16 +797,26 @@ export const AdminCodReconciliationVault = () => {
                             </>
                           )}
                         </span>
+                        {s.cashRemittanceBatch?.batchId && (
+                          <div className="text-[9px] text-amber-700 font-mono mt-0.5">
+                            Batch: {s.cashRemittanceBatch.batchId}
+                          </div>
+                        )}
                         {s.bankDeposit?.isDeposited && (
                           <div className="text-[9px] text-slate-500 font-mono mt-0.5">
                             Ref: {s.bankDeposit.transactionReference}
+                          </div>
+                        )}
+                        {s.varianceStatus && s.varianceStatus !== 'NONE' && (
+                          <div className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
+                            {s.varianceStatus.replace(/_/g, ' ')}
                           </div>
                         )}
                       </td>
 
                       {/* Actions */}
                       <td className="py-4 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
                           {/* 1. Print Official Slip */}
                           <a
                             href={`/api/cod-vault/slip/${s.reconciliationId}`}
@@ -590,7 +844,43 @@ export const AdminCodReconciliationVault = () => {
                             </button>
                           )}
 
-                          {/* 3. Deposit into Bank */}
+                          {/* 3. Resolve Dispute Action */}
+                          {(s.discrepancy !== 0 || s.status === 'DISPUTED') && (
+                            <button
+                              onClick={() => {
+                                setSelectedSettlementForDispute(s);
+                                setDisputeAdjustmentAmount(Math.abs(s.discrepancy));
+                                setDisputeResolution(s.dispute?.resolution || `Discrepancy settlement of ₹${Math.abs(s.discrepancy)}`);
+                                setDisputeRecoveryMode(s.dispute?.recoveryMode || 'SALARY_DEDUCTION');
+                                setIsDisputeModalOpen(true);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-black text-xs flex items-center gap-1 shadow-sm transition-all"
+                              title="Resolve Discrepancy & Dispute (Point #45)"
+                            >
+                              <Scale className="w-3.5 h-3.5" />
+                              <span>Dispute</span>
+                            </button>
+                          )}
+
+                          {/* 4. Vault Remittance Drop Action */}
+                          {s.status === 'VERIFIED' && !s.cashRemittanceBatch?.batchId && (
+                            <button
+                              onClick={() => {
+                                setSelectedSettlementForVaultDrop(s);
+                                setVaultDropSealNumber(`SEAL-${Date.now().toString().slice(-6)}`);
+                                setVaultDropCashierName('Chief Vault Cashier');
+                                setVaultDropLocation('CENTRAL-VAULT-MAIN');
+                                setIsVaultDropModalOpen(true);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-black text-xs flex items-center gap-1 shadow-sm transition-all"
+                              title="Record Hub Cashier Vault Remittance Drop (Point #45)"
+                            >
+                              <Layers className="w-3.5 h-3.5" />
+                              <span>Vault Drop</span>
+                            </button>
+                          )}
+
+                          {/* 5. Deposit into Bank */}
                           {s.status === 'VERIFIED' && (
                             <button
                               onClick={() => {
@@ -944,6 +1234,304 @@ export const AdminCodReconciliationVault = () => {
                   className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-md shadow-amber-500/20"
                 >
                   {isInitiating ? 'Generating...' : 'Generate 4-Digit Handover OTP'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: Adjust Rider Cash-in-Hand Limit & Dispatch Lock (Point #45) */}
+      {isLimitModalOpen && selectedRiderForLimit && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <span>Rider Cash Limit & CIH Settings</span>
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                    #45
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Update threshold for {selectedRiderForLimit.name} (Phone: {selectedRiderForLimit.phone})
+                </p>
+              </div>
+              <button
+                onClick={() => setIsLimitModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateLimitSubmit} className="space-y-4">
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                <div className="flex justify-between text-xs font-bold text-slate-700">
+                  <span>Current Cash in Hand:</span>
+                  <span className="font-mono text-slate-950 font-black">
+                    ₹{(selectedRiderForLimit.currentCashInHand || 0).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs font-bold text-slate-700">
+                  <span>Current Status:</span>
+                  <span className="font-mono font-bold text-amber-600">
+                    {selectedRiderForLimit.status || 'NORMAL'}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider block mb-1">
+                  Cash-in-Hand Limit (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="1000"
+                  step="500"
+                  required
+                  value={newCashLimit}
+                  onChange={(e) => setNewCashLimit(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Default: ₹10,000. Increase for trusted high-volume couriers.
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+                <div>
+                  <div className="text-xs font-black text-slate-900">COD Dispatch Lockout</div>
+                  <div className="text-[10px] text-slate-500">Prevent assigning further COD orders</div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={isLimitLockedToggle}
+                  onChange={(e) => setIsLimitLockedToggle(e.target.checked)}
+                  className="w-5 h-5 accent-rose-600 rounded cursor-pointer"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsLimitModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingLimit}
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-md shadow-amber-500/20"
+                >
+                  {isUpdatingLimit ? 'Saving...' : 'Save Limit Settings'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: Resolve Cash Discrepancy & Dispute (Point #45) */}
+      {isDisputeModalOpen && selectedSettlementForDispute && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <span>Resolve Discrepancy & Dispute</span>
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">
+                    #45
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Audit resolution for settlement {selectedSettlementForDispute.reconciliationId}
+                </p>
+              </div>
+              <button
+                onClick={() => setIsDisputeModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleResolveDisputeSubmit} className="space-y-4">
+              <div className="p-3.5 rounded-2xl bg-rose-50/80 border border-rose-200 space-y-2 text-xs">
+                <div className="flex justify-between font-bold text-slate-700">
+                  <span>Rider:</span>
+                  <span className="text-slate-950 font-black">
+                    {selectedSettlementForDispute.deliveryPartner?.name || 'Courier Partner'}
+                  </span>
+                </div>
+                <div className="flex justify-between font-bold text-slate-700">
+                  <span>Discrepancy:</span>
+                  <span className="font-mono font-black text-rose-700">
+                    {selectedSettlementForDispute.discrepancy < 0
+                      ? `Shortage: -₹${Math.abs(selectedSettlementForDispute.discrepancy).toLocaleString('en-IN')}`
+                      : `Excess: +₹${selectedSettlementForDispute.discrepancy.toLocaleString('en-IN')}`}
+                  </span>
+                </div>
+                {selectedSettlementForDispute.dispute?.reason && (
+                  <div className="pt-1 border-t border-rose-200/60 text-slate-600 italic">
+                    Reason: "{selectedSettlementForDispute.dispute.reason}"
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider block mb-1">
+                  Resolution Remarks *
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={disputeResolution}
+                  onChange={(e) => setDisputeResolution(e.target.value)}
+                  placeholder="e.g. Shortage recovered via next shift salary deduction"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider block mb-1">
+                  Adjustment Amount (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={disputeAdjustmentAmount}
+                  onChange={(e) => setDisputeAdjustmentAmount(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider block mb-1">
+                  Variance Recovery Mode *
+                </label>
+                <select
+                  value={disputeRecoveryMode}
+                  onChange={(e) => setDisputeRecoveryMode(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800"
+                >
+                  <option value="SALARY_DEDUCTION">Salary / Payout Deduction</option>
+                  <option value="RIDER_ONLINE_PAY">Rider Direct UPI / Online Payment</option>
+                  <option value="WAIVED_OFF">Waived Off (Management Discretion)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsDisputeModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResolvingDispute}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow-md shadow-rose-600/20"
+                >
+                  {isResolvingDispute ? 'Resolving...' : 'Complete Dispute Resolution'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 6: Regional Hub Cashier Vault Remittance Drop (Point #45) */}
+      {isVaultDropModalOpen && selectedSettlementForVaultDrop && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <span>Hub Cashier Vault Remittance Drop</span>
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                    #45
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Package verified physical currency into secured cashier safe bag.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsVaultDropModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleVaultDropSubmit} className="space-y-4">
+              <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 flex justify-between items-center text-xs font-bold text-amber-950">
+                <span>Total Cash to Lock:</span>
+                <span className="font-mono text-base font-black text-amber-800">
+                  ₹{selectedSettlementForVaultDrop.totalCounted.toLocaleString('en-IN')}
+                </span>
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider block mb-1">
+                  Cashier Safe Bag Seal Number *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={vaultDropSealNumber}
+                  onChange={(e) => setVaultDropSealNumber(e.target.value)}
+                  placeholder="e.g. SEAL-892144"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider block mb-1">
+                  Vault Cashier Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={vaultDropCashierName}
+                  onChange={(e) => setVaultDropCashierName(e.target.value)}
+                  placeholder="e.g. Chief Vault Cashier"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider block mb-1">
+                  Vault / Hub Location *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={vaultDropLocation}
+                  onChange={(e) => setVaultDropLocation(e.target.value)}
+                  placeholder="e.g. CENTRAL-VAULT-MAIN"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsVaultDropModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDroppingVault}
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-md shadow-amber-500/20"
+                >
+                  {isDroppingVault ? 'Dropping...' : 'Confirm Remittance Drop'}
                 </button>
               </div>
             </form>

@@ -193,11 +193,11 @@ export const CourierCodReconciliationModal = ({
               <h2 className="text-base font-black text-white flex items-center gap-2">
                 COD Cash Collection Reconciliation
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  Point #69
+                  Point #45
                 </span>
               </h2>
               <p className="text-xs text-slate-300">
-                Shift-End Cash Counter & Super Admin Deposit Submission
+                Shift-End Cash Counter & Cash Remittance Vault Submission
               </p>
             </div>
           </div>
@@ -253,6 +253,41 @@ export const CourierCodReconciliationModal = ({
 
           {activeTab === 'calculator' ? (
             <div className="space-y-4">
+              {/* Point 45: Live Cash-in-Hand (CIH) Threshold Meter */}
+              <div className="p-4 rounded-xl bg-slate-900 text-white space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5 font-black text-amber-400">
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Cash-in-Hand (CIH) Limit Tracker • Point #45</span>
+                  </div>
+                  <div className="font-mono font-bold">
+                    ₹{expectedAmount.toLocaleString('en-IN')} / ₹{(summaryData?.cashInHandLimit || 10000).toLocaleString('en-IN')} Limit ({summaryData?.utilizationPercentage || Math.min(100, Math.round((expectedAmount / 10000) * 100))}%)
+                  </div>
+                </div>
+
+                <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      (summaryData?.isLimitExceeded || expectedAmount >= (summaryData?.cashInHandLimit || 10000))
+                        ? 'bg-rose-500'
+                        : (summaryData?.isWarning || expectedAmount >= 0.8 * (summaryData?.cashInHandLimit || 10000))
+                        ? 'bg-amber-400'
+                        : 'bg-emerald-400'
+                    }`}
+                    style={{
+                      width: `${Math.min(100, summaryData?.utilizationPercentage || Math.round((expectedAmount / (summaryData?.cashInHandLimit || 10000)) * 100))}%`,
+                    }}
+                  />
+                </div>
+
+                {(summaryData?.isLimitExceeded || expectedAmount >= (summaryData?.cashInHandLimit || 10000)) && (
+                  <div className="p-2.5 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[11px] font-bold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>🚨 Cash threshold exceeded! Complete vault handover to accept new COD deliveries.</span>
+                  </div>
+                )}
+              </div>
+
               {/* Expected vs Counted Comparison Banner */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">

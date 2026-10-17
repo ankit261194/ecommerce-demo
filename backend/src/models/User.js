@@ -176,6 +176,20 @@ const userSchema = new mongoose.Schema(
       min: 1,
       max: 10,
     },
+    // Point 45: Automated Cash on Delivery (COD) Reconciliation & Cash Remittance Vault
+    cashInHandLimit: {
+      type: Number,
+      default: 10000, // ₹10,000 threshold for riders
+      min: 0,
+    },
+    isCashLimitLocked: {
+      type: Boolean,
+      default: false,
+    },
+    cashLimitLockedAt: {
+      type: Date,
+      default: null,
+    },
     // Point 27: VIP Loyalty Points & Customer Tier Matrix
     loyalty: {
       tier: {

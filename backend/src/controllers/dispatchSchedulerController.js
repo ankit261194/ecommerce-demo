@@ -114,7 +114,7 @@ const autoAssignRiderToTask = async (task, config = null) => {
     isActive: true,
     dutyStatus: 'ON_DUTY',
     isAvailable: true,
-  }).select('name phone email avatar dutyStatus isAvailable assignedZone lastLocation maxConcurrentOrders');
+  }).select('name phone email avatar dutyStatus isAvailable assignedZone lastLocation maxConcurrentOrders cashInHandLimit isCashLimitLocked');
 
   if (!riders || riders.length === 0) {
     task.dispatchStatus = 'UNASSIGNED';
@@ -126,6 +126,28 @@ const autoAssignRiderToTask = async (task, config = null) => {
   const eligibleRiders = [];
 
   for (const rider of riders) {
+    // Point 45: Check Cash-in-Hand limit for Cash on Delivery tasks
+    if (task.isCod) {
+      if (rider.isCashLimitLocked) {
+        continue; // Rider is locked out from COD tasks until cash drop
+      }
+      const unremittedTasks = await DeliveryTask.find({
+        deliveryPartner: rider._id,
+        isCod: true,
+        status: 'DELIVERED',
+        $or: [
+          { 'codReconciliation.status': { $in: ['PENDING', 'SUBMITTED'] } },
+          { codReconciliation: { $exists: false } },
+          { 'codReconciliation.status': { $exists: false } },
+        ],
+      });
+      const currentCih = unremittedTasks.reduce((sum, t) => sum + (t.amountCollected || t.amountToCollect || 0), 0);
+      const limit = rider.cashInHandLimit || 10000;
+      if (currentCih >= limit) {
+        continue; // Rider cash-in-hand limit reached
+      }
+    }
+
     const maxAllowed = rider.maxConcurrentOrders || maxTasksDefault;
     const activeTasksCount = await DeliveryTask.countDocuments({
       deliveryPartner: rider._id,

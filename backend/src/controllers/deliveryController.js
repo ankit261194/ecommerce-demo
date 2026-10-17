@@ -1723,6 +1723,12 @@ exports.getCodReconciliationSummary = async (req, res, next) => {
       .sort({ createdAt: -1 })
       .limit(10);
 
+    const rider = await User.findById(req.user._id).select('cashInHandLimit isCashLimitLocked cashLimitLockedAt');
+    const cashInHandLimit = rider?.cashInHandLimit || 10000;
+    const isLimitExceeded = totalCashPending >= cashInHandLimit;
+    const isWarning = totalCashPending >= cashInHandLimit * 0.8;
+    const utilizationPercentage = Math.min(100, Math.round((totalCashPending / cashInHandLimit) * 100));
+
     res.status(200).json({
       success: true,
       data: {
@@ -1730,6 +1736,11 @@ exports.getCodReconciliationSummary = async (req, res, next) => {
           totalCashPending,
           totalCashSubmitted,
           totalCashVerified,
+          cashInHandLimit,
+          isCashLimitLocked: Boolean(rider?.isCashLimitLocked),
+          isLimitExceeded,
+          isWarning,
+          utilizationPercentage,
           pendingTasksCount: pendingTasks.length,
           submittedTasksCount: submittedTasks.length,
           verifiedTasksCount: verifiedTasks.length,
@@ -1800,6 +1811,9 @@ exports.submitCodReconciliation = async (req, res, next) => {
     );
 
     const discrepancy = totalCounted - totalExpected;
+    let varianceStatus = 'EXACT_MATCH';
+    if (discrepancy < 0) varianceStatus = 'SHORTAGE_PENDING';
+    else if (discrepancy > 0) varianceStatus = 'EXCESS_UNCLAIMED';
 
     const reconciliationId = `COD-REC-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -1811,6 +1825,7 @@ exports.submitCodReconciliation = async (req, res, next) => {
       totalExpected,
       totalCounted,
       discrepancy,
+      varianceStatus,
       depositMethod,
       depositSlipNumber: depositSlipNumber.trim(),
       depositSlipImage,
@@ -1882,6 +1897,11 @@ exports.verifyCodReconciliation = async (req, res, next) => {
     reconciliation.adminRemarks = adminRemarks;
     reconciliation.verifiedBy = req.user._id;
     reconciliation.verifiedAt = new Date();
+
+    if (status === 'VERIFIED') {
+      reconciliation.varianceStatus = reconciliation.discrepancy === 0 ? 'EXACT_MATCH' : (reconciliation.discrepancy < 0 ? 'SHORTAGE_PENDING' : 'EXCESS_UNCLAIMED');
+    }
+
     await reconciliation.save();
 
     // If verified, mark tasks as VERIFIED
@@ -1895,6 +1915,26 @@ exports.verifyCodReconciliation = async (req, res, next) => {
           },
         }
       );
+    }
+
+    // Check rider lock status
+    if (status === 'VERIFIED' && reconciliation.deliveryPartner) {
+      const remainingTasks = await DeliveryTask.find({
+        deliveryPartner: reconciliation.deliveryPartner,
+        isCod: true,
+        status: 'DELIVERED',
+        $or: [
+          { 'codReconciliation.status': { $in: ['PENDING', 'SUBMITTED'] } },
+          { codReconciliation: { $exists: false } },
+          { 'codReconciliation.status': { $exists: false } },
+        ],
+      });
+      const remainingCih = remainingTasks.reduce((sum, t) => sum + (t.amountCollected || t.amountToCollect || 0), 0);
+      const riderUser = await User.findById(reconciliation.deliveryPartner);
+      if (riderUser && remainingCih < (riderUser.cashInHandLimit || 10000)) {
+        riderUser.isCashLimitLocked = false;
+        await riderUser.save();
+      }
     }
 
     res.status(200).json({

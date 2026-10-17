@@ -1693,9 +1693,9 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
             }`}
           >
             <Coins className="w-4 h-4 text-amber-400" />
-            <span>Rider COD Cash Vault</span>
+            <span>COD Vault & Remittance</span>
             <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-200 ml-1">
-              Point #23
+              Point #45
             </span>
           </button>
 

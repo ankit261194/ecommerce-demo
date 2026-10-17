@@ -236,6 +236,10 @@ exports.initiateHandover = async (req, res, next) => {
     const reconciliationId = `COD-REC-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const handoverOtp = Math.floor(1000 + Math.random() * 9000).toString();
 
+    let varianceStatus = 'EXACT_MATCH';
+    if (discrepancy < 0) varianceStatus = 'SHORTAGE_PENDING';
+    else if (discrepancy > 0) varianceStatus = 'EXCESS_UNCLAIMED';
+
     const ordersAudit = tasks.map((t) => ({
       orderNumber: t.subOrder?.subOrderId || `TASK-${t._id.toString().slice(-6).toUpperCase()}`,
       subOrderNumber: t.subOrder?._id?.toString() || '',
@@ -252,6 +256,7 @@ exports.initiateHandover = async (req, res, next) => {
       totalExpected,
       totalCounted,
       discrepancy,
+      varianceStatus,
       handoverOtp,
       depositMethod,
       depositSlipNumber: depositSlipNumber.trim(),
@@ -284,6 +289,7 @@ exports.initiateHandover = async (req, res, next) => {
         totalExpected: settlement.totalExpected,
         totalCounted: settlement.totalCounted,
         discrepancy: settlement.discrepancy,
+        varianceStatus: settlement.varianceStatus,
         status: settlement.status,
         ordersCount: tasks.length,
       },
@@ -330,6 +336,11 @@ exports.verifyHandoverOtp = async (req, res, next) => {
     settlement.adminRemarks = adminRemarks.trim();
     settlement.verifiedBy = req.user._id;
     settlement.verifiedAt = new Date();
+
+    if (settlement.discrepancy === 0) settlement.varianceStatus = 'EXACT_MATCH';
+    else if (settlement.discrepancy < 0) settlement.varianceStatus = 'SHORTAGE_PENDING';
+    else if (settlement.discrepancy > 0) settlement.varianceStatus = 'EXCESS_UNCLAIMED';
+
     await settlement.save();
 
     // Mark delivery tasks as VERIFIED
@@ -345,6 +356,26 @@ exports.verifyHandoverOtp = async (req, res, next) => {
       );
     }
 
+    // Check remaining cash-in-hand for rider and unlock if under limit
+    if (settlement.deliveryPartner) {
+      const remainingTasks = await DeliveryTask.find({
+        deliveryPartner: settlement.deliveryPartner._id || settlement.deliveryPartner,
+        isCod: true,
+        status: 'DELIVERED',
+        $or: [
+          { 'codReconciliation.status': { $in: ['PENDING', 'SUBMITTED'] } },
+          { codReconciliation: { $exists: false } },
+          { 'codReconciliation.status': { $exists: false } },
+        ],
+      });
+      const remainingCih = remainingTasks.reduce((sum, t) => sum + (t.amountCollected || t.amountToCollect || 0), 0);
+      const riderUser = await User.findById(settlement.deliveryPartner._id || settlement.deliveryPartner);
+      if (riderUser && remainingCih < (riderUser.cashInHandLimit || 10000)) {
+        riderUser.isCashLimitLocked = false;
+        await riderUser.save();
+      }
+    }
+
     // Audit Log entry
     await AuditLog.create({
       action: 'COD_SETTLEMENT_VERIFIED',
@@ -356,6 +387,7 @@ exports.verifyHandoverOtp = async (req, res, next) => {
         totalCounted: settlement.totalCounted,
         totalExpected: settlement.totalExpected,
         discrepancy: settlement.discrepancy,
+        varianceStatus: settlement.varianceStatus,
       },
     }).catch(() => {});
 
@@ -581,7 +613,7 @@ exports.getPrintableSettlementSlip = async (req, res, next) => {
   </div>
 
   <div class="footer">
-    AuraMarket Multi-Vendor Commerce Platform • Immutable Audit Record • Point #23
+    AuraMarket Multi-Vendor Commerce Platform • Immutable Audit Record • Point #45
   </div>
 </body>
 </html>`;
@@ -592,3 +624,532 @@ exports.getPrintableSettlementSlip = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Get Rider Live Cash-in-Hand Telemetry & Threshold Status (Point #45)
+// @route   GET /api/cod-vault/rider/cash-in-hand
+// @access  Private (Rider / Super Admin / Admin)
+exports.getRiderCashInHandTelemetry = async (req, res, next) => {
+  try {
+    const riderId = req.user.role === 'delivery' ? req.user._id : (req.query.riderId || req.user._id);
+
+    const rider = await User.findById(riderId).select('name phone email cashInHandLimit isCashLimitLocked cashLimitLockedAt');
+    if (!rider) {
+      return res.status(404).json({ success: false, message: 'Rider not found' });
+    }
+
+    const unremittedTasks = await DeliveryTask.find({
+      deliveryPartner: rider._id,
+      isCod: true,
+      status: 'DELIVERED',
+      $or: [
+        { 'codReconciliation.status': { $in: ['PENDING', 'SUBMITTED'] } },
+        { codReconciliation: { $exists: false } },
+        { 'codReconciliation.status': { $exists: false } },
+      ],
+    })
+      .populate('subOrder', 'subOrderId totalAmount')
+      .sort({ deliveredAt: -1 });
+
+    const currentCashInHand = unremittedTasks.reduce((sum, t) => sum + (t.amountCollected || t.amountToCollect || 0), 0);
+    const cashInHandLimit = rider.cashInHandLimit || 10000;
+    const utilizationPercentage = Math.min(100, Math.round((currentCashInHand / cashInHandLimit) * 100));
+    const isLimitExceeded = currentCashInHand >= cashInHandLimit;
+    const isWarning = currentCashInHand >= cashInHandLimit * 0.8;
+
+    // Auto-lock if threshold breached and not already locked
+    let isLocked = Boolean(rider.isCashLimitLocked);
+    if (isLimitExceeded && !isLocked) {
+      rider.isCashLimitLocked = true;
+      rider.cashLimitLockedAt = new Date();
+      await rider.save();
+      isLocked = true;
+    }
+
+    const remainingAllowance = Math.max(0, cashInHandLimit - currentCashInHand);
+
+    const ordersBreakdown = unremittedTasks.map((t) => ({
+      taskId: t._id,
+      orderNumber: t.subOrder?.subOrderId || `TASK-${t._id.toString().slice(-6).toUpperCase()}`,
+      amount: t.amountCollected || t.amountToCollect || 0,
+      customerName: t.dropLocation?.recipientName || 'Customer',
+      deliveredAt: t.deliveredAt || t.updatedAt,
+      reconciliationStatus: t.codReconciliation?.status || 'PENDING',
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        riderId: rider._id,
+        riderName: rider.name,
+        riderPhone: rider.phone,
+        currentCashInHand,
+        cashInHandLimit,
+        utilizationPercentage,
+        isLimitExceeded,
+        isWarning,
+        isCashLimitLocked: isLocked,
+        cashLimitLockedAt: rider.cashLimitLockedAt,
+        remainingAllowance,
+        unremittedTasksCount: unremittedTasks.length,
+        ordersBreakdown,
+        canAcceptNewCodOrders: !isLocked && !isLimitExceeded,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get All Riders Cash-in-Hand Threshold Radar (Point #45)
+// @route   GET /api/cod-vault/riders-limit-monitor
+// @access  Private (Super Admin / Admin)
+exports.getRidersLimitMonitor = async (req, res, next) => {
+  try {
+    const riders = await User.find({
+      role: 'delivery',
+      isActive: true,
+    }).select('name phone email cashInHandLimit isCashLimitLocked cashLimitLockedAt dutyStatus');
+
+    const tasks = await DeliveryTask.find({
+      isCod: true,
+      status: 'DELIVERED',
+      $or: [
+        { 'codReconciliation.status': { $in: ['PENDING', 'SUBMITTED'] } },
+        { codReconciliation: { $exists: false } },
+        { 'codReconciliation.status': { $exists: false } },
+      ],
+    });
+
+    const cashByRider = {};
+    const taskCountByRider = {};
+
+    tasks.forEach((t) => {
+      const rId = t.deliveryPartner?.toString();
+      if (!rId) return;
+      const amt = t.amountCollected || t.amountToCollect || 0;
+      cashByRider[rId] = (cashByRider[rId] || 0) + amt;
+      taskCountByRider[rId] = (taskCountByRider[rId] || 0) + 1;
+    });
+
+    let totalCashOnRoad = 0;
+    let breachedCount = 0;
+    let warningCount = 0;
+
+    const ridersList = riders.map((r) => {
+      const rId = r._id.toString();
+      const currentCash = cashByRider[rId] || 0;
+      const limit = r.cashInHandLimit || 10000;
+      const utilPct = Math.min(100, Math.round((currentCash / limit) * 100));
+      const isBreached = currentCash >= limit || r.isCashLimitLocked;
+      const isWarn = currentCash >= limit * 0.8 && !isBreached;
+
+      totalCashOnRoad += currentCash;
+      if (isBreached) breachedCount += 1;
+      if (isWarn) warningCount += 1;
+
+      return {
+        riderId: r._id,
+        name: r.name,
+        phone: r.phone,
+        email: r.email,
+        dutyStatus: r.dutyStatus,
+        cashInHandLimit: limit,
+        isCashLimitLocked: Boolean(r.isCashLimitLocked),
+        cashLimitLockedAt: r.cashLimitLockedAt,
+        currentCashInHand: currentCash,
+        utilizationPercentage: utilPct,
+        unremittedTasksCount: taskCountByRider[rId] || 0,
+        status: isBreached ? 'BREACHED_LOCKED' : (isWarn ? 'WARNING' : 'NORMAL'),
+      };
+    });
+
+    ridersList.sort((a, b) => b.currentCashInHand - a.currentCashInHand);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        summary: {
+          totalRiders: riders.length,
+          totalRidersWithCash: Object.keys(cashByRider).length,
+          totalCashOnRoad,
+          breachedRidersCount: breachedCount,
+          warningRidersCount: warningCount,
+        },
+        riders: ridersList,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update Rider Cash-in-Hand Limit or Unlock (Point #45)
+// @route   PUT /api/cod-vault/riders/:id/cash-limit
+// @access  Private (Super Admin)
+exports.updateRiderCashLimit = async (req, res, next) => {
+  try {
+    const { cashInHandLimit, isCashLimitLocked } = req.body;
+    const rider = await User.findById(req.params.id);
+    if (!rider || rider.role !== 'delivery') {
+      return res.status(404).json({ success: false, message: 'Delivery rider not found' });
+    }
+
+    if (cashInHandLimit !== undefined) {
+      rider.cashInHandLimit = Math.max(1000, Number(cashInHandLimit));
+    }
+    if (isCashLimitLocked !== undefined) {
+      rider.isCashLimitLocked = Boolean(isCashLimitLocked);
+      rider.cashLimitLockedAt = rider.isCashLimitLocked ? new Date() : null;
+    }
+
+    await rider.save();
+
+    await AuditLog.create({
+      action: 'COD_RIDER_LIMIT_UPDATED',
+      module: 'LOGISTICS',
+      description: `Rider ${rider.name} COD limit updated to ₹${rider.cashInHandLimit}${rider.isCashLimitLocked ? ' (Locked)' : ' (Unlocked)'}`,
+      performedBy: req.user._id,
+      targetType: 'USER',
+      targetId: rider._id.toString(),
+      details: {
+        riderName: rider.name,
+        cashInHandLimit: rider.cashInHandLimit,
+        isCashLimitLocked: rider.isCashLimitLocked,
+      },
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: `Rider ${rider.name} cash limit updated to ₹${rider.cashInHandLimit.toLocaleString('en-IN')}${rider.isCashLimitLocked ? ' (Locked)' : ' (Unlocked)'}!`,
+      data: {
+        riderId: rider._id,
+        name: rider.name,
+        cashInHandLimit: rider.cashInHandLimit,
+        isCashLimitLocked: rider.isCashLimitLocked,
+        cashLimitLockedAt: rider.cashLimitLockedAt,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Raise Variance Dispute on COD Settlement (Point #45)
+// @route   POST /api/cod-vault/settlements/:id/dispute
+// @access  Private (Rider / Super Admin)
+exports.raiseDispute = async (req, res, next) => {
+  try {
+    const { reason = '' } = req.body;
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ success: false, message: 'Dispute reason is required.' });
+    }
+
+    const settlement = await CodReconciliation.findOne({
+      $or: [{ reconciliationId: req.params.id }, { _id: req.params.id.match(/^[0-9a-fA-F]{24}$/) ? req.params.id : null }],
+    }).populate('deliveryPartner', 'name phone email');
+
+    if (!settlement) {
+      return res.status(404).json({ success: false, message: 'Settlement record not found.' });
+    }
+
+    settlement.status = 'DISPUTED';
+    settlement.varianceStatus = 'DISPUTE_RAISED';
+    settlement.dispute = {
+      isDisputed: true,
+      reason: reason.trim(),
+      raisedBy: req.user._id,
+      raisedAt: new Date(),
+      resolution: '',
+      resolvedBy: null,
+      resolvedAt: null,
+      adjustmentAmount: 0,
+      recoveryMode: 'NONE',
+    };
+
+    await settlement.save();
+
+    await AuditLog.create({
+      action: 'COD_DISPUTE_RAISED',
+      module: 'LOGISTICS',
+      description: `Dispute raised on COD settlement ${settlement.reconciliationId}: ${reason.trim()}`,
+      performedBy: req.user._id,
+      targetType: 'COD_SETTLEMENT',
+      targetId: settlement.reconciliationId,
+      details: {
+        reconciliationId: settlement.reconciliationId,
+        discrepancy: settlement.discrepancy,
+        reason: reason.trim(),
+      },
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: `Dispute raised for settlement ${settlement.reconciliationId}. Pending audit resolution.`,
+      data: settlement,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Resolve Discrepancy Dispute & Adjust Variance (Point #45)
+// @route   POST /api/cod-vault/settlements/:id/resolve-dispute
+// @access  Private (Super Admin)
+exports.resolveDispute = async (req, res, next) => {
+  try {
+    const { resolution, adjustmentAmount = 0, recoveryMode = 'NONE' } = req.body;
+    if (!resolution || !resolution.trim()) {
+      return res.status(400).json({ success: false, message: 'Dispute resolution description is required.' });
+    }
+
+    const settlement = await CodReconciliation.findOne({
+      $or: [{ reconciliationId: req.params.id }, { _id: req.params.id.match(/^[0-9a-fA-F]{24}$/) ? req.params.id : null }],
+    }).populate('deliveryPartner', 'name phone email');
+
+    if (!settlement) {
+      return res.status(404).json({ success: false, message: 'Settlement record not found.' });
+    }
+
+    settlement.status = 'VERIFIED';
+    settlement.varianceStatus = 'DISPUTE_RESOLVED';
+    settlement.verifiedBy = req.user._id;
+    settlement.verifiedAt = new Date();
+    settlement.adminRemarks = `${settlement.adminRemarks ? settlement.adminRemarks + ' | ' : ''}Dispute Resolved: ${resolution.trim()} (Mode: ${recoveryMode})`;
+
+    settlement.dispute = {
+      ...settlement.dispute,
+      isDisputed: false,
+      resolution: resolution.trim(),
+      resolvedBy: req.user._id,
+      resolvedAt: new Date(),
+      adjustmentAmount: Number(adjustmentAmount) || 0,
+      recoveryMode,
+    };
+
+    await settlement.save();
+
+    // Mark delivery tasks as VERIFIED
+    if (settlement.tasks && settlement.tasks.length > 0) {
+      await DeliveryTask.updateMany(
+        { _id: { $in: settlement.tasks } },
+        {
+          $set: {
+            'codReconciliation.status': 'VERIFIED',
+            'codReconciliation.reconciledAt': new Date(),
+          },
+        }
+      );
+    }
+
+    // Re-check rider lock status
+    if (settlement.deliveryPartner) {
+      const remainingTasks = await DeliveryTask.find({
+        deliveryPartner: settlement.deliveryPartner._id || settlement.deliveryPartner,
+        isCod: true,
+        status: 'DELIVERED',
+        $or: [
+          { 'codReconciliation.status': { $in: ['PENDING', 'SUBMITTED'] } },
+          { codReconciliation: { $exists: false } },
+          { 'codReconciliation.status': { $exists: false } },
+        ],
+      });
+      const remainingCih = remainingTasks.reduce((sum, t) => sum + (t.amountCollected || t.amountToCollect || 0), 0);
+      const riderUser = await User.findById(settlement.deliveryPartner._id || settlement.deliveryPartner);
+      if (riderUser && remainingCih < (riderUser.cashInHandLimit || 10000)) {
+        riderUser.isCashLimitLocked = false;
+        await riderUser.save();
+      }
+    }
+
+    await AuditLog.create({
+      action: 'COD_DISPUTE_RESOLVED',
+      module: 'LOGISTICS',
+      description: `Dispute resolved on COD settlement ${settlement.reconciliationId}: ${resolution.trim()} (Mode: ${recoveryMode})`,
+      performedBy: req.user._id,
+      targetType: 'COD_SETTLEMENT',
+      targetId: settlement.reconciliationId,
+      details: {
+        reconciliationId: settlement.reconciliationId,
+        resolution: resolution.trim(),
+        adjustmentAmount,
+        recoveryMode,
+      },
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: `Dispute resolved successfully! Settlement locked into vault with mode: ${recoveryMode}.`,
+      data: settlement,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Record Physical Cash Remittance Drop into Hub Vault (Point #45)
+// @route   POST /api/cod-vault/handover/vault-drop
+// @access  Private (Super Admin / Admin)
+exports.recordVaultRemittanceDrop = async (req, res, next) => {
+  try {
+    const { reconciliationId, bagSealNumber, cashierName, vaultLocation = 'CENTRAL-VAULT-MAIN' } = req.body;
+
+    if (!reconciliationId) {
+      return res.status(400).json({ success: false, message: 'Reconciliation ID is required.' });
+    }
+
+    const settlement = await CodReconciliation.findOne({
+      $or: [{ reconciliationId }, { _id: reconciliationId.match(/^[0-9a-fA-F]{24}$/) ? reconciliationId : null }],
+    }).populate('deliveryPartner', 'name phone email');
+
+    if (!settlement) {
+      return res.status(404).json({ success: false, message: 'Settlement record not found.' });
+    }
+
+    const batchId = `VAULT-BATCH-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
+
+    settlement.status = 'VERIFIED';
+    settlement.verifiedBy = req.user._id;
+    settlement.verifiedAt = new Date();
+    settlement.varianceStatus = settlement.discrepancy === 0 ? 'EXACT_MATCH' : (settlement.discrepancy < 0 ? 'SHORTAGE_PENDING' : 'EXCESS_UNCLAIMED');
+
+    settlement.cashRemittanceBatch = {
+      batchId,
+      cashierName: (cashierName || req.user.name || 'Chief Cashier').trim(),
+      vaultLocation: (vaultLocation || settlement.hubCode || 'CENTRAL-VAULT-MAIN').trim(),
+      receivedAmount: settlement.totalCounted,
+      bagSealNumber: (bagSealNumber || `SEAL-${Date.now().toString().slice(-6)}`).trim(),
+      remittedAt: new Date(),
+    };
+
+    await settlement.save();
+
+    // Mark delivery tasks as VERIFIED
+    if (settlement.tasks && settlement.tasks.length > 0) {
+      await DeliveryTask.updateMany(
+        { _id: { $in: settlement.tasks } },
+        {
+          $set: {
+            'codReconciliation.status': 'VERIFIED',
+            'codReconciliation.reconciledAt': new Date(),
+          },
+        }
+      );
+    }
+
+    // Re-check rider limit
+    if (settlement.deliveryPartner) {
+      const remainingTasks = await DeliveryTask.find({
+        deliveryPartner: settlement.deliveryPartner._id || settlement.deliveryPartner,
+        isCod: true,
+        status: 'DELIVERED',
+        $or: [
+          { 'codReconciliation.status': { $in: ['PENDING', 'SUBMITTED'] } },
+          { codReconciliation: { $exists: false } },
+          { 'codReconciliation.status': { $exists: false } },
+        ],
+      });
+      const remainingCih = remainingTasks.reduce((sum, t) => sum + (t.amountCollected || t.amountToCollect || 0), 0);
+      const riderUser = await User.findById(settlement.deliveryPartner._id || settlement.deliveryPartner);
+      if (riderUser && remainingCih < (riderUser.cashInHandLimit || 10000)) {
+        riderUser.isCashLimitLocked = false;
+        await riderUser.save();
+      }
+    }
+
+    await AuditLog.create({
+      action: 'COD_VAULT_DROP_COMPLETED',
+      module: 'LOGISTICS',
+      description: `Cash remittance batch ${batchId} deposited into ${vaultLocation} (Seal: ${settlement.cashRemittanceBatch.bagSealNumber})`,
+      performedBy: req.user._id,
+      targetType: 'COD_SETTLEMENT',
+      targetId: settlement.reconciliationId,
+      details: {
+        batchId,
+        vaultLocation,
+        bagSealNumber: settlement.cashRemittanceBatch.bagSealNumber,
+        receivedAmount: settlement.totalCounted,
+      },
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: `Cash remittance batch ${batchId} deposited into ${vaultLocation} (Seal: ${settlement.cashRemittanceBatch.bagSealNumber})!`,
+      data: settlement,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Export COD Settlements Audit Ledger CSV (Point #45)
+// @route   GET /api/cod-vault/export-csv
+// @access  Private (Super Admin / Admin)
+exports.exportSettlementsCsv = async (req, res, next) => {
+  try {
+    const settlements = await CodReconciliation.find({})
+      .populate('deliveryPartner', 'name phone email')
+      .populate('verifiedBy', 'name email')
+      .sort({ createdAt: -1 });
+
+    const escapeCsv = (val) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const headers = [
+      'Reconciliation ID',
+      'Shift Date',
+      'Rider Name',
+      'Rider Phone',
+      'Deposit Method',
+      'Deposit Slip Number',
+      'Total Expected (INR)',
+      'Total Counted (INR)',
+      'Discrepancy (INR)',
+      'Status',
+      'Variance Status',
+      'Handover OTP',
+      'Verified At',
+      'Verified By',
+      'Bank Name',
+      'Bank UTR Ref',
+      'Vault Batch ID',
+      'Bag Seal Number',
+      'Dispute Status',
+      'Dispute Resolution',
+    ];
+
+    const rows = settlements.map((s) => [
+      escapeCsv(s.reconciliationId),
+      escapeCsv(s.shiftDate ? new Date(s.shiftDate).toISOString().split('T')[0] : ''),
+      escapeCsv(s.deliveryPartner?.name || 'N/A'),
+      escapeCsv(s.deliveryPartner?.phone || 'N/A'),
+      escapeCsv(s.depositMethod || 'HUB_CASH_DESK'),
+      escapeCsv(s.depositSlipNumber || ''),
+      s.totalExpected || 0,
+      s.totalCounted || 0,
+      s.discrepancy || 0,
+      escapeCsv(s.status),
+      escapeCsv(s.varianceStatus || 'NONE'),
+      escapeCsv(s.handoverOtp || ''),
+      escapeCsv(s.verifiedAt ? new Date(s.verifiedAt).toISOString() : ''),
+      escapeCsv(s.verifiedBy?.name || ''),
+      escapeCsv(s.bankDeposit?.bankName || ''),
+      escapeCsv(s.bankDeposit?.transactionReference || ''),
+      escapeCsv(s.cashRemittanceBatch?.batchId || ''),
+      escapeCsv(s.cashRemittanceBatch?.bagSealNumber || ''),
+      escapeCsv(s.dispute?.isDisputed ? 'DISPUTED' : (s.dispute?.resolution ? 'RESOLVED' : 'NONE')),
+      escapeCsv(s.dispute?.resolution || ''),
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="COD_Settlements_Ledger_${Date.now()}.csv"`);
+    res.status(200).send(csvContent);
+  } catch (error) {
+    next(error);
+  }
+};
+

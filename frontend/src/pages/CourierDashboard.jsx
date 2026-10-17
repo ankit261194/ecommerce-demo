@@ -444,10 +444,13 @@ export const CourierDashboard = () => {
           <button
             onClick={() => setIsCodReconModalOpen(true)}
             className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-all flex items-center gap-1.5 text-xs font-bold"
-            title="Reconcile Cash on Delivery (Denomination Counter)"
+            title="Reconcile Cash on Delivery & Vault Handover (Point #45)"
           >
             <Calculator className="w-4 h-4" />
             <span>Reconcile COD Cash</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-amber-300">
+              #45
+            </span>
           </button>
           <button
             onClick={() => setIsRouteOptimizerModalOpen(true)}
@@ -508,14 +511,14 @@ export const CourierDashboard = () => {
         <div
           onClick={() => setIsCodReconModalOpen(true)}
           className="cursor-pointer transition-transform hover:scale-[1.01]"
-          title="Click to open COD Cash Collection & Denomination Reconciliation"
+          title="Click to open COD Cash Collection & Denomination Reconciliation (Point #45)"
         >
           <BentoCard
             title="Cash on Delivery (COD)"
             value={`₹${riderStats.codCollectedToday.toLocaleString('en-IN')}`}
             subtitle="Click to count notes & submit deposit slip"
             icon={DollarSign}
-            badge="Reconcile Cash"
+            badge="Vault Drop • Point #45"
             badgeColor="text-amber-800 bg-amber-50 border-amber-200"
             accentColor="text-amber-600"
           />

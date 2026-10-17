@@ -28855,6 +28855,372 @@ const runTests = async () => {
       assert.strictEqual(resRiderUnlock.status, 403);
     });
 
+    // =========================================================================
+    // PILLAR 4: FLEET & LOGISTICS - POINT 45
+    // Automated Cash on Delivery (COD) Reconciliation & Cash Remittance Vault
+    // =========================================================================
+
+    let p45Rider;
+    let p45RiderToken;
+    let p45Task1;
+    let p45Task2;
+    let p45SettlementId;
+    let p45HandoverOtp;
+
+    await test('Point 45: Setup: Create Dedicated Rider with Cash Limit and COD Delivered Tasks', async () => {
+      // 1. Create a rider with cashInHandLimit = 10000, isCashLimitLocked = false
+      p45Rider = await User.create({
+        name: 'Suresh Patil Fleet COD',
+        email: `suresh.cod.${Date.now()}@auramarket.delivery`,
+        phone: `+919876${Math.floor(100000 + Math.random() * 900000)}`,
+        password: 'Password123!',
+        role: 'delivery',
+        isActive: true,
+        cashInHandLimit: 10000,
+        isCashLimitLocked: false,
+      });
+      p45RiderToken = generateToken(p45Rider._id);
+
+      // 2. Create 2 delivered COD tasks assigned to p45Rider
+      p45Task1 = await DeliveryTask.create({
+        trackingNumber: `TRK-COD-P45-1-${Date.now()}`,
+        deliveryPartner: p45Rider._id,
+        status: 'DELIVERED',
+        isCod: true,
+        amountToCollect: 3500,
+        amountCollected: 3500,
+        codReconciliation: { status: 'PENDING' },
+        dropLocation: {
+          recipientName: 'Kavita Deshmukh',
+          phone: '+919876543210',
+          address: 'Indiranagar 100ft Road',
+          city: 'Bengaluru',
+          pincode: '560038',
+        },
+      });
+
+      p45Task2 = await DeliveryTask.create({
+        trackingNumber: `TRK-COD-P45-2-${Date.now()}`,
+        deliveryPartner: p45Rider._id,
+        status: 'DELIVERED',
+        isCod: true,
+        amountToCollect: 4000,
+        amountCollected: 4000,
+        codReconciliation: { status: 'PENDING' },
+        dropLocation: {
+          recipientName: 'Rohan Verma',
+          phone: '+919876543211',
+          address: 'Koramangala 4th Block',
+          city: 'Bengaluru',
+          pincode: '560034',
+        },
+      });
+
+      assert.ok(p45Rider);
+      assert.strictEqual(p45Rider.cashInHandLimit, 10000);
+      assert.strictEqual(p45Rider.isCashLimitLocked, false);
+    });
+
+    await test('Point 45: GET /api/cod-vault/rider/cash-in-hand calculates live unremitted cash, limit, and utilization telemetry', async () => {
+      const res = await fetch(`${baseUrl}/cod-vault/rider/cash-in-hand`, {
+        headers: { Authorization: `Bearer ${p45RiderToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.data.currentCashInHand, 7500); // 3500 + 4000
+      assert.strictEqual(json.data.cashInHandLimit, 10000);
+      assert.strictEqual(json.data.utilizationPercentage, 75);
+      assert.strictEqual(json.data.isWarning, false); // 75% < 80%
+      assert.strictEqual(json.data.isLimitExceeded, false);
+      assert.strictEqual(json.data.isCashLimitLocked, false);
+      assert.strictEqual(json.data.unremittedTasksCount, 2);
+    });
+
+    await test('Point 45: GET /api/cod-vault/riders-limit-monitor displays fleet-wide cash-in-hand radar (Super Admin)', async () => {
+      const res = await fetch(`${baseUrl}/cod-vault/riders-limit-monitor`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.ok(Array.isArray(json.data.riders));
+      const riderEntry = json.data.riders.find(r => r.riderId.toString() === p45Rider._id.toString());
+      assert.ok(riderEntry);
+      assert.strictEqual(riderEntry.currentCashInHand, 7500);
+      assert.strictEqual(riderEntry.cashInHandLimit, 10000);
+      assert.strictEqual(riderEntry.utilizationPercentage, 75);
+      assert.strictEqual(riderEntry.status, 'NORMAL');
+      assert.ok(json.data.summary.totalCashOnRoad >= 7500);
+    });
+
+    await test('Point 45: PUT /api/cod-vault/riders/:id/cash-limit updates threshold and lock state with AuditLog', async () => {
+      // Lower limit to 6,000 to trigger breach lockout
+      const res = await fetch(`${baseUrl}/cod-vault/riders/${p45Rider._id}/cash-limit`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          cashInHandLimit: 6000,
+          isCashLimitLocked: true,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.data.cashInHandLimit, 6000);
+      assert.strictEqual(json.data.isCashLimitLocked, true);
+
+      // Verify AuditLog recorded
+      const audit = await AuditLog.findOne({
+        targetId: p45Rider._id.toString(),
+        action: 'COD_RIDER_LIMIT_UPDATED',
+      });
+      assert.ok(audit);
+
+      // Check rider telemetry now reflects locked status & breach
+      const resRider = await fetch(`${baseUrl}/cod-vault/rider/cash-in-hand`, {
+        headers: { Authorization: `Bearer ${p45RiderToken}` },
+      });
+      const riderJson = await resRider.json();
+      assert.strictEqual(riderJson.data.isCashLimitLocked, true);
+      assert.strictEqual(riderJson.data.isLimitExceeded, true); // 7500 > 6000
+    });
+
+    await test('Point 45: POST /api/cod-vault/handover/initiate submits denomination count and generates 4-digit OTP', async () => {
+      // Initiate handover for 7,500 total (e.g. 15 x 500 = 7,500)
+      const res = await fetch(`${baseUrl}/cod-vault/handover/initiate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          riderId: p45Rider._id.toString(),
+          taskIds: [p45Task1._id.toString(), p45Task2._id.toString()],
+          denominations: {
+            d500: 15,
+            d200: 0,
+            d100: 0,
+            d50: 0,
+            d20: 0,
+            d10: 0,
+            coins: 0,
+          },
+          notes: 'Shift closing collection verified at Hub Counter',
+          hubCode: 'CENTRAL-VAULT-01',
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.ok(json.data.reconciliationId);
+      assert.strictEqual(json.data.totalExpected, 7500);
+      assert.strictEqual(json.data.totalCounted, 7500);
+      assert.strictEqual(json.data.discrepancy, 0);
+      assert.strictEqual(json.data.varianceStatus, 'EXACT_MATCH');
+      assert.strictEqual(json.data.status, 'SUBMITTED');
+      assert.ok(json.data.handoverOtp);
+      assert.strictEqual(json.data.handoverOtp.length, 4);
+
+      p45SettlementId = json.data.reconciliationId;
+      p45HandoverOtp = json.data.handoverOtp;
+    });
+
+    await test('Point 45: POST /api/cod-vault/handover/verify-otp verifies OTP, locks vault cash, remits tasks, and auto-unlocks rider', async () => {
+      // Verify with invalid OTP first (400)
+      const resBadOtp = await fetch(`${baseUrl}/cod-vault/handover/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          reconciliationId: p45SettlementId,
+          otp: '0000',
+        }),
+      });
+      assert.strictEqual(resBadOtp.status, 400);
+
+      // Verify with correct OTP (200)
+      const resVerify = await fetch(`${baseUrl}/cod-vault/handover/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          reconciliationId: p45SettlementId,
+          otp: p45HandoverOtp,
+          adminRemarks: 'Notes matched, packed into vault packet #45-A',
+        }),
+      });
+      assert.strictEqual(resVerify.status, 200);
+      const json = await resVerify.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.data.status, 'VERIFIED');
+      assert.ok(json.data.verifiedAt);
+
+      // Check tasks marked VERIFIED
+      const task1After = await DeliveryTask.findById(p45Task1._id);
+      const task2After = await DeliveryTask.findById(p45Task2._id);
+      assert.strictEqual(task1After.codReconciliation.status, 'VERIFIED');
+      assert.strictEqual(task2After.codReconciliation.status, 'VERIFIED');
+
+      // Check rider cash in hand is now 0 and auto-unlocked
+      const riderAfter = await User.findById(p45Rider._id);
+      assert.strictEqual(riderAfter.isCashLimitLocked, false);
+
+      const resRiderTele = await fetch(`${baseUrl}/cod-vault/rider/cash-in-hand`, {
+        headers: { Authorization: `Bearer ${p45RiderToken}` },
+      });
+      const teleJson = await resRiderTele.json();
+      assert.strictEqual(teleJson.data.currentCashInHand, 0);
+      assert.strictEqual(teleJson.data.utilizationPercentage, 0);
+      assert.strictEqual(teleJson.data.isCashLimitLocked, false);
+      assert.strictEqual(teleJson.data.unremittedTasksCount, 0);
+    });
+
+    await test('Point 45: POST /api/cod-vault/settlements/:id/dispute flags variance discrepancy and sets DISPUTED status', async () => {
+      // Create another task and settlement with a shortage variance
+      const p45TaskShortage = await DeliveryTask.create({
+        trackingNumber: `TRK-COD-P45-DISPUTE-${Date.now()}`,
+        deliveryPartner: p45Rider._id,
+        status: 'DELIVERED',
+        isCod: true,
+        amountToCollect: 2000,
+        amountCollected: 2000,
+        codReconciliation: { status: 'PENDING' },
+        dropLocation: { address: 'HSR Layout', city: 'Bengaluru', pincode: '560102' },
+      });
+
+      const resInit = await fetch(`${baseUrl}/cod-vault/handover/initiate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          riderId: p45Rider._id.toString(),
+          taskIds: [p45TaskShortage._id.toString()],
+          denominations: { d500: 3, d200: 0, d100: 0, d50: 0, d20: 0, d10: 0, coins: 0 }, // 1,500 counted vs 2,000 expected
+          notes: 'Rider short by ₹500',
+        }),
+      });
+      const initData = await resInit.json();
+      assert.strictEqual(initData.data.discrepancy, -500);
+      assert.strictEqual(initData.data.varianceStatus, 'SHORTAGE_PENDING');
+      const disputeRecId = initData.data.reconciliationId;
+
+      // Raise dispute
+      const resDispute = await fetch(`${baseUrl}/cod-vault/settlements/${disputeRecId}/dispute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          reason: 'Physical cash ₹500 missing from delivery parcel collection',
+        }),
+      });
+      assert.strictEqual(resDispute.status, 200);
+      const disputeJson = await resDispute.json();
+      assert.strictEqual(disputeJson.success, true);
+      assert.strictEqual(disputeJson.data.status, 'DISPUTED');
+      assert.strictEqual(disputeJson.data.varianceStatus, 'DISPUTE_RAISED');
+      assert.strictEqual(disputeJson.data.dispute.isDisputed, true);
+      assert.ok(disputeJson.data.dispute.reason.includes('₹500 missing'));
+
+      // Test Resolve Dispute: SALARY_DEDUCTION recovery
+      const resResolve = await fetch(`${baseUrl}/cod-vault/settlements/${disputeRecId}/resolve-dispute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          resolution: 'Shortage of ₹500 adjusted via courier monthly payout deduction.',
+          adjustmentAmount: 500,
+          recoveryMode: 'SALARY_DEDUCTION',
+        }),
+      });
+      assert.strictEqual(resResolve.status, 200);
+      const resolveJson = await resResolve.json();
+      assert.strictEqual(resolveJson.success, true);
+      assert.strictEqual(resolveJson.data.status, 'VERIFIED');
+      assert.strictEqual(resolveJson.data.varianceStatus, 'DISPUTE_RESOLVED');
+      assert.strictEqual(resolveJson.data.dispute.recoveryMode, 'SALARY_DEDUCTION');
+      assert.strictEqual(resolveJson.data.dispute.adjustmentAmount, 500);
+
+      const taskShortAfter = await DeliveryTask.findById(p45TaskShortage._id);
+      assert.strictEqual(taskShortAfter.codReconciliation.status, 'VERIFIED');
+    });
+
+    await test('Point 45: POST /api/cod-vault/handover/vault-drop records Regional Hub safe bag seal number and cashier batch', async () => {
+      const resVaultDrop = await fetch(`${baseUrl}/cod-vault/handover/vault-drop`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          reconciliationId: p45SettlementId,
+          bagSealNumber: 'SEAL-BLR-892144',
+          cashierName: 'Chief Vault Cashier Mohan',
+          vaultLocation: 'CENTRAL-SAFE-VAULT-01',
+        }),
+      });
+      assert.strictEqual(resVaultDrop.status, 200);
+      const dropJson = await resVaultDrop.json();
+      assert.strictEqual(dropJson.success, true);
+      assert.strictEqual(dropJson.data.cashRemittanceBatch.bagSealNumber, 'SEAL-BLR-892144');
+      assert.strictEqual(dropJson.data.cashRemittanceBatch.cashierName, 'Chief Vault Cashier Mohan');
+      assert.strictEqual(dropJson.data.cashRemittanceBatch.vaultLocation, 'CENTRAL-SAFE-VAULT-01');
+      assert.ok(dropJson.data.cashRemittanceBatch.batchId.startsWith('VAULT-BATCH-'));
+      assert.strictEqual(dropJson.data.cashRemittanceBatch.receivedAmount, 7500);
+    });
+
+    await test('Point 45: GET /api/cod-vault/export-csv returns RFC-4180 audit trail CSV with UTF-8 BOM', async () => {
+      const resCsv = await fetch(`${baseUrl}/cod-vault/export-csv`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resCsv.status, 200);
+      assert.ok(resCsv.headers.get('content-type').includes('text/csv'));
+      assert.ok(resCsv.headers.get('content-disposition').includes('COD_Settlements_Ledger_'));
+
+      const csvText = await resCsv.text();
+      assert.ok(csvText.includes('Reconciliation ID,Shift Date,Rider Name,Rider Phone'));
+      assert.ok(csvText.includes(p45SettlementId));
+      assert.ok(csvText.includes('Suresh Patil Fleet COD'));
+      assert.ok(csvText.includes('SEAL-BLR-892144'));
+    });
+
+    await test('Point 45: Role Security & Guardrails: Courier cannot access Admin endpoints, Unauthenticated rejected (401 / 403)', async () => {
+      // 1. Courier calling admin limit monitor (403)
+      const resCourierMonitor = await fetch(`${baseUrl}/cod-vault/riders-limit-monitor`, {
+        headers: { Authorization: `Bearer ${p45RiderToken}` },
+      });
+      assert.strictEqual(resCourierMonitor.status, 403);
+
+      // 2. Unauthenticated calling rider cash in hand (401)
+      const resUnauth = await fetch(`${baseUrl}/cod-vault/rider/cash-in-hand`);
+      assert.strictEqual(resUnauth.status, 401);
+
+      // 3. Customer calling courier telemetry (403)
+      const resCust = await fetch(`${baseUrl}/cod-vault/rider/cash-in-hand`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403);
+
+      // 4. Courier calling admin export CSV (403)
+      const resCourierCsv = await fetch(`${baseUrl}/cod-vault/export-csv`, {
+        headers: { Authorization: `Bearer ${p45RiderToken}` },
+      });
+      assert.strictEqual(resCourierCsv.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

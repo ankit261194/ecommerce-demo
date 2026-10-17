@@ -69,8 +69,45 @@ const codReconciliationSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['PENDING', 'SUBMITTED', 'VERIFIED', 'REJECTED', 'DEPOSITED_TO_BANK'],
+      enum: ['PENDING', 'SUBMITTED', 'VERIFIED', 'REJECTED', 'DEPOSITED_TO_BANK', 'DISPUTED'],
       default: 'SUBMITTED',
+    },
+    // Point 45: Automated Cash on Delivery (COD) Reconciliation & Cash Remittance Vault
+    varianceStatus: {
+      type: String,
+      enum: [
+        'NONE',
+        'EXACT_MATCH',
+        'SHORTAGE_PENDING',
+        'EXCESS_UNCLAIMED',
+        'SETTLED_WITH_DEDUCTION',
+        'DISPUTE_RAISED',
+        'DISPUTE_RESOLVED',
+      ],
+      default: 'NONE',
+    },
+    dispute: {
+      isDisputed: { type: Boolean, default: false },
+      reason: { type: String, default: '' },
+      raisedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      raisedAt: { type: Date, default: null },
+      resolution: { type: String, default: '' },
+      resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      resolvedAt: { type: Date, default: null },
+      adjustmentAmount: { type: Number, default: 0 },
+      recoveryMode: {
+        type: String,
+        enum: ['SALARY_DEDUCTION', 'RIDER_ONLINE_PAY', 'WAIVED_OFF', 'NONE'],
+        default: 'NONE',
+      },
+    },
+    cashRemittanceBatch: {
+      batchId: { type: String, default: '' },
+      cashierName: { type: String, default: '' },
+      vaultLocation: { type: String, default: 'CENTRAL-VAULT-MAIN' },
+      receivedAmount: { type: Number, default: 0 },
+      bagSealNumber: { type: String, default: '' },
+      remittedAt: { type: Date, default: null },
     },
     verifiedBy: {
       type: mongoose.Schema.Types.ObjectId,

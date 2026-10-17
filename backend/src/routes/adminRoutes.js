@@ -254,5 +254,20 @@ router.post('/escrow/:subOrderId/resolve-dispute', resolveEscrowDispute);
 router.get('/escrow/config', getEscrowConfig);
 router.put('/escrow/config', updateEscrowConfig);
 
+// Point 49: GST / TDS E-Invoicing & Automated Government Tax Compliance
+const {
+  getTaxComplianceDashboard,
+  getEInvoiceSettings,
+  updateEInvoiceSettings,
+  getGstr1Report,
+  getGstr8Report,
+} = require('../controllers/eInvoiceController');
+router.get('/tax/compliance-dashboard', getTaxComplianceDashboard);
+router.get('/tax/e-invoicing/settings', getEInvoiceSettings);
+router.put('/tax/e-invoicing/settings', updateEInvoiceSettings);
+router.get('/tax/reports/gstr1', getGstr1Report);
+router.get('/tax/reports/gstr8', getGstr8Report);
+
 module.exports = router;
+
 

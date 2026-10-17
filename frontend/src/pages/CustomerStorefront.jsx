@@ -71,6 +71,7 @@ import MapAddressPickerModal from '../components/MapAddressPickerModal';
 import DynamicCheckoutPayment from '../components/DynamicCheckoutPayment';
 import LiveOrderTrackerModal from '../components/LiveOrderTrackerModal';
 import TaxInvoiceModal from '../components/TaxInvoiceModal';
+import EInvoiceViewerModal from '../components/EInvoiceViewerModal';
 import WalletDrawer from '../components/WalletDrawer';
 import VendorPublicStoreModal from '../components/VendorPublicStoreModal';
 import WhatsAppOrderBotModal from '../components/WhatsAppOrderBotModal';
@@ -116,6 +117,9 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [trackedOrderId, setTrackedOrderId] = useState(null);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [invoiceOrderId, setInvoiceOrderId] = useState(null);
+  // Point #49: GST / TDS E-Invoicing & Automated Government Tax Compliance (IRN / QR Code)
+  const [isEInvoiceModalOpen, setIsEInvoiceModalOpen] = useState(false);
+  const [eInvoiceOrderId, setEInvoiceOrderId] = useState(null);
   // Point #20: Order History & 1-Click GST Invoice Download State
   const [isOrderHistoryOpen, setIsOrderHistoryOpen] = useState(false);
   const [customerOrderHistory, setCustomerOrderHistory] = useState([]);
@@ -3537,7 +3541,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               </button>
             </div>
 
-            {/* Point #20: 1-Click Download Official GST Tax Invoice PDF */}
+            {/* Point #20 & Point #49: 1-Click Download Official GST Tax Invoice PDF & Government IRN E-Invoice */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <a
                 href={`/api/orders/${activeOrderConfirmation.orderId}/invoice/pdf?download=true${(localStorage.getItem('auramarket_token') || localStorage.getItem('token')) ? `&token=${encodeURIComponent(localStorage.getItem('auramarket_token') || localStorage.getItem('token'))}` : ''}`}
@@ -3562,6 +3566,22 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
               >
                 <Printer className="w-3.5 h-3.5 text-indigo-600" />
                 <span>View Invoice</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEInvoiceOrderId(activeOrderConfirmation.orderId);
+                  setIsEInvoiceModalOpen(true);
+                }}
+                className="sm:col-span-2 py-2.5 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-95 shadow-sm"
+                title="Download Official Government GST Tax Invoice with IRN & signed QR Code (Point #49)"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-cyan-200" />
+                <span>Download GST Tax Invoice (IRN)</span>
+                <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-cyan-300 text-slate-950 ml-1">
+                  Point #49
+                </span>
               </button>
             </div>
 
@@ -3796,6 +3816,14 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         apiUrl="/api"
       />
 
+      {/* Point #49: GST / TDS E-Invoicing & Automated Government Tax Compliance (IRN / QR Code) */}
+      <EInvoiceViewerModal
+        isOpen={isEInvoiceModalOpen}
+        onClose={() => setIsEInvoiceModalOpen(false)}
+        orderId={eInvoiceOrderId}
+        apiUrl="/api"
+      />
+
       {/* Point #20: Order History & 1-Click GST Invoices Drawer */}
       <SlideOverDrawer
         isOpen={isOrderHistoryOpen}
@@ -3906,6 +3934,19 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                       >
                         <Printer className="w-3 h-3 text-indigo-600" />
                         <span>View Invoice</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEInvoiceOrderId(oNum);
+                          setIsEInvoiceModalOpen(true);
+                        }}
+                        className="py-2 px-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 flex items-center justify-center gap-1 transition active:scale-95 shadow-sm"
+                        title="Download Official Government GST Tax Invoice (IRN) with QR Code (Point #49)"
+                      >
+                        <ShieldCheck className="w-3 h-3 text-blue-600" />
+                        <span>GST IRN</span>
                       </button>
 
                       <button

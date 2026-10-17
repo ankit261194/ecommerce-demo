@@ -27,6 +27,7 @@ const auditLogSchema = new mongoose.Schema(
         'INVENTORY',
         'LOGISTICS',
         'SHIPPING_LOGISTICS',
+        'TAX',
       ],
       default: 'SYSTEM',
     },

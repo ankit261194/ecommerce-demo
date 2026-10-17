@@ -69,9 +69,33 @@ const vendorProfileSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    // Point 49: GST / TDS E-Invoicing & Automated Government Tax Compliance
+    gstin: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      validate: {
+        validator: function (v) {
+          if (!v) return true;
+          return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(v);
+        },
+        message: 'Invalid GSTIN format. Must be 15 alphanumeric characters conforming to GST standard.',
+      },
+    },
+    legalBusinessName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    stateCode: {
+      type: String,
+      trim: true,
+      default: '07',
+    },
     panNumber: {
       type: String,
       trim: true,
+      uppercase: true,
     },
     // Point 34: Self-Service 4-Step Vendor Registration & Onboarding Wizard
     onboardingStep: {

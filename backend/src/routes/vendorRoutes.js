@@ -235,4 +235,10 @@ const {
 router.get('/escrow/summary', requireVendorPermission('WALLET_FINANCE'), getVendorEscrowSummary);
 router.post('/escrow/release-matured', requireVendorPermission('WALLET_FINANCE'), releaseMaturedEscrowFunds);
 
+// Point 49: GST / TDS E-Invoicing & Automated Government Tax Compliance
+const { getVendorEInvoices } = require('../controllers/eInvoiceController');
+router.get('/tax/e-invoices', requireVendorPermission('WALLET_FINANCE'), getVendorEInvoices);
+router.get('/e-invoices', requireVendorPermission('WALLET_FINANCE'), getVendorEInvoices);
+
 module.exports = router;
+

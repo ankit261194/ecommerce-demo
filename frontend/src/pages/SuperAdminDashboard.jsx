@@ -132,6 +132,7 @@ import HyperlocalDispatchSchedulerModal from '../components/HyperlocalDispatchSc
 import FleetLiveMapRadarModal from '../components/FleetLiveMapRadarModal';
 import ReverseLogisticsRoutingHub from '../components/ReverseLogisticsRoutingHub';
 import AdminEscrowSettlementEngine from '../components/AdminEscrowSettlementEngine';
+import TaxComplianceDashboard from '../components/TaxComplianceDashboard';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -2048,6 +2049,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('tax-compliance')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'tax-compliance'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span>GST & TDS E-Invoicing</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-200 ml-1">
+              Point #49
+            </span>
+          </button>
+
+          <button
             onClick={() => setIsInventoryAlertsModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition-all"
             title="Point 10: Multi-Vendor Inventory Low-Stock Radar & Automated Alerts"
@@ -3133,6 +3149,15 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {activeDashboardTab === 'escrow' && (
         <div className="space-y-6 animate-fade-in">
           <AdminEscrowSettlementEngine />
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 38: GST / TDS E-INVOICING & GOVT COMPLIANCE (Pillar 5 • Point 49)     */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'tax-compliance' && (
+        <div className="space-y-6 animate-fade-in">
+          <TaxComplianceDashboard />
         </div>
       )}
 

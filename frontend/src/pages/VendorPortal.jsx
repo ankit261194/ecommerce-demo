@@ -64,6 +64,7 @@ import SponsoredAdsManagerModal from '../components/SponsoredAdsManagerModal';
 import InventoryAgingRadarModal from '../components/InventoryAgingRadarModal';
 import VendorReturnGradingModal from '../components/VendorReturnGradingModal';
 import VendorEscrowHoldTrackerModal from '../components/VendorEscrowHoldTrackerModal';
+import EInvoiceViewerModal from '../components/EInvoiceViewerModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -203,6 +204,8 @@ export const VendorPortal = () => {
   const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false); // Point #60: Customer Reviews Management
   const [isWalletLedgerModalOpen, setIsWalletLedgerModalOpen] = useState(false); // Point #61: Financial Wallet & Ledger
   const [isEscrowModalOpen, setIsEscrowModalOpen] = useState(false); // Point #48: Automated Escrow Payout Engine
+  const [isEInvoiceModalOpen, setIsEInvoiceModalOpen] = useState(false); // Point #49: GST E-Invoicing & TDS
+  const [selectedSubOrderForInvoice, setSelectedSubOrderForInvoice] = useState(null);
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [isChatInboxOpen, setIsChatInboxOpen] = useState(false);
@@ -804,6 +807,22 @@ export const VendorPortal = () => {
 
           <button
             type="button"
+            onClick={() => {
+              setSelectedSubOrderForInvoice(null);
+              setIsEInvoiceModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all border border-emerald-500/20"
+            title="GST Tax Invoices & TDS Reports (Point #49)"
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span>GST E-Invoices & TDS</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-emerald-400 text-slate-950">
+              #49
+            </span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setIsPosModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 text-xs font-black shadow-lg shadow-amber-500/20 transition-all"
             title="Point 18: Offline Point of Sale (POS) Counter Billing Screen with Barcode Scanning & 80mm/58mm Thermal Slips"
@@ -1331,6 +1350,19 @@ export const VendorPortal = () => {
                       >
                         <Printer className="w-3.5 h-3.5 text-amber-600" />
                         <span>Thermal POS</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedSubOrderForInvoice(order.rawId || order.id);
+                          setIsEInvoiceModalOpen(true);
+                        }}
+                        className="px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs border border-emerald-300"
+                        title="View Official Government GST E-Invoice with IRN & QR Code (Point #49)"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>GST IRN</span>
                       </button>
 
                       <button
@@ -2168,6 +2200,13 @@ export const VendorPortal = () => {
         isOpen={isEscrowModalOpen}
         onClose={() => setIsEscrowModalOpen(false)}
         onSuccess={fetchVendorData}
+      />
+
+      {/* Point 49: GST / TDS E-Invoicing & Automated Government Tax Compliance (IRN / QR Code) */}
+      <EInvoiceViewerModal
+        isOpen={isEInvoiceModalOpen}
+        onClose={() => setIsEInvoiceModalOpen(false)}
+        subOrderId={selectedSubOrderForInvoice}
       />
 
       {/* Point 13: Vendor Sub-Staff Roles & Permissions Modal */}

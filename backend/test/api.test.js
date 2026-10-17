@@ -31345,6 +31345,629 @@ const runTests = async () => {
       assert.strictEqual(subUpdated.escrowDetails.disputeResolution, 'REFUND_TO_CUSTOMER');
     });
 
+    // =========================================================================
+    // PILLAR 5 - POINT 49: GST / TDS E-INVOICING & AUTOMATED GOVERNMENT TAX COMPLIANCE (IRN / QR CODE)
+    // =========================================================================
+    console.log('\n--- PILLAR 5 - POINT 49: GST / TDS E-INVOICING & AUTOMATED GOVERNMENT TAX COMPLIANCE (IRN / QR CODE) ---');
+
+    const EInvoice = require('../src/models/EInvoice');
+    const EInvoiceConfig = require('../src/models/EInvoiceConfig');
+    const { computeIRN, getFinancialYear } = require('../src/services/eInvoiceService');
+
+    let p49AdminToken = adminToken;
+    let p49CustomerUser, p49CustomerToken;
+    let p49B2BCustomerUser, p49B2BCustomerToken;
+    let p49VendorUser1, p49VendorProfile1, p49VendorToken1;
+    let p49Product1, p49ProductHighVal;
+    let p49OrderIntra, p49SubOrderIntra;
+    let p49OrderInter, p49SubOrderInter;
+    let p49OrderHighVal;
+    let p49OrderB2B;
+    let p49GeneratedEInvoiceIntra, p49GeneratedEInvoiceInter, p49GeneratedEInvoiceHighVal, p49GeneratedEInvoiceB2B;
+
+    await test('Point 49: Setup dedicated accounts, vendors with valid GSTINs, products, and orders', async () => {
+      const p49Unique = Date.now().toString() + Math.floor(Math.random() * 1000);
+
+      // Customer 1 (B2C retail consumer in Delhi)
+      p49CustomerUser = await User.create({
+        name: 'Aarav Sharma ' + p49Unique,
+        email: 'customer.tax.' + p49Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'customer',
+      });
+      p49CustomerToken = generateToken(p49CustomerUser._id);
+
+      // Customer 2 (B2B Corporate client with registered GSTIN in Maharashtra)
+      p49B2BCustomerUser = await User.create({
+        name: 'Zenith Tech Systems Pvt Ltd ' + p49Unique,
+        email: 'zenith.b2b.' + p49Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'customer',
+        gstin: '27AABCT2345C1ZC',
+      });
+      p49B2BCustomerToken = generateToken(p49B2BCustomerUser._id);
+
+      // Vendor 1 (Delhi seller with valid 15-char GSTIN)
+      p49VendorUser1 = await User.create({
+        name: 'Aura Prime Retail Seller ' + p49Unique,
+        email: 'seller.tax.' + p49Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'vendor',
+      });
+      p49VendorProfile1 = await VendorProfile.create({
+        user: p49VendorUser1._id,
+        storeName: 'Aura Prime Retail ' + p49Unique,
+        storeSlug: 'aura-prime-retail-' + p49Unique.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        gstin: '07AAAAA0000A1Z5',
+        legalBusinessName: 'Aura Prime Retail Hub Pvt Ltd',
+        stateCode: '07',
+        panNumber: 'AAAAA0000A',
+        pickupAddress: {
+          street: 'Nehru Place Complex',
+          city: 'New Delhi',
+          state: 'Delhi',
+          pincode: '110019',
+        },
+      });
+      p49VendorUser1.vendorProfile = p49VendorProfile1._id;
+      await p49VendorUser1.save();
+      p49VendorToken1 = generateToken(p49VendorUser1._id);
+
+      // Product 1 (Standard value product ₹2,360)
+      let p49Cat = await Category.findOne();
+      p49Product1 = await Product.create({
+        title: 'Smart Noise-Cancelling Earbuds ' + p49Unique,
+        slug: 'earbuds-' + p49Unique.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        description: 'True Wireless Studio Earbuds',
+        category: p49Cat._id,
+        price: 2360,
+        mrp: 3499,
+        sellingPrice: 2360,
+        vendor: p49VendorProfile1._id,
+        user: p49VendorUser1._id,
+        sku: 'SKU-EAR-' + p49Unique,
+        stock: 100,
+        countInStock: 100,
+      });
+
+      // Product High Value (> ₹50,000 for e-Way Bill test, e.g. ₹64,900)
+      p49ProductHighVal = await Product.create({
+        title: 'Ultra High-End Sound Engineering Workstation ' + p49Unique,
+        slug: 'workstation-' + p49Unique.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        description: 'Complete Dolby Atmos Studio Console',
+        category: p49Cat._id,
+        price: 64900,
+        mrp: 79999,
+        sellingPrice: 64900,
+        vendor: p49VendorProfile1._id,
+        user: p49VendorUser1._id,
+        sku: 'SKU-WORK-' + p49Unique,
+        stock: 10,
+        countInStock: 10,
+      });
+
+      // Order 1: Intra-State (Supplier Delhi '07' -> Buyer Delhi '07')
+      p49OrderIntra = await Order.create({
+        orderNumber: 'ORD-INTRA-' + p49Unique,
+        customer: p49CustomerUser._id,
+        totalAmount: 2360,
+        finalAmount: 2360,
+        paymentStatus: 'PAID',
+        paymentMethod: 'ONLINE',
+        shippingAddress: {
+          recipientName: 'Aarav Sharma',
+          phone: '9876543210',
+          street: 'Connaught Place',
+          city: 'New Delhi',
+          state: 'Delhi',
+          stateCode: '07',
+          pincode: '110001',
+        },
+        items: [
+          {
+            product: p49Product1._id,
+            title: p49Product1.title,
+            quantity: 1,
+            price: 2360,
+            totalPrice: 2360,
+            hsnCode: '85183000',
+            vendor: p49VendorProfile1._id,
+          },
+        ],
+      });
+      p49SubOrderIntra = await SubOrder.create({
+        parentOrder: p49OrderIntra._id,
+        vendor: p49VendorProfile1._id,
+        customer: p49CustomerUser._id,
+        items: p49OrderIntra.items,
+        subTotal: 2360,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 236,
+        vendorEarning: 2124,
+        status: 'placed',
+      });
+      p49OrderIntra.subOrders = [p49SubOrderIntra._id];
+      await p49OrderIntra.save();
+
+      // Order 2: Inter-State (Supplier Delhi '07' -> Buyer Maharashtra '27')
+      p49OrderInter = await Order.create({
+        orderNumber: 'ORD-INTER-' + p49Unique,
+        customer: p49CustomerUser._id,
+        totalAmount: 2360,
+        finalAmount: 2360,
+        paymentStatus: 'PAID',
+        paymentMethod: 'ONLINE',
+        shippingAddress: {
+          recipientName: 'Sneha Patil',
+          phone: '9876543215',
+          street: 'Bandra West',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          stateCode: '27',
+          pincode: '400050',
+        },
+        items: [
+          {
+            product: p49Product1._id,
+            title: p49Product1.title,
+            quantity: 1,
+            price: 2360,
+            totalPrice: 2360,
+            hsnCode: '85183000',
+            vendor: p49VendorProfile1._id,
+          },
+        ],
+      });
+      p49SubOrderInter = await SubOrder.create({
+        parentOrder: p49OrderInter._id,
+        vendor: p49VendorProfile1._id,
+        customer: p49CustomerUser._id,
+        items: p49OrderInter.items,
+        subTotal: 2360,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 236,
+        vendorEarning: 2124,
+        status: 'placed',
+      });
+      p49OrderInter.subOrders = [p49SubOrderInter._id];
+      await p49OrderInter.save();
+
+      // Order 3: High Value (> ₹50,000 for e-Way Bill)
+      p49OrderHighVal = await Order.create({
+        orderNumber: 'ORD-HIGH-' + p49Unique,
+        customer: p49CustomerUser._id,
+        totalAmount: 64900,
+        finalAmount: 64900,
+        paymentStatus: 'PAID',
+        paymentMethod: 'ONLINE',
+        shippingAddress: {
+          recipientName: 'Vikas Gupta',
+          phone: '9876543219',
+          street: 'Indiranagar 100ft Road',
+          city: 'Bengaluru',
+          state: 'Karnataka',
+          stateCode: '29',
+          pincode: '560038',
+        },
+        items: [
+          {
+            product: p49ProductHighVal._id,
+            title: p49ProductHighVal.title,
+            quantity: 1,
+            price: 64900,
+            totalPrice: 64900,
+            hsnCode: '85182200',
+            vendor: p49VendorProfile1._id,
+          },
+        ],
+      });
+
+      // Order 4: B2B Order with buyer GSTIN
+      p49OrderB2B = await Order.create({
+        orderNumber: 'ORD-B2B-' + p49Unique,
+        customer: p49B2BCustomerUser._id,
+        buyerGstin: '27AABCT2345C1ZC',
+        totalAmount: 4720,
+        finalAmount: 4720,
+        paymentStatus: 'PAID',
+        paymentMethod: 'ONLINE',
+        shippingAddress: {
+          recipientName: 'Zenith Tech Systems Pvt Ltd',
+          phone: '9876543218',
+          street: 'Andheri East Industrial Zone',
+          city: 'Mumbai',
+          state: 'Maharashtra',
+          stateCode: '27',
+          pincode: '400093',
+        },
+        items: [
+          {
+            product: p49Product1._id,
+            title: p49Product1.title,
+            quantity: 2,
+            price: 2360,
+            totalPrice: 4720,
+            hsnCode: '85183000',
+            vendor: p49VendorProfile1._id,
+          },
+        ],
+      });
+    });
+
+    // Test 1: Intra-state delivery generates CGST (9%) + SGST (9%) tax breakdown
+    await test('Point 49: Test 1 - Intra-state delivery generates CGST (9%) + SGST (9%) tax breakdown', async () => {
+      const res = await fetch(`${baseUrl}/tax/e-invoicing/generate/${p49OrderIntra._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p49AdminToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      p49GeneratedEInvoiceIntra = body.data;
+
+      assert.strictEqual(p49GeneratedEInvoiceIntra.taxType, 'INTRA_STATE');
+      assert.ok(p49GeneratedEInvoiceIntra.totalCgst > 0, 'CGST must be greater than 0');
+      assert.ok(p49GeneratedEInvoiceIntra.totalSgst > 0, 'SGST must be greater than 0');
+      assert.strictEqual(p49GeneratedEInvoiceIntra.totalIgst, 0, 'IGST must be 0 for intra-state delivery');
+      assert.strictEqual(p49GeneratedEInvoiceIntra.totalCgst, p49GeneratedEInvoiceIntra.totalSgst, 'CGST and SGST must be equal (9% each)');
+      assert.strictEqual(p49GeneratedEInvoiceIntra.grandTotal, 2360);
+      assert.strictEqual(p49GeneratedEInvoiceIntra.supplierDetails.stateCode, '07');
+      assert.strictEqual(p49GeneratedEInvoiceIntra.buyerDetails.stateCode, '07');
+    });
+
+    // Test 2: Inter-state delivery generates IGST (18%) tax breakdown
+    await test('Point 49: Test 2 - Inter-state delivery generates IGST (18%) tax breakdown', async () => {
+      const res = await fetch(`${baseUrl}/tax/e-invoicing/generate/${p49OrderInter._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p49AdminToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+
+      assert.strictEqual(res.status, 201);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      p49GeneratedEInvoiceInter = body.data;
+
+      assert.strictEqual(p49GeneratedEInvoiceInter.taxType, 'INTER_STATE');
+      assert.ok(p49GeneratedEInvoiceInter.totalIgst > 0, 'IGST must be greater than 0');
+      assert.strictEqual(p49GeneratedEInvoiceInter.totalCgst, 0, 'CGST must be 0 for inter-state delivery');
+      assert.strictEqual(p49GeneratedEInvoiceInter.totalSgst, 0, 'SGST must be 0 for inter-state delivery');
+      assert.strictEqual(p49GeneratedEInvoiceInter.grandTotal, 2360);
+      assert.strictEqual(p49GeneratedEInvoiceInter.supplierDetails.stateCode, '07');
+      assert.strictEqual(p49GeneratedEInvoiceInter.buyerDetails.stateCode, '27');
+    });
+
+    // Test 3: Deterministic 64-char SHA-256 IRN generation and signed QR code payload
+    await test('Point 49: Test 3 - Deterministic 64-char SHA-256 IRN generation and signed QR code payload', async () => {
+      assert.ok(p49GeneratedEInvoiceIntra.irn, 'IRN must be present');
+      assert.strictEqual(p49GeneratedEInvoiceIntra.irn.length, 64, 'IRN must be exactly 64 hex characters (SHA-256)');
+      assert.ok(/^[a-f0-9]{64}$/i.test(p49GeneratedEInvoiceIntra.irn), 'IRN must conform to 64-char hexadecimal regex');
+
+      // Recompute deterministic hash
+      const fy = getFinancialYear(p49GeneratedEInvoiceIntra.invoiceDate);
+      const expectedHash = computeIRN(
+        p49GeneratedEInvoiceIntra.supplierDetails.gstin,
+        fy,
+        'INV',
+        p49GeneratedEInvoiceIntra.invoiceNumber
+      );
+      assert.strictEqual(p49GeneratedEInvoiceIntra.irn, expectedHash, 'Computed IRN must be deterministic matching GSTIN + FY + DocType + DocNo');
+
+      // Verify Government signed QR Code payload
+      assert.ok(p49GeneratedEInvoiceIntra.signedQrCode, 'Signed QR code string must be present');
+      const qrPayload = JSON.parse(Buffer.from(p49GeneratedEInvoiceIntra.signedQrCode, 'base64').toString('utf-8'));
+      assert.strictEqual(qrPayload.sellerGstin, p49GeneratedEInvoiceIntra.supplierDetails.gstin);
+      assert.strictEqual(qrPayload.docNo, p49GeneratedEInvoiceIntra.invoiceNumber);
+      assert.strictEqual(qrPayload.docTyp, 'INV');
+      assert.strictEqual(qrPayload.totInvVal, p49GeneratedEInvoiceIntra.grandTotal);
+      assert.strictEqual(qrPayload.irn, p49GeneratedEInvoiceIntra.irn);
+      assert.ok(qrPayload.docDt);
+    });
+
+    // Test 4: B2B buyer with GSTIN receives B2B classification and GSTR-1 attribution
+    await test('Point 49: Test 4 - B2B buyer with GSTIN receives B2B classification and GSTR-1 attribution', async () => {
+      const resB2B = await fetch(`${baseUrl}/tax/e-invoicing/generate/${p49OrderB2B._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p49AdminToken}`,
+        },
+        body: JSON.stringify({
+          buyerGstin: '27AABCT2345C1ZC',
+          buyerLegalName: 'Zenith Tech Systems Pvt Ltd',
+        }),
+      });
+
+      assert.strictEqual(resB2B.status, 201);
+      const b2bBody = await resB2B.json();
+      assert.strictEqual(b2bBody.success, true);
+      p49GeneratedEInvoiceB2B = b2bBody.data;
+
+      assert.strictEqual(p49GeneratedEInvoiceB2B.supplyType, 'B2B');
+      assert.strictEqual(p49GeneratedEInvoiceB2B.buyerDetails.isB2B, true);
+      assert.strictEqual(p49GeneratedEInvoiceB2B.buyerDetails.gstin, '27AABCT2345C1ZC');
+      assert.strictEqual(p49GeneratedEInvoiceB2B.buyerDetails.legalName, 'Zenith Tech Systems Pvt Ltd');
+
+      // Verify GSTR-1 Report attribution
+      const resGstr1 = await fetch(`${baseUrl}/tax/reports/gstr1`, {
+        headers: { Authorization: `Bearer ${p49AdminToken}` },
+      });
+      assert.strictEqual(resGstr1.status, 200);
+      const gstr1Body = await resGstr1.json();
+      assert.strictEqual(gstr1Body.success, true);
+      assert.ok(Array.isArray(gstr1Body.data.tables.b2b));
+
+      const b2bEntry = gstr1Body.data.tables.b2b.find(b => b.invoiceNumber === p49GeneratedEInvoiceB2B.invoiceNumber);
+      assert.ok(b2bEntry, 'B2B entry must be present in GSTR-1 table 4A');
+      assert.strictEqual(b2bEntry.gstin, '27AABCT2345C1ZC');
+      assert.strictEqual(b2bEntry.receiverName, 'Zenith Tech Systems Pvt Ltd');
+      assert.strictEqual(b2bEntry.irn, p49GeneratedEInvoiceB2B.irn);
+    });
+
+    // Test 5: Section 194O 1% TDS and Section 52 1% TCS deduction calculation
+    await test('Point 49: Test 5 - Section 194O 1% TDS and Section 52 1% TCS deduction calculation', async () => {
+      // 1% TDS under Section 194O
+      assert.ok(p49GeneratedEInvoiceIntra.tdsSection194O, 'tdsSection194O must be populated');
+      assert.strictEqual(p49GeneratedEInvoiceIntra.tdsSection194O.applicable, true);
+      assert.strictEqual(p49GeneratedEInvoiceIntra.tdsSection194O.ratePercent, 1.0);
+      const expectedTds = Math.round(p49GeneratedEInvoiceIntra.totalTaxableAmount * 0.01 * 100) / 100;
+      assert.strictEqual(p49GeneratedEInvoiceIntra.tdsSection194O.tdsAmount, expectedTds);
+
+      // 1% TCS under Section 52
+      assert.ok(p49GeneratedEInvoiceIntra.tcsSection52, 'tcsSection52 must be populated');
+      assert.strictEqual(p49GeneratedEInvoiceIntra.tcsSection52.applicable, true);
+      assert.strictEqual(p49GeneratedEInvoiceIntra.tcsSection52.ratePercent, 1.0);
+      const expectedTcs = Math.round(p49GeneratedEInvoiceIntra.totalTaxableAmount * 0.01 * 100) / 100;
+      assert.strictEqual(p49GeneratedEInvoiceIntra.tcsSection52.tcsAmount, expectedTcs);
+      // Intra-state TCS split 0.5% CGST + 0.5% SGST
+      assert.strictEqual(p49GeneratedEInvoiceIntra.tcsSection52.cgstTcs, Math.round(expectedTcs / 2 * 100) / 100);
+      assert.strictEqual(p49GeneratedEInvoiceIntra.tcsSection52.sgstTcs, Math.round((expectedTcs - p49GeneratedEInvoiceIntra.tcsSection52.cgstTcs) * 100) / 100);
+    });
+
+    // Test 6: Consignments > ₹50,000 generate e-Way Bill metadata
+    await test('Point 49: Test 6 - Consignments > ₹50,000 generate e-Way Bill metadata', async () => {
+      const resHigh = await fetch(`${baseUrl}/tax/e-invoicing/generate/${p49OrderHighVal._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p49AdminToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+
+      assert.strictEqual(resHigh.status, 201);
+      const highBody = await resHigh.json();
+      assert.strictEqual(highBody.success, true);
+      p49GeneratedEInvoiceHighVal = highBody.data;
+
+      assert.ok(p49GeneratedEInvoiceHighVal.grandTotal > 50000, 'Consignment value must exceed threshold ₹50,000');
+      assert.ok(p49GeneratedEInvoiceHighVal.eWayBill, 'eWayBill object must be generated for > ₹50k');
+      assert.ok(p49GeneratedEInvoiceHighVal.eWayBill.ewayBillNo, 'Valid 12-digit e-Way Bill number must be issued');
+      assert.strictEqual(p49GeneratedEInvoiceHighVal.eWayBill.status, 'ACTIVE');
+      assert.ok(p49GeneratedEInvoiceHighVal.eWayBill.validUpto);
+      assert.ok(p49GeneratedEInvoiceHighVal.eWayBill.vehicleNumber);
+
+      // Verify that smaller orders (₹2,360) do NOT generate e-Way Bill
+      assert.strictEqual(Boolean(p49GeneratedEInvoiceIntra.eWayBill?.ewayBillNo), false, 'Small consignments must not trigger e-Way Bill');
+    });
+
+    // Test 7: IRN cancellation within 24 hours updates status to CANCELLED
+    await test('Point 49: Test 7 - IRN cancellation within 24 hours updates status to CANCELLED', async () => {
+      const resCancel = await fetch(`${baseUrl}/tax/e-invoicing/${p49GeneratedEInvoiceIntra._id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p49AdminToken}`,
+        },
+        body: JSON.stringify({
+          cancellationReason: 'ORDER_CANCELLED',
+          cancellationRemarks: 'Customer cancelled prior to dispatch',
+        }),
+      });
+
+      assert.strictEqual(resCancel.status, 200);
+      const cancelBody = await resCancel.json();
+      assert.strictEqual(cancelBody.success, true);
+      assert.strictEqual(cancelBody.data.status, 'CANCELLED');
+      assert.strictEqual(cancelBody.data.cancellationReason, 'ORDER_CANCELLED');
+      assert.ok(cancelBody.data.cancelledAt);
+
+      // Verify cancellation persisted in database
+      const checkCancelled = await EInvoice.findById(p49GeneratedEInvoiceIntra._id);
+      assert.strictEqual(checkCancelled.status, 'CANCELLED');
+
+      // Idempotency: cancelling again returns status 200 without error
+      const resReCancel = await fetch(`${baseUrl}/tax/e-invoicing/${p49GeneratedEInvoiceIntra._id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p49AdminToken}`,
+        },
+        body: JSON.stringify({ cancellationReason: 'ORDER_CANCELLED' }),
+      });
+      assert.strictEqual(resReCancel.status, 200);
+    });
+
+    // Test 8: IRN cancellation after 24 hours is rejected with 400 Bad Request
+    await test('Point 49: Test 8 - IRN cancellation after 24 hours is rejected with 400 Bad Request', async () => {
+      // Simulate invoice acknowledgement 26 hours in the past
+      await EInvoice.findByIdAndUpdate(p49GeneratedEInvoiceInter._id, {
+        ackDate: new Date(Date.now() - 26 * 60 * 60 * 1000),
+      });
+
+      const resExpired = await fetch(`${baseUrl}/tax/e-invoicing/${p49GeneratedEInvoiceInter._id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p49AdminToken}`,
+        },
+        body: JSON.stringify({
+          cancellationReason: 'ORDER_CANCELLED',
+        }),
+      });
+
+      assert.strictEqual(resExpired.status, 400);
+      const expiredBody = await resExpired.json();
+      assert.strictEqual(expiredBody.success, false);
+      assert.ok(expiredBody.message.includes('24-hour'), 'Error message must cite statutory 24-hour cancellation window');
+
+      // Verify status remains GENERATED in database
+      const checkInter = await EInvoice.findById(p49GeneratedEInvoiceInter._id);
+      assert.strictEqual(checkInter.status, 'GENERATED');
+    });
+
+    // Test 9: GSTR-1 and GSTR-8 CSV export and tax compliance analytics radar
+    await test('Point 49: Test 9 - GSTR-1 and GSTR-8 CSV export and tax compliance analytics radar', async () => {
+      // 1. GSTR-1 CSV Export
+      const resGstr1Csv = await fetch(`${baseUrl}/tax/reports/gstr1?format=csv`, {
+        headers: { Authorization: `Bearer ${p49AdminToken}` },
+      });
+      assert.strictEqual(resGstr1Csv.status, 200);
+      assert.ok(resGstr1Csv.headers.get('content-type').includes('text/csv'));
+      const csvText1 = await resGstr1Csv.text();
+      assert.ok(csvText1.includes('GSTIN,Receiver Name,Invoice Number'));
+      assert.ok(csvText1.includes('27AABCT2345C1ZC'));
+
+      // 2. GSTR-8 CSV Export
+      const resGstr8Csv = await fetch(`${baseUrl}/tax/reports/gstr8?format=csv`, {
+        headers: { Authorization: `Bearer ${p49AdminToken}` },
+      });
+      assert.strictEqual(resGstr8Csv.status, 200);
+      assert.ok(resGstr8Csv.headers.get('content-type').includes('text/csv'));
+      const csvText8 = await resGstr8Csv.text();
+      assert.ok(csvText8.includes('Vendor ID,Merchant Name,Vendor GSTIN'));
+      assert.ok(csvText8.includes('07AAAAA0000A1Z5'));
+
+      // 3. Tax Compliance Dashboard Radar
+      const resDashboard = await fetch(`${baseUrl}/admin/tax/compliance-dashboard`, {
+        headers: { Authorization: `Bearer ${p49AdminToken}` },
+      });
+      assert.strictEqual(resDashboard.status, 200);
+      const dashBody = await resDashboard.json();
+      assert.strictEqual(dashBody.success, true);
+      assert.ok(dashBody.data.kpi.totalInvoices >= 3);
+      assert.ok(dashBody.data.kpi.totalTaxCollected > 0);
+      assert.ok(dashBody.data.kpi.totalTds194OWithheld > 0);
+      assert.ok(dashBody.data.kpi.totalTcs52Collected > 0);
+      assert.strictEqual(dashBody.data.gatewayHealth.gatewayStatus, 'ONLINE_ACTIVE');
+
+      // 4. Printable A4 Tax Invoice HTML Preview
+      const resPrint = await fetch(`${baseUrl}/tax/e-invoicing/${p49GeneratedEInvoiceHighVal._id}/print`);
+      assert.strictEqual(resPrint.status, 200);
+      assert.ok(resPrint.headers.get('content-type').includes('text/html'));
+      const htmlText = await resPrint.text();
+      assert.ok(htmlText.includes('TAX INVOICE / E-INVOICE'));
+      assert.ok(htmlText.includes(p49GeneratedEInvoiceHighVal.irn));
+      assert.ok(htmlText.includes('e-Way Bill No:'));
+    });
+
+    // Test 10: Role security guardrails (401 unauthenticated, 403 unauthorized)
+    await test('Point 49: Test 10 - Role security guardrails (401 unauthenticated, 403 unauthorized)', async () => {
+      // 1. Unauthenticated requests (401)
+      const resUnauth1 = await fetch(`${baseUrl}/admin/tax/compliance-dashboard`);
+      assert.strictEqual(resUnauth1.status, 401);
+
+      const resUnauth2 = await fetch(`${baseUrl}/tax/reports/gstr1`);
+      assert.strictEqual(resUnauth2.status, 401);
+
+      const resUnauth3 = await fetch(`${baseUrl}/tax/reports/gstr8`);
+      assert.strictEqual(resUnauth3.status, 401);
+
+      const resUnauth4 = await fetch(`${baseUrl}/admin/tax/e-invoicing/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isEnabled: false }),
+      });
+      assert.strictEqual(resUnauth4.status, 401);
+
+      const resUnauth5 = await fetch(`${baseUrl}/tax/e-invoicing/generate/${p49OrderIntra._id}`, {
+        method: 'POST',
+      });
+      assert.strictEqual(resUnauth5.status, 401);
+
+      // 2. Customer attempts calling Super Admin compliance radar (403)
+      const resCustRadar = await fetch(`${baseUrl}/admin/tax/compliance-dashboard`, {
+        headers: { Authorization: `Bearer ${p49CustomerToken}` },
+      });
+      assert.strictEqual(resCustRadar.status, 403);
+
+      // 3. Customer attempts calling GSTR-1 report (403)
+      const resCustGstr1 = await fetch(`${baseUrl}/tax/reports/gstr1`, {
+        headers: { Authorization: `Bearer ${p49CustomerToken}` },
+      });
+      assert.strictEqual(resCustGstr1.status, 403);
+
+      // 4. Customer attempts calling GSTR-8 report (403)
+      const resCustGstr8 = await fetch(`${baseUrl}/tax/reports/gstr8`, {
+        headers: { Authorization: `Bearer ${p49CustomerToken}` },
+      });
+      assert.strictEqual(resCustGstr8.status, 403);
+
+      // 5. Customer attempts updating NIC gateway settings (403)
+      const resCustSettings = await fetch(`${baseUrl}/admin/tax/e-invoicing/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p49CustomerToken}`,
+        },
+        body: JSON.stringify({ environment: 'PRODUCTION' }),
+      });
+      assert.strictEqual(resCustSettings.status, 403);
+    });
+
+    // Test 11: Idempotency, order lookup, and vendor tax invoices list
+    await test('Point 49: Test 11 - Idempotency, order lookup, and vendor tax invoices list', async () => {
+      // 1. Idempotency: generating again returns the same e-invoice without duplicate IRN
+      const resIdempotent = await fetch(`${baseUrl}/tax/e-invoicing/generate/${p49OrderHighVal._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p49AdminToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(resIdempotent.status, 201);
+      const idempBody = await resIdempotent.json();
+      assert.strictEqual(idempBody.data.irn, p49GeneratedEInvoiceHighVal.irn);
+
+      // 2. Lookup by Order ID
+      const resByOrder = await fetch(`${baseUrl}/tax/e-invoicing/order/${p49OrderHighVal._id}`, {
+        headers: { Authorization: `Bearer ${p49CustomerToken}` },
+      });
+      assert.strictEqual(resByOrder.status, 200);
+      const byOrderBody = await resByOrder.json();
+      assert.strictEqual(byOrderBody.data.irn, p49GeneratedEInvoiceHighVal.irn);
+
+      // 3. Lookup by IRN
+      const resByIrn = await fetch(`${baseUrl}/tax/e-invoicing/${p49GeneratedEInvoiceHighVal.irn}`, {
+        headers: { Authorization: `Bearer ${p49CustomerToken}` },
+      });
+      assert.strictEqual(resByIrn.status, 200);
+      const byIrnBody = await resByIrn.json();
+      assert.strictEqual(byIrnBody.data.invoiceNumber, p49GeneratedEInvoiceHighVal.invoiceNumber);
+
+      // 4. Vendor Tax Invoices List
+      const resVendorList = await fetch(`${baseUrl}/vendor/tax/e-invoices`, {
+        headers: { Authorization: `Bearer ${p49VendorToken1}` },
+      });
+      assert.strictEqual(resVendorList.status, 200);
+      const vendorListBody = await resVendorList.json();
+      assert.strictEqual(vendorListBody.success, true);
+      assert.ok(Array.isArray(vendorListBody.data));
+      assert.ok(vendorListBody.data.length >= 1);
+    });
+
   } finally {
     if (server) {
       server.close();

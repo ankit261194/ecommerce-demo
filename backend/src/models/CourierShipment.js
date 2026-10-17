@@ -107,6 +107,27 @@ const CourierShipmentSchema = new mongoose.Schema(
       codAmount: { type: Number, default: 0 },
     },
     trackingHistory: [TrackingEventSchema],
+    // Point 46: Multi-Carrier Fallback & Rate Optimization
+    fallbackDetails: {
+      fallbackApplied: { type: Boolean, default: false },
+      originalCourier: { type: String, default: null },
+      fallbackReason: { type: String, default: '' },
+      attempts: [
+        {
+          courier: { type: String, required: true },
+          attemptedAt: { type: Date, default: Date.now },
+          success: { type: Boolean, default: false },
+          reason: { type: String, default: '' },
+          latencyMs: { type: Number, default: 0 },
+        },
+      ],
+    },
+    rateDetails: {
+      quotedRate: { type: Number, default: 0 },
+      carrierDiscount: { type: Number, default: 0 },
+      finalCharge: { type: Number, default: 0 },
+      estimatedTransitDays: { type: Number, default: 3 },
+    },
   },
   {
     timestamps: true,

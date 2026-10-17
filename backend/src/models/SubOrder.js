@@ -103,6 +103,7 @@ const subOrderSchema = new mongoose.Schema(
     readyForPickupAt: { type: Date, default: null },
     dispatchedAt: { type: Date, default: null },
     shippedAt: { type: Date, default: null },
+    deliveredAt: { type: Date, default: null },
     trackingNumber: { type: String, default: '' },
     carrier: { type: String, default: '' },
     shippingAddress: {

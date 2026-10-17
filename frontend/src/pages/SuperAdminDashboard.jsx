@@ -3237,7 +3237,10 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
               }`}
             >
               <Truck className="w-4 h-4 text-purple-600" />
-              <span>🚚 Courier Aggregators</span>
+              <span>🚚 Multi-Carrier Shipping & Fallback Engine</span>
+              <span className="text-[10px] uppercase font-black px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-700 ml-1">
+                Point #46
+              </span>
             </button>
 
             <button

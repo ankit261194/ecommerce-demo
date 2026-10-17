@@ -34,6 +34,8 @@ const ShippingConfig = require('../src/models/ShippingConfig');
 const PincodeZone = require('../src/models/PincodeZone');
 const StaffRole = require('../src/models/StaffRole');
 const Category = require('../src/models/Category');
+const CourierIntegration = require('../src/models/CourierIntegration');
+const CourierShipment = require('../src/models/CourierShipment');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -29219,6 +29221,480 @@ const runTests = async () => {
         headers: { Authorization: `Bearer ${p45RiderToken}` },
       });
       assert.strictEqual(resCourierCsv.status, 403);
+    });
+
+    // ============================================================================
+    // PILLAR 4: POINT 46 - MULTI-CARRIER SHIPPING API & AUTOMATED FALLBACK ENGINE
+    // ============================================================================
+    console.log('\n--- Testing Pillar 4 - Point 46: Multi-Carrier Shipping & Fallback Engine ---');
+
+    // Setup Test Data for Point 46
+    const p46Customer = (await User.findOne({ role: 'customer' })) || (await User.create({
+      name: 'P46 Customer Test',
+      email: `p46cust_${Date.now()}@test.com`,
+      password: 'Password123!',
+      role: 'customer',
+    }));
+
+    const p46VendorUser = (await User.findOne({ role: 'vendor' })) || (await User.create({
+      name: 'P46 Vendor Merchant',
+      email: `p46vendor_${Date.now()}@test.com`,
+      password: 'Password123!',
+      role: 'vendor',
+    }));
+
+    let p46VendorProfile = await VendorProfile.findOne({ user: p46VendorUser._id });
+    if (!p46VendorProfile) {
+      p46VendorProfile = await VendorProfile.create({
+        user: p46VendorUser._id,
+        storeName: 'P46 Logistics Test Store',
+        status: 'approved',
+      });
+    }
+
+    const p46Order = await Order.create({
+      orderNumber: `ORD-P46-${Date.now()}`,
+      customer: p46Customer._id,
+      items: [
+        {
+          product: new mongoose.Types.ObjectId(),
+          vendor: p46VendorProfile._id,
+          name: 'Wireless Bluetooth Noise Cancelling Headphones',
+          price: 2499,
+          quantity: 1,
+          totalPrice: 2499,
+        },
+      ],
+      totalAmount: 2499,
+      totalCommission: 250,
+      paymentMethod: 'COD',
+      paymentStatus: 'PENDING',
+      shippingAddress: {
+        fullName: 'Aarav Sharma',
+        recipientName: 'Aarav Sharma',
+        phone: '9876543210',
+        street: 'Flat 402, Lotus Towers, Andheri West',
+        city: 'Mumbai',
+        state: 'Maharashtra',
+        pincode: '400053',
+      },
+      orderStatus: 'confirmed',
+    });
+
+    const p46SubOrder1 = await SubOrder.create({
+      parentOrder: p46Order._id,
+      vendor: p46VendorProfile._id,
+      customer: p46Customer._id,
+      status: 'confirmed',
+      subTotal: 2499,
+      platformCommissionRate: 10,
+      platformCommissionAmount: 250,
+      vendorEarning: 2249,
+      items: [
+        {
+          product: new mongoose.Types.ObjectId(),
+          title: 'Wireless Bluetooth Noise Cancelling Headphones',
+          price: 2499,
+          quantity: 1,
+          totalPrice: 2499,
+        },
+      ],
+      pricing: {
+        itemsPrice: 2499,
+        taxPrice: 0,
+        shippingPrice: 0,
+        totalPrice: 2499,
+      },
+    });
+
+    const p46SubOrder2 = await SubOrder.create({
+      parentOrder: p46Order._id,
+      vendor: p46VendorProfile._id,
+      customer: p46Customer._id,
+      status: 'confirmed',
+      subTotal: 699,
+      platformCommissionRate: 10,
+      platformCommissionAmount: 70,
+      vendorEarning: 629,
+      items: [
+        {
+          product: new mongoose.Types.ObjectId(),
+          title: 'Protective Hard EVA Carry Case',
+          price: 699,
+          quantity: 1,
+          totalPrice: 699,
+        },
+      ],
+      pricing: {
+        itemsPrice: 699,
+        taxPrice: 0,
+        shippingPrice: 0,
+        totalPrice: 699,
+      },
+    });
+
+    const p46SubOrder3 = await SubOrder.create({
+      parentOrder: p46Order._id,
+      vendor: p46VendorProfile._id,
+      customer: p46Customer._id,
+      status: 'confirmed',
+      subTotal: 299,
+      platformCommissionRate: 10,
+      platformCommissionAmount: 30,
+      vendorEarning: 269,
+      items: [
+        {
+          product: new mongoose.Types.ObjectId(),
+          title: 'Braided Audio Cable Replacement',
+          price: 299,
+          quantity: 1,
+          totalPrice: 299,
+        },
+      ],
+      pricing: {
+        itemsPrice: 299,
+        taxPrice: 0,
+        shippingPrice: 0,
+        totalPrice: 299,
+      },
+    });
+
+    const p46SubOrder4 = await SubOrder.create({
+      parentOrder: p46Order._id,
+      vendor: p46VendorProfile._id,
+      customer: p46Customer._id,
+      status: 'confirmed',
+      subTotal: 199,
+      platformCommissionRate: 10,
+      platformCommissionAmount: 20,
+      vendorEarning: 179,
+      items: [
+        {
+          product: new mongoose.Types.ObjectId(),
+          title: 'Audio Jack Adapter 3.5mm to 6.35mm',
+          price: 199,
+          quantity: 1,
+          totalPrice: 199,
+        },
+      ],
+      pricing: {
+        itemsPrice: 199,
+        taxPrice: 0,
+        shippingPrice: 0,
+        totalPrice: 199,
+      },
+    });
+
+    await test('Point 46: GET /api/admin/courier/settings returns fallback hierarchy, optimization strategy and masked credentials', async () => {
+      const res = await fetch(`${baseUrl}/admin/courier/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.ok(Array.isArray(json.data.fallbackHierarchy));
+      assert.ok(json.data.fallbackHierarchy.includes('SHIPROCKET'));
+      assert.ok(json.data.fallbackHierarchy.includes('DELHIVERY'));
+      assert.ok(json.data.fallbackHierarchy.includes('BLUEDART'));
+      assert.ok(json.data.fallbackHierarchy.includes('LOCAL_FLEET'));
+      assert.ok(json.data.autoFallbackEnabled !== undefined);
+      assert.ok(['BALANCED', 'CHEAPEST', 'FASTEST', 'PREFERRED_CARRIER'].includes(json.data.rateOptimizationStrategy));
+      assert.ok(json.data.shiprocket.passwordMasked.includes('•••'));
+    });
+
+    await test('Point 46: PUT /api/admin/courier/settings updates fallback cascade priority, strategy and logs audit trail', async () => {
+      const res = await fetch(`${baseUrl}/admin/courier/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          fallbackHierarchy: ['DELHIVERY', 'SHIPROCKET', 'BLUEDART', 'LOCAL_FLEET'],
+          rateOptimizationStrategy: 'FASTEST',
+          maxTransitDaysThreshold: 4,
+          autoFallbackEnabled: true,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.data.rateOptimizationStrategy, 'FASTEST');
+      assert.strictEqual(json.data.fallbackHierarchy[0], 'DELHIVERY');
+      assert.strictEqual(json.data.maxTransitDaysThreshold, 4);
+
+      // Verify audit trail logged
+      const audit = await AuditLog.findOne({ action: 'COURIER_SETTINGS_UPDATED' }).sort({ createdAt: -1 });
+      assert.ok(audit);
+      assert.strictEqual(audit.module, 'LOGISTICS');
+      assert.ok(audit.description.includes('FASTEST'));
+    });
+
+    await test('Point 46: POST /api/courier/rates/compare calculates deadweight vs volumetric weight & ranks quotes by optimization strategy', async () => {
+      // Dimensions: 25 x 20 x 15 cm -> Volumetric = (25*20*15)/5000 = 1.5 KG. Deadweight = 1.1 KG -> Chargeable = 1.5 KG
+      const res = await fetch(`${baseUrl}/courier/rates/compare`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          pickupPincode: '110001', // Delhi
+          deliveryPincode: '400053', // Mumbai (Metro to Metro)
+          weightKg: 1.1,
+          lengthCm: 25,
+          widthCm: 20,
+          heightCm: 15,
+          declaredValue: 2499,
+          isCod: true,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.query.volumetricWeightKg, 1.5);
+      assert.strictEqual(json.query.chargeableWeightKg, 1.5);
+      assert.strictEqual(json.query.slabs500g, 3);
+      assert.ok(json.query.zoneCode);
+      assert.ok(Array.isArray(json.comparisons));
+      assert.strictEqual(json.comparisons.length, 4);
+
+      // Verify all carriers have rate breakdown
+      json.comparisons.forEach((c) => {
+        assert.ok(c.courier);
+        assert.ok(c.freightCharged > 0);
+        assert.ok(c.finalCharge > 0);
+        assert.ok(c.estimatedTransitDays > 0);
+      });
+
+      assert.ok(json.cheapestCarrier);
+      assert.ok(json.fastestCarrier);
+      assert.ok(json.recommendedCarrier);
+    });
+
+    await test('Point 46: POST /api/courier/dispatch-with-fallback/:subOrderId manifests via primary carrier when operational', async () => {
+      const res = await fetch(`${baseUrl}/courier/dispatch-with-fallback/${p46SubOrder1._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          weightKg: 1.0,
+          lengthCm: 20,
+          widthCm: 15,
+          heightCm: 10,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.fallbackApplied, false);
+      assert.strictEqual(json.activeCarrier, 'DELHIVERY'); // Hierarchy[0] set in previous test
+      assert.ok(json.awbCode.startsWith('DEL-'));
+      assert.strictEqual(json.attempts.length, 1);
+      assert.strictEqual(json.attempts[0].success, true);
+
+      // Verify SubOrder updated
+      const subUpdated = await SubOrder.findById(p46SubOrder1._id);
+      assert.strictEqual(subUpdated.status, 'shipped');
+      assert.strictEqual(subUpdated.carrier, 'DELHIVERY');
+      assert.strictEqual(subUpdated.trackingNumber, json.awbCode);
+
+      // Verify CourierShipment record
+      const shipment = await CourierShipment.findOne({ subOrderId: p46SubOrder1._id });
+      assert.ok(shipment);
+      assert.strictEqual(shipment.awbCode, json.awbCode);
+      assert.strictEqual(shipment.courierPartner, 'DELHIVERY');
+      assert.strictEqual(shipment.fallbackDetails.fallbackApplied, false);
+      assert.ok(shipment.rateDetails.finalCharge > 0);
+    });
+
+    let p46FallbackAwb;
+    await test('Point 46: POST /api/courier/dispatch-with-fallback/:subOrderId cascades to secondary carrier when primary simulates gateway failure', async () => {
+      // Simulate failure on DELHIVERY (Primary). Should cascade to SHIPROCKET (Secondary).
+      const res = await fetch(`${baseUrl}/courier/dispatch-with-fallback/${p46SubOrder2._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          simulateFailureCarrier: 'DELHIVERY',
+          weightKg: 0.8,
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.fallbackApplied, true);
+      assert.strictEqual(json.originalCourier, 'DELHIVERY');
+      assert.strictEqual(json.activeCarrier, 'SHIPROCKET'); // Secondary in hierarchy
+      assert.ok(json.awbCode.startsWith('SR-'));
+      p46FallbackAwb = json.awbCode;
+
+      // Verify attempt history: Attempt 1 failed (504), Attempt 2 succeeded
+      assert.ok(json.attempts.length >= 2);
+      assert.strictEqual(json.attempts[0].courier, 'DELHIVERY');
+      assert.strictEqual(json.attempts[0].success, false);
+      assert.ok(json.attempts[0].reason.includes('504'));
+      assert.strictEqual(json.attempts[1].courier, 'SHIPROCKET');
+      assert.strictEqual(json.attempts[1].success, true);
+
+      // Verify CourierShipment record
+      const shipment = await CourierShipment.findOne({ subOrderId: p46SubOrder2._id });
+      assert.ok(shipment);
+      assert.strictEqual(shipment.fallbackDetails.fallbackApplied, true);
+      assert.strictEqual(shipment.fallbackDetails.originalCourier, 'DELHIVERY');
+      assert.strictEqual(shipment.courierPartner, 'SHIPROCKET');
+      assert.strictEqual(shipment.fallbackDetails.attempts.length, 2);
+
+      // Verify AuditLog recorded fallback event
+      const audit = await AuditLog.findOne({ action: 'COURIER_DISPATCH_FALLBACK' }).sort({ createdAt: -1 });
+      assert.ok(audit);
+      assert.strictEqual(audit.module, 'LOGISTICS');
+      assert.ok(audit.description.includes('Primary DELHIVERY failed'));
+    });
+
+    await test('Point 46: POST /api/courier/bulk-dispatch-with-fallback processes batch suborders through fallback pipeline', async () => {
+      const res = await fetch(`${baseUrl}/courier/bulk-dispatch-with-fallback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          subOrderIds: [p46SubOrder3._id.toString(), p46SubOrder4._id.toString()],
+          simulateFailureCarrier: 'DELHIVERY',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.total, 2);
+      assert.strictEqual(json.dispatchedCount, 2);
+      assert.strictEqual(json.failedCount, 0);
+      assert.strictEqual(json.results.length, 2);
+
+      json.results.forEach((r) => {
+        assert.strictEqual(r.success, true);
+        assert.ok(r.awbCode);
+        assert.strictEqual(r.fallbackApplied, true);
+      });
+
+      // SubOrders updated
+      const sub3 = await SubOrder.findById(p46SubOrder3._id);
+      const sub4 = await SubOrder.findById(p46SubOrder4._id);
+      assert.strictEqual(sub3.status, 'shipped');
+      assert.strictEqual(sub4.status, 'shipped');
+    });
+
+    await test('Point 46: GET /api/admin/courier/health-status returns live radar metrics (latency ms, uptime %, endpoint modes)', async () => {
+      const res = await fetch(`${baseUrl}/admin/courier/health-status`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.overallSystemHealth, 'OPERATIONAL');
+      assert.ok(Array.isArray(json.healthStatuses));
+      assert.strictEqual(json.healthStatuses.length, 4);
+
+      const carriers = json.healthStatuses.map((h) => h.courier);
+      assert.ok(carriers.includes('SHIPROCKET'));
+      assert.ok(carriers.includes('DELHIVERY'));
+      assert.ok(carriers.includes('BLUEDART'));
+      assert.ok(carriers.includes('LOCAL_FLEET'));
+
+      json.healthStatuses.forEach((h) => {
+        assert.ok(h.latencyMs > 0);
+        assert.ok(h.uptimePercentage >= 99);
+        assert.ok(['HEALTHY', 'DISABLED', 'STANDBY'].includes(h.status));
+      });
+    });
+
+    await test('Point 46: POST /api/courier/webhook/:carrier ingests milestones, appends tracking history & synchronizes SubOrder deliveredAt', async () => {
+      // 1. Ingest OUT_FOR_DELIVERY milestone
+      const resOfd = await fetch(`${baseUrl}/courier/webhook/shiprocket`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          awbCode: p46FallbackAwb,
+          status: 'OUT_FOR_DELIVERY',
+          location: 'Andheri Delivery Station Hub 12',
+          remarks: 'Shipment out for delivery with local express rider',
+        }),
+      });
+      assert.strictEqual(resOfd.status, 200);
+      const jsonOfd = await resOfd.json();
+      assert.strictEqual(jsonOfd.success, true);
+      assert.strictEqual(jsonOfd.shipmentStatus, 'OUT_FOR_DELIVERY');
+
+      const subOfd = await SubOrder.findById(p46SubOrder2._id);
+      assert.strictEqual(subOfd.status, 'out_for_delivery');
+
+      // 2. Ingest DELIVERED milestone
+      const resDlv = await fetch(`${baseUrl}/courier/webhook/shiprocket`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          awbCode: p46FallbackAwb,
+          status: 'DELIVERED',
+          location: 'Customer Doorstep - Andheri West',
+          remarks: 'Consignment successfully delivered to customer',
+        }),
+      });
+      assert.strictEqual(resDlv.status, 200);
+      const jsonDlv = await resDlv.json();
+      assert.strictEqual(jsonDlv.success, true);
+      assert.strictEqual(jsonDlv.shipmentStatus, 'DELIVERED');
+
+      // Verify Shipment and SubOrder marked as delivered
+      const shipDlv = await CourierShipment.findOne({ awbCode: p46FallbackAwb });
+      assert.strictEqual(shipDlv.shipmentStatus, 'DELIVERED');
+      assert.ok(shipDlv.deliveredAt);
+
+      const subDlv = await SubOrder.findById(p46SubOrder2._id);
+      assert.strictEqual(subDlv.status, 'delivered');
+      assert.ok(subDlv.deliveredAt);
+    });
+
+    await test('Point 46: Role Security & Guardrails (401 unauthenticated, 403 customer access rejected)', async () => {
+      // 1. Unauthenticated rate compare rejected (401)
+      const resUnauth = await fetch(`${baseUrl}/courier/rates/compare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(resUnauth.status, 401);
+
+      // 2. Customer rate compare rejected (403)
+      const resCustRate = await fetch(`${baseUrl}/courier/rates/compare`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(resCustRate.status, 403);
+
+      // 3. Customer calling health radar rejected (403)
+      const resCustHealth = await fetch(`${baseUrl}/admin/courier/health-status`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCustHealth.status, 403);
+
+      // 4. Customer calling fallback dispatch rejected (403)
+      const resCustDispatch = await fetch(`${baseUrl}/courier/dispatch-with-fallback/${p46SubOrder1._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${customerToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(resCustDispatch.status, 403);
     });
 
   } finally {

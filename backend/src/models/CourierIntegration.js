@@ -41,6 +41,24 @@ const CourierIntegrationSchema = new mongoose.Schema(
       type: String,
       default: 'whsec_courier_webhook_secret_2026',
     },
+    // Point 46: Multi-Carrier Fallback Hierarchy & Optimization Engine
+    fallbackHierarchy: {
+      type: [String],
+      default: ['SHIPROCKET', 'DELHIVERY', 'BLUEDART', 'LOCAL_FLEET'],
+    },
+    autoFallbackEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    rateOptimizationStrategy: {
+      type: String,
+      enum: ['BALANCED', 'CHEAPEST', 'FASTEST', 'PREFERRED_CARRIER'],
+      default: 'BALANCED',
+    },
+    maxTransitDaysThreshold: {
+      type: Number,
+      default: 5,
+    },
   },
   {
     timestamps: true,

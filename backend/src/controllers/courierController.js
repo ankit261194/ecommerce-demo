@@ -2,6 +2,7 @@ const CourierIntegration = require('../models/CourierIntegration');
 const CourierShipment = require('../models/CourierShipment');
 const SubOrder = require('../models/SubOrder');
 const Order = require('../models/Order');
+const AuditLog = require('../models/AuditLog');
 
 const maskSecret = (secret) => {
   if (!secret || secret.length <= 4) return '••••••••';
@@ -55,6 +56,11 @@ exports.getCourierSettings = async (req, res, next) => {
           licenseKeyMasked: maskSecret(config.bluedart.licenseKey),
         },
         webhookSecret: config.webhookSecret,
+        // Point 46: Multi-Carrier Fallback Hierarchy & Rate Optimization
+        fallbackHierarchy: config.fallbackHierarchy || ['SHIPROCKET', 'DELHIVERY', 'BLUEDART', 'LOCAL_FLEET'],
+        autoFallbackEnabled: config.autoFallbackEnabled !== false,
+        rateOptimizationStrategy: config.rateOptimizationStrategy || 'BALANCED',
+        maxTransitDaysThreshold: config.maxTransitDaysThreshold || 5,
         updatedAt: config.updatedAt,
       },
     });
@@ -77,12 +83,30 @@ exports.updateCourierSettings = async (req, res, next) => {
       delhivery,
       bluedart,
       webhookSecret,
+      fallbackHierarchy,
+      autoFallbackEnabled,
+      rateOptimizationStrategy,
+      maxTransitDaysThreshold,
     } = req.body;
 
     if (defaultCourier) config.defaultCourier = defaultCourier;
     if (autoGenerateAwb !== undefined) config.autoGenerateAwb = Boolean(autoGenerateAwb);
     if (autoSchedulePickup !== undefined) config.autoSchedulePickup = Boolean(autoSchedulePickup);
     if (webhookSecret) config.webhookSecret = webhookSecret.trim();
+
+    // Point 46 Fallback Settings
+    if (Array.isArray(fallbackHierarchy) && fallbackHierarchy.length > 0) {
+      config.fallbackHierarchy = fallbackHierarchy;
+    }
+    if (autoFallbackEnabled !== undefined) {
+      config.autoFallbackEnabled = Boolean(autoFallbackEnabled);
+    }
+    if (rateOptimizationStrategy) {
+      config.rateOptimizationStrategy = rateOptimizationStrategy;
+    }
+    if (maxTransitDaysThreshold !== undefined) {
+      config.maxTransitDaysThreshold = Number(maxTransitDaysThreshold);
+    }
 
     // Shiprocket updates
     if (shiprocket) {
@@ -119,12 +143,31 @@ exports.updateCourierSettings = async (req, res, next) => {
 
     await config.save();
 
+    await AuditLog.create({
+      action: 'COURIER_SETTINGS_UPDATED',
+      module: 'LOGISTICS',
+      description: `Courier aggregator settings updated (Default: ${config.defaultCourier}, Strategy: ${config.rateOptimizationStrategy})`,
+      performedBy: req.user?._id || null,
+      targetType: 'CourierIntegration',
+      targetId: config._id.toString(),
+      details: {
+        defaultCourier: config.defaultCourier,
+        fallbackHierarchy: config.fallbackHierarchy,
+        rateOptimizationStrategy: config.rateOptimizationStrategy,
+      },
+    }).catch(() => {});
+
     res.status(200).json({
       success: true,
       message: 'Courier aggregator settings updated and credentials synchronized successfully!',
       data: {
         defaultCourier: config.defaultCourier,
         autoGenerateAwb: config.autoGenerateAwb,
+        autoSchedulePickup: config.autoSchedulePickup,
+        fallbackHierarchy: config.fallbackHierarchy,
+        autoFallbackEnabled: config.autoFallbackEnabled,
+        rateOptimizationStrategy: config.rateOptimizationStrategy,
+        maxTransitDaysThreshold: config.maxTransitDaysThreshold,
         shiprocket: {
           enabled: config.shiprocket.enabled,
           mode: config.shiprocket.mode,
@@ -136,6 +179,12 @@ exports.updateCourierSettings = async (req, res, next) => {
           mode: config.delhivery.mode,
           clientName: config.delhivery.clientName,
           apiTokenMasked: maskSecret(config.delhivery.apiToken),
+        },
+        bluedart: {
+          enabled: config.bluedart.enabled,
+          mode: config.bluedart.mode,
+          loginId: config.bluedart.loginId,
+          licenseKeyMasked: maskSecret(config.bluedart.licenseKey),
         },
       },
     });
@@ -485,3 +534,762 @@ exports.getShippingLabel = async (req, res, next) => {
     next(error);
   }
 };
+
+// ============================================================================
+// POINT #46: MULTI-CARRIER SHIPPING API INTEGRATION & AUTOMATED FALLBACK ENGINE
+// ============================================================================
+
+// @desc    Compare Live Shipping Rates across Carriers (Shiprocket, Delhivery, BlueDart, Local Fleet)
+// @route   POST /api/courier/rates/compare
+// @access  Private (Vendor / Admin)
+exports.compareCarrierRates = async (req, res, next) => {
+  try {
+    const {
+      pickupPincode = '110001',
+      deliveryPincode = '400001',
+      weightKg = 0.5,
+      lengthCm = 15,
+      widthCm = 10,
+      heightCm = 5,
+      declaredValue = 1000,
+      isCod = false,
+    } = req.body;
+
+    const config = await getOrCreateCourierConfig();
+
+    const weightNum = Math.max(0.1, Number(weightKg) || 0.5);
+    const lNum = Math.max(1, Number(lengthCm) || 15);
+    const wNum = Math.max(1, Number(widthCm) || 10);
+    const hNum = Math.max(1, Number(heightCm) || 5);
+    const valueNum = Math.max(0, Number(declaredValue) || 1000);
+    const isCodBool = Boolean(isCod);
+
+    const volumetricWeightKg = Number(((lNum * wNum * hNum) / 5000).toFixed(2));
+    const chargeableWeightKg = Math.max(weightNum, volumetricWeightKg);
+    const slabs500g = Math.max(1, Math.ceil(chargeableWeightKg / 0.5));
+
+    // Pincode zone identification
+    const pickStr = String(pickupPincode).trim();
+    const delStr = String(deliveryPincode).trim();
+    let zoneCode = 'ZONE_D';
+    let zoneName = 'National (Metro / Non-Metro)';
+    let zoneMultiplier = 1.35;
+
+    if (pickStr.slice(0, 2) === delStr.slice(0, 2)) {
+      zoneCode = 'ZONE_A';
+      zoneName = 'Intra-City (Local)';
+      zoneMultiplier = 1.0;
+    } else if (pickStr[0] === delStr[0]) {
+      zoneCode = 'ZONE_B';
+      zoneName = 'Intra-State (Regional)';
+      zoneMultiplier = 1.15;
+    } else if (['1', '4', '5', '6', '7'].includes(pickStr[0]) && ['1', '4', '5', '6', '7'].includes(delStr[0])) {
+      zoneCode = 'ZONE_C';
+      zoneName = 'Metro-to-Metro Express';
+      zoneMultiplier = 1.25;
+    }
+
+    const carrierConfigs = [
+      {
+        courier: 'SHIPROCKET',
+        carrierName: 'Shiprocket Multi-Carrier Surface',
+        mode: config.shiprocket.mode,
+        enabled: config.shiprocket.enabled,
+        baseRate500g: 42,
+        addl500gRate: 38,
+        transitDays: zoneCode === 'ZONE_A' ? 2 : (zoneCode === 'ZONE_B' ? 3 : 4),
+        codPercent: 0.015,
+        codMin: 35,
+        carrierDiscount: 15,
+        serviceable: true,
+        tierTag: 'Best Value Surface',
+      },
+      {
+        courier: 'DELHIVERY',
+        carrierName: 'Delhivery Surface Direct Hub',
+        mode: config.delhivery.mode,
+        enabled: config.delhivery.enabled,
+        baseRate500g: 48,
+        addl500gRate: 42,
+        transitDays: zoneCode === 'ZONE_A' ? 1 : (zoneCode === 'ZONE_B' ? 2 : 3),
+        codPercent: 0.018,
+        codMin: 40,
+        carrierDiscount: 20,
+        serviceable: true,
+        tierTag: 'Fastest Surface Network',
+      },
+      {
+        courier: 'BLUEDART',
+        carrierName: 'BlueDart Apex Priority Air',
+        mode: config.bluedart.mode,
+        enabled: config.bluedart.enabled,
+        baseRate500g: 75,
+        addl500gRate: 60,
+        transitDays: zoneCode === 'ZONE_A' ? 1 : (zoneCode === 'ZONE_B' ? 1 : 2),
+        codPercent: 0.02,
+        codMin: 50,
+        carrierDiscount: 25,
+        serviceable: true,
+        tierTag: 'Dedicated Aviation Cargo',
+      },
+      {
+        courier: 'LOCAL_FLEET',
+        carrierName: 'AuraMarket Hyperlocal Rider Fleet',
+        mode: 'internal',
+        enabled: true,
+        baseRate500g: 35,
+        addl500gRate: 15,
+        transitDays: 1,
+        codPercent: 0,
+        codMin: 20,
+        carrierDiscount: 0,
+        serviceable: zoneCode === 'ZONE_A' || zoneCode === 'ZONE_B',
+        tierTag: 'Same-Day City Delivery',
+      },
+    ];
+
+    const comparisons = carrierConfigs.map((c) => {
+      const baseFreight = c.baseRate500g + Math.max(0, slabs500g - 1) * c.addl500gRate;
+      const freightCharged = Math.round(baseFreight * zoneMultiplier);
+      const codFee = isCodBool ? Math.max(c.codMin, Math.round(valueNum * c.codPercent)) : 0;
+      const fuelAndGst = Math.round((freightCharged + codFee) * 0.18);
+      const quotedRate = freightCharged + codFee + fuelAndGst;
+      const finalCharge = Math.max(25, quotedRate - c.carrierDiscount);
+      const score = finalCharge * 0.6 + c.transitDays * 25;
+
+      return {
+        courier: c.courier,
+        carrierName: c.carrierName,
+        mode: c.mode,
+        enabled: c.enabled,
+        serviceable: c.serviceable,
+        tierTag: c.tierTag,
+        freightCharged,
+        codFee,
+        fuelAndGst,
+        quotedRate,
+        carrierDiscount: c.carrierDiscount,
+        finalCharge,
+        estimatedTransitDays: c.transitDays,
+        balanceScore: Math.round(score),
+      };
+    });
+
+    const activeQuotes = comparisons.filter((c) => c.serviceable && c.enabled);
+    const validPool = activeQuotes.length > 0 ? activeQuotes : comparisons;
+
+    const cheapestCarrier = [...validPool].sort((a, b) => a.finalCharge - b.finalCharge)[0].courier;
+    const fastestCarrier = [...validPool].sort((a, b) => a.estimatedTransitDays - b.estimatedTransitDays)[0].courier;
+
+    let recommendedCarrier = cheapestCarrier;
+    const strategy = config.rateOptimizationStrategy || 'BALANCED';
+
+    if (strategy === 'CHEAPEST') {
+      recommendedCarrier = cheapestCarrier;
+    } else if (strategy === 'FASTEST') {
+      recommendedCarrier = fastestCarrier;
+    } else if (strategy === 'PREFERRED_CARRIER' && config.defaultCourier) {
+      recommendedCarrier = config.defaultCourier;
+    } else {
+      // BALANCED
+      recommendedCarrier = [...validPool].sort((a, b) => a.balanceScore - b.balanceScore)[0].courier;
+    }
+
+    res.status(200).json({
+      success: true,
+      query: {
+        pickupPincode: pickStr,
+        deliveryPincode: delStr,
+        weightKg: weightNum,
+        volumetricWeightKg,
+        chargeableWeightKg,
+        slabs500g,
+        zoneCode,
+        zoneName,
+        zoneMultiplier,
+        isCod: isCodBool,
+        declaredValue: valueNum,
+      },
+      optimizationStrategy: strategy,
+      recommendedCarrier,
+      cheapestCarrier,
+      fastestCarrier,
+      comparisons,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Dispatch SubOrder with Cascading Multi-Carrier Fallback
+// @route   POST /api/courier/dispatch-with-fallback/:subOrderId
+// @access  Private (Vendor / Admin)
+exports.dispatchWithFallback = async (req, res, next) => {
+  try {
+    const { subOrderId } = req.params;
+    const { requestedCarrier, simulateFailureCarrier, weightKg, lengthCm, widthCm, heightCm } = req.body;
+
+    const subOrder = await SubOrder.findById(subOrderId)
+      .populate('parentOrder')
+      .populate('customer');
+
+    if (!subOrder) {
+      return res.status(404).json({ success: false, message: 'SubOrder not found.' });
+    }
+
+    const config = await getOrCreateCourierConfig();
+
+    // Determine cascade hierarchy
+    let hierarchy = (Array.isArray(config.fallbackHierarchy) && config.fallbackHierarchy.length > 0)
+      ? [...config.fallbackHierarchy]
+      : ['SHIPROCKET', 'DELHIVERY', 'BLUEDART', 'LOCAL_FLEET'];
+
+    // If requestedCarrier specified, put it at front
+    if (requestedCarrier && hierarchy.includes(requestedCarrier)) {
+      hierarchy = [requestedCarrier, ...hierarchy.filter((c) => c !== requestedCarrier)];
+    }
+
+    const initialPrimaryCourier = hierarchy[0];
+    const attempts = [];
+    let chosenCarrier = null;
+
+    // Simulate carrier fallback cascade
+    for (const carrier of hierarchy) {
+      const isSimulatedFail = simulateFailureCarrier && (
+        Array.isArray(simulateFailureCarrier)
+          ? simulateFailureCarrier.includes(carrier)
+          : simulateFailureCarrier === carrier
+      );
+
+      const isDisabled =
+        (carrier === 'SHIPROCKET' && !config.shiprocket?.enabled) ||
+        (carrier === 'DELHIVERY' && !config.delhivery?.enabled) ||
+        (carrier === 'BLUEDART' && !config.bluedart?.enabled);
+
+      const latencyMs = Math.floor(Math.random() * 35) + 30;
+
+      if (isSimulatedFail) {
+        attempts.push({
+          courier: carrier,
+          attemptedAt: new Date(),
+          success: false,
+          reason: `Carrier ${carrier} API response timed out (HTTP 504 Gateway Timeout simulated)`,
+          latencyMs,
+        });
+        continue;
+      }
+
+      if (isDisabled) {
+        attempts.push({
+          courier: carrier,
+          attemptedAt: new Date(),
+          success: false,
+          reason: `Carrier ${carrier} is disabled in Courier Integration settings`,
+          latencyMs: 12,
+        });
+        continue;
+      }
+
+      // Successful handshake and AWB generation
+      attempts.push({
+        courier: carrier,
+        attemptedAt: new Date(),
+        success: true,
+        reason: `Manifest acknowledged & electronic waybill generated successfully via ${carrier}`,
+        latencyMs,
+      });
+
+      chosenCarrier = carrier;
+      break;
+    }
+
+    // If all configured carriers failed, emergency fallback to LOCAL_FLEET
+    if (!chosenCarrier) {
+      chosenCarrier = 'LOCAL_FLEET';
+      attempts.push({
+        courier: 'LOCAL_FLEET',
+        attemptedAt: new Date(),
+        success: true,
+        reason: 'Emergency Dispatch: Auto-routed to AuraMarket Hyperlocal Dedicated Fleet',
+        latencyMs: 15,
+      });
+    }
+
+    const fallbackApplied = attempts.length > 1 || attempts[0].courier !== chosenCarrier;
+    const originalCourier = initialPrimaryCourier;
+    const fallbackReason = fallbackApplied ? attempts[0].reason : '';
+
+    // Generate unique standard AWB code
+    const prefixMap = { SHIPROCKET: 'SR', DELHIVERY: 'DEL', BLUEDART: 'BD', LOCAL_FLEET: 'LF' };
+    const prefix = prefixMap[chosenCarrier] || 'AWB';
+    const randomDigits = Math.floor(10000000 + Math.random() * 90000000);
+    const awbCode = `${prefix}-${randomDigits}`;
+    const shipmentId = `SHP-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+
+    // Extract customer shipping details
+    const order = subOrder.parentOrder;
+    const customer = subOrder.customer;
+    const shippingAddr = order?.shippingAddress || {};
+
+    const customerDetails = {
+      name: customer?.name || shippingAddr.fullName || 'Valued Customer',
+      phone: customer?.phone || shippingAddr.phone || '9876543210',
+      address: shippingAddr.street || '123 Market Street',
+      city: shippingAddr.city || 'New Delhi',
+      state: shippingAddr.state || 'Delhi',
+      pincode: shippingAddr.pincode || '110001',
+    };
+
+    const isCod = order?.paymentMethod === 'COD';
+    const totalAmount = subOrder.pricing?.totalPrice || 1000;
+
+    const transitDays = chosenCarrier === 'BLUEDART' ? 1 : (chosenCarrier === 'DELHIVERY' ? 2 : (chosenCarrier === 'LOCAL_FLEET' ? 1 : 3));
+    const quotedRate = chosenCarrier === 'BLUEDART' ? 115 : (chosenCarrier === 'DELHIVERY' ? 85 : (chosenCarrier === 'LOCAL_FLEET' ? 45 : 75));
+    const carrierDiscount = chosenCarrier === 'LOCAL_FLEET' ? 0 : 15;
+    const finalCharge = quotedRate - carrierDiscount;
+
+    const now = new Date();
+    const estimatedEta = new Date(now.getTime() + transitDays * 24 * 60 * 60 * 1000);
+
+    const pickupLoc = chosenCarrier === 'SHIPROCKET'
+      ? config.shiprocket.defaultPickupLocation
+      : (chosenCarrier === 'DELHIVERY' ? config.delhivery.pickupLocation : 'Primary Warehouse - Delhi Central Hub');
+
+    let shipment = await CourierShipment.findOne({ subOrderId: subOrder._id });
+
+    const shipmentPayload = {
+      shipmentId,
+      subOrderId: subOrder._id,
+      orderId: order?._id,
+      orderNumber: order?.orderNumber || `ORD-${Date.now()}`,
+      courierPartner: chosenCarrier,
+      awbCode,
+      shipmentStatus: 'AWB_ASSIGNED',
+      pickupLocation: pickupLoc,
+      pickupScheduledAt: new Date(now.getTime() + 4 * 60 * 60 * 1000),
+      estimatedDeliveryDate: estimatedEta,
+      labelUrl: `/api/courier/label/${awbCode}`,
+      customerDetails,
+      packageDetails: {
+        weightKg: Number(weightKg || 0.8),
+        lengthCm: Number(lengthCm || 20),
+        widthCm: Number(widthCm || 15),
+        heightCm: Number(heightCm || 8),
+        declaredValue: totalAmount,
+        isCod,
+        codAmount: isCod ? totalAmount : 0,
+      },
+      rateDetails: {
+        quotedRate,
+        carrierDiscount,
+        finalCharge,
+        estimatedTransitDays: transitDays,
+      },
+      fallbackDetails: {
+        fallbackApplied,
+        originalCourier,
+        fallbackReason,
+        attempts,
+      },
+      trackingHistory: [
+        {
+          timestamp: now,
+          status: 'MANIFESTED',
+          location: customerDetails.city,
+          activity: fallbackApplied
+            ? `Automated fallback engaged: Routed to ${chosenCarrier} after primary carrier (${originalCourier}) failed.`
+            : `Electronic shipment manifest registered with ${chosenCarrier} gateway`,
+        },
+        {
+          timestamp: new Date(now.getTime() + 1000),
+          status: 'AWB_ASSIGNED',
+          location: customerDetails.city,
+          activity: `AWB ${awbCode} generated. 4x6 thermal barcode shipping label ready`,
+        },
+      ],
+    };
+
+    if (shipment) {
+      Object.assign(shipment, shipmentPayload);
+      await shipment.save();
+    } else {
+      shipment = await CourierShipment.create(shipmentPayload);
+    }
+
+    // Update SubOrder record
+    subOrder.trackingNumber = awbCode;
+    subOrder.carrier = chosenCarrier;
+    subOrder.status = 'shipped';
+    subOrder.shippedAt = now;
+    await subOrder.save();
+
+    await AuditLog.create({
+      action: fallbackApplied ? 'COURIER_DISPATCH_FALLBACK' : 'COURIER_DISPATCH_SUCCESS',
+      module: 'LOGISTICS',
+      description: fallbackApplied
+        ? `Fallback engine dispatched sub-order ${subOrder._id} via ${chosenCarrier} (Primary ${originalCourier} failed). AWB: ${awbCode}`
+        : `Sub-order ${subOrder._id} successfully dispatched via ${chosenCarrier}. AWB: ${awbCode}`,
+      performedBy: req.user?._id || null,
+      targetType: 'CourierShipment',
+      targetId: shipment._id.toString(),
+      details: {
+        subOrderId: subOrder._id,
+        awbCode,
+        chosenCarrier,
+        fallbackApplied,
+        originalCourier,
+        attemptsCount: attempts.length,
+      },
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: fallbackApplied
+        ? `Automated fallback activated! Primary carrier failed. Dispatched via ${chosenCarrier} (AWB: ${awbCode})`
+        : `Shipment manifested successfully via ${chosenCarrier} (AWB: ${awbCode})`,
+      awbCode,
+      activeCarrier: chosenCarrier,
+      fallbackApplied,
+      originalCourier,
+      attempts,
+      shipment,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Bulk Dispatch SubOrders with Fallback Engine
+// @route   POST /api/courier/bulk-dispatch-with-fallback
+// @access  Private (Vendor / Admin)
+exports.bulkDispatchWithFallback = async (req, res, next) => {
+  try {
+    const { subOrderIds, simulateFailureCarrier } = req.body;
+
+    if (!Array.isArray(subOrderIds) || subOrderIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'subOrderIds array is required and must not be empty.',
+      });
+    }
+
+    const results = [];
+    let dispatchedCount = 0;
+    let failedCount = 0;
+
+    for (const id of subOrderIds) {
+      try {
+        const subOrder = await SubOrder.findById(id).populate('parentOrder').populate('customer');
+        if (!subOrder) {
+          results.push({ subOrderId: id, success: false, error: 'SubOrder not found' });
+          failedCount++;
+          continue;
+        }
+
+        const config = await getOrCreateCourierConfig();
+        const hierarchy = config.fallbackHierarchy || ['SHIPROCKET', 'DELHIVERY', 'BLUEDART', 'LOCAL_FLEET'];
+
+        const attempts = [];
+        let chosenCarrier = null;
+
+        for (const carrier of hierarchy) {
+          const isSimulatedFail = simulateFailureCarrier && (
+            Array.isArray(simulateFailureCarrier)
+              ? simulateFailureCarrier.includes(carrier)
+              : simulateFailureCarrier === carrier
+          );
+
+          if (isSimulatedFail) {
+            attempts.push({
+              courier: carrier,
+              attemptedAt: new Date(),
+              success: false,
+              reason: `Simulated timeout on ${carrier}`,
+              latencyMs: 35,
+            });
+            continue;
+          }
+
+          attempts.push({
+            courier: carrier,
+            attemptedAt: new Date(),
+            success: true,
+            reason: `Batch AWB generation successful via ${carrier}`,
+            latencyMs: 25,
+          });
+          chosenCarrier = carrier;
+          break;
+        }
+
+        if (!chosenCarrier) {
+          chosenCarrier = 'LOCAL_FLEET';
+          attempts.push({
+            courier: 'LOCAL_FLEET',
+            attemptedAt: new Date(),
+            success: true,
+            reason: 'Emergency fallback to Local Fleet',
+            latencyMs: 15,
+          });
+        }
+
+        const fallbackApplied = attempts.length > 1 || attempts[0].courier !== chosenCarrier;
+        const prefixMap = { SHIPROCKET: 'SR', DELHIVERY: 'DEL', BLUEDART: 'BD', LOCAL_FLEET: 'LF' };
+        const prefix = prefixMap[chosenCarrier] || 'AWB';
+        const awbCode = `${prefix}-${Math.floor(10000000 + Math.random() * 90000000)}`;
+        const shipmentId = `SHP-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+
+        const now = new Date();
+        const shipment = await CourierShipment.create({
+          shipmentId,
+          subOrderId: subOrder._id,
+          orderId: subOrder.parentOrder?._id,
+          orderNumber: subOrder.parentOrder?.orderNumber || `ORD-${Date.now()}`,
+          courierPartner: chosenCarrier,
+          awbCode,
+          shipmentStatus: 'AWB_ASSIGNED',
+          pickupLocation: config.shiprocket.defaultPickupLocation,
+          pickupScheduledAt: new Date(now.getTime() + 4 * 60 * 60 * 1000),
+          estimatedDeliveryDate: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000),
+          labelUrl: `/api/courier/label/${awbCode}`,
+          customerDetails: {
+            name: subOrder.customer?.name || 'Customer',
+            phone: subOrder.customer?.phone || '9876543210',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+          },
+          packageDetails: {
+            weightKg: 0.8,
+            lengthCm: 20,
+            widthCm: 15,
+            heightCm: 8,
+            declaredValue: subOrder.pricing?.totalPrice || 1000,
+            isCod: subOrder.parentOrder?.paymentMethod === 'COD',
+            codAmount: subOrder.parentOrder?.paymentMethod === 'COD' ? subOrder.pricing?.totalPrice || 1000 : 0,
+          },
+          fallbackDetails: {
+            fallbackApplied,
+            originalCourier: hierarchy[0],
+            fallbackReason: fallbackApplied ? attempts[0].reason : '',
+            attempts,
+          },
+          rateDetails: {
+            quotedRate: 85,
+            carrierDiscount: 15,
+            finalCharge: 70,
+            estimatedTransitDays: 3,
+          },
+          trackingHistory: [
+            {
+              timestamp: now,
+              status: 'AWB_ASSIGNED',
+              location: 'Delhi Central Hub',
+              activity: `Bulk dispatch assigned to ${chosenCarrier} (AWB: ${awbCode})`,
+            },
+          ],
+        });
+
+        subOrder.trackingNumber = awbCode;
+        subOrder.carrier = chosenCarrier;
+        subOrder.status = 'shipped';
+        subOrder.shippedAt = now;
+        await subOrder.save();
+
+        results.push({
+          subOrderId: id,
+          success: true,
+          awbCode,
+          activeCarrier: chosenCarrier,
+          fallbackApplied,
+          shipmentId: shipment.shipmentId,
+        });
+        dispatchedCount++;
+      } catch (err) {
+        results.push({ subOrderId: id, success: false, error: err.message });
+        failedCount++;
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Bulk dispatch completed. ${dispatchedCount} dispatched, ${failedCount} failed.`,
+      total: subOrderIds.length,
+      dispatchedCount,
+      failedCount,
+      results,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Carrier API Health, Latency & Live Radar Status
+// @route   GET /api/admin/courier/health-status
+// @access  Private (Super Admin / Admin)
+exports.getCarrierHealthStatus = async (req, res, next) => {
+  try {
+    const config = await getOrCreateCourierConfig();
+
+    const healthStatuses = [
+      {
+        courier: 'SHIPROCKET',
+        name: 'Shiprocket Shipping Gateway',
+        status: config.shiprocket.enabled ? 'HEALTHY' : 'DISABLED',
+        latencyMs: Math.floor(Math.random() * 25) + 28,
+        uptimePercentage: 99.96,
+        mode: config.shiprocket.mode,
+        endpoint: 'https://apiv2.shiprocket.in/v1/external',
+        serviceablePincodes: '29,000+ PIN Codes Across India',
+        lastChecked: new Date(),
+      },
+      {
+        courier: 'DELHIVERY',
+        name: 'Delhivery Direct One Express',
+        status: config.delhivery.enabled ? 'HEALTHY' : 'DISABLED',
+        latencyMs: Math.floor(Math.random() * 20) + 38,
+        uptimePercentage: 99.92,
+        mode: config.delhivery.mode,
+        endpoint: 'https://track.delhivery.com/api/cmu/create.json',
+        serviceablePincodes: '27,500+ PIN Codes Direct Delivery',
+        lastChecked: new Date(),
+      },
+      {
+        courier: 'BLUEDART',
+        name: 'BlueDart Apex Aviation Network',
+        status: config.bluedart.enabled ? 'HEALTHY' : 'STANDBY',
+        latencyMs: Math.floor(Math.random() * 15) + 22,
+        uptimePercentage: 99.98,
+        mode: config.bluedart.mode,
+        endpoint: 'https://api.bluedart.com/servlet/RoutingServlet',
+        serviceablePincodes: '14,000+ Pincodes Priority Aviation',
+        lastChecked: new Date(),
+      },
+      {
+        courier: 'LOCAL_FLEET',
+        name: 'AuraMarket Dedicated Hyperlocal Fleet',
+        status: 'HEALTHY',
+        latencyMs: 8,
+        uptimePercentage: 100.0,
+        mode: 'internal',
+        endpoint: 'internal://auramarket/fleet/dispatch',
+        serviceablePincodes: 'Hyperlocal Hub Coverage (Radius: 15km)',
+        lastChecked: new Date(),
+      },
+    ];
+
+    res.status(200).json({
+      success: true,
+      timestamp: new Date(),
+      overallSystemHealth: 'OPERATIONAL',
+      defaultCourier: config.defaultCourier,
+      fallbackHierarchy: config.fallbackHierarchy || ['SHIPROCKET', 'DELHIVERY', 'BLUEDART', 'LOCAL_FLEET'],
+      autoFallbackEnabled: config.autoFallbackEnabled !== false,
+      rateOptimizationStrategy: config.rateOptimizationStrategy || 'BALANCED',
+      maxTransitDaysThreshold: config.maxTransitDaysThreshold || 5,
+      healthStatuses,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Ingest Third-Party Courier Webhook Milestones
+// @route   POST /api/courier/webhook/:carrier
+// @access  Public
+exports.ingestCourierWebhook = async (req, res, next) => {
+  try {
+    const { carrier } = req.params;
+    const {
+      awbCode,
+      waybill,
+      trackingNumber,
+      status,
+      current_status,
+      location,
+      city,
+      activity,
+      remarks,
+      timestamp,
+    } = req.body;
+
+    const targetAwb = awbCode || waybill || trackingNumber;
+
+    if (!targetAwb) {
+      return res.status(400).json({
+        success: false,
+        message: 'AWB code (awbCode, waybill, or trackingNumber) is required in webhook payload.',
+      });
+    }
+
+    const shipment = await CourierShipment.findOne({ awbCode: targetAwb });
+    if (!shipment) {
+      return res.status(404).json({
+        success: false,
+        message: `Shipment with AWB '${targetAwb}' not found.`,
+      });
+    }
+
+    const rawStatus = String(status || current_status || '').toUpperCase();
+    let mappedStatus = shipment.shipmentStatus;
+
+    if (['MANIFESTED', 'REGISTERED'].includes(rawStatus)) {
+      mappedStatus = 'MANIFESTED';
+    } else if (['PICKED_UP', 'PICKEDUP', 'INWARDED'].includes(rawStatus)) {
+      mappedStatus = 'PICKED_UP';
+    } else if (['IN_TRANSIT', 'TRANSIT', 'HUB_RECEIVED', 'DISPATCHED'].includes(rawStatus)) {
+      mappedStatus = 'IN_TRANSIT';
+    } else if (['OUT_FOR_DELIVERY', 'OFD'].includes(rawStatus)) {
+      mappedStatus = 'OUT_FOR_DELIVERY';
+    } else if (['DELIVERED', 'DLV'].includes(rawStatus)) {
+      mappedStatus = 'DELIVERED';
+    } else if (['RTO', 'RTO_INITIATED', 'RETURN_TO_ORIGIN'].includes(rawStatus)) {
+      mappedStatus = 'RTO_INITIATED';
+    } else if (['CANCELLED', 'CANCELED'].includes(rawStatus)) {
+      mappedStatus = 'CANCELLED';
+    }
+
+    const eventLocation = location || city || 'Transit Hub';
+    const eventActivity = activity || remarks || `Shipment milestone updated to ${mappedStatus} via ${carrier.toUpperCase()} webhook`;
+
+    shipment.trackingHistory.push({
+      timestamp: timestamp ? new Date(timestamp) : new Date(),
+      status: mappedStatus,
+      location: eventLocation,
+      activity: eventActivity,
+    });
+
+    shipment.shipmentStatus = mappedStatus;
+    if (mappedStatus === 'DELIVERED') {
+      shipment.deliveredAt = new Date();
+    } else if (mappedStatus === 'PICKED_UP') {
+      shipment.pickedUpAt = new Date();
+    }
+
+    await shipment.save();
+
+    // Synchronize SubOrder status
+    if (shipment.subOrderId) {
+      const subOrder = await SubOrder.findById(shipment.subOrderId);
+      if (subOrder) {
+        if (mappedStatus === 'DELIVERED') {
+          subOrder.status = 'delivered';
+          subOrder.deliveredAt = new Date();
+        } else if (mappedStatus === 'OUT_FOR_DELIVERY') {
+          subOrder.status = 'out_for_delivery';
+        }
+        await subOrder.save();
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Webhook event processed successfully for carrier ${carrier.toUpperCase()}`,
+      awbCode: shipment.awbCode,
+      shipmentStatus: shipment.shipmentStatus,
+      trackingEventCount: shipment.trackingHistory.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

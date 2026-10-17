@@ -21119,6 +21119,246 @@ const runTests = async () => {
       assert.ok(dataDirectLocal.message.includes('completed successfully'));
     });
 
+    // =========================================================================
+    // PILLAR 2 - POINT 22: ENTERPRISE BACKGROUND JOB QUEUE & WORKERS (REDIS + BULLMQ QUEUE MONITOR)
+    // =========================================================================
+    console.log('\n--- PILLAR 2 - POINT 22: ENTERPRISE BACKGROUND JOB QUEUE & WORKERS (REDIS + BULLMQ QUEUE MONITOR) ---');
+
+    const jobQueueService = require('../src/services/jobQueueService');
+    const JobQueue = require('../src/models/JobQueue');
+
+    await test('Point 22: GET /api/admin/queues returns registered queues, status counts, and Redis/embedded health', async () => {
+      const res = await fetch(`${baseUrl}/admin/queues`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.overview);
+      assert.ok(typeof data.data.overview.totalJobs === 'number');
+      assert.ok(data.data.redis);
+      assert.ok(['EMBEDDED_ACTIVE', 'CONNECTED'].includes(data.data.redis.status));
+      assert.ok(Array.isArray(data.data.queues));
+      const queueNames = data.data.queues.map(q => q.queueName);
+      assert.ok(queueNames.includes('email'));
+      assert.ok(queueNames.includes('notifications'));
+      assert.ok(queueNames.includes('reports'));
+      assert.ok(queueNames.includes('maintenance'));
+      assert.ok(queueNames.includes('default'));
+    });
+
+    let point22JobId = null;
+    await test('Point 22: POST /api/admin/queues/dispatch dispatches a background job with payload and priority', async () => {
+      const res = await fetch(`${baseUrl}/admin/queues/dispatch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          queueName: 'default',
+          name: 'test_job',
+          priority: 2,
+          data: {
+            echo: 'P22_TEST_ECHO_TOKEN',
+            simulateDurationMs: 20,
+            shouldFail: false,
+          },
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.data.jobId.startsWith('job_'));
+      assert.strictEqual(data.data.name, 'test_job');
+      assert.strictEqual(data.data.priority, 2);
+      assert.strictEqual(data.data.queueName, 'default');
+      assert.ok(['waiting', 'active', 'completed'].includes(data.data.status));
+      point22JobId = data.data.jobId;
+    });
+
+    await test('Point 22: Worker processes job to completion, records duration, progress, logs, and execution result', async () => {
+      // Process pending job
+      await jobQueueService.processNextJobs();
+      // Wait small tick for processor
+      await new Promise(r => setTimeout(r, 100));
+
+      const res = await fetch(`${baseUrl}/admin/queues/jobs/${point22JobId}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.data.status, 'completed');
+      assert.strictEqual(data.data.progress, 100);
+      assert.strictEqual(data.data.isDeadLetter, false);
+      assert.ok(data.data.durationMs >= 0);
+      assert.strictEqual(data.data.result.echo, 'P22_TEST_ECHO_TOKEN');
+      assert.strictEqual(data.data.result.acknowledged, true);
+      assert.ok(Array.isArray(data.data.logs));
+      assert.ok(data.data.logs.length >= 2);
+    });
+
+    let point22FailedJobId = null;
+    await test('Point 22: Retry policy with exponential backoff & Dead-Letter Queue (DLQ) transition upon max attempts', async () => {
+      // Dispatch job with shouldFail: true and maxAttempts: 2
+      const resDispatch = await fetch(`${baseUrl}/admin/queues/dispatch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          queueName: 'maintenance',
+          name: 'test_job',
+          priority: 1,
+          maxAttempts: 2,
+          data: {
+            simulateDurationMs: 10,
+            shouldFail: true,
+          },
+        }),
+      });
+      assert.strictEqual(resDispatch.status, 201);
+      const dispatchData = await resDispatch.json();
+      point22FailedJobId = dispatchData.data.jobId;
+
+      // Attempt 1: Trigger worker
+      await jobQueueService.processNextJobs();
+      await new Promise(r => setTimeout(r, 50));
+
+      let jobDoc = await JobQueue.findOne({ jobId: point22FailedJobId });
+      assert.strictEqual(jobDoc.attemptsMade, 1);
+      assert.strictEqual(jobDoc.status, 'delayed', 'Job should be in delayed status awaiting backoff');
+      assert.strictEqual(jobDoc.isDeadLetter, false);
+
+      // Fast-forward runAt to past so it becomes eligible for attempt 2
+      jobDoc.runAt = new Date(Date.now() - 1000);
+      await jobDoc.save();
+
+      // Attempt 2: Trigger worker again -> reaches maxAttempts (2)
+      await jobQueueService.processNextJobs();
+      await new Promise(r => setTimeout(r, 50));
+
+      jobDoc = await JobQueue.findOne({ jobId: point22FailedJobId });
+      assert.strictEqual(jobDoc.attemptsMade, 2);
+      assert.strictEqual(jobDoc.status, 'failed', 'Job should transition to failed status');
+      assert.strictEqual(jobDoc.isDeadLetter, true, 'Job must be archived to Dead-Letter Queue (DLQ)');
+      assert.ok(jobDoc.error.message.includes('Simulated test failure'));
+      assert.ok(jobDoc.error.stack);
+    });
+
+    await test('Point 22: POST /api/admin/queues/jobs/:jobId/retry recovers job from Dead-Letter Queue (DLQ)', async () => {
+      const resRetry = await fetch(`${baseUrl}/admin/queues/jobs/${point22FailedJobId}/retry`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resRetry.status, 200);
+      const dataRetry = await resRetry.json();
+      assert.strictEqual(dataRetry.success, true);
+      assert.strictEqual(dataRetry.data.status, 'waiting');
+      assert.strictEqual(dataRetry.data.attemptsMade, 0);
+      assert.strictEqual(dataRetry.data.isDeadLetter, false);
+      assert.strictEqual(dataRetry.data.error, undefined);
+    });
+
+    await test('Point 22: Queue controls: pause, resume, and purge completed jobs', async () => {
+      // 1. Pause queue
+      const resPause = await fetch(`${baseUrl}/admin/queues/maintenance/pause`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resPause.status, 200);
+      const dataPause = await resPause.json();
+      assert.strictEqual(dataPause.success, true);
+      assert.strictEqual(dataPause.isPaused, true);
+      assert.ok(jobQueueService.pausedQueues.has('maintenance'));
+
+      // 2. Resume queue
+      const resResume = await fetch(`${baseUrl}/admin/queues/maintenance/resume`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resResume.status, 200);
+      const dataResume = await resResume.json();
+      assert.strictEqual(dataResume.success, true);
+      assert.strictEqual(dataResume.isPaused, false);
+      assert.ok(!jobQueueService.pausedQueues.has('maintenance'));
+
+      // 3. Purge completed jobs in default queue
+      const resClean = await fetch(`${baseUrl}/admin/queues/default/clean`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ type: 'completed' }),
+      });
+      assert.strictEqual(resClean.status, 200);
+      const dataClean = await resClean.json();
+      assert.strictEqual(dataClean.success, true);
+      assert.ok(dataClean.data.purgedCount >= 1);
+    });
+
+    await test('Point 22: GET & PUT /api/admin/queues/settings updates worker concurrency & protects Redis credentials', async () => {
+      // 1. Get settings
+      const resGet = await fetch(`${baseUrl}/admin/queues/settings`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resGet.status, 200);
+      const dataGet = await resGet.json();
+      assert.strictEqual(dataGet.success, true);
+      assert.ok(typeof dataGet.data.concurrency === 'number');
+      assert.ok(typeof dataGet.data.maxRetries === 'number');
+
+      // 2. Update settings
+      const resPut = await fetch(`${baseUrl}/admin/queues/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          concurrency: 6,
+          maxRetries: 4,
+          autoCleanCompletedDays: 14,
+          redis: {
+            enabled: false,
+            host: 'redis.internal.auramarket.com',
+            port: 6380,
+            password: 'secret_cluster_pass',
+          },
+        }),
+      });
+      assert.strictEqual(resPut.status, 200);
+      const dataPut = await resPut.json();
+      assert.strictEqual(dataPut.success, true);
+      assert.strictEqual(dataPut.data.concurrency, 6);
+      assert.strictEqual(dataPut.data.maxRetries, 4);
+      assert.strictEqual(dataPut.data.autoCleanCompletedDays, 14);
+      assert.strictEqual(dataPut.data.redis.host, 'redis.internal.auramarket.com');
+      assert.strictEqual(dataPut.data.redis.port, 6380);
+      assert.strictEqual(dataPut.data.redis.password, '••••••••', 'Redis password must be masked in API output');
+    });
+
+    await test('Point 22: Role Security: Customer and unauthenticated requests are rejected (401 / 403)', async () => {
+      // Unauthenticated
+      const resUnauth = await fetch(`${baseUrl}/admin/queues`);
+      assert.strictEqual(resUnauth.status, 401, 'Unauthenticated request must return 401');
+
+      // Customer
+      const resCust = await fetch(`${baseUrl}/admin/queues`, {
+        headers: { Authorization: `Bearer ${customerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403, 'Customer token must return 403 Forbidden');
+
+      // Delivery Rider
+      const resRider = await fetch(`${baseUrl}/admin/queues`, {
+        headers: { Authorization: `Bearer ${riderToken}` },
+      });
+      assert.strictEqual(resRider.status, 403, 'Delivery rider token must return 403 Forbidden');
+    });
+
   } finally {
     if (server) {
       server.close();

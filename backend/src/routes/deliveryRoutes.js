@@ -33,6 +33,10 @@ const {
   getPodCertificatePrintHtml,
   unlockOtpAttempts,
 } = require('../controllers/deliveryController');
+const {
+  getReturnPickupDetails,
+  inspectDoorstepReturn,
+} = require('../controllers/reverseLogisticsController');
 const { protect, authorize } = require('../middlewares/auth');
 
 // Point 16 & Point 43: Public Live Real-Time GPS Tracking Map & Interactive Telemetry (Accessible by customer)
@@ -87,5 +91,9 @@ router.put('/cod/reconciliations/:id/verify', verifyCodReconciliation);
 // Point #70: Delivery Failure & Reschedule Routes
 router.post('/tasks/:id/fail', reportDeliveryFailure);
 router.post('/tasks/:id/reschedule', rescheduleTask);
+
+// Point 47: Return Pickup Inspection & Reverse Logistics Routing Engine
+router.get('/reverse-pickup/:taskId', getReturnPickupDetails);
+router.post('/reverse-pickup/:taskId/inspect-doorstep', inspectDoorstepReturn);
 
 module.exports = router;

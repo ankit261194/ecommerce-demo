@@ -42,6 +42,7 @@ const walletTransactionSchema = new mongoose.Schema(
         'SPLIT_PAYMENT',
         'PARTIAL_COD_ADVANCE',
         'RIDER_TIP',
+        'SPF_COMPENSATION',
       ],
       default: 'COIN_REDEMPTION',
     },

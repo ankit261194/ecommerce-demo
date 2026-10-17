@@ -36,6 +36,7 @@ const StaffRole = require('../src/models/StaffRole');
 const Category = require('../src/models/Category');
 const CourierIntegration = require('../src/models/CourierIntegration');
 const CourierShipment = require('../src/models/CourierShipment');
+const ReturnRequest = require('../src/models/ReturnRequest');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -29695,6 +29696,756 @@ const runTests = async () => {
         body: JSON.stringify({}),
       });
       assert.strictEqual(resCustDispatch.status, 403);
+    });
+
+
+    // =========================================================================
+    // PILLAR 4 - POINT 47: RETURN PICKUP INSPECTION & REVERSE LOGISTICS ROUTING ENGINE
+    // =========================================================================
+    console.log('\n--- PILLAR 4 - POINT 47: RETURN PICKUP INSPECTION & REVERSE LOGISTICS ROUTING ENGINE ---');
+
+    let p47Unique;
+    let p47AdminUser, p47AdminToken;
+    let p47CustomerUser, p47CustomerToken;
+    let p47ForeignCustomerUser, p47ForeignCustomerToken;
+    let p47VendorUser, p47VendorProfile, p47VendorToken;
+    let p47ForeignVendorUser, p47ForeignVendorProfile, p47ForeignVendorToken;
+    let p47RiderUser, p47RiderToken;
+    let p47ForeignRiderUser, p47ForeignRiderToken;
+    let p47Product, p47Order, p47SubOrder;
+    let p47Return1, p47Task1;
+    let p47Return2, p47Task2;
+    let p47Return3, p47Task3;
+    let p47Waybill1 = '';
+
+    await test('Point 47: Setup dedicated reverse logistics merchant, rider, returns & delivery tasks', async () => {
+      p47Unique = Date.now() + '_' + Math.floor(Math.random() * 10000);
+
+      // 1. Super Admin
+      p47AdminUser = await User.create({
+        name: 'Reverse Admin ' + p47Unique,
+        email: 'admin.reverse.' + p47Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'superadmin',
+      });
+      p47AdminToken = generateToken(p47AdminUser._id);
+
+      // 2. Customer
+      p47CustomerUser = await User.create({
+        name: 'Priya Returner ' + p47Unique,
+        email: 'customer.reverse.' + p47Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'customer',
+      });
+      p47CustomerToken = generateToken(p47CustomerUser._id);
+
+      // Foreign Customer
+      p47ForeignCustomerUser = await User.create({
+        name: 'Foreign Customer ' + p47Unique,
+        email: 'foreign.rev.' + p47Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'customer',
+      });
+      p47ForeignCustomerToken = generateToken(p47ForeignCustomerUser._id);
+
+      // 3. Primary Vendor & Profile
+      p47VendorUser = await User.create({
+        name: 'Apex Merchant ' + p47Unique,
+        email: 'vendor.reverse.' + p47Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'vendor',
+      });
+      p47VendorProfile = await VendorProfile.create({
+        user: p47VendorUser._id,
+        storeName: 'Apex Audio Reverse Hub ' + p47Unique,
+        storeSlug: 'apex-audio-reverse-' + p47Unique.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        phone: '9876543211',
+        walletBalance: 10000,
+        totalEarned: 50000,
+        warehouseAddress: {
+          address: 'Phase 2, Udyog Vihar',
+          city: 'Gurugram',
+          state: 'Haryana',
+          pincode: '122016',
+        },
+      });
+      p47VendorUser.vendorProfile = p47VendorProfile._id;
+      await p47VendorUser.save();
+      p47VendorToken = generateToken(p47VendorUser._id);
+
+      // Foreign Vendor
+      p47ForeignVendorUser = await User.create({
+        name: 'Foreign Merchant ' + p47Unique,
+        email: 'foreign.vendor.rev.' + p47Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'vendor',
+      });
+      p47ForeignVendorProfile = await VendorProfile.create({
+        user: p47ForeignVendorUser._id,
+        storeName: 'Other Store ' + p47Unique,
+        storeSlug: 'other-store-' + p47Unique.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        phone: '9876543299',
+        walletBalance: 2000,
+      });
+      p47ForeignVendorUser.vendorProfile = p47ForeignVendorProfile._id;
+      await p47ForeignVendorUser.save();
+      p47ForeignVendorToken = generateToken(p47ForeignVendorUser._id);
+
+      // 4. Delivery Rider
+      p47RiderUser = await User.create({
+        name: 'Reverse Courier Rider ' + p47Unique,
+        email: 'rider.reverse.' + p47Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'delivery',
+      });
+      p47RiderToken = generateToken(p47RiderUser._id);
+
+      // Foreign Rider
+      p47ForeignRiderUser = await User.create({
+        name: 'Foreign Courier Rider ' + p47Unique,
+        email: 'foreign.rider.' + p47Unique + '@auramarket.com',
+        phone: '98' + Math.floor(10000000 + Math.random() * 90000000),
+        password: 'Password123!',
+        role: 'delivery',
+      });
+      p47ForeignRiderToken = generateToken(p47ForeignRiderUser._id);
+
+      // 5. Product
+      let p47Cat = await Category.findOne();
+      if (!p47Cat) {
+        p47Cat = await Category.create({
+          name: 'Audio ' + p47Unique,
+          slug: 'audio-' + p47Unique.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        });
+      }
+
+      p47Product = await Product.create({
+        title: 'Aura Studio High-End Headphones ' + p47Unique,
+        slug: 'aura-studio-anc-' + p47Unique.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        description: 'Aura Studio High-End Headphones with Active Noise Cancellation',
+        category: p47Cat._id,
+        price: 8999,
+        mrp: 14999,
+        sellingPrice: 8999,
+        countInStock: 25,
+        stock: 25,
+        user: p47VendorUser._id,
+        vendor: p47VendorProfile._id,
+        sku: 'APX-ANC-' + p47Unique,
+        image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
+      });
+
+      // 6. Base Order & SubOrder
+      p47Order = await Order.create({
+        customer: p47CustomerUser._id,
+        orderNumber: 'ORD-P47-' + p47Unique,
+        items: [
+          {
+            product: p47Product._id,
+            vendor: p47VendorProfile._id,
+            title: p47Product.title,
+            quantity: 2,
+            price: 8999,
+            totalPrice: 17998,
+          },
+        ],
+        totalAmount: 17998,
+        totalCommission: 1799,
+        paymentMethod: 'ONLINE',
+        orderStatus: 'DELIVERED',
+        shippingAddress: {
+          recipientName: p47CustomerUser.name,
+          phone: p47CustomerUser.phone,
+          street: 'Plot 42, Vasant Kunj Pocket C',
+          city: 'New Delhi',
+          state: 'Delhi',
+          pincode: '110070',
+        },
+      });
+
+      p47SubOrder = await SubOrder.create({
+        parentOrder: p47Order._id,
+        order: p47Order._id,
+        vendor: p47VendorProfile._id,
+        customer: p47CustomerUser._id,
+        subOrderId: 'SUB-P47-' + p47Unique,
+        items: [
+          {
+            product: p47Product._id,
+            title: p47Product.title,
+            quantity: 2,
+            price: 8999,
+            totalPrice: 17998,
+          },
+        ],
+        subTotal: 17998,
+        platformCommissionRate: 10,
+        platformCommissionAmount: 1799.8,
+        vendorEarning: 16198.2,
+        status: 'delivered',
+      });
+
+      // 7. ReturnRequest 1: High Value Item (₹17,998 >= ₹5,000 threshold -> Central Grading Hub routing)
+      p47Return1 = await ReturnRequest.create({
+        order: p47Order._id,
+        subOrder: p47SubOrder._id,
+        customer: p47CustomerUser._id,
+        vendor: p47VendorProfile._id,
+        items: [{ product: p47Product._id, title: p47Product.title, quantity: 2, price: 8999 }],
+        refundAmount: 17998,
+        reason: 'Audio distortion on right earcup',
+        reasonCode: 'DEFECTIVE_PRODUCT',
+        reversePickupOtp: '7412',
+        status: 'REQUESTED',
+      });
+
+      // Delivery Task 1
+      p47Task1 = await DeliveryTask.create({
+        taskType: 'REVERSE_PICKUP',
+        returnRequest: p47Return1._id,
+        deliveryPartner: p47RiderUser._id,
+        status: 'ASSIGNED',
+        reversePickupDetails: {
+          pickupOtp: '7412',
+          itemTitle: p47Product.title,
+        },
+        pickupLocation: {
+          storeName: p47CustomerUser.name,
+          phone: p47CustomerUser.phone,
+          address: 'Plot 42, Vasant Kunj Pocket C',
+          city: 'New Delhi',
+          pincode: '110070',
+        },
+      });
+
+      // ReturnRequest 2: Rejection Flow
+      p47Return2 = await ReturnRequest.create({
+        order: p47Order._id,
+        subOrder: p47SubOrder._id,
+        customer: p47CustomerUser._id,
+        vendor: p47VendorProfile._id,
+        items: [{ product: p47Product._id, title: p47Product.title, quantity: 1, price: 8999 }],
+        refundAmount: 8999,
+        reason: 'Customer initiated return',
+        reasonCode: 'OTHER',
+        reversePickupOtp: '9823',
+        status: 'REQUESTED',
+      });
+
+      p47Task2 = await DeliveryTask.create({
+        taskType: 'REVERSE_PICKUP',
+        returnRequest: p47Return2._id,
+        deliveryPartner: p47RiderUser._id,
+        status: 'ASSIGNED',
+        reversePickupDetails: {
+          pickupOtp: '9823',
+          itemTitle: p47Product.title,
+        },
+        pickupLocation: {
+          storeName: p47CustomerUser.name,
+          phone: p47CustomerUser.phone,
+          address: 'Sector 18 Commercial',
+          city: 'Noida',
+          pincode: '201301',
+        },
+      });
+
+      // ReturnRequest 3: Damaged Return for SPF Claim
+      p47Return3 = await ReturnRequest.create({
+        order: p47Order._id,
+        subOrder: p47SubOrder._id,
+        customer: p47CustomerUser._id,
+        vendor: p47VendorProfile._id,
+        items: [{ product: p47Product._id, title: p47Product.title, quantity: 1, price: 8999 }],
+        refundAmount: 8999,
+        reason: 'Damaged item received by customer',
+        reasonCode: 'DAMAGED_IN_TRANSIT',
+        reversePickupOtp: '3321',
+        status: 'PICKED_UP',
+        reverseRouting: {
+          destinationType: 'RETURN_TO_VENDOR',
+          reverseWaybill: 'RTO-CLAIM-8999',
+          routingStatus: 'RECEIVED_AT_VENDOR_WAREHOUSE',
+        },
+      });
+
+      assert.ok(p47Return1._id);
+      assert.ok(p47Task1._id);
+      assert.ok(p47Return2._id);
+      assert.ok(p47Task2._id);
+      assert.ok(p47Return3._id);
+    });
+
+    await test('Point 47: Test 1 - Doorstep inspection acceptance validates OTP, sets status to ACCEPTED_AT_DOORSTEP, generates RTO waybill, updates ReturnRequest and DeliveryTask', async () => {
+      // 1. Get Return Pickup Details with inspection checklist guide
+      const resDetails = await fetch(`${baseUrl}/delivery/reverse-pickup/${p47Task1._id}`, {
+        headers: { Authorization: `Bearer ${p47RiderToken}` },
+      });
+      assert.strictEqual(resDetails.status, 200);
+      const jsonDetails = await resDetails.json();
+      assert.strictEqual(jsonDetails.success, true);
+      assert.ok(Array.isArray(jsonDetails.inspectionChecklistGuide));
+      assert.strictEqual(jsonDetails.inspectionChecklistGuide.length, 6);
+
+      // 2. Reject if OTP is invalid
+      const resBadOtp = await fetch(`${baseUrl}/delivery/reverse-pickup/${p47Task1._id}/inspect-doorstep`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47RiderToken}`,
+        },
+        body: JSON.stringify({
+          otp: '0000',
+          inspectionStatus: 'ACCEPTED_AT_DOORSTEP',
+          checklist: { brandTagIntact: true, originalPackagingPresent: true, noPhysicalDamage: true },
+        }),
+      });
+      assert.strictEqual(resBadOtp.status, 400);
+      const jsonBadOtp = await resBadOtp.json();
+      assert.strictEqual(jsonBadOtp.success, false);
+      assert.ok(jsonBadOtp.message.includes('Invalid customer pickup OTP'));
+
+      // 3. Foreign rider attempting to inspect task assigned to someone else
+      const resForeignRider = await fetch(`${baseUrl}/delivery/reverse-pickup/${p47Task1._id}/inspect-doorstep`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47ForeignRiderToken}`,
+        },
+        body: JSON.stringify({
+          otp: '7412',
+          inspectionStatus: 'ACCEPTED_AT_DOORSTEP',
+        }),
+      });
+      assert.strictEqual(resForeignRider.status, 403);
+
+      // 4. Successful Doorstep Return Acceptance with 6-point checklist & valid OTP
+      const resAccept = await fetch(`${baseUrl}/delivery/reverse-pickup/${p47Task1._id}/inspect-doorstep`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47RiderToken}`,
+        },
+        body: JSON.stringify({
+          otp: '7412',
+          inspectionStatus: 'ACCEPTED_AT_DOORSTEP',
+          checklist: {
+            brandTagIntact: true,
+            originalPackagingPresent: true,
+            serialNumberMatched: true,
+            noPhysicalDamage: true,
+            accessoriesComplete: true,
+            powerOnVerified: true,
+          },
+          photos: [
+            { url: 'https://cdn.auramarket.com/returns/tag_proof.jpg', caption: 'Brand seal intact' },
+            { url: 'https://cdn.auramarket.com/returns/box_barcode.jpg', caption: 'Box barcode scanned' },
+          ],
+        }),
+      });
+      assert.strictEqual(resAccept.status, 200);
+      const jsonAccept = await resAccept.json();
+      assert.strictEqual(jsonAccept.success, true);
+      assert.ok(jsonAccept.data.reverseWaybill);
+      assert.ok(jsonAccept.data.reverseWaybill.startsWith('RTO-'));
+      p47Waybill1 = jsonAccept.data.reverseWaybill;
+
+      // 5. Verify DeliveryTask in DB
+      const dbTask1 = await DeliveryTask.findById(p47Task1._id);
+      assert.strictEqual(dbTask1.status, 'DELIVERED');
+      assert.strictEqual(dbTask1.otpVerified, true);
+      assert.strictEqual(dbTask1.doorstepInspection.inspectionStatus, 'ACCEPTED_AT_DOORSTEP');
+      assert.strictEqual(dbTask1.doorstepInspection.reverseWaybill, p47Waybill1);
+      assert.strictEqual(dbTask1.doorstepInspection.checklist.brandTagIntact, true);
+      assert.strictEqual(dbTask1.doorstepInspection.checklist.powerOnVerified, true);
+      assert.strictEqual(dbTask1.doorstepInspection.photos.length, 2);
+
+      // 6. Verify ReturnRequest in DB (High-value item ₹17,998 routed to CENTRAL_GRADING_HUB)
+      const dbReturn1 = await ReturnRequest.findById(p47Return1._id);
+      assert.strictEqual(dbReturn1.status, 'PICKED_UP');
+      assert.strictEqual(dbReturn1.reversePickupStatus, 'PICKED_UP');
+      assert.strictEqual(dbReturn1.doorstepInspection.inspectionStatus, 'ACCEPTED_AT_DOORSTEP');
+      assert.strictEqual(dbReturn1.reverseRouting.reverseWaybill, p47Waybill1);
+      assert.strictEqual(dbReturn1.reverseRouting.destinationType, 'CENTRAL_GRADING_HUB');
+      assert.strictEqual(dbReturn1.reverseRouting.routingStatus, 'PICKED_UP_FROM_CUSTOMER');
+      assert.strictEqual(dbReturn1.reverseRouting.milestones.length, 1);
+      assert.strictEqual(dbReturn1.reverseRouting.milestones[0].status, 'PICKED_UP_FROM_CUSTOMER');
+    });
+
+    await test('Point 47: Test 2 - Doorstep inspection rejection records rejection category & reason, marks task FAILED, and updates ReturnRequest to REJECTED', async () => {
+      const resReject = await fetch(`${baseUrl}/delivery/reverse-pickup/${p47Task2._id}/inspect-doorstep`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47RiderToken}`,
+        },
+        body: JSON.stringify({
+          inspectionStatus: 'REJECTED_AT_DOORSTEP',
+          rejectionCategory: 'DAMAGED_BY_CUSTOMER',
+          rejectionReason: 'Headband cracked and deep scratches on earcups. Customer admits accidental drop.',
+          checklist: {
+            brandTagIntact: false,
+            originalPackagingPresent: true,
+            noPhysicalDamage: false,
+          },
+          photos: [{ url: 'https://cdn.auramarket.com/returns/damage_crack.jpg', caption: 'Headband crack' }],
+        }),
+      });
+      assert.strictEqual(resReject.status, 200);
+      const jsonReject = await resReject.json();
+      assert.strictEqual(jsonReject.success, true);
+      assert.strictEqual(jsonReject.data.inspectionStatus, 'REJECTED_AT_DOORSTEP');
+
+      // Verify DeliveryTask
+      const dbTask2 = await DeliveryTask.findById(p47Task2._id);
+      assert.strictEqual(dbTask2.status, 'FAILED');
+      assert.strictEqual(dbTask2.doorstepInspection.inspectionStatus, 'REJECTED_AT_DOORSTEP');
+      assert.strictEqual(dbTask2.doorstepInspection.rejectionCategory, 'DAMAGED_BY_CUSTOMER');
+      assert.ok((dbTask2.failureReason || dbTask2.doorstepInspection?.rejectionReason || '').includes('Headband cracked'));
+
+      // Verify ReturnRequest
+      const dbReturn2 = await ReturnRequest.findById(p47Return2._id);
+      assert.strictEqual(dbReturn2.status, 'REJECTED');
+      assert.strictEqual(dbReturn2.reversePickupStatus, 'FAILED');
+      assert.strictEqual(dbReturn2.reverseRouting.routingStatus, 'REJECTED_AT_DOORSTEP');
+      assert.strictEqual(dbReturn2.doorstepInspection.rejectionCategory, 'DAMAGED_BY_CUSTOMER');
+      assert.ok((dbReturn2.resolutionNote || dbReturn2.doorstepInspection?.rejectionReason || dbReturn2.reverseRouting?.routingStatus || '').includes('DAMAGED_BY_CUSTOMER') || dbReturn2.doorstepInspection.rejectionCategory === 'DAMAGED_BY_CUSTOMER');
+      assert.strictEqual(dbReturn2.reverseRouting.milestones.length, 1);
+      assert.strictEqual(dbReturn2.reverseRouting.milestones[0].status, 'REJECTED_AT_DOORSTEP');
+    });
+
+    await test('Point 47: Test 3 - Reverse routing milestone updates transit history and current location', async () => {
+      // 1. Inward at local hub
+      const resM1 = await fetch(`${baseUrl}/returns/${p47Return1._id}/reverse-routing/milestone`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47RiderToken}`,
+        },
+        body: JSON.stringify({
+          milestoneStatus: 'INWARDED_LOCAL_HUB',
+          location: 'Delhi Okhla Phase 3 Logistics Hub',
+          notes: 'Package inducted into line-haul reverse sorting lane.',
+        }),
+      });
+      assert.strictEqual(resM1.status, 200);
+      const jsonM1 = await resM1.json();
+      assert.strictEqual(jsonM1.success, true);
+      assert.strictEqual(jsonM1.data.reverseRouting.routingStatus, 'INWARDED_LOCAL_HUB');
+      assert.strictEqual(jsonM1.data.reverseRouting.currentLocation, 'Delhi Okhla Phase 3 Logistics Hub');
+
+      // 2. Line-haul transit
+      const resM2 = await fetch(`${baseUrl}/returns/${p47Return1._id}/reverse-routing/milestone`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47AdminToken}`,
+        },
+        body: JSON.stringify({
+          milestoneStatus: 'IN_REVERSE_TRANSIT',
+          location: 'Northern Expressway Freight Transit',
+          notes: 'Line-haul container departed for Central QC & Grading Hub.',
+          carrierPartner: 'AuraMarket Express Reverse',
+        }),
+      });
+      assert.strictEqual(resM2.status, 200);
+      const jsonM2 = await resM2.json();
+      assert.strictEqual(jsonM2.data.status, 'IN_REVERSE_TRANSIT');
+      assert.strictEqual(jsonM2.data.reverseRouting.routingStatus, 'IN_REVERSE_TRANSIT');
+
+      // 3. Inbound at destination facility
+      const resM3 = await fetch(`${baseUrl}/returns/${p47Return1._id}/reverse-routing/milestone`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47AdminToken}`,
+        },
+        body: JSON.stringify({
+          milestoneStatus: 'RECEIVED_AT_VENDOR_WAREHOUSE',
+          location: 'AuraMarket Central QC & Grading Hub, Sector 62 Noida',
+          notes: 'Dock received and parcel barcoded for inbound condition grading.',
+        }),
+      });
+      assert.strictEqual(resM3.status, 200);
+      const jsonM3 = await resM3.json();
+      assert.strictEqual(jsonM3.data.status, 'RECEIVED_AT_WAREHOUSE');
+      assert.strictEqual(jsonM3.data.reverseRouting.milestones.length, 4); // Picked up + Inwarded + In transit + Received
+    });
+
+    await test('Point 47: Test 4 - Vendor inbound grading (Grade A) automatically increments Product.countInStock', async () => {
+      const dbProductBefore = await Product.findById(p47Product._id);
+      const stockBefore = Number(dbProductBefore.countInStock || dbProductBefore.stock || 25);
+
+      // Vendor executes Grade A Resaleable grading & restock
+      const resGrade = await fetch(`${baseUrl}/vendor/returns/${p47Return1._id}/grade-and-restock`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47VendorToken}`,
+        },
+        body: JSON.stringify({
+          conditionGrade: 'GRADE_A_RESALEABLE',
+          restockAction: 'RESTOCK',
+          restockQuantity: 2,
+          notes: 'Tested in sound isolation chamber. Zero blemishes. Full accessories present.',
+        }),
+      });
+      assert.strictEqual(resGrade.status, 200);
+      const jsonGrade = await resGrade.json();
+      assert.strictEqual(jsonGrade.success, true);
+      assert.strictEqual(jsonGrade.data.status, 'RESTOCKED');
+      assert.strictEqual(jsonGrade.data.reverseRouting.conditionGrade, 'GRADE_A_RESALEABLE');
+      assert.strictEqual(jsonGrade.data.reverseRouting.restockedQuantity, 2);
+      assert.ok(jsonGrade.data.reverseRouting.restockedAt);
+
+      // Verify product stock increased by 2
+      const dbProductAfter = await Product.findById(p47Product._id);
+      assert.strictEqual(Number(dbProductAfter.countInStock || dbProductAfter.stock), stockBefore + 2);
+
+      // Verify Audit Log recorded
+      const auditLog = await AuditLog.findOne({
+        targetId: p47Return1._id.toString(),
+        action: 'RETURN_RESTOCKED_TO_INVENTORY',
+      });
+      assert.ok(auditLog);
+      assert.strictEqual(auditLog.module, 'INVENTORY');
+    });
+
+    await test('Point 47: Test 5 - Vendor damaged item returns raise SPF Claim with proof photos and unboxing video URL', async () => {
+      const resSpf = await fetch(`${baseUrl}/vendor/returns/${p47Return3._id}/grade-and-restock`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47VendorToken}`,
+        },
+        body: JSON.stringify({
+          conditionGrade: 'GRADE_C_DAMAGED',
+          restockAction: 'RAISE_SPF_CLAIM',
+          spfClaimData: {
+            claimAmount: 8999,
+            claimReason: 'Customer returned box packed with used broken tile instead of original ANC headphones.',
+            proofPhotos: [
+              'https://cdn.auramarket.com/spf/broken_tile_box.jpg',
+              'https://cdn.auramarket.com/spf/tampered_seal.jpg',
+            ],
+            unboxingVideoUrl: 'https://cdn.auramarket.com/spf/cctv_unboxing_p47.mp4',
+          },
+          notes: 'Fraudulent return package unboxed under continuous CCTV security feed.',
+        }),
+      });
+      assert.strictEqual(resSpf.status, 200);
+      const jsonSpf = await resSpf.json();
+      assert.strictEqual(jsonSpf.success, true);
+      assert.strictEqual(jsonSpf.data.status, 'SPF_CLAIM_RAISED');
+      assert.strictEqual(jsonSpf.data.reverseRouting.routingStatus, 'SPF_CLAIM_RAISED');
+
+      // Verify in DB
+      const dbReturn3 = await ReturnRequest.findById(p47Return3._id);
+      assert.strictEqual(dbReturn3.reverseRouting.spfClaim.isClaimRaised, true);
+      assert.strictEqual(dbReturn3.reverseRouting.spfClaim.claimStatus, 'PENDING_REVIEW');
+      assert.strictEqual(dbReturn3.reverseRouting.spfClaim.claimAmount, 8999);
+      assert.strictEqual(dbReturn3.reverseRouting.spfClaim.unboxingVideoUrl, 'https://cdn.auramarket.com/spf/cctv_unboxing_p47.mp4');
+      assert.strictEqual(dbReturn3.reverseRouting.spfClaim.proofPhotos.length, 2);
+
+      // Verify Vendor SPF claims listing returns this claim
+      const resVendorClaims = await fetch(`${baseUrl}/vendor/returns/spf-claims`, {
+        headers: { Authorization: `Bearer ${p47VendorToken}` },
+      });
+      assert.strictEqual(resVendorClaims.status, 200);
+      const jsonVendorClaims = await resVendorClaims.json();
+      assert.strictEqual(jsonVendorClaims.success, true);
+      assert.ok(jsonVendorClaims.count >= 1);
+      const myClaim = jsonVendorClaims.data.find(c => c._id === p47Return3._id.toString());
+      assert.ok(myClaim);
+      assert.strictEqual(myClaim.reverseRouting.spfClaim.claimStatus, 'PENDING_REVIEW');
+    });
+
+    await test('Point 47: Test 6 - Super admin approves SPF claim, pays compensation to vendor wallet, and creates WalletTransaction & Ledger entry', async () => {
+      const vendorProfileBefore = await VendorProfile.findById(p47VendorProfile._id);
+      const balanceBefore = vendorProfileBefore.walletBalance; // 10000
+
+      // Super Admin reviews and approves claim for full ₹8,999
+      const resReview = await fetch(`${baseUrl}/admin/returns/spf-claims/${p47Return3._id}/review`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47AdminToken}`,
+        },
+        body: JSON.stringify({
+          decision: 'APPROVED',
+          compensationAmount: 8999,
+          reviewNotes: 'CCTV footage unboxing confirmed parcel fraud. Full compensation reimbursed to merchant wallet.',
+        }),
+      });
+      assert.strictEqual(resReview.status, 200);
+      const jsonReview = await resReview.json();
+      assert.strictEqual(jsonReview.success, true);
+      assert.strictEqual(jsonReview.data.reverseRouting.spfClaim.claimStatus, 'APPROVED_COMPENSATED');
+      assert.strictEqual(jsonReview.data.reverseRouting.spfClaim.compensationAmount, 8999);
+      assert.ok(jsonReview.data.reverseRouting.spfClaim.reviewedAt);
+
+      // 1. Verify Vendor Wallet balance increased by ₹8,999
+      const vendorProfileAfter = await VendorProfile.findById(p47VendorProfile._id);
+      assert.strictEqual(vendorProfileAfter.walletBalance, balanceBefore + 8999); // 18999
+
+      // 2. Verify WalletTransaction created
+      const walletTx = await WalletTransaction.findOne({
+        user: p47VendorUser._id,
+        category: 'SPF_COMPENSATION',
+      });
+      assert.ok(walletTx);
+      assert.strictEqual(walletTx.amount, 8999);
+      assert.strictEqual(walletTx.type, 'CREDIT');
+      assert.strictEqual(walletTx.status, 'SUCCESS');
+
+      // 3. Verify Ledger entry created
+      const ledgerEntry = await Ledger.findOne({
+        vendor: p47VendorProfile._id,
+        type: 'SPF_COMPENSATION',
+      });
+      assert.ok(ledgerEntry);
+      assert.strictEqual(ledgerEntry.amount, 8999);
+      assert.strictEqual(ledgerEntry.balanceAfter, vendorProfileAfter.walletBalance);
+
+      // 4. Verify Milestone appended
+      const dbReturn3After = await ReturnRequest.findById(p47Return3._id);
+      const spfMilestone = dbReturn3After.reverseRouting.milestones.find(m => m.status === 'SPF_CLAIM_APPROVED');
+      assert.ok(spfMilestone);
+    });
+
+    await test('Point 47: Test 7 - Reverse routing dashboard and config endpoints return valid data', async () => {
+      // 1. Dashboard KPIs and Breakdowns
+      const resDashboard = await fetch(`${baseUrl}/admin/returns/reverse-logistics/dashboard`, {
+        headers: { Authorization: `Bearer ${p47AdminToken}` },
+      });
+      assert.strictEqual(resDashboard.status, 200);
+      const jsonDashboard = await resDashboard.json();
+      assert.strictEqual(jsonDashboard.success, true);
+      assert.ok(jsonDashboard.kpis);
+      assert.ok(jsonDashboard.kpis.totalReturns >= 3);
+      assert.ok(jsonDashboard.kpis.totalRestockedCount >= 1);
+      assert.ok(jsonDashboard.kpis.approvedSpfAmount >= 8999);
+      assert.ok(jsonDashboard.destinationBreakdown);
+      assert.ok(jsonDashboard.conditionGradeBreakdown);
+      assert.ok(Array.isArray(jsonDashboard.recentReturns));
+
+      // 2. Admin SPF claims inbox
+      const resClaims = await fetch(`${baseUrl}/admin/returns/spf-claims`, {
+        headers: { Authorization: `Bearer ${p47AdminToken}` },
+      });
+      assert.strictEqual(resClaims.status, 200);
+      const jsonClaims = await resClaims.json();
+      assert.strictEqual(jsonClaims.success, true);
+      assert.ok(jsonClaims.metrics.approvedCount >= 1);
+      assert.strictEqual(jsonClaims.metrics.totalCompensatedAmount >= 8999, true);
+
+      // 3. Get Routing Configuration
+      const resConfig = await fetch(`${baseUrl}/admin/returns/routing-config`, {
+        headers: { Authorization: `Bearer ${p47AdminToken}` },
+      });
+      assert.strictEqual(resConfig.status, 200);
+      const jsonConfig = await resConfig.json();
+      assert.strictEqual(jsonConfig.success, true);
+      assert.ok(jsonConfig.data.centralHubThresholdAmount > 0);
+
+      // 4. Update Routing Configuration
+      const resUpdateConfig = await fetch(`${baseUrl}/admin/returns/routing-config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47AdminToken}`,
+        },
+        body: JSON.stringify({
+          centralHubThresholdAmount: 7500,
+          defaultCarrierPartner: 'Delhivery Reverse Logistics',
+          maxReverseTransitDays: 3,
+        }),
+      });
+      assert.strictEqual(resUpdateConfig.status, 200);
+      const jsonUpdateConfig = await resUpdateConfig.json();
+      assert.strictEqual(jsonUpdateConfig.success, true);
+      assert.strictEqual(jsonUpdateConfig.data.centralHubThresholdAmount, 7500);
+      assert.strictEqual(jsonUpdateConfig.data.defaultCarrierPartner, 'Delhivery Reverse Logistics');
+      assert.strictEqual(jsonUpdateConfig.data.maxReverseTransitDays, 3);
+    });
+
+    await test('Point 47: Test 8 - Role security guardrails (401 unauthenticated, 403 customer and unauthorized roles)', async () => {
+      // 1. Unauthenticated reverse-pickup task details (401)
+      const resUnauth1 = await fetch(`${baseUrl}/delivery/reverse-pickup/${p47Task1._id}`);
+      assert.strictEqual(resUnauth1.status, 401);
+
+      // 2. Customer accessing reverse-pickup details (403)
+      const resCustDetails = await fetch(`${baseUrl}/delivery/reverse-pickup/${p47Task1._id}`, {
+        headers: { Authorization: `Bearer ${p47CustomerToken}` },
+      });
+      assert.strictEqual(resCustDetails.status, 403);
+
+      // 3. Customer calling doorstep inspection (403)
+      const resCustInspect = await fetch(`${baseUrl}/delivery/reverse-pickup/${p47Task1._id}/inspect-doorstep`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47CustomerToken}`,
+        },
+        body: JSON.stringify({ inspectionStatus: 'ACCEPTED_AT_DOORSTEP' }),
+      });
+      assert.strictEqual(resCustInspect.status, 403);
+
+      // 4. Customer attempting to record reverse transit milestone (403)
+      const resCustMilestone = await fetch(`${baseUrl}/returns/${p47Return1._id}/reverse-routing/milestone`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47CustomerToken}`,
+        },
+        body: JSON.stringify({ milestoneStatus: 'IN_REVERSE_TRANSIT' }),
+      });
+      assert.strictEqual(resCustMilestone.status, 403);
+
+      // 5. Customer calling vendor grade and restock (403)
+      const resCustGrade = await fetch(`${baseUrl}/vendor/returns/${p47Return1._id}/grade-and-restock`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47CustomerToken}`,
+        },
+        body: JSON.stringify({ conditionGrade: 'GRADE_A_RESALEABLE' }),
+      });
+      assert.strictEqual(resCustGrade.status, 403);
+
+      // 6. Foreign vendor attempting to grade return parcel belonging to another vendor (403)
+      const resForeignVendorGrade = await fetch(`${baseUrl}/vendor/returns/${p47Return1._id}/grade-and-restock`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47ForeignVendorToken}`,
+        },
+        body: JSON.stringify({ conditionGrade: 'GRADE_A_RESALEABLE' }),
+      });
+      assert.strictEqual(resForeignVendorGrade.status, 403);
+
+      // 7. Vendor or customer attempting to adjudicate SPF claim (403)
+      const resVendorReview = await fetch(`${baseUrl}/admin/returns/spf-claims/${p47Return3._id}/review`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47VendorToken}`,
+        },
+        body: JSON.stringify({ decision: 'APPROVED', compensationAmount: 5000 }),
+      });
+      assert.strictEqual(resVendorReview.status, 403);
+
+      // 8. Customer calling routing config (403)
+      const resCustConfig = await fetch(`${baseUrl}/admin/returns/routing-config`, {
+        headers: { Authorization: `Bearer ${p47CustomerToken}` },
+      });
+      assert.strictEqual(resCustConfig.status, 403);
     });
 
   } finally {

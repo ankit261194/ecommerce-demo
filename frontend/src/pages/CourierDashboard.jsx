@@ -36,6 +36,7 @@ import CourierDeliveryFailureModal from '../components/CourierDeliveryFailureMod
 import RiderRouteOptimizerModal from '../components/RiderRouteOptimizerModal';
 import CameraBarcodeScannerModal from '../components/CameraBarcodeScannerModal';
 import DigitalProofOfDeliveryModal from '../components/DigitalProofOfDeliveryModal';
+import DoorstepReturnInspectionModal from '../components/DoorstepReturnInspectionModal';
 import api from '../api/client';
 
 export const CourierDashboard = () => {
@@ -44,6 +45,7 @@ export const CourierDashboard = () => {
   const [selectedTaskForSignature, setSelectedTaskForSignature] = useState(null);
   const [selectedTaskForPhoto, setSelectedTaskForPhoto] = useState(null);
   const [selectedTaskForDigitalPod, setSelectedTaskForDigitalPod] = useState(null);
+  const [selectedTaskForReverseInspection, setSelectedTaskForReverseInspection] = useState(null); // Point #47: Return Pickup Inspection
   const [selectedTaskForFailure, setSelectedTaskForFailure] = useState(null);
   const [isCodReconModalOpen, setIsCodReconModalOpen] = useState(false);
   const [isRouteOptimizerModalOpen, setIsRouteOptimizerModalOpen] = useState(false); // Point #17: Multi-Stop Route Optimizer
@@ -938,6 +940,17 @@ export const CourierDashboard = () => {
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => {
+                          setSelectedTaskForReverseInspection(task);
+                          setErrorMessage('');
+                        }}
+                        className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-700 hover:to-indigo-700 text-white text-xs font-black flex items-center gap-1.5 shadow-md hover:shadow-lg transition-all"
+                        title="Point 47: Doorstep 6-Point Return Pickup Inspection and Waybill Handover"
+                      >
+                        <ShieldCheck className="w-4 h-4 text-teal-300" />
+                        <span>Return Inspection (Point #47)</span>
+                      </button>
+                      <button
+                        onClick={() => {
                           setSelectedTaskForDigitalPod(task);
                           setErrorMessage('');
                         }}
@@ -1003,6 +1016,19 @@ export const CourierDashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Point #47: Doorstep Return Pickup Inspection and Reverse Waybill Modal */}
+      {selectedTaskForReverseInspection && (
+        <DoorstepReturnInspectionModal
+          task={selectedTaskForReverseInspection}
+          isOpen={Boolean(selectedTaskForReverseInspection)}
+          onClose={() => setSelectedTaskForReverseInspection(null)}
+          onSuccess={(data) => {
+            fetchTasks();
+            setSelectedTaskForReverseInspection(null);
+          }}
+        />
+      )}
 
       {/* Point #44: Digital Proof of Delivery (OTP, Customer Signature & Geo-stamped Photo) Modal */}
       {selectedTaskForDigitalPod && (

@@ -62,6 +62,7 @@ import VendorStorefrontBuilderModal from '../components/VendorStorefrontBuilderM
 import BulkInlineCatalogEditorModal from '../components/BulkInlineCatalogEditorModal';
 import SponsoredAdsManagerModal from '../components/SponsoredAdsManagerModal';
 import InventoryAgingRadarModal from '../components/InventoryAgingRadarModal';
+import VendorReturnGradingModal from '../components/VendorReturnGradingModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -192,7 +193,9 @@ export const VendorPortal = () => {
   const [isStorefrontBuilderOpen, setIsStorefrontBuilderOpen] = useState(false); // Point #36: Vendor Custom Micro-Storefront Builder
   const [isSpreadsheetEditorOpen, setIsSpreadsheetEditorOpen] = useState(false); // Point #38: Bulk Inline Spreadsheet Catalog Editor
   const [isSponsoredAdsOpen, setIsSponsoredAdsOpen] = useState(false); // Point #40: Seller Sponsored Ads & CPC Keyword Bidding
-  const [isInventoryAgingRadarOpen, setIsInventoryAgingRadarOpen] = useState(false); // Point #41: Inventory Aging & Dead-Stock Velocity Radar
+  const [isInventoryAgingRadarOpen, setIsInventoryAgingRadarOpen] = useState(false);
+  const [isReturnGradingModalOpen, setIsReturnGradingModalOpen] = useState(false); // Point #47: Inbound Return Grading & SPF
+  const [selectedReturnForGrading, setSelectedReturnForGrading] = useState(null); // Point #41: Inventory Aging & Dead-Stock Velocity Radar
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // Point #58: Store Profile Customization
   const [isPublicStorePreviewOpen, setIsPublicStorePreviewOpen] = useState(false); // Point #58: Public Storefront Preview
   const [isVacationModalOpen, setIsVacationModalOpen] = useState(false); // Point #59: Vacation Mode Toggle
@@ -670,6 +673,42 @@ export const VendorPortal = () => {
             <span>Sponsored Ads & CPC</span>
             <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-amber-400">
               Point #40
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (!selectedReturnForGrading) {
+                setSelectedReturnForGrading({
+                  _id: 'ret_demo_47',
+                  order: { orderNumber: 'ORD-9821' },
+                  items: [
+                    {
+                      title: 'Aura Pro ANC Wireless Noise-Cancelling Headphones',
+                      quantity: 1,
+                      price: 8999,
+                      product: { title: 'Aura Pro ANC Wireless Noise-Cancelling Headphones', sku: 'APX-HEAD-001', countInStock: 45 },
+                    },
+                  ],
+                  refundAmount: 8999,
+                  reason: 'Package delivered late, customer returned item in sealed box',
+                  reverseRouting: {
+                    reverseWaybill: 'RTO-849201',
+                    destinationType: 'RETURN_TO_VENDOR',
+                    conditionGrade: 'UNGRADED',
+                  },
+                });
+              }
+              setIsReturnGradingModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-700 hover:to-indigo-700 text-white text-xs font-black shadow-md transition-all active:scale-95"
+            title="Point 47: Return Inbound Grading & Seller Protection Fund (SPF) Claims"
+          >
+            <Boxes className="w-4 h-4 text-emerald-200" />
+            <span>Return Inbound & SPF</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-950 text-emerald-300">
+              Point #47
             </span>
           </button>
 
@@ -2198,6 +2237,16 @@ export const VendorPortal = () => {
         isOpen={isInventoryAgingRadarOpen}
         onClose={() => setIsInventoryAgingRadarOpen(false)}
         token={localStorage.getItem('token')}
+      />
+
+      {/* Point 47: Return Inbound Grading & Inventory Restock / SPF Claim Modal */}
+      <VendorReturnGradingModal
+        returnRequest={selectedReturnForGrading}
+        isOpen={isReturnGradingModalOpen}
+        onClose={() => setIsReturnGradingModalOpen(false)}
+        onSuccess={() => {
+          fetchVendorData();
+        }}
       />
     </div>
   );

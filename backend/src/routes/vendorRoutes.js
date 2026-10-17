@@ -44,6 +44,10 @@ const {
 const { getVendorTaxReport, exportVendorTaxReportCSV } = require('../controllers/taxController');
 const { getSplitPackingSlips, getThermalReceipt } = require('../controllers/orderController');
 const {
+  vendorGradeAndRestock,
+  getSpfClaimsList,
+} = require('../controllers/reverseLogisticsController');
+const {
   getVendorPromotions,
   createVendorPromotion,
   updateVendorPromotion,
@@ -216,5 +220,9 @@ router.post('/staff', requireVendorPermission('STAFF_MANAGE'), createVendorStaff
 router.put('/staff/:id', requireVendorPermission('STAFF_MANAGE'), updateVendorStaff);
 router.patch('/staff/:id/toggle-status', requireVendorPermission('STAFF_MANAGE'), toggleVendorStaffStatus);
 router.delete('/staff/:id', requireVendorPermission('STAFF_MANAGE'), deleteVendorStaff);
+
+// Point 47: Return Pickup Inspection & Reverse Logistics Inbound Grading & SPF Claims
+router.post('/returns/:id/grade-and-restock', vendorGradeAndRestock);
+router.get('/returns/spf-claims', getSpfClaimsList);
 
 module.exports = router;

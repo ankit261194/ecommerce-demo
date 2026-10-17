@@ -1,3 +1,10 @@
+const {
+  getReverseRoutingDashboard,
+  getSpfClaimsList,
+  reviewSpfClaim,
+  getRoutingConfig,
+  updateRoutingConfig,
+} = require('../controllers/reverseLogisticsController');
 const express = require('express');
 const router = express.Router();
 const {
@@ -218,6 +225,18 @@ router.post('/wipe-demo', triggerWipeDemo);
 router.post('/demo/wipe', triggerWipeDemo);
 router.post('/seed-demo', triggerSeedDemo);
 router.post('/demo/seed', triggerSeedDemo);
+
+// Point 47: Return Pickup Inspection & Reverse Logistics Routing Engine
+router.get('/returns/reverse-logistics/dashboard', getReverseRoutingDashboard);
+router.get('/reverse-logistics/dashboard', getReverseRoutingDashboard);
+router.get('/returns/spf-claims', getSpfClaimsList);
+router.get('/spf-claims', getSpfClaimsList);
+router.post('/returns/spf-claims/:id/review', reviewSpfClaim);
+router.post('/spf-claims/:id/review', reviewSpfClaim);
+router.get('/returns/routing-config', getRoutingConfig);
+router.get('/routing-config', getRoutingConfig);
+router.put('/returns/routing-config', updateRoutingConfig);
+router.put('/routing-config', updateRoutingConfig);
 
 module.exports = router;
 

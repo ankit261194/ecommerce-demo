@@ -94,6 +94,11 @@ const productSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    countInStock: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     lowStockThreshold: {
       type: Number,
       default: 5,

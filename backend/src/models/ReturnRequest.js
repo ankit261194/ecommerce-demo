@@ -184,6 +184,12 @@ const returnRequestSchema = new mongoose.Schema(
         'REPLACEMENT_DISPATCHED',
         'REPLACEMENT_DELIVERED',
         'EXCHANGE_COMPLETED',
+        // Point 47: Reverse Logistics Lifecycles
+        'PICKED_UP',
+        'IN_REVERSE_TRANSIT',
+        'RECEIVED_AT_WAREHOUSE',
+        'RESTOCKED',
+        'SPF_CLAIM_RAISED',
       ],
       default: 'REQUESTED',
     },
@@ -195,6 +201,105 @@ const returnRequestSchema = new mongoose.Schema(
     resolvedAt: {
       type: Date,
       default: null,
+    },
+    // Point 47: Doorstep Inspection Details
+    doorstepInspection: {
+      checklist: {
+        brandTagIntact: { type: Boolean, default: false },
+        originalPackagingPresent: { type: Boolean, default: false },
+        serialNumberMatched: { type: Boolean, default: false },
+        noPhysicalDamage: { type: Boolean, default: false },
+        accessoriesComplete: { type: Boolean, default: false },
+        powerOnVerified: { type: Boolean, default: false },
+      },
+      photos: [
+        {
+          url: { type: String, default: '' },
+          caption: { type: String, default: '' },
+          uploadedAt: { type: Date, default: Date.now },
+        },
+      ],
+      inspectionStatus: {
+        type: String,
+        enum: ['PENDING', 'ACCEPTED_AT_DOORSTEP', 'REJECTED_AT_DOORSTEP'],
+        default: 'PENDING',
+      },
+      rejectionCategory: {
+        type: String,
+        enum: ['NONE', 'TAG_MISSING', 'DAMAGED_BY_CUSTOMER', 'SERIAL_MISMATCH', 'ACCESSORY_MISSING', 'CUSTOMER_REFUSED_HANDOVER'],
+        default: 'NONE',
+      },
+      rejectionReason: { type: String, default: '' },
+      inspectedAt: { type: Date, default: null },
+      inspectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+      reverseWaybill: { type: String, default: '' },
+    },
+    // Point 47: Reverse Logistics Multi-Hop Routing Engine
+    reverseRouting: {
+      destinationType: {
+        type: String,
+        enum: ['RETURN_TO_VENDOR', 'CENTRAL_GRADING_HUB', 'LOCAL_DARK_STORE', 'SCRAP_LIQUIDATION'],
+        default: 'RETURN_TO_VENDOR',
+      },
+      destinationHubName: { type: String, default: 'Primary Vendor Fulfillment Facility' },
+      destinationAddress: {
+        recipient: { type: String, default: '' },
+        street: { type: String, default: '' },
+        city: { type: String, default: '' },
+        state: { type: String, default: '' },
+        pincode: { type: String, default: '' },
+      },
+      currentLocation: { type: String, default: 'Customer Doorstep' },
+      reverseWaybill: { type: String, default: '' },
+      carrierPartner: { type: String, default: 'AuraMarket Express Reverse' },
+      routingStatus: {
+        type: String,
+        enum: [
+          'PICKUP_SCHEDULED',
+          'PICKED_UP_FROM_CUSTOMER',
+          'INWARDED_LOCAL_HUB',
+          'IN_REVERSE_TRANSIT',
+          'OUT_FOR_VENDOR_DELIVERY',
+          'RECEIVED_AT_VENDOR_WAREHOUSE',
+          'RESTOCKED_TO_INVENTORY',
+          'SPF_CLAIM_RAISED',
+          'SCRAPPED',
+          'REJECTED_AT_DOORSTEP',
+        ],
+        default: 'PICKUP_SCHEDULED',
+      },
+      conditionGrade: {
+        type: String,
+        enum: ['UNGRADED', 'GRADE_A_RESALEABLE', 'GRADE_B_REFURB', 'GRADE_C_DAMAGED', 'DEFECTIVE_SCRAP'],
+        default: 'UNGRADED',
+      },
+      restockedQuantity: { type: Number, default: 0 },
+      restockedAt: { type: Date, default: null },
+      spfClaim: {
+        isClaimRaised: { type: Boolean, default: false },
+        claimReason: { type: String, default: '' },
+        claimAmount: { type: Number, default: 0 },
+        claimStatus: {
+          type: String,
+          enum: ['NONE', 'PENDING_REVIEW', 'APPROVED_COMPENSATED', 'REJECTED'],
+          default: 'NONE',
+        },
+        proofPhotos: [{ type: String }],
+        unboxingVideoUrl: { type: String, default: '' },
+        compensationAmount: { type: Number, default: 0 },
+        reviewedAt: { type: Date, default: null },
+        reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        reviewNotes: { type: String, default: '' },
+      },
+      milestones: [
+        {
+          status: { type: String, required: true },
+          location: { type: String, default: '' },
+          timestamp: { type: Date, default: Date.now },
+          notes: { type: String, default: '' },
+          updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        },
+      ],
     },
   },
   { timestamps: true }

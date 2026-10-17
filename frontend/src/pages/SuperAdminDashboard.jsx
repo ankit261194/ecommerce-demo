@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  RotateCcw,
   DollarSign,
   TrendingUp,
   Store,
@@ -129,6 +130,7 @@ import AbandonedCartRecoverySequenceManager from '../components/AbandonedCartRec
 import AdminVendorVerificationHub from '../components/AdminVendorVerificationHub';
 import HyperlocalDispatchSchedulerModal from '../components/HyperlocalDispatchSchedulerModal';
 import FleetLiveMapRadarModal from '../components/FleetLiveMapRadarModal';
+import ReverseLogisticsRoutingHub from '../components/ReverseLogisticsRoutingHub';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -2011,6 +2013,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
             <span>Fleet Live Map Radar</span>
             <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-200 ml-1">
               Point #43
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveDashboardTab('reverse-logistics')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'reverse-logistics'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <RotateCcw className="w-4 h-4 text-teal-400" />
+            <span>Reverse Logistics & SPF</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-teal-500/30 text-teal-200 ml-1">
+              Point #47
             </span>
           </button>
 

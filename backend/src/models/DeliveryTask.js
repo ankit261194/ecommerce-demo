@@ -284,6 +284,39 @@ const deliveryTaskSchema = new mongoose.Schema(
       generatedAt: { type: Date, default: null },
       generatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     },
+    // Point 47: Doorstep Return Pickup Inspection & Reverse Waybill
+    doorstepInspection: {
+      checklist: {
+        brandTagIntact: { type: Boolean, default: false },
+        originalPackagingPresent: { type: Boolean, default: false },
+        serialNumberMatched: { type: Boolean, default: false },
+        noPhysicalDamage: { type: Boolean, default: false },
+        accessoriesComplete: { type: Boolean, default: false },
+        powerOnVerified: { type: Boolean, default: false },
+      },
+      photos: [
+        {
+          url: { type: String, default: '' },
+          caption: { type: String, default: '' },
+          uploadedAt: { type: Date, default: Date.now },
+        },
+      ],
+      inspectionStatus: {
+        type: String,
+        enum: ['PENDING', 'ACCEPTED_AT_DOORSTEP', 'REJECTED_AT_DOORSTEP'],
+        default: 'PENDING',
+      },
+      rejectionCategory: {
+        type: String,
+        enum: ['NONE', 'TAG_MISSING', 'DAMAGED_BY_CUSTOMER', 'SERIAL_MISMATCH', 'ACCESSORY_MISSING', 'CUSTOMER_REFUSED_HANDOVER'],
+        default: 'NONE',
+      },
+      rejectionReason: { type: String, default: '' },
+      inspectedAt: { type: Date, default: null },
+      inspectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+      reverseWaybill: { type: String, default: '' },
+    },
+    failureReason: { type: String, default: '' },
     // Point #69: Cash on Delivery (COD) Cash Collection Reconciliation
     codReconciliation: {
       status: {

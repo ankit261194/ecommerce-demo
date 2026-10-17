@@ -111,6 +111,21 @@ const ShippingConfigSchema = new mongoose.Schema(
         { zone: 'SPECIAL', surcharge: 90, transitDaysAdjustment: 4 },
       ],
     },
+    // Point 47: Reverse Logistics Routing Configuration
+    reverseLogisticsConfig: {
+      centralHubThresholdAmount: { type: Number, default: 5000 },
+      defaultCarrierPartner: { type: String, default: 'AuraMarket Express Reverse' },
+      autoRestockGradeA: { type: Boolean, default: true },
+      maxReverseTransitDays: { type: Number, default: 4 },
+      centralHubName: { type: String, default: 'AuraMarket Central QC & Grading Hub' },
+      centralHubAddress: {
+        recipient: { type: String, default: 'Central Returns Intake' },
+        street: { type: String, default: 'Sector 62, Industrial Area' },
+        city: { type: String, default: 'Noida' },
+        state: { type: String, default: 'Uttar Pradesh' },
+        pincode: { type: String, default: '201301' },
+      },
+    },
   },
   {
     timestamps: true,

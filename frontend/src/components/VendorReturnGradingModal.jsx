@@ -34,19 +34,50 @@ export default function VendorReturnGradingModal({
 }) {
   if (!isOpen || !returnRequest) return null;
 
-  const returnId = returnRequest._id || returnRequest.id;
-  const item = returnRequest.items?.[0] || {};
+  const [inboundReturns, setInboundReturns] = useState([]);
+  const [activeReturn, setActiveReturn] = useState(returnRequest);
+  const [isLoadingReturns, setIsLoadingReturns] = useState(false);
+
+  useEffect(() => {
+    setActiveReturn(returnRequest);
+  }, [returnRequest]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsLoadingReturns(true);
+      api.get('/vendor/returns')
+        .then((res) => {
+          if (res.data?.success && Array.isArray(res.data.data) && res.data.data.length > 0) {
+            setInboundReturns(res.data.data);
+            const isDemo = !returnRequest?._id || !/^[0-9a-fA-F]{24}$/.test(String(returnRequest._id));
+            if (isDemo && res.data.data[0]) {
+              setActiveReturn(res.data.data[0]);
+            }
+          }
+        })
+        .catch((err) => {
+          console.warn('Could not load vendor returns list:', err);
+        })
+        .finally(() => {
+          setIsLoadingReturns(false);
+        });
+    }
+  }, [isOpen, returnRequest]);
+
+  const currentReturn = activeReturn || returnRequest;
+  const returnId = currentReturn._id || currentReturn.id;
+  const item = currentReturn.items?.[0] || {};
   const productTitle = item.product?.title || item.title || 'Returned Item';
   const productImage = item.product?.image || item.image || '';
   const itemSku = item.product?.sku || item.variantSku || 'SKU-RET';
   const itemQty = item.quantity || 1;
-  const itemPrice = item.price || returnRequest.refundAmount || 0;
+  const itemPrice = item.price || currentReturn.refundAmount || 0;
   const reverseWaybill =
-    returnRequest.reverseRouting?.reverseWaybill ||
-    returnRequest.doorstepInspection?.reverseWaybill ||
+    currentReturn.reverseRouting?.reverseWaybill ||
+    currentReturn.doorstepInspection?.reverseWaybill ||
     'RTO-INBOUND';
 
-  const existingSpf = returnRequest.reverseRouting?.spfClaim;
+  const existingSpf = currentReturn.reverseRouting?.spfClaim;
 
   const [conditionGrade, setConditionGrade] = useState(
     returnRequest.reverseRouting?.conditionGrade !== 'UNGRADED' && returnRequest.reverseRouting?.conditionGrade
@@ -89,6 +120,12 @@ export default function VendorReturnGradingModal({
     setIsSubmitting(true);
 
     try {
+      if (!/^[0-9a-fA-F]{24}$/.test(String(returnId))) {
+        setErrorMessage('Demonstration return parcel preview. To submit live database inventory restock or file an official SPF claim, an active store return order must be selected.');
+        setIsSubmitting(false);
+        return;
+      }
+
       let restockAction = 'RESTOCK';
       let spfClaimData = {};
 
@@ -224,6 +261,32 @@ export default function VendorReturnGradingModal({
             </div>
           ) : (
             <>
+              {/* Parcel Selector if multiple returns exist */}
+              {inboundReturns.length > 1 && (
+                <div className="p-3 rounded-2xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Boxes className="w-4 h-4 text-teal-600 shrink-0" />
+                    <span className="text-xs font-bold text-teal-900 dark:text-teal-200">
+                      Inbound Return Parcels ({inboundReturns.length}):
+                    </span>
+                  </div>
+                  <select
+                    value={returnId}
+                    onChange={(e) => {
+                      const found = inboundReturns.find((r) => (r._id || r.id) === e.target.value);
+                      if (found) setActiveReturn(found);
+                    }}
+                    className="bg-white dark:bg-slate-900 border border-teal-300 dark:border-teal-700 rounded-xl text-xs py-1.5 px-3 font-bold text-slate-800 dark:text-slate-100"
+                  >
+                    {inboundReturns.map((r) => (
+                      <option key={r._id || r.id} value={r._id || r.id}>
+                        {r.order?.orderNumber || 'ORD'} ? {r.reverseRouting?.reverseWaybill || 'Waybill'} ({r.items?.[0]?.title?.slice(0, 25) || 'Return Item'}...)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Return Item Card */}
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 flex items-center gap-4">
                 {productImage ? (

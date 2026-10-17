@@ -22,6 +22,7 @@ const {
   getReverseRoutingDashboard,
   getRoutingConfig,
   updateRoutingConfig,
+  getVendorReturns,
 } = require('../controllers/reverseLogisticsController');
 const { protect, authorize } = require('../middlewares/auth');
 
@@ -42,6 +43,7 @@ router.post('/:id/sla-auto-approve', autoResolveExpiredSLA);
 router.put('/:id/reverse-pickup', updateReversePickupStatus);
 
 // Point 47: Return Pickup Inspection & Reverse Logistics Routing Engine
+router.get('/', authorize('superadmin', 'vendor', 'vendor_staff'), getVendorReturns);
 router.patch('/:id/reverse-routing/milestone', authorize('delivery', 'vendor', 'vendor_staff', 'superadmin'), recordReverseRoutingMilestone);
 router.post('/:id/grade-and-restock', authorize('vendor', 'vendor_staff', 'superadmin'), vendorGradeAndRestock);
 router.get('/spf-claims', authorize('superadmin', 'vendor', 'vendor_staff'), getSpfClaimsList);

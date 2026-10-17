@@ -30025,6 +30025,23 @@ const runTests = async () => {
       });
       assert.strictEqual(resForeignRider.status, 403);
 
+      // 3b. Reject if mandatory checklist items are missing or false
+      const resBadChecklist = await fetch(`${baseUrl}/delivery/reverse-pickup/${p47Task1._id}/inspect-doorstep`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47RiderToken}`,
+        },
+        body: JSON.stringify({
+          otp: '7412',
+          inspectionStatus: 'ACCEPTED_AT_DOORSTEP',
+          checklist: { brandTagIntact: false, originalPackagingPresent: true, noPhysicalDamage: true },
+        }),
+      });
+      assert.strictEqual(resBadChecklist.status, 400);
+      const jsonBadChecklist = await resBadChecklist.json();
+      assert.ok(jsonBadChecklist.message.includes('Mandatory inspection checklist items'));
+
       // 4. Successful Doorstep Return Acceptance with 6-point checklist & valid OTP
       const resAccept = await fetch(`${baseUrl}/delivery/reverse-pickup/${p47Task1._id}/inspect-doorstep`, {
         method: 'POST',
@@ -30076,6 +30093,23 @@ const runTests = async () => {
       assert.strictEqual(dbReturn1.reverseRouting.routingStatus, 'PICKED_UP_FROM_CUSTOMER');
       assert.strictEqual(dbReturn1.reverseRouting.milestones.length, 1);
       assert.strictEqual(dbReturn1.reverseRouting.milestones[0].status, 'PICKED_UP_FROM_CUSTOMER');
+
+      // 7. Duplicate doorstep inspection rejection (idempotency check)
+      const resDupAccept = await fetch(`${baseUrl}/delivery/reverse-pickup/${p47Task1._id}/inspect-doorstep`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47RiderToken}`,
+        },
+        body: JSON.stringify({
+          otp: '7412',
+          inspectionStatus: 'ACCEPTED_AT_DOORSTEP',
+          checklist: { brandTagIntact: true, originalPackagingPresent: true, noPhysicalDamage: true },
+        }),
+      });
+      assert.strictEqual(resDupAccept.status, 400);
+      const jsonDupAccept = await resDupAccept.json();
+      assert.ok(jsonDupAccept.message.includes('already been inspected and accepted'));
     });
 
     await test('Point 47: Test 2 - Doorstep inspection rejection records rejection category & reason, marks task FAILED, and updates ReturnRequest to REJECTED', async () => {
@@ -30215,6 +30249,25 @@ const runTests = async () => {
       });
       assert.ok(auditLog);
       assert.strictEqual(auditLog.module, 'INVENTORY');
+
+      // Verify idempotency: Duplicate restock request is rejected and does not increment stock
+      const resDupGrade = await fetch(`${baseUrl}/vendor/returns/${p47Return1._id}/grade-and-restock`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47VendorToken}`,
+        },
+        body: JSON.stringify({
+          conditionGrade: 'GRADE_A_RESALEABLE',
+          restockAction: 'RESTOCK',
+          restockQuantity: 2,
+        }),
+      });
+      assert.strictEqual(resDupGrade.status, 400);
+      const jsonDupGrade = await resDupGrade.json();
+      assert.ok(jsonDupGrade.message.includes('already been restocked'));
+      const dbProductUnchanged = await Product.findById(p47Product._id);
+      assert.strictEqual(Number(dbProductUnchanged.countInStock || dbProductUnchanged.stock), stockBefore + 2);
     });
 
     await test('Point 47: Test 5 - Vendor damaged item returns raise SPF Claim with proof photos and unboxing video URL', async () => {
@@ -30264,6 +30317,23 @@ const runTests = async () => {
       const myClaim = jsonVendorClaims.data.find(c => c._id === p47Return3._id.toString());
       assert.ok(myClaim);
       assert.strictEqual(myClaim.reverseRouting.spfClaim.claimStatus, 'PENDING_REVIEW');
+
+      // Verify idempotency: Duplicate SPF claim submission is rejected
+      const resDupSpf = await fetch(`${baseUrl}/vendor/returns/${p47Return3._id}/grade-and-restock`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47VendorToken}`,
+        },
+        body: JSON.stringify({
+          conditionGrade: 'GRADE_C_DAMAGED',
+          restockAction: 'RAISE_SPF_CLAIM',
+          spfClaimData: { claimAmount: 8999, claimReason: 'Duplicate attempt' },
+        }),
+      });
+      assert.strictEqual(resDupSpf.status, 400);
+      const jsonDupSpf = await resDupSpf.json();
+      assert.ok(jsonDupSpf.message.includes('already been submitted'));
     });
 
     await test('Point 47: Test 6 - Super admin approves SPF claim, pays compensation to vendor wallet, and creates WalletTransaction & Ledger entry', async () => {
@@ -30317,6 +30387,25 @@ const runTests = async () => {
       const dbReturn3After = await ReturnRequest.findById(p47Return3._id);
       const spfMilestone = dbReturn3After.reverseRouting.milestones.find(m => m.status === 'SPF_CLAIM_APPROVED');
       assert.ok(spfMilestone);
+
+      // Verify idempotency: Duplicate SPF review approval is rejected and does not double-pay vendor
+      const resDupReview = await fetch(`${baseUrl}/admin/returns/spf-claims/${p47Return3._id}/review`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p47AdminToken}`,
+        },
+        body: JSON.stringify({
+          decision: 'APPROVED',
+          compensationAmount: 8999,
+        }),
+      });
+      assert.strictEqual(resDupReview.status, 400);
+      const jsonDupReview = await resDupReview.json();
+      assert.ok(jsonDupReview.message.includes('already been approved and compensated'));
+
+      const vendorProfileUnchanged = await VendorProfile.findById(p47VendorProfile._id);
+      assert.strictEqual(vendorProfileUnchanged.walletBalance, balanceBefore + 8999);
     });
 
     await test('Point 47: Test 7 - Reverse routing dashboard and config endpoints return valid data', async () => {
@@ -30373,6 +30462,15 @@ const runTests = async () => {
       assert.strictEqual(jsonUpdateConfig.data.centralHubThresholdAmount, 7500);
       assert.strictEqual(jsonUpdateConfig.data.defaultCarrierPartner, 'Delhivery Reverse Logistics');
       assert.strictEqual(jsonUpdateConfig.data.maxReverseTransitDays, 3);
+
+      // 5. Vendor returns endpoint
+      const resVendorReturns = await fetch(`${baseUrl}/vendor/returns`, {
+        headers: { Authorization: `Bearer ${p47VendorToken}` },
+      });
+      assert.strictEqual(resVendorReturns.status, 200);
+      const jsonVendorReturns = await resVendorReturns.json();
+      assert.strictEqual(jsonVendorReturns.success, true);
+      assert.ok(Array.isArray(jsonVendorReturns.data));
     });
 
     await test('Point 47: Test 8 - Role security guardrails (401 unauthenticated, 403 customer and unauthorized roles)', async () => {

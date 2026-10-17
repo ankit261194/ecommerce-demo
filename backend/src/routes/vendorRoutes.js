@@ -46,6 +46,7 @@ const { getSplitPackingSlips, getThermalReceipt } = require('../controllers/orde
 const {
   vendorGradeAndRestock,
   getSpfClaimsList,
+  getVendorReturns,
 } = require('../controllers/reverseLogisticsController');
 const {
   getVendorPromotions,
@@ -222,6 +223,7 @@ router.patch('/staff/:id/toggle-status', requireVendorPermission('STAFF_MANAGE')
 router.delete('/staff/:id', requireVendorPermission('STAFF_MANAGE'), deleteVendorStaff);
 
 // Point 47: Return Pickup Inspection & Reverse Logistics Inbound Grading & SPF Claims
+router.get('/returns', getVendorReturns);
 router.post('/returns/:id/grade-and-restock', vendorGradeAndRestock);
 router.get('/returns/spf-claims', getSpfClaimsList);
 

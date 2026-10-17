@@ -74,6 +74,16 @@ exports.inspectDoorstepReturn = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Specified task is not a reverse pickup task' });
     }
 
+    if (
+      task.status === 'DELIVERED' ||
+      task.doorstepInspection?.inspectionStatus === 'ACCEPTED_AT_DOORSTEP'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'This reverse pickup task has already been inspected and accepted at doorstep.',
+      });
+    }
+
     // Role check: only assigned rider or superadmin
     if (
       req.user.role !== 'superadmin' &&
@@ -102,6 +112,18 @@ exports.inspectDoorstepReturn = async (req, res, next) => {
 
     // 1. ACCEPTED WORKFLOW
     if (inspectionStatus === 'ACCEPTED_AT_DOORSTEP') {
+      // Validate mandatory checklist items (Brand tag, packaging, physical condition)
+      if (
+        !checklist.brandTagIntact ||
+        !checklist.originalPackagingPresent ||
+        !checklist.noPhysicalDamage
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Mandatory inspection checklist items (Brand Tag, Original Packaging, No Physical Damage) must be verified before acceptance.',
+        });
+      }
       // Validate customer OTP
       if (expectedOtp && (!otp || String(otp).trim() !== String(expectedOtp).trim())) {
         return res.status(400).json({
@@ -454,6 +476,15 @@ exports.vendorGradeAndRestock = async (req, res, next) => {
 
     // 1. RESTOCK WORKFLOW (Grade A or explicit RESTOCK)
     if (conditionGrade === 'GRADE_A_RESALEABLE' || restockAction === 'RESTOCK') {
+      if (
+        returnReq.status === 'RESTOCKED' ||
+        returnReq.reverseRouting?.routingStatus === 'RESTOCKED_TO_INVENTORY'
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'This return parcel has already been restocked to live inventory.',
+        });
+      }
       let totalUnits = 0;
       for (const item of returnReq.items) {
         const qty = Number(restockQuantity) || item.quantity || 1;
@@ -502,6 +533,15 @@ exports.vendorGradeAndRestock = async (req, res, next) => {
 
     // 2. SELLER PROTECTION FUND (SPF) CLAIM WORKFLOW (Grade C / Damaged / Tampered)
     if (restockAction === 'RAISE_SPF_CLAIM' || conditionGrade === 'GRADE_C_DAMAGED') {
+      if (
+        returnReq.reverseRouting?.spfClaim?.isClaimRaised &&
+        returnReq.reverseRouting?.spfClaim?.claimStatus !== 'NONE'
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'An SPF claim has already been submitted for this return (Status: ' + (returnReq.reverseRouting?.spfClaim?.claimStatus || 'PENDING') + ').',
+        });
+      }
       const claimAmount = Number(spfClaimData.claimAmount) || returnReq.refundAmount || 0;
       const claimReason =
         spfClaimData.claimReason || notes || `Damaged / Tampered return package graded as ${conditionGrade}`;
@@ -667,6 +707,20 @@ exports.reviewSpfClaim = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: 'No active SPF Claim has been filed for this return request.',
+      });
+    }
+
+    if (returnReq.reverseRouting?.spfClaim?.claimStatus === 'APPROVED_COMPENSATED') {
+      return res.status(400).json({
+        success: false,
+        message: 'This SPF claim has already been approved and compensated.',
+      });
+    }
+
+    if (returnReq.reverseRouting?.spfClaim?.claimStatus === 'REJECTED') {
+      return res.status(400).json({
+        success: false,
+        message: 'This SPF claim has already been reviewed and rejected.',
       });
     }
 
@@ -965,6 +1019,37 @@ exports.updateRoutingConfig = async (req, res, next) => {
       success: true,
       message: 'Reverse logistics routing configuration updated successfully',
       data: shippingConfig.reverseLogisticsConfig,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Inbound Returns for Vendor
+// @route   GET /api/vendor/returns
+// @access  Private (Vendor, Vendor Staff, SuperAdmin)
+exports.getVendorReturns = async (req, res, next) => {
+  try {
+    let query = {};
+    if (req.user.role === 'vendor' || req.user.role === 'vendor_staff') {
+      const vendorId =
+        req.user.vendorProfile ||
+        req.vendorProfile?._id ||
+        (await VendorProfile.findOne({ user: req.user._id }))?._id;
+      if (vendorId) {
+        query.vendor = vendorId;
+      }
+    }
+    const returns = await ReturnRequest.find(query)
+      .populate('order', 'orderNumber totalAmount paymentMethod shippingAddress')
+      .populate('customer', 'name email phone')
+      .populate('items.product', 'title price image sku countInStock stock')
+      .sort({ updatedAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: returns.length,
+      data: returns,
     });
   } catch (error) {
     next(error);

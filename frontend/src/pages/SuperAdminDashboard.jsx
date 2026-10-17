@@ -3102,6 +3102,16 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       )}
 
       {/* ========================================================================= */}
+      {/* TAB 36: REVERSE LOGISTICS ROUTING & SPF CLAIMS HUB (Pillar 4 • Point 47)  */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'reverse-logistics' && (
+        <ReverseLogisticsRoutingHub
+          isOpen={true}
+          onClose={() => setActiveDashboardTab('overview')}
+        />
+      )}
+
+      {/* ========================================================================= */}
       {/* TAB: HOMEPAGE MODULAR SECTION MANAGER (Screenshot 3 Style) */}
       {/* ========================================================================= */}
       {activeDashboardTab === 'layout' && (

@@ -42,11 +42,37 @@ export default function DoorstepReturnInspectionModal({
 }) {
   if (!isOpen || !task) return null;
 
-  const taskId = task._id || task.id || task.rawId;
-  const returnReq = task.returnRequest || {};
+  const rawTaskId = task.rawId || task._id || (task.id && !String(task.id).startsWith('DEL-') ? task.id : task.rawId);
+  const [liveTask, setLiveTask] = useState(task);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+
+  useEffect(() => {
+    if (rawTaskId) {
+      setIsLoadingDetails(true);
+      api.get(`/delivery/reverse-pickup/${rawTaskId}`)
+        .then((res) => {
+          if (res.data?.success && res.data.data) {
+            setLiveTask(res.data.data);
+            if (res.data.data.doorstepInspection?.inspectionStatus && res.data.data.doorstepInspection.inspectionStatus !== 'PENDING') {
+              setSuccessResult(res.data.data.doorstepInspection);
+            }
+          }
+        })
+        .catch((err) => {
+          console.warn('Could not fetch live reverse pickup details:', err);
+        })
+        .finally(() => {
+          setIsLoadingDetails(false);
+        });
+    }
+  }, [rawTaskId]);
+
+  const returnReq = liveTask.returnRequest || task.returnRequest || {};
   const expectedOtp =
+    liveTask.reversePickupDetails?.pickupOtp ||
     task.reversePickupDetails?.pickupOtp ||
     returnReq.reversePickupOtp ||
+    liveTask.expectedOtp ||
     task.expectedOtp ||
     '';
 
@@ -173,7 +199,7 @@ export default function DoorstepReturnInspectionModal({
 
     setIsSubmitting(true);
     try {
-      const res = await api.post(`/delivery/reverse-pickup/${taskId}/inspect-doorstep`, {
+      const res = await api.post(`/delivery/reverse-pickup/${rawTaskId}/inspect-doorstep`, {
         otp: enteredOtp || expectedOtp || '0000',
         checklist,
         photos,
@@ -212,7 +238,7 @@ export default function DoorstepReturnInspectionModal({
 
     setIsSubmitting(true);
     try {
-      const res = await api.post(`/delivery/reverse-pickup/${taskId}/inspect-doorstep`, {
+      const res = await api.post(`/delivery/reverse-pickup/${rawTaskId}/inspect-doorstep`, {
         checklist,
         photos,
         inspectionStatus: 'REJECTED_AT_DOORSTEP',
@@ -246,11 +272,16 @@ export default function DoorstepReturnInspectionModal({
     window.print();
   };
 
-  const customerName = task.customer?.name || returnReq.customer?.name || task.dropLocation?.recipientName || 'Customer';
-  const customerAddress = task.customer?.address || task.pickupLocation?.address || 'Customer Doorstep';
-  const customerPhone = task.customer?.phone || task.pickupLocation?.phone || '';
-  const itemSummary = task.itemSummary || returnReq.items?.[0]?.product?.title || returnReq.items?.[0]?.title || 'Returned Item';
-  const refundAmount = returnReq.refundAmount || task.amountToCollect || 0;
+  const customerName = liveTask.pickupLocation?.storeName || returnReq.customer?.name || task.customer?.name || 'Customer';
+  const customerAddress = liveTask.pickupLocation?.address || task.customer?.address || task.pickupLocation?.address || 'Customer Doorstep';
+  const customerPhone = liveTask.pickupLocation?.phone || returnReq.customer?.phone || task.customer?.phone || '';
+  const itemSummary =
+    liveTask.reversePickupDetails?.itemTitle ||
+    returnReq.items?.[0]?.product?.title ||
+    returnReq.items?.[0]?.title ||
+    task.itemSummary ||
+    'Returned Item';
+  const refundAmount = returnReq.refundAmount || liveTask.amountToCollect || task.amountToCollect || 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto animate-fade-in">

@@ -678,27 +678,34 @@ export const VendorPortal = () => {
 
           <button
             type="button"
-            onClick={() => {
-              if (!selectedReturnForGrading) {
-                setSelectedReturnForGrading({
-                  _id: 'ret_demo_47',
-                  order: { orderNumber: 'ORD-9821' },
-                  items: [
-                    {
-                      title: 'Aura Pro ANC Wireless Noise-Cancelling Headphones',
-                      quantity: 1,
-                      price: 8999,
-                      product: { title: 'Aura Pro ANC Wireless Noise-Cancelling Headphones', sku: 'APX-HEAD-001', countInStock: 45 },
+            onClick={async () => {
+              try {
+                const res = await api.get('/vendor/returns');
+                if (res.data?.success && res.data.data?.length > 0) {
+                  setSelectedReturnForGrading(res.data.data[0]);
+                } else if (!selectedReturnForGrading) {
+                  setSelectedReturnForGrading({
+                    _id: 'ret_demo_47',
+                    order: { orderNumber: 'ORD-9821' },
+                    items: [
+                      {
+                        title: 'Aura Pro ANC Wireless Noise-Cancelling Headphones',
+                        quantity: 1,
+                        price: 8999,
+                        product: { title: 'Aura Pro ANC Wireless Noise-Cancelling Headphones', sku: 'APX-HEAD-001', countInStock: 45 },
+                      },
+                    ],
+                    refundAmount: 8999,
+                    reason: 'Package delivered late, customer returned item in sealed box',
+                    reverseRouting: {
+                      reverseWaybill: 'RTO-849201',
+                      destinationType: 'RETURN_TO_VENDOR',
+                      conditionGrade: 'UNGRADED',
                     },
-                  ],
-                  refundAmount: 8999,
-                  reason: 'Package delivered late, customer returned item in sealed box',
-                  reverseRouting: {
-                    reverseWaybill: 'RTO-849201',
-                    destinationType: 'RETURN_TO_VENDOR',
-                    conditionGrade: 'UNGRADED',
-                  },
-                });
+                  });
+                }
+              } catch (e) {
+                // Fallback demo return
               }
               setIsReturnGradingModalOpen(true);
             }}

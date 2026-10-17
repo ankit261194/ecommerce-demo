@@ -129,44 +129,53 @@ export const CourierDashboard = () => {
       const res = await api.get('/delivery/tasks');
       if (res.data?.success && res.data?.data?.length > 0) {
         const mapped = res.data.data.map(t => {
-          const dropAddr = t.dropLocation?.address || 'Flat 402, Green Valley Apartments';
-          const dropCity = t.dropLocation?.city || 'New Delhi';
-          const dropPin = t.dropLocation?.pincode || '110001';
-          const mapQuery = encodeURIComponent(`${dropAddr}, ${dropCity} ${dropPin}`);
+          const isReverse = t.taskType === 'REVERSE_PICKUP';
+          const dropAddr = t.dropLocation?.address || (isReverse ? 'Merchant Return Hub' : 'Flat 402, Green Valley Apartments');
+          const dropCity = t.dropLocation?.city || (isReverse ? 'Gurugram' : 'New Delhi');
+          const dropPin = t.dropLocation?.pincode || (isReverse ? '122016' : '110001');
+          const customerAddr = isReverse ? (t.pickupLocation?.address || 'Customer Doorstep') : dropAddr;
+          const customerCity = isReverse ? (t.pickupLocation?.city || '') : dropCity;
+          const customerPin = isReverse ? (t.pickupLocation?.pincode || '') : dropPin;
+          const mapQuery = encodeURIComponent(customerAddr + ', ' + customerCity + ' ' + customerPin);
 
           return {
-            id: `DEL-${t._id.toString().slice(-3).toUpperCase()}`,
+            _id: t._id,
             rawId: t._id,
-            subOrderId: t.subOrder?._id ? `SUB-${t.subOrder._id.toString().slice(-4)}` : 'SUB-PARCEL',
+            id: 'DEL-' + t._id.toString().slice(-3).toUpperCase(),
+            taskType: t.taskType || 'FORWARD_DELIVERY',
+            returnRequest: t.returnRequest || null,
+            subOrderId: t.subOrder?._id ? 'SUB-' + t.subOrder._id.toString().slice(-4) : (isReverse ? 'REV-PICKUP' : 'SUB-PARCEL'),
             vendor: {
-              storeName: t.subOrder?.vendor?.storeName || t.pickupLocation?.storeName || 'Apex Tech Hub',
-              phone: t.pickupLocation?.phone || '9876543211',
-              address: t.pickupLocation?.address || 'Shop 14, Sector 18, Noida',
-              city: t.pickupLocation?.city || 'Noida',
-              pincode: t.pickupLocation?.pincode || '',
+              storeName: isReverse ? (t.dropLocation?.recipientName || 'Merchant Return Bay') : (t.subOrder?.vendor?.storeName || t.pickupLocation?.storeName || 'Apex Tech Hub'),
+              phone: isReverse ? (t.dropLocation?.phone || '9876543211') : (t.pickupLocation?.phone || '9876543211'),
+              address: isReverse ? (t.dropLocation?.address || '') : (t.pickupLocation?.address || 'Shop 14, Sector 18, Noida'),
+              city: isReverse ? (t.dropLocation?.city || '') : (t.pickupLocation?.city || 'Noida'),
+              pincode: isReverse ? (t.dropLocation?.pincode || '') : (t.pickupLocation?.pincode || ''),
             },
             customer: {
-              name: t.subOrder?.customer?.name || t.dropLocation?.recipientName || 'Aman Sharma',
-              phone: t.dropLocation?.phone || '9876543214',
-              address: dropAddr,
-              city: dropCity,
-              pincode: dropPin,
-              landmark: t.dropLocation?.landmark || '',
+              name: isReverse ? (t.pickupLocation?.storeName || 'Customer Return') : (t.subOrder?.customer?.name || t.dropLocation?.recipientName || 'Aman Sharma'),
+              phone: isReverse ? (t.pickupLocation?.phone || '') : (t.dropLocation?.phone || '9876543214'),
+              address: customerAddr,
+              city: customerCity,
+              pincode: customerPin,
+              landmark: isReverse ? '' : (t.dropLocation?.landmark || ''),
             },
             itemSummary:
-              t.subOrder?.items?.map(i => `${i.quantity}x ${i.title}`).join(', ') ||
-              '1x Aura Pro ANC Wireless Headphones',
+              isReverse
+                ? (t.reversePickupDetails?.itemTitle || 'Returned Item for Doorstep Inspection')
+                : (t.subOrder?.items?.map(i => i.quantity + 'x ' + i.title).join(', ') || '1x Aura Pro ANC Wireless Headphones'),
             isCod: t.isCod,
             amountToCollect: t.amountToCollect || 0,
             status: t.status,
-            expectedOtp: t.subOrder?.deliveryOtp || '4821',
+            expectedOtp: isReverse ? (t.reversePickupDetails?.pickupOtp || '') : (t.subOrder?.deliveryOtp || '4821'),
             deliveryInstructions: t.deliveryInstructions || t.subOrder?.deliveryInstructions || '',
+            doorstepInspection: t.doorstepInspection || null,
             customerSignature: t.customerSignature || null,
             signatureDetails: t.signatureDetails || null,
             proofPhoto: t.proofPhoto || null,
             proofPhotoDetails: t.proofPhotoDetails || null,
             failureLog: t.failureLog || null,
-            mapUrl: t.dropLocation?.mapUrl || `https://maps.google.com/?q=${mapQuery}`,
+            mapUrl: t.dropLocation?.mapUrl || ('https://maps.google.com/?q=' + mapQuery),
           };
         });
         setTasks(mapped);
@@ -666,6 +675,11 @@ export const CourierDashboard = () => {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-black text-slate-900 text-base">{task.id}</span>
+                      {task.taskType === 'REVERSE_PICKUP' && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200">
+                          Reverse Pickup (Return)
+                        </span>
+                      )}
                       <span className="text-xs font-bold text-slate-400 font-mono">({task.subOrderId})</span>
                     </div>
                     <p className="text-xs text-slate-700 font-bold mt-0.5 line-clamp-1">{task.itemSummary}</p>
@@ -936,19 +950,24 @@ export const CourierDashboard = () => {
                     </button>
                   )}
 
-                  {task.status === 'OUT_FOR_DELIVERY' && (
+                  {/* Point #47: Reverse Pickup Inspection for REVERSE_PICKUP tasks */}
+                  {task.taskType === 'REVERSE_PICKUP' && !['DELIVERED', 'FAILED', 'CANCELLED'].includes(task.status) && (
+                    <button
+                      onClick={() => {
+                        setSelectedTaskForReverseInspection(task);
+                        setErrorMessage('');
+                      }}
+                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-700 hover:to-indigo-700 text-white text-xs font-black flex items-center gap-1.5 shadow-md hover:shadow-lg transition-all"
+                      title="Point 47: Doorstep 6-Point Return Pickup Inspection and Waybill Handover"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-teal-300" />
+                      <span>Doorstep Inspection & Pickup (Point #47)</span>
+                    </button>
+                  )}
+
+                  {/* Forward Delivery POD Actions */}
+                  {task.taskType !== 'REVERSE_PICKUP' && task.status === 'OUT_FOR_DELIVERY' && (
                     <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={() => {
-                          setSelectedTaskForReverseInspection(task);
-                          setErrorMessage('');
-                        }}
-                        className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-700 hover:to-indigo-700 text-white text-xs font-black flex items-center gap-1.5 shadow-md hover:shadow-lg transition-all"
-                        title="Point 47: Doorstep 6-Point Return Pickup Inspection and Waybill Handover"
-                      >
-                        <ShieldCheck className="w-4 h-4 text-teal-300" />
-                        <span>Return Inspection (Point #47)</span>
-                      </button>
                       <button
                         onClick={() => {
                           setSelectedTaskForDigitalPod(task);

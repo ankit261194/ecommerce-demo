@@ -53,67 +53,12 @@ export const CourierDashboard = () => {
   const [isBroadcastingGps, setIsBroadcastingGps] = useState(false); // Point 16: Live Socket.io GPS Telemetry Broadcast
   const [riderStats, setRiderStats] = useState({
     name: 'Vikram Singh',
-    assignedTasks: 2,
-    deliveredToday: 6,
-    codCollectedToday: 4499,
+    assignedTasks: 0,
+    deliveredToday: 0,
+    codCollectedToday: 0,
   });
 
-  const [tasks, setTasks] = useState([
-    {
-      id: 'DEL-101',
-      rawId: null,
-      subOrderId: 'SUB-9821',
-      vendor: {
-        storeName: 'Apex Tech Hub',
-        phone: '9876543211',
-        address: 'Shop 14, Commercial Complex, Sector 18, Noida',
-        city: 'Noida',
-        pincode: '201301',
-      },
-      customer: {
-        name: 'Aman Sharma',
-        phone: '9876543214',
-        address: 'Flat 402, Green Valley Apartments, Sector 62',
-        city: 'New Delhi',
-        pincode: '110001',
-        landmark: 'Near City Centre Gate #3',
-      },
-      itemSummary: '1x Aura Pro ANC Wireless Headphones',
-      isCod: false,
-      amountToCollect: 0,
-      status: 'OUT_FOR_DELIVERY', // 'ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED'
-      expectedOtp: '4821', // Matches customer's secret OTP
-      deliveryInstructions: 'Leave with security guard. Ring bell once.',
-      mapUrl: 'https://maps.google.com/?q=Sector+62+New+Delhi+110001',
-    },
-    {
-      id: 'DEL-102',
-      rawId: null,
-      subOrderId: 'SUB-7612',
-      vendor: {
-        storeName: 'Vogue Trends Apparel',
-        phone: '9876543212',
-        address: 'Unit 402, Fashion District, Sector 29, Gurugram',
-        city: 'Gurugram',
-        pincode: '122002',
-      },
-      customer: {
-        name: 'Priya Mehta',
-        phone: '9876543299',
-        address: 'House 88, Vasant Vihar, Block C',
-        city: 'New Delhi',
-        pincode: '110057',
-        landmark: 'Opposite Community Center',
-      },
-      itemSummary: '2x AeroWatch S9 Ultra Smartwatch',
-      isCod: true,
-      amountToCollect: 4499,
-      status: 'PICKED_UP',
-      expectedOtp: '9104',
-      deliveryInstructions: 'Call before arriving. Gate #3 entrance.',
-      mapUrl: 'https://maps.google.com/?q=House+88+Vasant+Vihar+New+Delhi+110057',
-    },
-  ]);
+  const [tasks, setTasks] = useState([]);
 
   const [filterTab, setFilterTab] = useState('ALL'); // 'ALL' | 'ACTIVE' | 'ASSIGNED' | 'OUT_FOR_DELIVERY' | 'DELIVERED'
   const [searchQuery, setSearchQuery] = useState('');
@@ -127,8 +72,9 @@ export const CourierDashboard = () => {
     setIsRefreshing(true);
     try {
       const res = await api.get('/delivery/tasks');
-      if (res.data?.success && res.data?.data?.length > 0) {
-        const mapped = res.data.data.map(t => {
+      if (res.data?.success) {
+        const rawTasks = Array.isArray(res.data.data) ? res.data.data : [];
+        const mapped = rawTasks.map(t => {
           const isReverse = t.taskType === 'REVERSE_PICKUP';
           const dropAddr = t.dropLocation?.address || (isReverse ? 'Merchant Return Hub' : 'Flat 402, Green Valley Apartments');
           const dropCity = t.dropLocation?.city || (isReverse ? 'Gurugram' : 'New Delhi');
@@ -197,12 +143,13 @@ export const CourierDashboard = () => {
           setRiderStats(prev => ({
             ...prev,
             assignedTasks: mapped.filter(m => m.status !== 'DELIVERED').length,
-            deliveredToday: deliveredCount > 0 ? deliveredCount : prev.deliveredToday,
-            codCollectedToday: codSum > 0 ? codSum : prev.codCollectedToday,
+            deliveredToday: deliveredCount,
+            codCollectedToday: codSum,
           }));
         }
       }
-    } catch (_) {
+    } catch (err) {
+      console.error('Failed to fetch delivery tasks:', err?.message);
     } finally {
       setIsRefreshing(false);
     }
@@ -215,24 +162,21 @@ export const CourierDashboard = () => {
   // Update Status to Picked Up or Out For Delivery
   const handleAdvanceStatus = async (taskId, newStatus) => {
     const target = tasks.find(t => t.id === taskId);
-    setTasks(prev =>
-      prev.map(t => (t.id === taskId ? { ...t, status: newStatus } : t))
-    );
-    setSuccessMessage(`Delivery status updated to ${newStatus.replace(/_/g, ' ')}`);
+    if (!target?.rawId) {
+      setErrorMessage('Cannot update task without valid database ID');
+      return;
+    }
 
-    if (target?.rawId) {
-      try {
-        await api.put(`/delivery/tasks/${target.rawId}/status`, { status: newStatus });
+    try {
+      const res = await api.put(`/delivery/tasks/${target.rawId}/status`, { status: newStatus });
+      if (res.data?.success) {
+        setSuccessMessage(`Delivery status updated to ${newStatus.replace(/_/g, ' ')}`);
         fetchTasks();
-      } catch (err) {
-        if (err.response?.data?.message) {
-          setErrorMessage(err.response.data.message);
-          setSuccessMessage('');
-          setTasks(prev =>
-            prev.map(t => (t.id === taskId ? { ...t, status: target.status } : t))
-          );
-        }
       }
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to update delivery task';
+      setErrorMessage(msg);
+      setSuccessMessage('');
     }
   };
 

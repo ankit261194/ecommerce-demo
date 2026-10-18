@@ -129,18 +129,7 @@ export const CourierProofPhotoModal = ({ task, onClose, onSuccess }) => {
         setViewMode(true);
       }
     } catch (err) {
-      console.warn('[ProofPhoto] Backend upload fallback (demo mode):', err.message);
-      const taskId = task.rawId || task._id || task.id;
-      if (onSuccess) {
-        onSuccess(taskId, photoBase64, {
-          notes: notes.trim(),
-          tag,
-          fileSize,
-          geoTag,
-          uploadedAt: new Date(),
-        });
-      }
-      setViewMode(true);
+      setErrorMessage(err.response?.data?.message || err.message || 'Failed to upload proof photo');
     } finally {
       setIsSubmitting(false);
     }

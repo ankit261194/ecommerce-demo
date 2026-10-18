@@ -188,13 +188,7 @@ export const CourierSignatureModal = ({ task, onClose, onSuccess }) => {
         setActiveTab('pod');
       }
     } catch (err) {
-      console.warn('[SignatureModal] Backend save fallback (demo mode):', err.message);
-      // Client-side fallback for simulated demo mode
-      const taskId = task.rawId || task._id || task.id;
-      if (onSuccess) {
-        onSuccess(taskId, base64Signature, signerName.trim(), signerRelation);
-      }
-      setActiveTab('pod');
+      setErrorMessage(err.response?.data?.message || err.message || 'Failed to save customer signature');
     } finally {
       setIsSubmitting(false);
     }

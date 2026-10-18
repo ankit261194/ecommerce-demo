@@ -108,23 +108,7 @@ export const CourierDeliveryFailureModal = ({ task, onClose, onSuccess }) => {
         }
       }
     } catch (err) {
-      console.warn('[FailureModal] Backend fail fallback (demo mode):', err.message);
-      const taskId = task.rawId || task._id || task.id;
-      const mockUpdated = {
-        ...task,
-        status: 'FAILED',
-        failureLog: {
-          reason,
-          attemptCount: nextAttemptNum,
-          rescheduledFor: new Date(rescheduledFor),
-          timeSlot,
-          notes: notes.trim(),
-          isRto: isFinalAttempt || reason === 'CUSTOMER_REFUSED',
-        },
-      };
-      if (onSuccess) {
-        onSuccess(taskId, mockUpdated);
-      }
+      setErrorMessage(err.response?.data?.message || err.message || 'Failed to report delivery failure');
     } finally {
       setIsSubmitting(false);
     }

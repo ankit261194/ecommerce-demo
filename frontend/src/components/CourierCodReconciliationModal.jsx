@@ -160,21 +160,7 @@ export const CourierCodReconciliationModal = ({
         setTimeout(() => setActiveTab('history'), 1200);
       }
     } catch (err) {
-      console.warn('[COD Modal] Fallback demo submission:', err.message);
-      const mockRecord = {
-        reconciliationId: `COD-REC-${Date.now().toString(36).toUpperCase()}`,
-        totalCounted,
-        totalExpected: expectedAmount,
-        discrepancy,
-        depositMethod,
-        depositSlipNumber,
-        status: 'SUBMITTED',
-        createdAt: new Date().toISOString(),
-      };
-      setRecentReconciliations(prev => [mockRecord, ...prev]);
-      setSuccessMessage('✅ Shift COD Deposit Slip submitted successfully (Demo Mode)!');
-      if (onSuccess) onSuccess(mockRecord);
-      setTimeout(() => setActiveTab('history'), 1200);
+      setErrorMessage(err.response?.data?.message || err.message || 'Failed to submit COD reconciliation');
     } finally {
       setIsSubmitting(false);
     }

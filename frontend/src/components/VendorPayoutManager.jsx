@@ -57,112 +57,53 @@ export default function VendorPayoutManager() {
   const [actionErrorMessage, setActionErrorMessage] = useState('');
   const [copiedId, setCopiedId] = useState(null);
 
-  // Demo Fallback Data in case of offline/mock mode
-  const demoPayoutsFallback = [
-    {
-      _id: 'p-demo-1',
-      transactionId: 'TXN-PAYOUT-17920401',
-      type: 'PAYOUT_WITHDRAWAL',
-      amount: 45000,
-      status: 'PENDING',
-      description: 'Vendor payout request for ₹45000 to bank HDFC Bank Ltd',
-      createdAt: new Date(Date.now() - 3600000 * 4).toISOString(),
-      vendor: {
-        _id: 'v-1',
-        storeName: 'Aura Sound & Beats Official',
-        walletBalance: 124500,
-        gstNumber: '07AAAAA0000A1Z5',
-        panNumber: 'ABCDE1234F',
-        user: {
-          name: 'Vikram Malhotra',
-          email: 'vikram.malhotra@auramarket.com',
-          phone: '+91 98765 43211',
-        },
-        bankDetails: {
-          accountHolder: 'Aura Sound Private Limited',
-          accountNumber: '91802001928374',
-          ifscCode: 'HDFC0001234',
-          bankName: 'HDFC Bank Ltd',
-        },
-      },
-      payoutDetails: {
-        paymentMode: 'IMPS',
-        bankName: 'HDFC Bank Ltd',
-        accountNumber: '91802001928374',
-        ifscCode: 'HDFC0001234',
-        accountHolder: 'Aura Sound Private Limited',
-      },
-    },
-    {
-      _id: 'p-demo-2',
-      transactionId: 'TXN-PAYOUT-17920392',
-      type: 'PAYOUT_WITHDRAWAL',
-      amount: 28500,
-      status: 'COMPLETED',
-      description: 'Vendor payout request for ₹28500 to bank ICICI Bank Ltd',
-      createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-      vendor: {
-        _id: 'v-2',
-        storeName: 'Titan Electronics & Gadgets',
-        walletBalance: 42000,
-        gstNumber: '29ABCDE1234F1Z8',
-        panNumber: 'KLMNO5678P',
-        user: {
-          name: 'Rohan Deshmukh',
-          email: 'rohan.titan@gmail.com',
-          phone: '+91 98111 22334',
-        },
-        bankDetails: {
-          accountHolder: 'Titan Electronics LLP',
-          accountNumber: '00120500129384',
-          ifscCode: 'ICIC0000012',
-          bankName: 'ICICI Bank Ltd',
-        },
-      },
-      payoutDetails: {
-        utrNumber: 'UTR-ICIC-20261014-98421',
-        paymentMode: 'NEFT',
-        bankName: 'ICICI Bank Ltd',
-        accountNumber: '00120500129384',
-        ifscCode: 'ICIC0000012',
-        accountHolder: 'Titan Electronics LLP',
-        processedAt: new Date(Date.now() - 86400000 * 1).toISOString(),
-        adminNotes: 'Settled via Corporate Netbanking Batch #401',
-      },
-    },
-    {
-      _id: 'p-demo-3',
-      transactionId: 'TXN-PAYOUT-17920355',
-      type: 'PAYOUT_WITHDRAWAL',
-      amount: 15000,
-      status: 'REJECTED',
-      description: 'Vendor payout request for ₹15000 to bank SBI',
-      createdAt: new Date(Date.now() - 86400000 * 4).toISOString(),
-      vendor: {
-        _id: 'v-3',
-        storeName: 'Apex Luxe Apparel Hub',
-        walletBalance: 15000,
-        gstNumber: '08XYZAB9876C1Z2',
-        panNumber: 'PQRST4321R',
-        user: {
-          name: 'Priya Rathore',
-          email: 'priya.apex@gmail.com',
-          phone: '+91 97722 88441',
-        },
-        bankDetails: {
-          accountHolder: 'Priya Rathore Enterprises',
-          accountNumber: '50100234918231',
-          ifscCode: 'SBIN0004521',
-          bankName: 'State Bank of India',
-        },
-      },
-      payoutDetails: {
-        rejectionReason: 'Invalid beneficiary account number. Bank returned NEFT rejection code AC01.',
-        processedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-        adminNotes: 'Merchant contacted via telephone to correct bank account IFSC.',
-      },
-    },
-  ];
+  // Sub-tab selection: Manual Withdrawals vs Automated Escrow Splits
+  const [activeSubTab, setActiveSubTab] = useState('WITHDRAWALS');
+  const [escrowSplits, setEscrowSplits] = useState([]);
+  const [escrowStats, setEscrowStats] = useState({
+    totalSettlements: 0,
+    platformTotalGross: 0,
+    platformCommissionRevenue: 0,
+    vendorDisbursements: 0,
+  });
+  const [isEscrowLoading, setIsEscrowLoading] = useState(false);
+  const [settlingSubOrderId, setSettlingSubOrderId] = useState(null);
+
+  const fetchEscrowSplits = async () => {
+    setIsEscrowLoading(true);
+    try {
+      const res = await api.get('/payout-splits/admin');
+      if (res.data?.success) {
+        setEscrowSplits(res.data.data || []);
+        if (res.data.platformStats) {
+          setEscrowStats(res.data.platformStats);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load escrow splits:', err?.message);
+    } finally {
+      setIsEscrowLoading(false);
+    }
+  };
+
+  const handleSettleEscrowSplit = async (subOrderId) => {
+    setSettlingSubOrderId(subOrderId);
+    try {
+      const res = await api.post(`/payout-splits/admin/settle/${subOrderId}`, {
+        notes: 'Admin-triggered instant escrow payout settlement.',
+      });
+      if (res.data?.success) {
+        setActionSuccessMessage(`Escrow split for sub-order settled successfully!`);
+        fetchEscrowSplits();
+      } else {
+        setActionErrorMessage(res.data?.message || 'Settlement failed');
+      }
+    } catch (err) {
+      setActionErrorMessage(err.response?.data?.message || err.message || 'Settlement error');
+    } finally {
+      setSettlingSubOrderId(null);
+    }
+  };
 
   const fetchPayouts = async () => {
     setIsLoading(true);
@@ -180,29 +121,22 @@ export default function VendorPayoutManager() {
         if (res.data.stats) {
           setStats(res.data.stats);
         }
-      } else {
-        setPayouts(demoPayoutsFallback);
       }
     } catch (err) {
-      console.warn('Using demo payout fallback data:', err?.message);
-      setPayouts(demoPayoutsFallback);
-      setStats({
-        totalRequests: 3,
-        pendingCount: 1,
-        pendingAmount: 45000,
-        completedCount: 1,
-        completedAmount: 28500,
-        rejectedCount: 1,
-        rejectedAmount: 15000,
-      });
+      const errMsg = err.response?.data?.message || err.message || 'Failed to load payouts';
+      setActionErrorMessage(errMsg);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchPayouts();
-  }, [statusFilter, dateRangeFilter]);
+    if (activeSubTab === 'WITHDRAWALS') {
+      fetchPayouts();
+    } else {
+      fetchEscrowSplits();
+    }
+  }, [activeSubTab, statusFilter, dateRangeFilter]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -244,26 +178,8 @@ export default function VendorPayoutManager() {
         fetchPayouts();
       }
     } catch (err) {
-      // Demo optimistic update
-      setPayouts((prev) =>
-        prev.map((p) =>
-          p._id === selectedPayout._id
-            ? {
-                ...p,
-                status: 'COMPLETED',
-                payoutDetails: {
-                  ...p.payoutDetails,
-                  utrNumber: utrNumber.trim(),
-                  paymentMode,
-                  adminNotes,
-                  processedAt: new Date().toISOString(),
-                },
-              }
-            : p
-        )
-      );
-      setActionSuccessMessage(`Payout #${selectedPayout.transactionId} approved with UTR: ${utrNumber} (Demo State)!`);
-      setIsApproveModalOpen(false);
+      const errMsg = err.response?.data?.message || err.message || 'Failed to approve payout';
+      setActionErrorMessage(errMsg);
     }
   };
 
@@ -287,26 +203,8 @@ export default function VendorPayoutManager() {
         fetchPayouts();
       }
     } catch (err) {
-      setPayouts((prev) =>
-        prev.map((p) =>
-          p._id === selectedPayout._id
-            ? {
-                ...p,
-                status: 'REJECTED',
-                payoutDetails: {
-                  ...p.payoutDetails,
-                  rejectionReason,
-                  adminNotes,
-                  processedAt: new Date().toISOString(),
-                },
-              }
-            : p
-        )
-      );
-      setActionSuccessMessage(
-        `Payout #${selectedPayout.transactionId} rejected and ₹${selectedPayout.amount} refunded (Demo State)!`
-      );
-      setIsRejectModalOpen(false);
+      const errMsg = err.response?.data?.message || err.message || 'Failed to reject payout';
+      setActionErrorMessage(errMsg);
     }
   };
 
@@ -426,8 +324,43 @@ export default function VendorPayoutManager() {
         </div>
       )}
 
-      {/* KPI Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Sub-Tab Navigation Bar */}
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+        <button
+          onClick={() => setActiveSubTab('WITHDRAWALS')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-xs transition-all ${
+            activeSubTab === 'WITHDRAWALS'
+              ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20'
+              : 'bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <Landmark className="w-4 h-4" />
+          <span>Manual Bank Withdrawals</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-900/60 font-mono">
+            {stats.totalRequests || payouts.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('ESCROW_SPLITS')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-xs transition-all ${
+            activeSubTab === 'ESCROW_SPLITS'
+              ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20'
+              : 'bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <Building2 className="w-4 h-4" />
+          <span>Automated Escrow Payout Splits</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono">
+            Point #48 / PayoutSplit
+          </span>
+        </button>
+      </div>
+
+      {activeSubTab === 'WITHDRAWALS' && (
+        <>
+          {/* KPI Stats Grid */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Pending Payouts Card */}
         <div className="bg-slate-900 border border-amber-500/20 bg-amber-500/5 rounded-2xl p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between text-amber-400 text-xs font-semibold">
@@ -721,6 +654,136 @@ export default function VendorPayoutManager() {
           </table>
         </div>
       </div>
+        </>
+      )}
+
+      {/* Sub-Tab 2: Automated Escrow Payout Splits (Point #48 / PayoutSplit) */}
+      {activeSubTab === 'ESCROW_SPLITS' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Escrow KPI Stats */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+              <span className="text-xs font-semibold text-slate-400">Total Settled Batches</span>
+              <div className="text-2xl font-black text-white mt-1">{escrowStats.totalSettlements}</div>
+              <p className="text-[11px] text-slate-500 mt-0.5">Automated sub-order splits</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+              <span className="text-xs font-semibold text-slate-400">Platform Gross Sales</span>
+              <div className="text-2xl font-black text-amber-400 mt-1">₹{(escrowStats.platformTotalGross || 0).toLocaleString('en-IN')}</div>
+              <p className="text-[11px] text-slate-500 mt-0.5">Customer payments processed</p>
+            </div>
+            <div className="bg-slate-900 border border-emerald-500/20 bg-emerald-500/5 rounded-2xl p-4">
+              <span className="text-xs font-semibold text-emerald-400">Platform Commission Cut</span>
+              <div className="text-2xl font-black text-emerald-300 mt-1">₹{(escrowStats.platformCommissionRevenue || 0).toLocaleString('en-IN')}</div>
+              <p className="text-[11px] text-emerald-400/70 mt-0.5">Platform retained revenue</p>
+            </div>
+            <div className="bg-slate-900 border border-purple-500/20 bg-purple-500/5 rounded-2xl p-4">
+              <span className="text-xs font-semibold text-purple-400">Vendor Net Disbursements</span>
+              <div className="text-2xl font-black text-purple-300 mt-1">₹{(escrowStats.vendorDisbursements || 0).toLocaleString('en-IN')}</div>
+              <p className="text-[11px] text-purple-400/70 mt-0.5">Disbursed to merchant wallets</p>
+            </div>
+          </div>
+
+          {/* Escrow Splits Table */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-white text-base">Multi-Party Escrow Splits Ledger</h3>
+                <p className="text-xs text-slate-400">Real-time sub-order escrow release ledger and automated platform commission split.</p>
+              </div>
+              <button
+                onClick={fetchEscrowSplits}
+                disabled={isEscrowLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isEscrowLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead>
+                  <tr className="bg-slate-800/60 border-b border-slate-800 text-slate-400 font-semibold">
+                    <th className="py-3 px-4">Sub-Order ID</th>
+                    <th className="py-3 px-4">Vendor Store</th>
+                    <th className="py-3 px-4">Gross Sale</th>
+                    <th className="py-3 px-4">Commission Cut</th>
+                    <th className="py-3 px-4">Vendor Net</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Settled At</th>
+                    <th className="py-3 px-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {isEscrowLoading ? (
+                    <tr>
+                      <td colSpan="8" className="py-12 text-center text-slate-500">
+                        <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-400" />
+                        Loading escrow splits...
+                      </td>
+                    </tr>
+                  ) : escrowSplits.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="py-12 text-center text-slate-500">
+                        <Building2 className="w-8 h-8 mx-auto mb-2 opacity-40 text-emerald-400" />
+                        No automated escrow payout splits recorded in database yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    escrowSplits.map((split) => (
+                      <tr key={split._id} className="hover:bg-slate-800/40 transition">
+                        <td className="py-3 px-4 font-mono font-bold text-slate-200">
+                          {split.subOrder?.orderNumber || (split.subOrder?._id ? `SUB-${split.subOrder._id.slice(-6)}` : `SPLIT-${split._id.slice(-6)}`)}
+                        </td>
+                        <td className="py-3 px-4 font-bold text-white">
+                          {split.vendor?.storeName || 'Merchant Partner'}
+                        </td>
+                        <td className="py-3 px-4 font-mono font-semibold text-slate-200">
+                          ₹{(split.grossAmount || 0).toLocaleString('en-IN')}
+                        </td>
+                        <td className="py-3 px-4 text-emerald-400 font-mono">
+                          ₹{(split.adminCommission || 0).toLocaleString('en-IN')}
+                          <span className="text-[10px] text-slate-500 ml-1">({split.commissionRatePercent || 10}%)</span>
+                        </td>
+                        <td className="py-3 px-4 font-mono font-bold text-emerald-300">
+                          ₹{(split.vendorNetPayout || 0).toLocaleString('en-IN')}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                            split.status === 'SETTLED'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : split.status === 'RELEASED'
+                              ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          }`}>
+                            {split.status || 'SETTLED'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-[11px] text-slate-400">
+                          {split.settledAt ? new Date(split.settledAt).toLocaleDateString('en-IN') : 'Completed'}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          {split.status !== 'SETTLED' && (split.subOrder?._id || split.subOrder) ? (
+                            <button
+                              onClick={() => handleSettleEscrowSplit(split.subOrder?._id || split.subOrder)}
+                              disabled={settlingSubOrderId === (split.subOrder?._id || split.subOrder)}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-xs transition"
+                            >
+                              {settlingSubOrderId === (split.subOrder?._id || split.subOrder) ? 'Settling...' : 'Release Escrow'}
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-slate-500">Auto-Settled</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Approve Payout Modal */}
       {isApproveModalOpen && selectedPayout && (

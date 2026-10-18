@@ -66,93 +66,6 @@ export default function CategoryTreeManager() {
     isActive: true,
   });
 
-  // Default fallback categories for demo mode
-  const defaultCategories = [
-    {
-      _id: 'cat_electronics',
-      name: 'Electronics & Gadgets',
-      slug: 'electronics',
-      description: 'Smartphones, Audio gear, Laptops and smart wearables',
-      image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
-      icon: 'smartphone',
-      parentCategory: null,
-      isFeatured: true,
-      displayOrder: 1,
-      isActive: true,
-      productCount: 18,
-      subcategories: [
-        {
-          _id: 'sub_smartphones',
-          name: 'Smartphones & Tablets',
-          slug: 'smartphones',
-          description: 'Flagship 5G phones and pro tablets',
-          image: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500',
-          icon: 'smartphone',
-          parentCategory: 'cat_electronics',
-          isFeatured: false,
-          displayOrder: 1,
-          isActive: true,
-          productCount: 8,
-        },
-        {
-          _id: 'sub_audio',
-          name: 'Wireless Audio & Headphones',
-          slug: 'audio',
-          description: 'Noise cancelling over-ear headphones and earbuds',
-          image: 'https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=500',
-          icon: 'headphones',
-          parentCategory: 'cat_electronics',
-          isFeatured: true,
-          displayOrder: 2,
-          isActive: true,
-          productCount: 10,
-        },
-      ],
-    },
-    {
-      _id: 'cat_fashion',
-      name: 'Fashion & Apparel',
-      slug: 'fashion',
-      description: 'Designer streetwear, premium footwear, and accessories',
-      image: 'https://images.unsplash.com/photo-1445205170230-053b83016050?w=500',
-      icon: 'shirt',
-      parentCategory: null,
-      isFeatured: true,
-      displayOrder: 2,
-      isActive: true,
-      productCount: 24,
-      subcategories: [
-        {
-          _id: 'sub_mens_wear',
-          name: 'Men\'s Designer Wear',
-          slug: 'mens-wear',
-          description: 'Jackets, suits, and daily essentials',
-          image: 'https://images.unsplash.com/photo-1617137984095-74e4e5e3613f?w=500',
-          icon: 'shirt',
-          parentCategory: 'cat_fashion',
-          isFeatured: false,
-          displayOrder: 1,
-          isActive: true,
-          productCount: 14,
-        },
-      ],
-    },
-    {
-      _id: 'cat_lifestyle',
-      name: 'Lifestyle & Accessories',
-      slug: 'lifestyle',
-      description: 'Smart watches, travel bags, and daily productivity items',
-      image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
-      icon: 'watch',
-      parentCategory: null,
-      isFeatured: false,
-      displayOrder: 3,
-      isActive: true,
-      productCount: 12,
-      subcategories: [],
-    },
-  ];
-
   const fetchCategories = async () => {
     setLoading(true);
     try {
@@ -161,25 +74,20 @@ export default function CategoryTreeManager() {
         setTree(res.data.data);
         // Also fetch flat categories for parent dropdown
         const flatRes = await api.get('/categories?includeInactive=true');
-        if (flatRes.data?.success) {
+        if (flatRes.data?.success && Array.isArray(flatRes.data.data)) {
           setCategories(flatRes.data.data);
         }
         // Auto-expand all root categories
         const rootIds = new Set(res.data.data.map((c) => c._id));
         setExpandedIds(rootIds);
       } else {
-        throw new Error('Fallback to default');
+        setTree([]);
+        setCategories([]);
       }
-    } catch (_) {
-      // Local fallback for offline / demo mode
-      setTree(defaultCategories);
-      const flatList = [];
-      defaultCategories.forEach((cat) => {
-        flatList.push(cat);
-        (cat.subcategories || []).forEach((sub) => flatList.push(sub));
-      });
-      setCategories(flatList);
-      setExpandedIds(new Set(defaultCategories.map((c) => c._id)));
+    } catch (err) {
+      console.error('Failed to fetch categories:', err?.message);
+      setTree([]);
+      setCategories([]);
     } finally {
       setLoading(false);
     }
@@ -255,44 +163,8 @@ export default function CategoryTreeManager() {
       setIsModalOpen(false);
       fetchCategories();
     } catch (err) {
-      // Local fallback for offline/demo mode
-      const isEdit = Boolean(editingCategory);
-      if (isEdit) {
-        setTree((prev) =>
-          prev.map((root) => {
-            if (root._id === editingCategory._id) {
-              return { ...root, ...formData };
-            }
-            return {
-              ...root,
-              subcategories: (root.subcategories || []).map((sub) =>
-                sub._id === editingCategory._id ? { ...sub, ...formData } : sub
-              ),
-            };
-          })
-        );
-        showMessage('success', `Category updated successfully (Demo mode)!`);
-      } else {
-        const newCat = {
-          _id: `cat_${Date.now()}`,
-          ...formData,
-          productCount: 0,
-          subcategories: [],
-        };
-        if (formData.parentCategory && formData.parentCategory !== 'none') {
-          setTree((prev) =>
-            prev.map((root) =>
-              root._id === formData.parentCategory
-                ? { ...root, subcategories: [...(root.subcategories || []), newCat] }
-                : root
-            )
-          );
-        } else {
-          setTree((prev) => [...prev, newCat]);
-        }
-        showMessage('success', `Category created successfully (Demo mode)!`);
-      }
-      setIsModalOpen(false);
+      const errMsg = err.response?.data?.message || err.message || 'Failed to save category';
+      showMessage('error', errMsg);
     } finally {
       setIsSaving(false);
     }
@@ -312,16 +184,7 @@ export default function CategoryTreeManager() {
       if (err.response?.status === 400 && err.response?.data?.productCount) {
         showMessage('error', `Cannot delete: ${err.response.data.productCount} products belong to this category!`);
       } else {
-        // Fallback for demo mode
-        setTree((prev) =>
-          prev
-            .filter((root) => root._id !== cat._id)
-            .map((root) => ({
-              ...root,
-              subcategories: (root.subcategories || []).filter((sub) => sub._id !== cat._id),
-            }))
-        );
-        showMessage('success', `Category '${cat.name}' deleted (Demo mode)!`);
+        showMessage('error', msg || 'Failed to delete category');
       }
     }
   };

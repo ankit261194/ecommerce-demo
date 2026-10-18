@@ -86,90 +86,8 @@ export const VendorPortal = () => {
     },
   });
 
-  const [products, setProducts] = useState([
-    {
-      id: 'p1',
-      title: 'Aura Pro ANC Wireless Noise-Cancelling Headphones',
-      sku: 'APX-HEAD-001',
-      mrp: 14999,
-      sellingPrice: 8999,
-      stock: 45,
-      lowStockThreshold: 10,
-      category: 'Electronics & Audio',
-      image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
-      thumbnail: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
-      gallery: [
-        'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=500',
-        'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=500',
-        'https://images.unsplash.com/photo-1583394838336-acd977736f90?w=500',
-      ],
-      variantsCount: 3,
-      colorSwatches: ['#0F172A', '#2563EB', '#DC2626'],
-      sizeMatrix: ['S', 'M', 'L'],
-    },
-    {
-      id: 'p2',
-      title: 'AeroWatch S9 Ultra Smartwatch with AMOLED Display',
-      sku: 'APX-WTCH-002',
-      mrp: 9999,
-      sellingPrice: 4499,
-      stock: 3,
-      lowStockThreshold: 5,
-      category: 'Watches & Accessories',
-      image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
-      thumbnail: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
-      gallery: [
-        'https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=500',
-        'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=500',
-      ],
-      variantsCount: 2,
-      colorSwatches: ['#1E293B', '#F59E0B'],
-      sizeMatrix: ['42mm', '46mm'],
-    },
-    {
-      id: 'p3',
-      title: 'AuraStudio True Wireless ANC Earbuds (Demo Out-of-Stock)',
-      sku: 'APX-EAR-003',
-      mrp: 4999,
-      sellingPrice: 2499,
-      stock: 0,
-      lowStockThreshold: 5,
-      category: 'Electronics & Audio',
-      image: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500',
-      thumbnail: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500',
-      gallery: [],
-      variantsCount: 0,
-      colorSwatches: ['#000000'],
-      sizeMatrix: ['Standard'],
-    },
-  ]);
-
-  const [subOrders, setSubOrders] = useState([
-    {
-      id: 'SUB-9821',
-      rawId: null,
-      customerName: 'Aman Sharma',
-      items: [{ title: 'Aura Pro ANC Headphones', qty: 1, price: 8999 }],
-      subTotal: 8999,
-      commissionCut: 719.92,
-      vendorEarning: 8279.08,
-      status: 'confirmed',
-      deliveryOtp: '4821',
-      date: 'Today, 02:40 PM',
-    },
-    {
-      id: 'SUB-7612',
-      rawId: null,
-      customerName: 'Priya Mehta',
-      items: [{ title: 'AeroWatch S9 Ultra', qty: 2, price: 4499 }],
-      subTotal: 8998,
-      commissionCut: 719.84,
-      vendorEarning: 8278.16,
-      status: 'placed',
-      deliveryOtp: '9104',
-      date: 'Today, 11:15 AM',
-    },
-  ]);
+  const [products, setProducts] = useState([]);
+  const [subOrders, setSubOrders] = useState([]);
 
   const [isAddProductDrawerOpen, setIsAddProductDrawerOpen] = useState(false);
   const [isMultiVariantModalOpen, setIsMultiVariantModalOpen] = useState(false);
@@ -259,8 +177,9 @@ export const VendorPortal = () => {
         }));
       }
 
-      if (prodRes.status === 'fulfilled' && prodRes.value.data?.data?.length > 0) {
-        const pList = prodRes.value.data.data.map(p => ({
+      if (prodRes.status === 'fulfilled') {
+        const rawProducts = Array.isArray(prodRes.value.data?.data) ? prodRes.value.data.data : [];
+        const pList = rawProducts.map(p => ({
           id: p._id,
           title: p.title,
           sku: p.sku,
@@ -279,8 +198,9 @@ export const VendorPortal = () => {
         setProducts(pList);
       }
 
-      if (ordRes.status === 'fulfilled' && ordRes.value.data?.data?.length > 0) {
-        const oList = ordRes.value.data.data.map(so => ({
+      if (ordRes.status === 'fulfilled') {
+        const rawOrders = Array.isArray(ordRes.value.data?.data) ? ordRes.value.data.data : [];
+        const oList = rawOrders.map(so => ({
           id: `SUB-${so._id.toString().slice(-4)}`,
           rawId: so._id,
           customerName: so.customer?.name || 'Customer',
@@ -294,7 +214,9 @@ export const VendorPortal = () => {
         }));
         setSubOrders(oList);
       }
-    } catch (_) {}
+    } catch (err) {
+      console.error('Failed to fetch vendor dashboard data:', err?.message);
+    }
   };
 
   useEffect(() => {
@@ -324,22 +246,23 @@ export const VendorPortal = () => {
   // Handle Order Status Stepper
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     const target = subOrders.find(o => o.id === orderId);
-    setSubOrders(prev =>
-      prev.map(o => (o.id === orderId ? { ...o, status: newStatus } : o))
-    );
-    setNotification(`Sub-order ${orderId} marked as ${newStatus.toUpperCase()}`);
+    if (!target?.rawId) {
+      setNotification(`Cannot update sub-order without valid database ID`);
+      return;
+    }
 
-    if (target?.rawId) {
-      try {
-        await api.put(`/vendor/orders/${target.rawId}/status`, { status: newStatus });
-      } catch (err) {
-        if (err.response?.data?.message) {
-          setNotification(`Error: ${err.response.data.message}`);
-          setSubOrders(prev =>
-            prev.map(o => (o.id === orderId ? { ...o, status: target.status } : o))
-          );
-        }
+    try {
+      const res = await api.put(`/vendor/orders/${target.rawId}/status`, { status: newStatus });
+      if (res.data?.success) {
+        setSubOrders(prev =>
+          prev.map(o => (o.id === orderId ? { ...o, status: newStatus } : o))
+        );
+        setNotification(`Sub-order ${orderId} marked as ${newStatus.toUpperCase()}`);
+        fetchVendorData();
       }
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to update order status';
+      setNotification(`Error: ${msg}`);
     }
   };
 

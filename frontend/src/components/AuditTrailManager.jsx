@@ -94,44 +94,8 @@ export default function AuditTrailManager() {
         setStats(statsRes.data.stats);
       }
     } catch (err) {
-      console.warn('Audit logs API error, using baseline fallback:', err.message);
-      // Fallback baseline for demo mode
-      setLogs([
-        {
-          _id: 'audit-001',
-          action: 'TOGGLE_MAINTENANCE',
-          module: 'SECURITY',
-          userName: 'Super Admin',
-          userEmail: 'admin@auramarket.com',
-          userRole: 'superadmin',
-          description: 'Site Maintenance Mode toggled to: DEACTIVATED (Storefront Live)',
-          changeSummary: 'Status changed: true -> false',
-          previousValue: { enabled: true, title: 'Scheduled Cloud Infrastructure Upgrade' },
-          newValue: { enabled: false, title: 'Scheduled Cloud Infrastructure Upgrade' },
-          ipAddress: '127.0.0.1',
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/128.0',
-          severity: 'CRITICAL',
-          status: 'SUCCESS',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          _id: 'audit-002',
-          action: 'UPDATE_GLOBAL_SETTINGS',
-          module: 'SETTINGS',
-          userName: 'Super Admin',
-          userEmail: 'admin@auramarket.com',
-          userRole: 'superadmin',
-          description: "Updated platform branding to 'AuraMarket Prime Enterprise'",
-          changeSummary: 'Store branding updated',
-          previousValue: { storeName: 'AuraMarket' },
-          newValue: { storeName: 'AuraMarket Prime Enterprise' },
-          ipAddress: '127.0.0.1',
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-          severity: 'HIGH',
-          status: 'SUCCESS',
-          createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-        },
-      ]);
+      console.error('Audit logs API error:', err.message);
+      setLogs([]);
     } finally {
       setIsLoading(false);
     }

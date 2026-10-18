@@ -146,30 +146,23 @@ const CourierOtpVerificationModal = ({ task, onClose, onSuccess }) => {
     setErrorMessage('');
 
     try {
-      if (task.rawId) {
-        const res = await api.post(`/delivery/tasks/${task.rawId}/verify-otp`, {
-          otp: fullOtp,
-          amountCollected: task.isCod ? task.amountToCollect : 0,
-        });
-
-        if (res.data?.success) {
-          setIsSuccess(true);
-          setTimeout(() => {
-            onSuccess(task.id, task.amountToCollect);
-          }, 1200);
-          return;
-        }
+      if (!task.rawId) {
+        triggerShake('Task ID missing. Please refresh your tasks.');
+        return;
       }
 
-      // Standalone / Demo Simulation Fallback
-      const expected = task.expectedOtp || '4821';
-      if (fullOtp === expected) {
+      const res = await api.post(`/delivery/tasks/${task.rawId}/verify-otp`, {
+        otp: fullOtp,
+        amountCollected: task.isCod ? task.amountToCollect : 0,
+      });
+
+      if (res.data?.success) {
         setIsSuccess(true);
         setTimeout(() => {
           onSuccess(task.id, task.amountToCollect);
         }, 1200);
       } else {
-        triggerShake(`Invalid OTP! Ask ${task.customer.name} for the 4-digit code shown on their order screen.`);
+        triggerShake(res.data?.message || 'OTP verification failed. Please check with customer.');
       }
     } catch (err) {
       triggerShake(err.response?.data?.message || 'Invalid delivery OTP! Please verify with customer.');
@@ -192,12 +185,12 @@ const CourierOtpVerificationModal = ({ task, onClose, onSuccess }) => {
     setErrorMessage('');
 
     try {
-      if (task.rawId) {
-        const res = await api.post(`/delivery/tasks/${task.rawId}/resend-otp`);
-        setResendSuccess(res.data?.message || 'OTP resent via SMS & Email to customer!');
-      } else {
-        setResendSuccess(`OTP (${task.expectedOtp || '4821'}) resent to ${task.customer.phone} via SMS.`);
+      if (!task.rawId) {
+        setErrorMessage('Task ID missing. Please refresh your tasks.');
+        return;
       }
+      const res = await api.post(`/delivery/tasks/${task.rawId}/resend-otp`);
+      setResendSuccess(res.data?.message || 'OTP resent via SMS & Email to customer!');
       setResendCooldown(30);
     } catch (err) {
       setErrorMessage(err.response?.data?.message || 'Failed to resend OTP. Please try again.');

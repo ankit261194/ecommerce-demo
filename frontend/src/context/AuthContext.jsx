@@ -75,28 +75,61 @@ export const AuthProvider = ({ children }) => {
     }
   }, [user, token]);
 
-  const switchPersona = async roleKey => {
-    const persona = DEMO_PERSONAS[roleKey] || DEMO_PERSONAS.customer;
-    setUser(persona);
-    setToken(persona.token);
-    setActiveRole(persona.role);
+  // Synchronize on mount if stored token is missing or a mock placeholder
+  useEffect(() => {
+    const savedToken = localStorage.getItem('auramarket_token');
+    if (!savedToken || savedToken.startsWith('mock_jwt_')) {
+      const targetRole = activeRole || user?.role || 'superadmin';
+      const creds = DEMO_CREDENTIALS[targetRole] || DEMO_CREDENTIALS.superadmin;
+      api.post('/auth/login', creds)
+        .then(res => {
+          if (res.data?.success && res.data?.token) {
+            const liveUser = {
+              ...res.data.user,
+              vendorProfile: res.data.vendorProfile,
+            };
+            setUser(liveUser);
+            setToken(res.data.token);
+            setActiveRole(liveUser.role);
+            localStorage.setItem('auramarket_user', JSON.stringify(liveUser));
+            localStorage.setItem('auramarket_token', res.data.token);
+          }
+        })
+        .catch(err => {
+          console.warn('Initial live token synchronization failed:', err?.message);
+        });
+    }
+  }, []);
 
-    // Asynchronously synchronize with backend to obtain live JWT if backend is reachable
+  const switchPersona = async roleKey => {
+    // Attempt authentic login with real backend credentials
     const credentials = DEMO_CREDENTIALS[roleKey];
     if (credentials) {
       try {
         const res = await api.post('/auth/login', credentials);
         if (res.data?.success && res.data?.token) {
-          setUser({
+          const liveUser = {
             ...res.data.user,
             vendorProfile: res.data.vendorProfile,
-          });
+          };
+          setUser(liveUser);
           setToken(res.data.token);
+          setActiveRole(liveUser.role);
+          localStorage.setItem('auramarket_user', JSON.stringify(liveUser));
+          localStorage.setItem('auramarket_token', res.data.token);
+          return;
         }
       } catch (err) {
-        // Backend offline or local demo fallback
+        console.warn('Backend live persona switch failed:', err?.message);
       }
     }
+
+    const persona = DEMO_PERSONAS[roleKey] || DEMO_PERSONAS.customer;
+    setUser(persona);
+    setToken(persona.token);
+    setActiveRole(persona.role);
+    localStorage.setItem('auramarket_user', JSON.stringify(persona));
+    localStorage.setItem('auramarket_token', persona.token);
   };
 
   const login = async (email, password) => {

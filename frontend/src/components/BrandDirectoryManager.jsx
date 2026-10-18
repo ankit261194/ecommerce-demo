@@ -37,81 +37,6 @@ export default function BrandDirectoryManager() {
     displayOrder: 0,
   });
 
-  const defaultBrands = [
-    {
-      _id: 'br_apple',
-      name: 'Apple',
-      slug: 'apple',
-      logo: 'https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=300',
-      description: 'Pioneering smartphones, laptops, smartwatches, and premium audio gear.',
-      website: 'https://apple.com',
-      isFeatured: true,
-      isActive: true,
-      displayOrder: 1,
-      productCount: 14,
-    },
-    {
-      _id: 'br_sony',
-      name: 'Sony',
-      slug: 'sony',
-      logo: 'https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=300',
-      description: 'Industry-leading noise cancelling audio, pro cameras, and gaming displays.',
-      website: 'https://sony.com',
-      isFeatured: true,
-      isActive: true,
-      displayOrder: 2,
-      productCount: 9,
-    },
-    {
-      _id: 'br_nike',
-      name: 'Nike',
-      slug: 'nike',
-      logo: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300',
-      description: 'High-performance athletic footwear, running gear, and modern sportswear.',
-      website: 'https://nike.com',
-      isFeatured: true,
-      isActive: true,
-      displayOrder: 3,
-      productCount: 18,
-    },
-    {
-      _id: 'br_samsung',
-      name: 'Samsung',
-      slug: 'samsung',
-      logo: 'https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=300',
-      description: 'Next-generation OLED displays, Galaxy smartphones, and smart home tech.',
-      website: 'https://samsung.com',
-      isFeatured: false,
-      isActive: true,
-      displayOrder: 4,
-      productCount: 11,
-    },
-    {
-      _id: 'br_zara',
-      name: 'Zara',
-      slug: 'zara',
-      logo: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=300',
-      description: 'Contemporary European fashion, streetwear jackets, and luxury apparel.',
-      website: 'https://zara.com',
-      isFeatured: false,
-      isActive: true,
-      displayOrder: 5,
-      productCount: 8,
-    },
-    {
-      _id: 'br_bose',
-      name: 'Bose',
-      slug: 'bose',
-      logo: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300',
-      description: 'Acoustic noise cancelling headphones, soundbars, and spatial audio systems.',
-      website: 'https://bose.com',
-      isFeatured: true,
-      isActive: true,
-      displayOrder: 6,
-      productCount: 6,
-    },
-  ];
-
   const fetchBrands = async () => {
     setLoading(true);
     try {
@@ -119,10 +44,11 @@ export default function BrandDirectoryManager() {
       if (res.data?.success && Array.isArray(res.data.data)) {
         setBrands(res.data.data);
       } else {
-        throw new Error('Fallback to default');
+        setBrands([]);
       }
-    } catch (_) {
-      setBrands(defaultBrands);
+    } catch (err) {
+      console.error('Failed to fetch brands:', err?.message);
+      setBrands([]);
     } finally {
       setLoading(false);
     }
@@ -178,22 +104,8 @@ export default function BrandDirectoryManager() {
       setIsModalOpen(false);
       fetchBrands();
     } catch (err) {
-      // Local fallback for offline/demo mode
-      if (editingBrand) {
-        setBrands((prev) =>
-          prev.map((b) => (b._id === editingBrand._id ? { ...b, ...formData } : b))
-        );
-        showMessage('success', `Brand updated successfully (Demo mode)!`);
-      } else {
-        const newBrand = {
-          _id: `br_${Date.now()}`,
-          ...formData,
-          productCount: 0,
-        };
-        setBrands((prev) => [...prev, newBrand]);
-        showMessage('success', `Brand '${formData.name}' created (Demo mode)!`);
-      }
-      setIsModalOpen(false);
+      const errMsg = err.response?.data?.message || err.message || 'Failed to save brand';
+      showMessage('error', errMsg);
     } finally {
       setIsSaving(false);
     }
@@ -212,8 +124,8 @@ export default function BrandDirectoryManager() {
       if (err.response?.status === 400 && err.response?.data?.productCount) {
         showMessage('error', `Cannot delete: ${err.response.data.productCount} products are linked to ${b.name}!`);
       } else {
-        setBrands((prev) => prev.filter((item) => item._id !== b._id));
-        showMessage('success', `Brand '${b.name}' deleted (Demo mode)!`);
+        const errMsg = err.response?.data?.message || err.message || 'Failed to delete brand';
+        showMessage('error', errMsg);
       }
     }
   };

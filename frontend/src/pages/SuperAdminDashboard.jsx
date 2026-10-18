@@ -353,229 +353,18 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
   // =========================================================================
   // POINT 32: ORDERS MANAGEMENT CENTER STATE & HANDLERS
   // =========================================================================
-  const defaultOrders = [
-    {
-      _id: 'ord_mock_101',
-      orderNumber: 'ORD-2026-901',
-      createdAt: new Date().toISOString(),
-      customer: {
-        _id: 'usr_cust_1',
-        name: 'Rohan Sharma',
-        email: 'rohan.sharma@gmail.com',
-        phone: '+91 98201 92831',
-      },
-      shippingAddress: {
-        fullName: 'Rohan Sharma',
-        phone: '+91 98201 92831',
-        street: 'Flat 402, Sunset Heights, Bandra West',
-        city: 'Mumbai',
-        state: 'Maharashtra',
-        pincode: '400050',
-      },
-      items: [
-        {
-          product: 'prod_001',
-          title: 'AuraSound Apex ANC Headphones',
-          quantity: 1,
-          price: 4999,
-          variantSku: 'AURA-HEAD-BLK-01',
-          variantDetails: { color: 'Midnight Black' },
-          image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300',
-        },
-      ],
-      subOrders: [
-        {
-          _id: 'sub_001',
-          vendor: { _id: 'vnd_001', storeName: 'Apex Tech Hub' },
-          status: 'pending',
-          items: [
-            {
-              product: 'prod_001',
-              title: 'AuraSound Apex ANC Headphones',
-              quantity: 1,
-              price: 4999,
-            },
-          ],
-          vendorPayout: 4599,
-          platformCommission: 400,
-        },
-      ],
-      totalAmount: 4999,
-      discountAmount: 0,
-      paymentMethod: 'RAZORPAY',
-      paymentStatus: 'PAID',
-      status: 'PLACED',
-      deliveryOtp: '4921',
-      deliveryInstructions: 'Ring the doorbell twice and leave with security if unavailable.',
-    },
-    {
-      _id: 'ord_mock_102',
-      orderNumber: 'ORD-2026-884',
-      createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-      customer: {
-        _id: 'usr_cust_2',
-        name: 'Priya Patel',
-        email: 'priya.patel@outlook.com',
-        phone: '+91 98765 43210',
-      },
-      shippingAddress: {
-        fullName: 'Priya Patel',
-        phone: '+91 98765 43210',
-        street: '12-A Civil Lines, Near Raj Mandir Cinema',
-        city: 'Jaipur',
-        state: 'Rajasthan',
-        pincode: '302006',
-      },
-      items: [
-        {
-          product: 'prod_002',
-          title: 'Luxe Italian Leather Handbag',
-          quantity: 1,
-          price: 8999,
-          variantSku: 'VOGUE-BAG-BRN-02',
-          variantDetails: { color: 'Cognac Brown', size: 'Medium' },
-          image: 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=300',
-        },
-        {
-          product: 'prod_003',
-          title: 'PulseFit Pro Fitness Band',
-          quantity: 1,
-          price: 3451,
-          variantSku: 'APEX-FIT-BLU-03',
-          variantDetails: { color: 'Navy Blue' },
-          image: 'https://images.unsplash.com/photo-1575311373937-040b8e1fd5b6?w=300',
-        },
-      ],
-      subOrders: [
-        {
-          _id: 'sub_002a',
-          vendor: { _id: 'vnd_002', storeName: 'Vogue Trends Apparel' },
-          status: 'ready_for_pickup',
-          vendorPayout: 7919,
-          platformCommission: 1080,
-        },
-        {
-          _id: 'sub_002b',
-          vendor: { _id: 'vnd_001', storeName: 'Apex Tech Hub' },
-          status: 'handed_to_courier',
-          vendorPayout: 3175,
-          platformCommission: 276,
-        },
-      ],
-      totalAmount: 12450,
-      discountAmount: 0,
-      paymentMethod: 'UPI',
-      paymentStatus: 'PAID',
-      status: 'IN_PROGRESS',
-      deliveryOtp: '7182',
-      deliveryInstructions: 'Call on reaching gate #3.',
-    },
-    {
-      _id: 'ord_mock_103',
-      orderNumber: 'ORD-2026-872',
-      createdAt: new Date(Date.now() - 3600000 * 28).toISOString(),
-      customer: {
-        _id: 'usr_cust_3',
-        name: 'Amit Verma',
-        email: 'amit.verma@techcorp.in',
-        phone: '+91 99112 23344',
-      },
-      shippingAddress: {
-        fullName: 'Amit Verma',
-        phone: '+91 99112 23344',
-        street: 'H-201 Green Glen Layout, Outer Ring Road, Bellandur',
-        city: 'Bengaluru',
-        state: 'Karnataka',
-        pincode: '560103',
-      },
-      items: [
-        {
-          product: 'prod_004',
-          title: 'Handcrafted Brass Royal Diya Bell',
-          quantity: 1,
-          price: 1899,
-          variantSku: 'KAVERI-BELL-01',
-          variantDetails: { material: 'Antique Brass' },
-          image: 'https://images.unsplash.com/photo-1606760227091-3dd870d97f1d?w=300',
-        },
-      ],
-      subOrders: [
-        {
-          _id: 'sub_003',
-          vendor: { _id: 'vnd_003', storeName: 'Kaveri Handicrafts & Decor' },
-          status: 'delivered',
-          vendorPayout: 1709,
-          platformCommission: 190,
-        },
-      ],
-      totalAmount: 1899,
-      discountAmount: 100,
-      paymentMethod: 'WALLET',
-      paymentStatus: 'PAID',
-      status: 'DELIVERED',
-      deliveryOtp: '3389',
-      deliveryInstructions: '',
-    },
-    {
-      _id: 'ord_mock_104',
-      orderNumber: 'ORD-2026-860',
-      createdAt: new Date(Date.now() - 3600000 * 50).toISOString(),
-      customer: {
-        _id: 'usr_cust_4',
-        name: 'Sunita Nair',
-        email: 'sunita.nair@outlook.com',
-        phone: '+91 94470 12345',
-      },
-      shippingAddress: {
-        fullName: 'Sunita Nair',
-        phone: '+91 94470 12345',
-        street: '45 Marine Drive, Waterfront Promenade',
-        city: 'Kochi',
-        state: 'Kerala',
-        pincode: '682011',
-      },
-      items: [
-        {
-          product: 'prod_005',
-          title: 'Nordic Ceramic Planter Trio',
-          quantity: 1,
-          price: 3499,
-          variantSku: 'KAVERI-PLT-WHT-01',
-          variantDetails: { color: 'Matte White' },
-          image: 'https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=300',
-        },
-      ],
-      subOrders: [
-        {
-          _id: 'sub_004',
-          vendor: { _id: 'vnd_003', storeName: 'Kaveri Handicrafts & Decor' },
-          status: 'cancelled',
-          vendorPayout: 0,
-          platformCommission: 0,
-        },
-      ],
-      totalAmount: 3499,
-      discountAmount: 0,
-      paymentMethod: 'STRIPE',
-      paymentStatus: 'REFUNDED',
-      status: 'CANCELLED',
-      cancellationReason: 'Customer requested cancellation prior to package dispatch',
-      cancelledAt: new Date(Date.now() - 3600000 * 48).toISOString(),
-    },
-  ];
-
-  const [orders, setOrders] = useState(defaultOrders);
+  const [orders, setOrders] = useState([]);
   const [orderStatusFilter, setOrderStatusFilter] = useState('ALL');
   const [orderPaymentStatusFilter, setOrderPaymentStatusFilter] = useState('ALL');
   const [orderPaymentMethodFilter, setOrderPaymentMethodFilter] = useState('ALL');
   const [orderDateRangeFilter, setOrderDateRangeFilter] = useState('ALL');
   const [orderSearchTerm, setOrderSearchTerm] = useState('');
   const [orderStatusCounts, setOrderStatusCounts] = useState({
-    all: 4,
-    placed: 1,
-    in_progress: 1,
-    delivered: 1,
-    cancelled: 1,
+    all: 0,
+    placed: 0,
+    in_progress: 0,
+    delivered: 0,
+    cancelled: 0,
   });
   const [selectedOrderForModal, setSelectedOrderForModal] = useState(null);
   const [selectedInvoiceOrderId, setSelectedInvoiceOrderId] = useState(null);
@@ -606,80 +395,15 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       if (res.data?.success && res.data.data) {
         setCommissionSplitData(res.data.data);
       } else {
-        throw new Error('Fallback to local calculation');
+        throw new Error(res.data?.message || 'Failed to retrieve commission split breakdown');
       }
-    } catch (_) {
-      // Local fallback calculation for demo mode
-      const grossOrderAmount = (order.totalAmount || 0) + (order.discountAmount || 0);
-      const discountAmount = order.discountAmount || 0;
-      const netCustomerPaid = order.totalAmount || 0;
-
-      const vendorSplits = (order.subOrders || []).map((sub, idx) => {
-        const vendorSubtotal =
-          sub.subTotal ||
-          (sub.items || []).reduce((acc, i) => acc + i.price * i.quantity, 0) ||
-          Math.round(order.totalAmount / (order.subOrders.length || 1));
-        const commissionRatePercent = sub.platformCommissionRate || 10;
-        const platformCommissionCut =
-          sub.platformCommissionAmount !== undefined
-            ? sub.platformCommissionAmount
-            : Math.round((vendorSubtotal * commissionRatePercent) / 100);
-        const netVendorPayable =
-          sub.vendorEarning !== undefined ? sub.vendorEarning : vendorSubtotal - platformCommissionCut;
-
-        return {
-          subOrderId: sub._id || `sub_${idx + 1}`,
-          subOrderStatus: sub.status || 'placed',
-          vendorId: sub.vendor?._id || `vnd_${idx + 1}`,
-          storeName: sub.vendor?.storeName || 'Partner Store',
-          storeLogo: sub.vendor?.storeLogo || '',
-          commissionRatePercent,
-          vendorSubtotal,
-          platformCommissionCut,
-          netVendorPayable,
-          items: sub.items || order.items || [],
-          payoutStatus:
-            sub.status === 'delivered'
-              ? 'SETTLED_TO_WALLET'
-              : sub.status === 'cancelled'
-              ? 'CANCELLED_REVERSED'
-              : 'ESCROW_PENDING_DELIVERY',
-          ledgerEntries: [
-            {
-              transactionId: `TXN-${order.orderNumber}-${idx + 1}`,
-              type: 'COMMISSION_DEBIT',
-              amount: platformCommissionCut,
-              balanceAfter: netVendorPayable,
-              status: 'COMPLETED',
-              createdAt: order.createdAt,
-            },
-          ],
-        };
+    } catch (err) {
+      const errMsg = err.response?.data?.message || err.message || 'Failed to load commission split';
+      setActionMessage({
+        type: 'error',
+        text: `❌ ${errMsg}`,
       });
-
-      const totalVendorPayouts = vendorSplits.reduce((sum, s) => sum + s.netVendorPayable, 0);
-      const totalPlatformCommissions = vendorSplits.reduce((sum, s) => sum + s.platformCommissionCut, 0);
-      const reconciliationDelta = Math.abs(totalVendorPayouts + totalPlatformCommissions - grossOrderAmount);
-
-      setCommissionSplitData({
-        orderId: order._id,
-        orderNumber: order.orderNumber,
-        createdAt: order.createdAt,
-        status: order.status,
-        paymentStatus: order.paymentStatus,
-        paymentMethod: order.paymentMethod,
-        customer: order.customer || order.shippingAddress,
-        financials: {
-          grossOrderAmount,
-          discountAmount,
-          netCustomerPaid,
-          totalVendorPayouts,
-          totalPlatformCommissions,
-          reconciliationDelta,
-          isPennyPerfectReconciled: reconciliationDelta <= 1,
-        },
-        vendorSplits,
-      });
+      setTimeout(() => setActionMessage(null), 4000);
     } finally {
       setIsLoadingSplit(false);
     }
@@ -702,15 +426,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
 
       const res = await api.get('/admin/orders', { params });
       if (res.data?.success) {
-        if (Array.isArray(res.data.data) && res.data.data.length > 0) {
-          setOrders(res.data.data);
-        }
+        setOrders(Array.isArray(res.data.data) ? res.data.data : []);
         if (res.data.statusCounts) {
           setOrderStatusCounts(res.data.statusCounts);
         }
       }
-    } catch (_) {
-      // In demo mode or offline, fallback to client-side filtering
+    } catch (err) {
+      console.error('Failed to fetch orders from database:', err?.message);
     }
   };
 
@@ -737,28 +459,12 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
         fetchOrders();
       }
     } catch (err) {
-      setOrders(prev =>
-        prev.map(o => {
-          if (o._id === orderId) {
-            const upd = {
-              ...o,
-              status: newStatus,
-              paymentStatus: newStatus === 'DELIVERED' ? 'PAID' : o.paymentStatus,
-              cancellationReason: newStatus === 'CANCELLED' ? note || 'Cancelled by Admin' : o.cancellationReason,
-            };
-            if (selectedOrderForModal?._id === orderId) {
-              setSelectedOrderForModal(upd);
-            }
-            return upd;
-          }
-          return o;
-        })
-      );
+      const errMsg = err.response?.data?.message || err.message || 'Failed to update order status';
       setActionMessage({
-        type: 'success',
-        text: `✅ Order status updated to ${newStatus} (Demo mode)!`,
+        type: 'error',
+        text: `❌ Error: ${errMsg}`,
       });
-      setTimeout(() => setActionMessage(null), 3500);
+      setTimeout(() => setActionMessage(null), 4000);
     } finally {
       setIsUpdatingStatus(false);
       setStatusChangeTarget(null);
@@ -802,25 +508,13 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
         setSelectedOrderIds([]);
         fetchOrders();
       }
-    } catch (_) {
-      // Local fallback for offline/demo mode
-      setOrders(prev =>
-        prev.map(o =>
-          selectedOrderIds.includes(o._id)
-            ? {
-                ...o,
-                status: newStatus,
-                paymentStatus: newStatus === 'DELIVERED' ? 'PAID' : o.paymentStatus,
-              }
-            : o
-        )
-      );
+    } catch (err) {
+      const errMsg = err.response?.data?.message || err.message || 'Failed to bulk update orders';
       setActionMessage({
-        type: 'success',
-        text: `✅ Successfully updated ${selectedOrderIds.length} orders to ${newStatus} (Demo mode)!`,
+        type: 'error',
+        text: `❌ Error: ${errMsg}`,
       });
-      setTimeout(() => setActionMessage(null), 3500);
-      setSelectedOrderIds([]);
+      setTimeout(() => setActionMessage(null), 4000);
     } finally {
       setIsBulkProcessing(false);
     }
@@ -1067,11 +761,10 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
         text: '🔌 Master Integrations & API credentials saved! Live across Storefront, Checkout & Backend.',
       });
     } catch (err) {
-      // In demo mode without backend, synchronize locally
-      setUiConfig(prev => ({ ...prev, integrations }));
+      const errMsg = err.response?.data?.message || err.message || 'Failed to save integrations';
       setActionMessage({
-        type: 'success',
-        text: '🔌 Master Integrations & API credentials saved! Live across Storefront, Checkout & Backend.',
+        type: 'error',
+        text: `❌ Error: ${errMsg}`,
       });
     } finally {
       setIsProcessing(false);
@@ -1091,10 +784,10 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
         text: '🔍 SEO & Webmaster settings saved successfully! Meta tags, GA4, Sitemaps, and Schema markup updated live.',
       });
     } catch (err) {
-      setUiConfig(prev => ({ ...prev, seo: seoConfig }));
+      const errMsg = err.response?.data?.message || err.message || 'Failed to save SEO settings';
       setActionMessage({
-        type: 'success',
-        text: '🔍 SEO & Webmaster settings saved successfully! (Demo Mode Synchronized)',
+        type: 'error',
+        text: `❌ Error: ${errMsg}`,
       });
     } finally {
       setIsProcessing(false);

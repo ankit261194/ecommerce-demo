@@ -85,6 +85,7 @@ import SubscribeAndSaveModal from '../components/SubscribeAndSaveModal';
 import RiderTipPicker from '../components/RiderTipPicker';
 import { InternationalShippingModal } from '../components/InternationalShippingModal';
 import { CurrencySwitcherModal } from '../components/CurrencySwitcherModal';
+import { PersonalizedRecommendationsShelf } from '../components/PersonalizedRecommendationsShelf';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useLocalization } from '../context/LocalizationContext';
@@ -1840,6 +1841,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         </div>
 
         {/* Flash Sale Frenzy & Deal of the Day with Live Countdown Timer (Point #11) */}
+        {/* Flash Sale Frenzy & Deal of the Day with Live Countdown Timer (Point #11) */}
         <FlashSaleSection
           onSelectProduct={p => setSelectedProduct(p)}
           onAddToCart={deal => {
@@ -1849,6 +1851,11 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
             setTimeout(() => setToastMessage(null), 2500);
           }}
           currency={activeCurrencyConfig?.symbol || "₹"}
+        />
+
+        {/* Point #52: AI-Powered Collaborative Filtering & Personalized Recommendations Shelf */}
+        <PersonalizedRecommendationsShelf
+          onSelectProduct={p => setSelectedProduct(p)}
         />
 
         {/* Category Circular Cards / Filter Pills */}

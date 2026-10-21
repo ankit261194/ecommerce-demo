@@ -78,6 +78,7 @@ const fraudRoutes = require('./routes/fraudRoutes');
 const installRoutes = require('./routes/installRoutes');
 const currencyRoutes = require('./routes/currencyRoutes');
 const internationalShippingRoutes = require('./routes/internationalShippingRoutes');
+const recommendationRoutes = require('./routes/recommendationRoutes');
 
 const app = express();
 
@@ -244,6 +245,8 @@ app.use('/api/install', installRoutes);
 app.use('/api/currency', currencyRoutes);
 app.use('/api/shipping/international', internationalShippingRoutes);
 app.use('/api/admin/shipping/international', internationalShippingRoutes);
+app.use('/api/recommendations', recommendationRoutes);
+app.use('/api/admin/recommendations', recommendationRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

@@ -33079,6 +33079,164 @@ const runTests = async () => {
       const resCust = await fetch(baseUrl + '/currency/admin', {
         headers: { Authorization: `Bearer ${p51CustomerToken}` },
       });
+
+    // =========================================================================
+    // POINT 52: Collaborative Filtering & AI Hybrid Recommendation Engine
+    // =========================================================================
+    let p52ProductId1, p52ProductId2, p52ProductId3;
+
+    await test('Point 52: Setup - Resolve products and multi-item orders for recommendation testing', async () => {
+      const prods = await Product.find({ isPublished: { $ne: false } }).limit(3).lean();
+      assert.ok(prods.length >= 2, 'Need at least 2 products for recommendation testing');
+      p52ProductId1 = prods[0]._id.toString();
+      p52ProductId2 = prods[1]._id.toString();
+      if (!prods[0].sellingPrice && !prods[0].price) {
+        await Product.findByIdAndUpdate(p52ProductId1, { sellingPrice: 2499, mrp: 3999 });
+      }
+      if (!prods[1].sellingPrice && !prods[1].price) {
+        await Product.findByIdAndUpdate(p52ProductId2, { sellingPrice: 999, mrp: 1499 });
+      }
+      if (prods[2]) {
+        p52ProductId3 = prods[2]._id.toString();
+      } else {
+        p52ProductId3 = p52ProductId2;
+      }
+    });
+
+    await test('Point 52: Test 1 - POST /api/recommendations/interaction records user click/view/cart events', async () => {
+      const resView = await fetch(baseUrl + '/recommendations/interaction', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p51CustomerToken}`,
+        },
+        body: JSON.stringify({
+          productId: p52ProductId1,
+          interactionType: 'VIEW',
+          sessionId: 'test_session_p52',
+        }),
+      });
+      assert.strictEqual(resView.status, 201);
+      const viewBody = await resView.json();
+      assert.strictEqual(viewBody.success, true);
+      assert.strictEqual(viewBody.data.interactionType, 'VIEW');
+
+      const resCart = await fetch(baseUrl + '/recommendations/interaction', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p51CustomerToken}`,
+        },
+        body: JSON.stringify({
+          productId: p52ProductId2,
+          interactionType: 'ADD_TO_CART',
+          sessionId: 'test_session_p52',
+        }),
+      });
+      assert.strictEqual(resCart.status, 201);
+      const cartBody = await resCart.json();
+      assert.strictEqual(cartBody.data.weight, 4);
+    });
+
+    await test('Point 52: Test 2 - POST /api/recommendations/interaction validates required fields', async () => {
+      const resInvalid = await fetch(baseUrl + '/recommendations/interaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: 'session_only' }),
+      });
+      assert.strictEqual(resInvalid.status, 400);
+    });
+
+    await test('Point 52: Test 3 - POST /api/admin/recommendations/recompute updates product affinity matrix from orders', async () => {
+      const resRecompute = await fetch(baseUrl + '/admin/recommendations/recompute', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${p51AdminToken}` },
+      });
+      assert.strictEqual(resRecompute.status, 200);
+      const body = await resRecompute.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(typeof body.data.ordersAnalyzed === 'number');
+      assert.ok(typeof body.data.pairsProcessed === 'number');
+      assert.ok(typeof body.data.updatedAffinities === 'number');
+    });
+
+    await test('Point 52: Test 4 - GET /api/recommendations/fbt/:productId returns Frequently Bought Together bundle with discount', async () => {
+      const resFbt = await fetch(`${baseUrl}/recommendations/fbt/${p52ProductId1}?discount=15`);
+      assert.strictEqual(resFbt.status, 200);
+      const body = await resFbt.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.primaryProduct);
+      assert.strictEqual(body.data.primaryProduct._id.toString(), p52ProductId1);
+      assert.strictEqual(body.data.bundleDiscountPercent, 15);
+      assert.ok(body.data.combinedRawPrice > 0);
+      assert.ok(body.data.finalBundlePrice <= body.data.combinedRawPrice);
+    });
+
+    await test('Point 52: Test 5 - GET /api/recommendations/similar/:productId returns catalog items in same category/brand', async () => {
+      const resSimilar = await fetch(`${baseUrl}/recommendations/similar/${p52ProductId1}?limit=4`);
+      assert.strictEqual(resSimilar.status, 200);
+      const body = await resSimilar.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(Array.isArray(body.data));
+    });
+
+    await test('Point 52: Test 6 - GET /api/recommendations/personalized delivers tailored suggestions based on interaction history', async () => {
+      const resPersonalized = await fetch(`${baseUrl}/recommendations/personalized?sessionId=test_session_p52&limit=6`, {
+        headers: { Authorization: `Bearer ${p51CustomerToken}` },
+      });
+      assert.strictEqual(resPersonalized.status, 200);
+      const body = await resPersonalized.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(Array.isArray(body.data));
+    });
+
+    await test('Point 52: Test 7 - Super Admin can view recommendation analytics (views, cart adds, CTR)', async () => {
+      const resAnalytics = await fetch(baseUrl + '/admin/recommendations/analytics', {
+        headers: { Authorization: `Bearer ${p51AdminToken}` },
+      });
+      assert.strictEqual(resAnalytics.status, 200);
+      const body = await resAnalytics.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.viewsCount >= 1);
+      assert.ok(body.data.cartAddsCount >= 1);
+      assert.ok(typeof body.data.recommendationCtrPercent === 'number');
+    });
+
+    await test('Point 52: Test 8 - Super Admin can view and update recommendation engine configuration', async () => {
+      const resGetConfig = await fetch(baseUrl + '/admin/recommendations/config', {
+        headers: { Authorization: `Bearer ${p51AdminToken}` },
+      });
+      assert.strictEqual(resGetConfig.status, 200);
+      const getConfigBody = await resGetConfig.json();
+      assert.strictEqual(getConfigBody.success, true);
+
+      const resUpdateConfig = await fetch(baseUrl + '/admin/recommendations/config', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p51AdminToken}`,
+        },
+        body: JSON.stringify({
+          bundleDiscountPercent: 12.5,
+          maxRecommendationsPerShelf: 12,
+        }),
+      });
+      assert.strictEqual(resUpdateConfig.status, 200);
+      const updateConfigBody = await resUpdateConfig.json();
+      assert.strictEqual(updateConfigBody.data.bundleDiscountPercent, 12.5);
+      assert.strictEqual(updateConfigBody.data.maxRecommendationsPerShelf, 12);
+    });
+
+    await test('Point 52: Test 9 - Role security guardrails (401 unauthenticated, 403 customer access denied to admin recommendation endpoints)', async () => {
+      const resUnauth = await fetch(baseUrl + '/admin/recommendations/recompute', { method: 'POST' });
+      assert.strictEqual(resUnauth.status, 401);
+
+      const resForbidden = await fetch(baseUrl + '/admin/recommendations/recompute', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${p51CustomerToken}` },
+      });
+      assert.strictEqual(resForbidden.status, 403);
+    });
       assert.strictEqual(resCust.status, 403);
     });
 

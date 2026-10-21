@@ -45,6 +45,9 @@ export default defineConfig({
           if (id.includes('LiveStream') || id.includes('VideoShopping')) {
             return 'feature-video-shopping';
           }
+          if (id.includes('RecommendationsShelf') || id.includes('CurrencySwitcherModal') || id.includes('InternationalShippingModal')) {
+            return 'feature-crossborder-recs';
+          }
         },
       },
     },

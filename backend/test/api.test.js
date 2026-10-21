@@ -7045,7 +7045,9 @@ const runTests = async () => {
           headers: { Authorization: 'Bearer mock_jwt_superadmin_token_2026' },
         });
         assert.strictEqual(res.status, 401);
-      } finally {
+        
+
+  } finally {
         process.env.NODE_ENV = origEnv;
         if (origAllow) process.env.ALLOW_DEMO_TOKENS = origAllow;
       }
@@ -32733,6 +32735,120 @@ const runTests = async () => {
         headers: { Authorization: `Bearer ${p50CustomerCleanToken}` },
       });
       assert.strictEqual(resForbidden.status, 403);
+    });
+
+    console.log('\n--- 1-CLICK WEB GUI INSTALLATION WIZARD (/api/install) ---');
+
+    await test('Installer: Test 1 - GET /api/install/status returns platform state and DB connectivity', async () => {
+      const res = await fetch(baseUrl + '/install/status');
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(typeof body.data.isInstalled, 'boolean');
+      assert.strictEqual(body.data.dbConnected, true);
+      assert.ok(body.data.nodeVersion.startsWith('v'));
+    });
+
+    await test('Installer: Test 2 - GET /api/install/check-requirements audits Node version, memory, write perms, and crypto', async () => {
+      const res = await fetch(baseUrl + '/install/check-requirements');
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.allPassed, true);
+      const ids = body.data.checks.map(c => c.id);
+      assert.ok(ids.includes('node_version'));
+      assert.ok(ids.includes('system_memory'));
+      assert.ok(ids.includes('write_permissions'));
+      assert.ok(ids.includes('crypto_engine'));
+    });
+
+    await test('Installer: Test 3 - POST /api/install/test-db validates URI format and tests live connectivity', async () => {
+      const resInvalid = await fetch(baseUrl + '/install/test-db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mongoUri: 'postgres://invalid:5432/db' }),
+      });
+      assert.strictEqual(resInvalid.status, 400);
+
+      const resEmpty = await fetch(baseUrl + '/install/test-db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(resEmpty.status, 400);
+
+      const currentUri = mongoose.connection.client?.s?.url || 'mongodb://127.0.0.1:27017/ecommerce_marketplace';
+      const resValid = await fetch(baseUrl + '/install/test-db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mongoUri: currentUri }),
+      });
+      assert.strictEqual(resValid.status, 200);
+      const validBody = await resValid.json();
+      assert.strictEqual(validBody.success, true);
+      assert.strictEqual(validBody.data.connected, true);
+      assert.ok(validBody.data.latencyMs >= 0);
+    });
+
+    await test('Installer: Test 4 - POST /api/install/setup enforces validation on admin credentials', async () => {
+      const resMissing = await fetch(baseUrl + '/install/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminName: 'Admin', adminEmail: '' }),
+      });
+      assert.strictEqual(resMissing.status, 400);
+
+      const resShortPass = await fetch(baseUrl + '/install/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminName: 'Admin', adminEmail: 'admin@test.com', adminPassword: '123' }),
+      });
+      assert.strictEqual(resShortPass.status, 400);
+    });
+
+    await test('Installer: Test 5 - POST /api/install/setup executes setup, creates lock, and locks subsequent attempts', async () => {
+      const fsMod = require('fs');
+      const pathMod = require('path');
+      const lockPath = pathMod.join(__dirname, '../INSTALLED.lock');
+      if (fsMod.existsSync(lockPath)) fsMod.unlinkSync(lockPath);
+
+      const resSetup = await fetch(baseUrl + '/install/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminName: 'Setup Wizard Admin',
+          adminEmail: 'installer.admin@auramarket.com',
+          adminPassword: 'EnterprisePassword2026!',
+          adminPhone: '9876543299',
+          platformName: 'AuraMarket Suite',
+          defaultCurrency: 'INR',
+          seedMode: 'clean',
+        }),
+      });
+      assert.strictEqual(resSetup.status, 200);
+      const setupBody = await resSetup.json();
+      assert.strictEqual(setupBody.success, true);
+      assert.strictEqual(setupBody.data.adminEmail, 'installer.admin@auramarket.com');
+      assert.ok(fsMod.existsSync(lockPath));
+
+      const resLocked = await fetch(baseUrl + '/install/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminName: 'Intruder',
+          adminEmail: 'intruder@auramarket.com',
+          adminPassword: 'IntruderPassword2026!',
+        }),
+      });
+      assert.strictEqual(resLocked.status, 403);
+
+      const resUnlock = await fetch(baseUrl + '/install/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secretKey: 'auramarket_enterprise_master_key_2026' }),
+      });
+      assert.strictEqual(resUnlock.status, 200);
+      assert.ok(!fsMod.existsSync(lockPath));
     });
 
   } finally {

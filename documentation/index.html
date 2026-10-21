@@ -684,6 +684,7 @@
         <a href="#overview" class="nav-link active">📖 1. Overview & Architecture</a>
         <a href="#requirements" class="nav-link">⚙️ 2. System Requirements</a>
         <a href="#credentials" class="nav-link">🔑 3. Demo Credentials</a>
+        <a href="#web-installer" class="nav-link" style="color: #d97706; font-weight: 800;">⚡ 3b. 1-Click Web Installer (/install)</a>
 
         <div class="nav-section-title">Local Development</div>
         <a href="#backend-setup" class="nav-link">🖥️ 4. Backend (Node.js/Mongo)</a>
@@ -853,6 +854,141 @@
             </tbody>
           </table>
         </div>
+      </section>
+
+      <!-- 3b. 1-Click Web GUI Installation Wizard -->
+      <section id="web-installer" class="doc-section">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
+          <h2 class="section-title" style="margin-bottom: 0;">⚡ 3b. 1-Click Interactive Web GUI Setup Wizard</h2>
+          <span class="badge-pill" style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a;">🌟 Recommended for Beginners & cPanel</span>
+        </div>
+        <p class="section-subtitle">Zero terminal commands or command-line experience required. Set up your multi-vendor marketplace in under 60 seconds directly in your web browser.</p>
+
+        <div class="callout callout-success">
+          <strong>⚡ Direct Installer Access:</strong> Simply navigate to <code>https://yourdomain.com/install</code> (or click <strong>Web Installer (/install)</strong> on the demo toolbar / showcase hub). The system will automatically detect uninstalled status and launch the interactive 5-step installer wizard.
+        </div>
+
+        <!-- MOCKUP: Web Setup Wizard Interface -->
+        <div class="mockup-window">
+          <div class="mockup-header-bar mockup-header-dark">
+            <div class="mockup-dots">
+              <span class="mockup-dot dot-red"></span>
+              <span class="mockup-dot dot-yellow"></span>
+              <span class="mockup-dot dot-green"></span>
+            </div>
+            <div class="mockup-title">https://yourdomain.com/install — AuraMarket Web Installer v2.5</div>
+            <span class="mockup-badge badge-admin">Zero-Code GUI</span>
+          </div>
+          <div style="padding: 24px; background: #0b1329; color: #f8fafc;">
+            <!-- Stepper Bar -->
+            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 24px; text-align: center;">
+              <div style="padding: 8px; background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; border-radius: 8px; color: #34d399; font-weight: 700; font-size: 0.76rem;">✓ 1. License</div>
+              <div style="padding: 8px; background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; border-radius: 8px; color: #34d399; font-weight: 700; font-size: 0.76rem;">✓ 2. Server Audit</div>
+              <div style="padding: 8px; background: rgba(245, 158, 11, 0.2); border: 1px solid #f59e0b; border-radius: 8px; color: #fbbf24; font-weight: 800; font-size: 0.76rem;">3. Database</div>
+              <div style="padding: 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #94a3b8; font-size: 0.76rem;">4. Admin & Store</div>
+              <div style="padding: 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #94a3b8; font-size: 0.76rem;">5. Launch</div>
+            </div>
+
+            <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px;">
+              <div style="font-size: 0.88rem; font-weight: 700; color: #f59e0b; margin-bottom: 6px;">STEP 3: MONGODB DATABASE CONNECTIVITY</div>
+              <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 16px;">Works seamlessly with MongoDB Atlas, local MongoDB, or cPanel Node.js deployments.</p>
+              
+              <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+                <input type="text" readonly value="mongodb://127.0.0.1:27017/ecommerce_marketplace" style="flex: 1; background: #020617; border: 1px solid #334155; border-radius: 8px; padding: 8px 12px; color: #38bdf8; font-family: monospace; font-size: 0.78rem;" />
+                <button type="button" style="background: #1e293b; color: #f8fafc; border: 1px solid #475569; border-radius: 8px; padding: 8px 14px; font-weight: 700; font-size: 0.78rem; cursor: pointer;">⚡ Test Connection</button>
+              </div>
+
+              <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 8px; padding: 10px 14px; font-size: 0.78rem; color: #6ee7b7; display: flex; align-items: center; gap: 8px;">
+                <span>✅ Connected to MongoDB cluster in 8ms (MongoDB v7.0.5 Engine Ready)!</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <h3>The 5-Step Guided Walkthrough (कदम-दर-कदम गाइड)</h3>
+
+        <div class="bilingual-grid">
+          <div class="bilingual-card bilingual-en">
+            <div class="lang-flag lang-flag-en">🇬🇧 English Installation Steps</div>
+            <ol>
+              <li><strong>Step 1: License & Welcome:</strong> Review and accept the Envato / CodeCanyon standard or extended commercial license terms.</li>
+              <li><strong>Step 2: Server Audit:</strong> Automated health verification checks Node.js engine (v18.0+), system RAM (>= 256MB free), directory write permissions (<code>.env</code> and <code>uploads/</code>), and OpenSSL cryptography capabilities.</li>
+              <li><strong>Step 3: Database Configuration:</strong> Provide your MongoDB connection string (e.g., MongoDB Atlas <code>mongodb+srv://...</code> or local <code>mongodb://127.0.0.1:27017/dbname</code>). Click <em>"Test Database Connection"</em> to measure ping latency and verify cluster credentials in real-time.</li>
+              <li><strong>Step 4: Super Admin & Store Profile:</strong> Set up your platform owner credentials (Legal Name, Admin Email, Password, Mobile), default currency (INR ₹, USD $, EUR €, GBP £, AED, SAR), and choose between:
+                <ul>
+                  <li><strong>Full Showroom Demo Data (Recommended):</strong> Populates 30+ products, 3 verified merchant stores, delivery riders, coupons, and flash deals.</li>
+                  <li><strong>Clean Production Install:</strong> Clean empty product catalog and vendor registries ready for brand-new live store launch.</li>
+                </ul>
+              </li>
+              <li><strong>Step 5: 1-Click Launch:</strong> System writes the configuration, establishes database indexes, hashes admin credentials, and engages the <code>INSTALLED.lock</code> security seal.</li>
+            </ol>
+          </div>
+
+          <div class="bilingual-card bilingual-hi">
+            <div class="lang-flag lang-flag-hi">🇮🇳 हिंदी सेटअप निर्देश</div>
+            <ol>
+              <li><strong>कदम 1: लाइसेंस स्वीकृति:</strong> कोडकैनियन (Envato) लाइसेंस नियमों को देखकर सहमति टिक करें।</li>
+              <li><strong>कदम 2: सर्वर परीक्षण:</strong> सिस्टम स्वचालित रूप से Node.js वर्शन (v18+), रैम मेमोरी, फाइल राइट परमिशन्स, और क्रिप्टोग्राफिक इंजन की जांच करता है। सब हरा होने पर आगे बढ़ें।</li>
+              <li><strong>कदम 3: डेटाबेस कनेक्टिविटी:</strong> अपना MongoDB URI डालें और <em>"Test Database Connection"</em> बटन दबाएं। यदि कनेक्शन सफल होता है, तो स्क्रीन पर रिस्पॉन्स टाइम (उदा. 8ms) और वर्शन दिखाई देगा।</li>
+              <li><strong>कदम 4: सुपर एडमिन व स्टोर विवरण:</strong> अपना नाम, ईमेल, 8 अक्षरों का पासवर्ड, फोन नंबर व डिफॉल्ट करेंसी चुनें। आप <strong>"Showroom Demo Data"</strong> चुनकर 30+ डेमो प्रोडक्ट्स व वेंडर्स के साथ शुरू कर सकते हैं, या <strong>"Clean Production"</strong> चुनकर खाली डेटाबेस के साथ शुरू कर सकते हैं।</li>
+              <li><strong>कदम 5: 1-क्लिक फाइनल इंस्टॉलेशन:</strong> इंस्टॉलेशन बटन दबाते ही सिस्टम एडमिन अकाउंट बनाकर <code>INSTALLED.lock</code> फाइल लॉक कर देता है। इसके बाद सीधे सुपर एडमिन या स्टोरफ्रंट पर जाएं!</li>
+            </ol>
+          </div>
+        </div>
+
+        <h3>cPanel Node.js Application Deployment (cPanel गाइड)</h3>
+        <p>If you are deploying on shared hosting or VPS using cPanel, follow these 4 simple steps in your cPanel dashboard:</p>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>cPanel Setting Field</th>
+                <th>Recommended Value</th>
+                <th>Purpose / Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Node.js Version</strong></td>
+                <td><code>20.x</code> or <code>18.x</code></td>
+                <td>Latest LTS Node.js runtime engine</td>
+              </tr>
+              <tr>
+                <td><strong>Application Mode</strong></td>
+                <td><code>Production</code></td>
+                <td>Optimized production performance</td>
+              </tr>
+              <tr>
+                <td><strong>Application Root</strong></td>
+                <td><code>ecommerce-marketplace/backend</code></td>
+                <td>Folder where <code>package.json</code> lives</td>
+              </tr>
+              <tr>
+                <td><strong>Application Startup File</strong></td>
+                <td><code>src/server.js</code></td>
+                <td>Primary entrypoint file for the API Gateway</td>
+              </tr>
+              <tr>
+                <td><strong>Application URL</strong></td>
+                <td><code>yourdomain.com/api</code> <em>(or subdomain)</em></td>
+                <td>Route where backend API endpoints will resolve</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Security & Re-installation Lock (INSTALLED.lock)</h3>
+        <p>To prevent malicious third parties from overwriting your live database or resetting your Super Administrator account, the installer permanently locks itself after completion by creating <code>backend/INSTALLED.lock</code>.</p>
+        <ul>
+          <li><strong>Subsequent visits to <code>/install</code>:</strong> The wizard renders a secure <em>"System Locked for Production"</em> status card displaying active platform version, timestamp, and direct links to the admin portal.</li>
+          <li><strong>How to Unlock / Reinstall:</strong>
+            <ul>
+              <li><strong>Method A (Web GUI):</strong> Expand the <em>"Need to re-run setup?"</em> box on the lock screen and input your master secret key (defined in <code>INSTALL_OVERRIDE_SECRET</code>).</li>
+              <li><strong>Method B (File Manager / Terminal):</strong> Delete the file <code>backend/INSTALLED.lock</code> via cPanel File Manager or terminal (<code>rm backend/INSTALLED.lock</code>).</li>
+            </ul>
+          </li>
+        </ul>
       </section>
 
       <!-- 4. Backend Setup -->

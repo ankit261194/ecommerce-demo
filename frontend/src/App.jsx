@@ -1,25 +1,50 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider, useCart } from './context/CartContext';
 import { LocalizationProvider } from './context/LocalizationContext';
 import { Navbar } from './components/Navbar';
 import { DemoToolbar } from './components/DemoToolbar';
-import { DemoHub } from './components/DemoHub';
 import { DocumentationModal } from './components/DocumentationModal';
-import { CustomerStorefront } from './pages/CustomerStorefront';
-import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
-import { VendorPortal } from './pages/VendorPortal';
-import { CourierDashboard } from './pages/CourierDashboard';
 import { CmsPolicyViewerModal } from './components/CmsPolicyViewerModal';
 import { FaqSection } from './components/FaqSection';
 import { ExitIntentCartModal } from './components/ExitIntentCartModal';
-import { ShoppingBag, Flame, Layers, LayoutGrid, MessageCircle, Phone, BookOpen, ChevronUp } from 'lucide-react';
+import { ShoppingBag, Flame, Layers, LayoutGrid, MessageCircle, Phone, BookOpen, ChevronUp, RefreshCw } from 'lucide-react';
 import api from './api/client';
+
+// Optimized Lazy-Loaded Portals & Dashboards for Lighthouse 90+ Score
+const DemoHub = lazy(() => import('./components/DemoHub').then(m => ({ default: m.DemoHub })));
+const CustomerStorefront = lazy(() => import('./pages/CustomerStorefront').then(m => ({ default: m.CustomerStorefront })));
+const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard').then(m => ({ default: m.SuperAdminDashboard })));
+const VendorPortal = lazy(() => import('./pages/VendorPortal').then(m => ({ default: m.VendorPortal })));
+const CourierDashboard = lazy(() => import('./pages/CourierDashboard').then(m => ({ default: m.CourierDashboard })));
+const InstallWizard = lazy(() => import('./components/InstallWizard').then(m => ({ default: m.InstallWizard })));
+
+const PortalLoadingSkeleton = ({ label = 'Loading AuraMarket Portal...' }) => (
+  <div className="min-h-[500px] flex flex-col items-center justify-center p-8 text-center space-y-4">
+    <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center animate-spin">
+      <RefreshCw className="w-6 h-6 animate-spin text-amber-500" />
+    </div>
+    <div className="space-y-1">
+      <p className="text-sm font-black text-slate-800 tracking-tight">{label}</p>
+      <p className="text-xs text-slate-400">Streaming optimized portal module...</p>
+    </div>
+  </div>
+);
 
 const MainLayout = () => {
   // 'hub' | 'customer' | 'superadmin' | 'vendor' | 'courier'
   const [activeTab, setActiveTab] = useState('hub');
   const [deviceMode, setDeviceMode] = useState('desktop'); // 'desktop' | 'tablet' | 'mobile'
+
+  // Detect direct /install navigation or URL hash
+  useEffect(() => {
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
+    const search = window.location.search.toLowerCase();
+    if (path.includes('install') || hash.includes('install') || search.includes('tab=install')) {
+      setActiveTab('install');
+    }
+  }, []);
   const [isBarCollapsed, setIsBarCollapsed] = useState(false);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [activePolicySlug, setActivePolicySlug] = useState(null);
@@ -345,7 +370,9 @@ const MainLayout = () => {
   const handleSelectPortalFromHub = (portalId, mode = 'desktop') => {
     setActiveTab(portalId);
     setDeviceMode(mode);
-    switchPersona(portalId === 'courier' ? 'delivery' : portalId);
+    if (portalId !== 'install') {
+      switchPersona(portalId === 'courier' ? 'delivery' : portalId);
+    }
   };
 
   // Render Inner Content of the Active Portal
@@ -361,16 +388,31 @@ const MainLayout = () => {
         isMobileMode={isMobile}
       />
 
-      {/* Main Panel Content Area */}
+      {/* Main Panel Content Area with Dynamic Suspense Code-Splitting */}
       <main className="flex-1">
-        {activeTab === 'customer' && (
-          <CustomerStorefront searchQuery={searchQuery} uiConfig={uiConfig} />
-        )}
-        {activeTab === 'superadmin' && (
-          <SuperAdminDashboard uiConfig={uiConfig} setUiConfig={setUiConfig} />
-        )}
-        {activeTab === 'vendor' && <VendorPortal />}
-        {activeTab === 'courier' && <CourierDashboard />}
+        <Suspense fallback={<PortalLoadingSkeleton label={`Loading ${activeTab}...`} />}>
+          {activeTab === 'customer' && (
+            <CustomerStorefront searchQuery={searchQuery} uiConfig={uiConfig} />
+          )}
+          {activeTab === 'superadmin' && (
+            <SuperAdminDashboard uiConfig={uiConfig} setUiConfig={setUiConfig} />
+          )}
+          {activeTab === 'vendor' && <VendorPortal />}
+          {activeTab === 'courier' && <CourierDashboard />}
+          {activeTab === 'install' && (
+            <InstallWizard
+              onGoToStore={() => {
+                setActiveTab('customer');
+                switchPersona('customer');
+              }}
+              onGoToAdmin={() => {
+                setActiveTab('superadmin');
+                switchPersona('superadmin');
+              }}
+              onOpenDocs={() => setIsDocsOpen(true)}
+            />
+          )}
+        </Suspense>
       </main>
 
       {/* Real Customer Mobile Bottom Navigation Bar (No role clutter!) */}
@@ -552,10 +594,34 @@ const MainLayout = () => {
     </div>
   );
 
+  // If in Standalone Web Installer mode (/install)
+  if (activeTab === 'install') {
+    return (
+      <Suspense fallback={<PortalLoadingSkeleton label="Loading AuraMarket Web Installer..." />}>
+        {renderScrollIndicators()}
+        <InstallWizard
+          onGoToStore={() => {
+            setActiveTab('customer');
+            switchPersona('customer');
+          }}
+          onGoToAdmin={() => {
+            setActiveTab('superadmin');
+            switchPersona('superadmin');
+          }}
+          onOpenDocs={() => setIsDocsOpen(true)}
+        />
+        <DocumentationModal
+          isOpen={isDocsOpen}
+          onClose={() => setIsDocsOpen(false)}
+        />
+      </Suspense>
+    );
+  }
+
   // If in Demo Hub mode, show the CodeCanyon Master Showcase Landing Page
   if (activeTab === 'hub') {
     return (
-      <>
+      <Suspense fallback={<PortalLoadingSkeleton label="Loading AuraMarket Showcase Hub..." />}>
         {renderScrollIndicators()}
         <DemoHub
           onSelectPortal={handleSelectPortalFromHub}
@@ -566,7 +632,7 @@ const MainLayout = () => {
           isOpen={isDocsOpen}
           onClose={() => setIsDocsOpen(false)}
         />
-      </>
+      </Suspense>
     );
   }
 

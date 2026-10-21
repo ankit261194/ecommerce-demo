@@ -124,6 +124,29 @@ export const DemoHub = ({ onSelectPortal, uiConfig, onOpenDocs }) => {
       actionText: 'Launch Courier Hub',
       deviceTarget: 'desktop',
     },
+    {
+      id: 'install',
+      title: '1-Click Web GUI Installation Wizard',
+      badge: 'Installer Engine',
+      badgeColor: 'bg-amber-100 text-amber-800 border-amber-200',
+      icon: KeyRound,
+      iconColor: 'text-amber-600 bg-amber-50 border-amber-200',
+      description:
+        'Interactive 5-step setup wizard to audit server prerequisites, test MongoDB connectivity, provision the Super Admin account, and initialize the marketplace with zero terminal commands.',
+      features: [
+        'Automated Server Prerequisite & Permissions Audit',
+        'Interactive MongoDB Latency & Version Connectivity Test',
+        'Super Admin Account Provisioning & Encrypted Keygen',
+        'Showroom Demo Data Seed vs Clean Production Toggle',
+      ],
+      credentials: {
+        role: 'Web Installer Engine',
+        email: 'Available at /install route',
+        password: 'No CLI or terminal required',
+      },
+      actionText: 'Launch Web Setup Wizard',
+      deviceTarget: 'desktop',
+    },
   ];
 
   return (
@@ -154,6 +177,15 @@ export const DemoHub = ({ onSelectPortal, uiConfig, onOpenDocs }) => {
           </div>
 
           <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => onSelectPortal('install', 'desktop')}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-1.5 transition-all shadow-sm"
+              title="1-Click Web GUI Installation Wizard (/install)"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Web Installer (/install)</span>
+            </button>
+
             <button
               onClick={onOpenDocs}
               className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs flex items-center gap-1.5 transition-colors"

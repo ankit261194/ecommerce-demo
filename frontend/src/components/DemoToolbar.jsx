@@ -13,6 +13,7 @@ import {
   BookOpen,
   Phone,
   MessageCircle,
+  KeyRound,
 } from 'lucide-react';
 
 export const DemoToolbar = ({
@@ -31,6 +32,7 @@ export const DemoToolbar = ({
     { id: 'superadmin', label: 'Super Admin', icon: ShieldCheck, role: 'superadmin' },
     { id: 'vendor', label: 'Vendor Portal', icon: Store, role: 'vendor' },
     { id: 'courier', label: 'Courier Hub', icon: Truck, role: 'delivery' },
+    { id: 'install', label: 'Web Installer', icon: KeyRound, role: null },
   ];
 
   if (isBarCollapsed) {
@@ -88,7 +90,7 @@ export const DemoToolbar = ({
                 key={p.id}
                 onClick={() => {
                   setActiveTab(p.id);
-                  switchPersona(p.role);
+                  if (p.role) switchPersona(p.role);
                 }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   isActive

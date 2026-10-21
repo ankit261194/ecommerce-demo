@@ -83,6 +83,8 @@ import { GiftOptionsModal } from '../components/GiftOptionsModal';
 import ShoppableReelsModal from '../components/ShoppableReelsModal';
 import SubscribeAndSaveModal from '../components/SubscribeAndSaveModal';
 import RiderTipPicker from '../components/RiderTipPicker';
+import { InternationalShippingModal } from '../components/InternationalShippingModal';
+import { CurrencySwitcherModal } from '../components/CurrencySwitcherModal';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useLocalization } from '../context/LocalizationContext';
@@ -128,7 +130,22 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   const [isWhatsAppBotOpen, setIsWhatsAppBotOpen] = useState(false); // Point #71: WhatsApp Order Bot
   const [whatsAppBotOrder, setWhatsAppBotOrder] = useState(null);
   const [rtoVerificationOrder, setRtoVerificationOrder] = useState(null); // Point #74: RTO Guard High-Risk Verification
-  const [isVoiceAssistantOpen, setIsVoiceAssistantOpen] = useState(false); // Point #20: AI Voice Shopping Assistant
+  const [isVoiceAssistantOpen, setIsVoiceAssistantOpen] = useState(false);
+  // Point #51: Cross-Border International Shipping & Multi-Currency FX
+  const [isShippingModalOpen, setIsShippingModalOpen] = useState(false);
+  const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpenShipping = () => setIsShippingModalOpen(true);
+    const handleOpenCurrency = () => setIsCurrencyModalOpen(true);
+    window.addEventListener('auramarket_open_international_shipping', handleOpenShipping);
+    window.addEventListener('auramarket_open_currency_switcher', handleOpenCurrency);
+    return () => {
+      window.removeEventListener('auramarket_open_international_shipping', handleOpenShipping);
+      window.removeEventListener('auramarket_open_currency_switcher', handleOpenCurrency);
+    };
+  }, []);
+ // Point #20: AI Voice Shopping Assistant
   const [isShoppableReelsOpen, setIsShoppableReelsOpen] = useState(false); // Point #27: Live Video Shopping & Shoppable Reels
   const [isArModalOpen, setIsArModalOpen] = useState(false); // Point 10: 3D & AR Virtual Try-On
   const [selectedArProduct, setSelectedArProduct] = useState(null);
@@ -4138,6 +4155,17 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
       <SupportHelpdeskModal
         isOpen={isHelpdeskOpen}
         onClose={() => setIsHelpdeskOpen(false)}
+      />
+
+      {/* Point #51: Cross-Border International Shipping & Multi-Currency FX Modals */}
+      <InternationalShippingModal
+        isOpen={isShippingModalOpen}
+        onClose={() => setIsShippingModalOpen(false)}
+        initialCartTotal={cartTotal}
+      />
+      <CurrencySwitcherModal
+        isOpen={isCurrencyModalOpen}
+        onClose={() => setIsCurrencyModalOpen(false)}
       />
     </div>
   );

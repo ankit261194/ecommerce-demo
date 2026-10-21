@@ -76,6 +76,8 @@ const logisticsRoutes = require('./routes/logisticsRoutes');
 const escrowRoutes = require('./routes/escrowRoutes');
 const fraudRoutes = require('./routes/fraudRoutes');
 const installRoutes = require('./routes/installRoutes');
+const currencyRoutes = require('./routes/currencyRoutes');
+const internationalShippingRoutes = require('./routes/internationalShippingRoutes');
 
 const app = express();
 
@@ -239,6 +241,9 @@ app.use('/api/escrow', escrowRoutes);
 app.use('/api/fraud', fraudRoutes);
 app.use('/api/admin/fraud', fraudRoutes);
 app.use('/api/install', installRoutes);
+app.use('/api/currency', currencyRoutes);
+app.use('/api/shipping/international', internationalShippingRoutes);
+app.use('/api/admin/shipping/international', internationalShippingRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

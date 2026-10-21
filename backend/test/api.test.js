@@ -32851,6 +32851,237 @@ const runTests = async () => {
       assert.ok(!fsMod.existsSync(lockPath));
     });
 
+    console.log('\n--- PILLAR 5 - POINT 51: MULTI-CURRENCY FX ENGINE & CROSS-BORDER INTERNATIONAL SHIPPING ---');
+
+    let p51AdminToken;
+    let p51CustomerToken;
+    let p51OrderId;
+
+    await test('Point 51: Setup dedicated test accounts, orders, and initial currency seed', async () => {
+      const adminUser = await User.create({
+        name: 'P51 Super Admin',
+        email: 'p51.admin@auramarket.com',
+        password: 'password123',
+        role: 'superadmin',
+        phone: '9811122233',
+        permissions: ['all'],
+      });
+      p51AdminToken = jwt.sign({ id: adminUser._id, role: 'superadmin' }, process.env.JWT_SECRET || 'secret');
+
+      const customerUser = await User.create({
+        name: 'Global Shopper',
+        email: 'global.shopper@example.com',
+        password: 'password123',
+        role: 'customer',
+        phone: '9811122234',
+      });
+      p51CustomerToken = jwt.sign({ id: customerUser._id, role: 'customer' }, process.env.JWT_SECRET || 'secret');
+
+      const existingProduct = await Product.findOne();
+      const sampleOrder = await Order.create({
+        orderNumber: 'ORD-P51-CROSSBORDER-991',
+        customer: customerUser._id,
+        items: [{
+          product: existingProduct ? existingProduct._id : adminUser._id,
+          vendor: existingProduct ? existingProduct.vendor : adminUser._id,
+          title: 'Audiophile ANC Wireless Headphones',
+          price: 5999,
+          totalPrice: 5999,
+          quantity: 1,
+        }],
+        totalAmount: 5999,
+        status: 'PLACED',
+        shippingAddress: {
+          recipientName: 'John Smith',
+          street: '350 5th Ave',
+          city: 'New York',
+          state: 'NY',
+          pincode: '10118',
+          phone: '9811122234',
+          country: 'US',
+          countryCode: 'US',
+        },
+      });
+      p51OrderId = sampleOrder._id.toString();
+    });
+
+    await test('Point 51: Test 1 - GET /api/currency/list returns active currencies and rates relative to base', async () => {
+      const res = await fetch(baseUrl + '/currency/list');
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.baseCurrency, 'INR');
+      assert.ok(Array.isArray(body.data.currencies));
+      const codes = body.data.currencies.map(c => c.code);
+      assert.ok(codes.includes('USD'));
+      assert.ok(codes.includes('EUR'));
+      assert.ok(codes.includes('AED'));
+    });
+
+    await test('Point 51: Test 2 - POST /api/currency/convert converts INR to foreign currencies with accurate rate', async () => {
+      const res = await fetch(baseUrl + '/currency/convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: 10000, from: 'INR', to: 'USD' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.from, 'INR');
+      assert.strictEqual(body.data.to, 'USD');
+      assert.ok(body.data.convertedAmount > 0);
+      assert.ok(body.data.exchangeRate > 0);
+    });
+
+    await test('Point 51: Test 3 - POST /api/currency/convert validates numeric amounts and currency presence', async () => {
+      const resInvalid = await fetch(baseUrl + '/currency/convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: 'invalid-amount' }),
+      });
+      assert.strictEqual(resInvalid.status, 400);
+    });
+
+    await test('Point 51: Test 4 - Super Admin can list, create, and update currency configurations', async () => {
+      const resList = await fetch(baseUrl + '/currency/admin', {
+        headers: { Authorization: `Bearer ${p51AdminToken}` },
+      });
+      assert.strictEqual(resList.status, 200);
+      const listBody = await resList.json();
+      assert.strictEqual(listBody.success, true);
+
+      // Create custom currency (KWD Kuwaiti Dinar)
+      const resCreate = await fetch(baseUrl + '/currency/admin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p51AdminToken}`,
+        },
+        body: JSON.stringify({
+          code: 'KWD',
+          name: 'Kuwaiti Dinar',
+          symbol: 'KD',
+          rateAgainstBase: 0.0037,
+          rateMarkupPercent: 1.0,
+          decimalPlaces: 3,
+        }),
+      });
+      assert.strictEqual(resCreate.status, 201);
+
+      // Update exchange rate for KWD
+      const resUpdate = await fetch(baseUrl + '/currency/admin/KWD', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p51AdminToken}`,
+        },
+        body: JSON.stringify({ rateAgainstBase: 0.0038, rateMarkupPercent: 1.5 }),
+      });
+      assert.strictEqual(resUpdate.status, 200);
+      const updateBody = await resUpdate.json();
+      assert.strictEqual(updateBody.data.rateAgainstBase, 0.0038);
+    });
+
+    await test('Point 51: Test 5 - Super Admin triggers live FX rate synchronization', async () => {
+      const resSync = await fetch(baseUrl + '/currency/admin/sync', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${p51AdminToken}` },
+      });
+      assert.strictEqual(resSync.status, 200);
+      const syncBody = await resSync.json();
+      assert.strictEqual(syncBody.success, true);
+      assert.ok(syncBody.data.syncedCount > 0);
+    });
+
+    await test('Point 51: Test 6 - POST /api/shipping/international/quotes returns live carrier options and DDP duties', async () => {
+      const resQuotes = await fetch(baseUrl + '/shipping/international/quotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          destinationCountry: 'US',
+          weightKg: 1.5,
+          cartTotal: 5000,
+          currency: 'INR',
+        }),
+      });
+      assert.strictEqual(resQuotes.status, 200);
+      const body = await resQuotes.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.destinationCountry, 'US');
+      assert.strictEqual(body.data.calculationMode, 'DDP');
+      assert.ok(Array.isArray(body.data.quotes));
+      assert.ok(body.data.quotes.length > 0);
+      const carriers = body.data.quotes.map(q => q.carrierName);
+      assert.ok(carriers.some(c => c.includes('DHL') || c.includes('FedEx')));
+    });
+
+    await test('Point 51: Test 7 - De minimis exemption waives customs duties when order value is below threshold', async () => {
+      const resExempt = await fetch(baseUrl + '/shipping/international/quotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          destinationCountry: 'US',
+          weightKg: 0.5,
+          cartTotal: 1500, // Well below USA USD 800 de minimis threshold
+          currency: 'USD',
+        }),
+      });
+      assert.strictEqual(resExempt.status, 200);
+      const body = await resExempt.json();
+      assert.strictEqual(body.data.isDutyExempt, true);
+      assert.strictEqual(body.data.quotes[0].customsDutyAndTaxBase, 0);
+    });
+
+    await test('Point 51: Test 8 - POST /api/shipping/international/quotes validates destination country code', async () => {
+      const resEmpty = await fetch(baseUrl + '/shipping/international/quotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(resEmpty.status, 400);
+
+      const resUnknown = await fetch(baseUrl + '/shipping/international/quotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destinationCountry: 'ZZ' }),
+      });
+      assert.strictEqual(resUnknown.status, 404);
+    });
+
+    await test('Point 51: Test 9 - GET /api/shipping/international/zones lists active cross-border shipping zones', async () => {
+      const res = await fetch(baseUrl + '/shipping/international/zones');
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(Array.isArray(body.data));
+      const codes = body.data.map(z => z.zoneCode);
+      assert.ok(codes.includes('ZONE_NA'));
+      assert.ok(codes.includes('ZONE_GCC'));
+    });
+
+    await test('Point 51: Test 10 - GET /api/shipping/international/declaration/:orderId generates official CN22 export declaration', async () => {
+      const res = await fetch(`${baseUrl}/shipping/international/declaration/${p51OrderId}`, {
+        headers: { Authorization: `Bearer ${p51AdminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.declarationType, 'CN22');
+      assert.ok(body.data.exporterDetails.exporterCode.includes('IEC'));
+      assert.strictEqual(body.data.consigneeDetails.country, 'US');
+      assert.ok(body.data.lineItems.length > 0);
+    });
+
+    await test('Point 51: Test 11 - Role security guardrails (401 unauthenticated, 403 customer access denied to admin FX)', async () => {
+      const resUnauth = await fetch(baseUrl + '/currency/admin');
+      assert.strictEqual(resUnauth.status, 401);
+
+      const resCust = await fetch(baseUrl + '/currency/admin', {
+        headers: { Authorization: `Bearer ${p51CustomerToken}` },
+      });
+      assert.strictEqual(resCust.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

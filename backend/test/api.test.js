@@ -33452,6 +33452,172 @@ const runTests = async () => {
       assert.strictEqual(resForbidden.status, 403);
     });
 
+  
+    // =========================================================================
+    // POINT 54: Real-Time Interactive Live Video Shopping Streams
+    // =========================================================================
+    let p54LiveStreamId, p54PinnedProductId, p54NewProductId;
+
+    await test('Point 54: Setup - Seed initial live shopping stream and resolve test products', async () => {
+      const prods = await Product.find({ isPublished: { $ne: false } }).limit(3).lean();
+      assert.ok(prods.length >= 2, 'Need at least 2 products for live stream tests');
+      p54PinnedProductId = prods[0]._id.toString();
+      p54NewProductId = prods[1]._id.toString();
+
+      // Trigger seeding by calling GET /api/video-shopping/live
+      const res = await fetch(baseUrl + '/video-shopping/live');
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.length >= 1);
+      p54LiveStreamId = body.data[0]._id.toString();
+    });
+
+    await test('Point 54: Test 1 - GET /api/video-shopping/live lists active streams with pinned products and metrics', async () => {
+      const res = await fetch(baseUrl + '/video-shopping/live');
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(Array.isArray(body.data));
+      const stream = body.data.find(s => s._id.toString() === p54LiveStreamId);
+      assert.ok(stream);
+      assert.strictEqual(stream.status, 'LIVE');
+      assert.ok(stream.playbackUrl.includes('.mp4'));
+    });
+
+    await test('Point 54: Test 2 - GET /api/video-shopping/live/:id returns stream room details, chat history, and viewer counts', async () => {
+      const res = await fetch(`${baseUrl}/video-shopping/live/${p54LiveStreamId}`);
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.metrics.concurrentViewers >= 1);
+      assert.ok(Array.isArray(body.data.liveChatMessages));
+      assert.ok(body.data.liveChatMessages.length >= 1);
+    });
+
+    await test('Point 54: Test 3 - POST /api/video-shopping/live/start launches new live shopping broadcast with streamKey', async () => {
+      const res = await fetch(baseUrl + '/video-shopping/live/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p53VendorToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Festival Runway Audio Drop - LIVE',
+          description: 'Special 20% live exclusive launch stream',
+          pinnedProductId: p54PinnedProductId,
+          exclusiveDiscountPercent: 20,
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.status, 'LIVE');
+      assert.ok(body.data.streamKey.startsWith('live_sk_'));
+    });
+
+    await test('Point 54: Test 4 - POST /api/video-shopping/live/start validates required title', async () => {
+      const res = await fetch(baseUrl + '/video-shopping/live/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p53VendorToken}`,
+        },
+        body: JSON.stringify({ description: 'Missing title' }),
+      });
+      assert.strictEqual(res.status, 400);
+    });
+
+    await test('Point 54: Test 5 - POST /api/video-shopping/live/:id/pin dynamically switches pinned product on viewer screens', async () => {
+      const res = await fetch(`${baseUrl}/video-shopping/live/${p54LiveStreamId}/pin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p53VendorToken}`,
+        },
+        body: JSON.stringify({ productId: p54NewProductId }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.pinnedProduct._id.toString(), p54NewProductId);
+    });
+
+    await test('Point 54: Test 6 - POST /api/video-shopping/live/:id/chat posts real-time comments to chat stream', async () => {
+      const res = await fetch(`${baseUrl}/video-shopping/live/${p54LiveStreamId}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p53CustomerToken}`,
+        },
+        body: JSON.stringify({
+          message: 'Is the wireless latency under 30ms for gaming?',
+          userName: 'Shopper Live Test',
+        }),
+      });
+      assert.strictEqual(res.status, 201);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.message, 'Is the wireless latency under 30ms for gaming?');
+      assert.strictEqual(body.data.userName, 'Shopper Live Test');
+    });
+
+    await test('Point 54: Test 7 - POST /api/video-shopping/live/:id/like increments live stream heart reactions', async () => {
+      const res = await fetch(`${baseUrl}/video-shopping/live/${p54LiveStreamId}/like`, {
+        method: 'POST',
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(typeof body.totalLikes === 'number');
+    });
+
+    await test('Point 54: Test 8 - POST /api/video-shopping/live/:id/quick-buy performs 1-click buy with exclusive live discount and updates GMV', async () => {
+      const res = await fetch(`${baseUrl}/video-shopping/live/${p54LiveStreamId}/quick-buy`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${p53CustomerToken}`,
+        },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.discountedPrice < body.data.originalPrice);
+      assert.ok(body.data.orderReference.startsWith('LIVE-ORD-'));
+    });
+
+    await test('Point 54: Test 9 - POST /api/video-shopping/live/:id/end concludes live broadcast and marks status ENDED', async () => {
+      const res = await fetch(`${baseUrl}/video-shopping/live/${p54LiveStreamId}/end`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${p53VendorToken}`,
+        },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.status, 'ENDED');
+    });
+
+    await test('Point 54: Test 10 - Role security guardrails (401 unauthenticated, 403 customer access denied to vendor live broadcast controls)', async () => {
+      const resUnauth = await fetch(baseUrl + '/video-shopping/live/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Unauth live' }),
+      });
+      assert.strictEqual(resUnauth.status, 401);
+
+      const resCust = await fetch(baseUrl + '/video-shopping/live/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p53CustomerToken}`,
+        },
+        body: JSON.stringify({ title: 'Customer attempt live' }),
+      });
+      assert.strictEqual(resCust.status, 403);
+    });
+
   } finally {
     if (server) {
       server.close();

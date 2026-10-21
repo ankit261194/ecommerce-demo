@@ -42,7 +42,7 @@ export default defineConfig({
           if (id.includes('Escrow') || id.includes('Dispute')) {
             return 'feature-escrow-engine';
           }
-          if (id.includes('LiveStream') || id.includes('VideoShopping')) {
+          if (id.includes('LiveStream') || id.includes('VideoShopping') || id.includes('LiveShoppingRoom')) {
             return 'feature-video-shopping';
           }
           if (id.includes('RecommendationsShelf') || id.includes('CurrencySwitcherModal') || id.includes('InternationalShippingModal')) {

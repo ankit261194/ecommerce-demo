@@ -49,6 +49,7 @@ import {
   Download,
   Package,
   RefreshCw,
+  Radio,
 } from 'lucide-react';
 import SupportHelpdeskModal from '../components/SupportHelpdeskModal';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -81,6 +82,7 @@ import VoiceShoppingAssistantModal from '../components/VoiceShoppingAssistantMod
 import WebPushOptInBanner from '../components/WebPushOptInBanner';
 import { GiftOptionsModal } from '../components/GiftOptionsModal';
 import ShoppableReelsModal from '../components/ShoppableReelsModal';
+import LiveShoppingRoomModal from '../components/LiveShoppingRoomModal';
 import SubscribeAndSaveModal from '../components/SubscribeAndSaveModal';
 import RiderTipPicker from '../components/RiderTipPicker';
 import { InternationalShippingModal } from '../components/InternationalShippingModal';
@@ -147,7 +149,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
     };
   }, []);
  // Point #20: AI Voice Shopping Assistant
-  const [isShoppableReelsOpen, setIsShoppableReelsOpen] = useState(false); // Point #27: Live Video Shopping & Shoppable Reels
+  const [isShoppableReelsOpen, setIsShoppableReelsOpen] = useState(false);
+  const [isLiveStreamRoomOpen, setIsLiveStreamRoomOpen] = useState(false); // Point #27: Live Video Shopping & Shoppable Reels
   const [isArModalOpen, setIsArModalOpen] = useState(false); // Point 10: 3D & AR Virtual Try-On
   const [selectedArProduct, setSelectedArProduct] = useState(null);
 
@@ -4109,7 +4112,22 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         subtotal={cartTotal}
       />
 
-      {/* Point #27: Floating Live Video Shopping & Shoppable Reels Launch Pill */}
+            {/* Point #54: Floating Real-Time Interactive Live Stream Room Launch Pill */}
+      <button
+        type="button"
+        onClick={() => setIsLiveStreamRoomOpen(true)}
+        className="fixed bottom-20 left-44 z-40 px-3.5 py-2 rounded-full bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 text-white font-black text-xs shadow-2xl flex items-center gap-2 border border-white/20 backdrop-blur-md group hover:scale-105 active:scale-95 transition-all"
+        title="Real-Time Interactive Live Shopping Broadcast Room (Point #54)"
+      >
+        <span className="w-2 h-2 rounded-full bg-amber-300 animate-ping" />
+        <Radio className="w-4 h-4 fill-white" />
+        <span className="font-bold text-white">Live Stream</span>
+        <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black uppercase">
+          #54
+        </span>
+      </button>
+
+{/* Point #27: Floating Live Video Shopping & Shoppable Reels Launch Pill */}
       <button
         type="button"
         onClick={() => setIsShoppableReelsOpen(true)}
@@ -4124,7 +4142,13 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
         </span>
       </button>
 
-      {/* Point #27: Live Video Shopping & Shoppable Reels Modal */}
+      
+      {/* Point #54: Real-Time Interactive Live Shopping Stream Room Modal */}
+      <LiveShoppingRoomModal
+        isOpen={isLiveStreamRoomOpen}
+        onClose={() => setIsLiveStreamRoomOpen(false)}
+      />
+{/* Point #27: Live Video Shopping & Shoppable Reels Modal */}
       <ShoppableReelsModal
         isOpen={isShoppableReelsOpen}
         onClose={() => setIsShoppableReelsOpen(false)}

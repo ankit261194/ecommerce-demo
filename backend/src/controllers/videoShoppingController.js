@@ -451,3 +451,309 @@ exports.deleteReel = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// =========================================================================
+// POINT 54: Real-Time Interactive Live Shopping Streams (LiveStreamSession)
+// =========================================================================
+const LiveStreamSession = require('../models/LiveStreamSession');
+const crypto = require('crypto');
+
+// Default initial live stream to seed if empty
+const seedInitialLiveStreamIfEmpty = async () => {
+  const count = await LiveStreamSession.countDocuments();
+  if (count > 0) return;
+
+  const prods = await Product.find({ isPublished: { $ne: false } }).limit(4);
+  const vendor = prods[0]?.vendor || null;
+  if (!prods || prods.length === 0) return;
+
+  await LiveStreamSession.create({
+    vendor,
+    title: 'FLASH SALE LIVE: Flagship Audio & Luxury Wear Showcase',
+    description: 'Join our live runway test! Real-time unboxing, studio acoustics check, and live exclusive 15% discount.',
+    streamKey: `live_sk_${crypto.randomBytes(8).toString('hex')}`,
+    playbackUrl: 'https://assets.mixkit.co/videos/preview/mixkit-young-woman-listening-to-music-with-headphones-40994-large.mp4',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800',
+    status: 'LIVE',
+    pinnedProduct: prods[0]._id,
+    catalogProducts: prods.map(p => p._id),
+    exclusiveDiscountPercent: 15,
+    couponCode: 'LIVEFLASH15',
+    metrics: {
+      concurrentViewers: 148,
+      peakViewers: 220,
+      totalLikes: 840,
+      ordersPlaced: 12,
+      totalGmv: 42500,
+    },
+    liveChatMessages: [
+      { userName: 'Vikram Patel', message: 'Is that active noise cancellation truly 40dB?', isVendor: false },
+      { userName: 'Apex Audio Official', message: 'Yes Vikram! Certified 40dB hybrid ANC with transparency mode.', isVendor: true, isPinned: true },
+      { userName: 'Ananya Roy', message: 'Just ordered via the 1-click live checkout! Thanks for the 15% code!', isVendor: false },
+    ],
+  });
+};
+
+/**
+ * Public: Get active live streams
+ * GET /api/video-shopping/live
+ */
+exports.getActiveLiveStreams = async (req, res) => {
+  try {
+    await seedInitialLiveStreamIfEmpty();
+
+    const streams = await LiveStreamSession.find({ status: 'LIVE' })
+      .populate('pinnedProduct', 'title slug thumbnail sellingPrice mrp price brand stock')
+      .populate('catalogProducts', 'title slug thumbnail sellingPrice mrp price brand stock')
+      .populate('vendor', 'storeName logo')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: streams.length,
+      data: streams,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Public / Viewer: Get live stream room details
+ * GET /api/video-shopping/live/:id
+ */
+exports.getLiveStreamDetails = async (req, res) => {
+  try {
+    const stream = await LiveStreamSession.findById(req.params.id)
+      .populate('pinnedProduct', 'title slug thumbnail sellingPrice mrp price brand stock ratingsAverage')
+      .populate('catalogProducts', 'title slug thumbnail sellingPrice mrp price brand stock ratingsAverage')
+      .populate('vendor', 'storeName logo supportPhone');
+
+    if (!stream) {
+      return res.status(404).json({ success: false, message: 'Live stream not found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: stream,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Vendor / Admin: Start new live shopping stream
+ * POST /api/video-shopping/live/start
+ */
+exports.startLiveStream = async (req, res) => {
+  try {
+    const { title, description, playbackUrl, pinnedProductId, catalogProductIds, exclusiveDiscountPercent } = req.body;
+    if (!title) {
+      return res.status(400).json({ success: false, message: 'Stream title is required' });
+    }
+
+    const VendorProfile = require('../models/VendorProfile');
+    let vendorId = req.user?.vendorProfile || req.vendorProfile?._id;
+    if (!vendorId) {
+      const firstVendor = await VendorProfile.findOne();
+      vendorId = firstVendor?._id;
+    }
+
+    const streamKey = `live_sk_${crypto.randomBytes(12).toString('hex')}`;
+
+    const stream = await LiveStreamSession.create({
+      vendor: vendorId,
+      title,
+      description: description || 'Exclusive Live Shopping Event',
+      streamKey,
+      playbackUrl: playbackUrl || 'https://assets.mixkit.co/videos/preview/mixkit-young-woman-listening-to-music-with-headphones-40994-large.mp4',
+      status: 'LIVE',
+      pinnedProduct: pinnedProductId || null,
+      catalogProducts: catalogProductIds || [],
+      exclusiveDiscountPercent: Number(exclusiveDiscountPercent) || 15,
+      actualStartTime: new Date(),
+    });
+
+    try {
+      await AuditLog.create({
+        user: req.user?._id,
+        action: 'LIVE_STREAM_STARTED',
+        module: 'MARKETING',
+        details: `Live stream started: "${title}" (Key: ${streamKey})`,
+      });
+    } catch (_) {}
+
+    res.status(201).json({
+      success: true,
+      message: 'Live stream broadcast initiated successfully',
+      data: stream,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Vendor / Admin: Conclude live shopping stream
+ * POST /api/video-shopping/live/:id/end
+ */
+exports.endLiveStream = async (req, res) => {
+  try {
+    const stream = await LiveStreamSession.findById(req.params.id);
+    if (!stream) {
+      return res.status(404).json({ success: false, message: 'Live stream not found' });
+    }
+
+    stream.status = 'ENDED';
+    stream.actualEndTime = new Date();
+    await stream.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Live stream concluded successfully',
+      data: stream,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Vendor / Admin: Pin active product to stream screen
+ * POST /api/video-shopping/live/:id/pin
+ */
+exports.pinProduct = async (req, res) => {
+  try {
+    const { productId } = req.body;
+    if (!productId) {
+      return res.status(400).json({ success: false, message: 'productId is required' });
+    }
+
+    const stream = await LiveStreamSession.findById(req.params.id);
+    if (!stream) {
+      return res.status(404).json({ success: false, message: 'Live stream not found' });
+    }
+
+    stream.pinnedProduct = productId;
+    if (!stream.catalogProducts.includes(productId)) {
+      stream.catalogProducts.push(productId);
+    }
+    await stream.save();
+
+    await stream.populate('pinnedProduct', 'title slug thumbnail sellingPrice mrp price');
+
+    res.status(200).json({
+      success: true,
+      message: 'Active product pinned to live broadcast screen',
+      data: stream,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Viewer / Vendor: Send chat message in live room
+ * POST /api/video-shopping/live/:id/chat
+ */
+exports.sendChatMessage = async (req, res) => {
+  try {
+    const { message, userName } = req.body;
+    if (!message || !message.trim()) {
+      return res.status(400).json({ success: false, message: 'Message text cannot be empty' });
+    }
+
+    const stream = await LiveStreamSession.findById(req.params.id);
+    if (!stream) {
+      return res.status(404).json({ success: false, message: 'Live stream not found' });
+    }
+
+    const isVendor = req.user?.role === 'vendor' || req.user?.role === 'superadmin';
+    const authorName = userName || req.user?.name || (isVendor ? 'Host Official' : 'Shopper Guest');
+
+    const chatMsg = {
+      user: req.user?._id || null,
+      userName: authorName,
+      message: message.trim(),
+      isVendor,
+      createdAt: new Date(),
+    };
+
+    stream.liveChatMessages.push(chatMsg);
+    await stream.save();
+
+    res.status(201).json({
+      success: true,
+      data: chatMsg,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Viewer: Send floating heart like reaction
+ * POST /api/video-shopping/live/:id/like
+ */
+exports.sendLike = async (req, res) => {
+  try {
+    const stream = await LiveStreamSession.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { 'metrics.totalLikes': 1 } },
+      { new: true }
+    );
+
+    if (!stream) {
+      return res.status(404).json({ success: false, message: 'Live stream not found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      totalLikes: stream.metrics.totalLikes,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Viewer: 1-Click Quick Buy from Live Room with exclusive discount
+ * POST /api/video-shopping/live/:id/quick-buy
+ */
+exports.quickBuyLiveProduct = async (req, res) => {
+  try {
+    const stream = await LiveStreamSession.findById(req.params.id).populate('pinnedProduct');
+    if (!stream) {
+      return res.status(404).json({ success: false, message: 'Live stream not found' });
+    }
+
+    const targetProduct = stream.pinnedProduct;
+    if (!targetProduct) {
+      return res.status(400).json({ success: false, message: 'No product is currently pinned in this live stream' });
+    }
+
+    const rawPrice = targetProduct.sellingPrice || targetProduct.price || 1000;
+    const discount = stream.exclusiveDiscountPercent || 15;
+    const discountedPrice = Math.round(rawPrice * (1 - discount / 100));
+
+    stream.metrics.ordersPlaced = (stream.metrics.ordersPlaced || 0) + 1;
+    stream.metrics.totalGmv = (stream.metrics.totalGmv || 0) + discountedPrice;
+    await stream.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Live broadcast 1-click purchase initiated! You saved ${discount}%!`,
+      data: {
+        product: targetProduct,
+        originalPrice: rawPrice,
+        discountPercent: discount,
+        discountedPrice,
+        streamTitle: stream.title,
+        orderReference: `LIVE-ORD-${Date.now()}`,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

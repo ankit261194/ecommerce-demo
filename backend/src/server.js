@@ -79,6 +79,7 @@ const installRoutes = require('./routes/installRoutes');
 const currencyRoutes = require('./routes/currencyRoutes');
 const internationalShippingRoutes = require('./routes/internationalShippingRoutes');
 const recommendationRoutes = require('./routes/recommendationRoutes');
+const vendorSubscriptionRoutes = require('./routes/vendorSubscriptionRoutes');
 
 const app = express();
 
@@ -153,6 +154,8 @@ app.get('/api/health', (req, res) => {
 
 // API Routes Mounting
 app.use('/api/auth', authRoutes);
+app.use('/api/vendor/subscription', vendorSubscriptionRoutes);
+app.use('/api/admin/subscriptions', vendorSubscriptionRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/vendor', vendorRoutes);
 app.use('/api/products', productRoutes);

@@ -48,6 +48,9 @@ export default defineConfig({
           if (id.includes('RecommendationsShelf') || id.includes('CurrencySwitcherModal') || id.includes('InternationalShippingModal')) {
             return 'feature-crossborder-recs';
           }
+          if (id.includes('VendorSubscriptionModal')) {
+            return 'feature-vendor-subscription';
+          }
         },
       },
     },

@@ -33079,8 +33079,10 @@ const runTests = async () => {
       const resCust = await fetch(baseUrl + '/currency/admin', {
         headers: { Authorization: `Bearer ${p51CustomerToken}` },
       });
+      assert.strictEqual(resCust.status, 403);
+    });
 
-    // =========================================================================
+    
     // POINT 52: Collaborative Filtering & AI Hybrid Recommendation Engine
     // =========================================================================
     let p52ProductId1, p52ProductId2, p52ProductId3;
@@ -33237,7 +33239,217 @@ const runTests = async () => {
       });
       assert.strictEqual(resForbidden.status, 403);
     });
-      assert.strictEqual(resCust.status, 403);
+
+// =========================================================================
+    // POINT 53: Vendor Subscription SaaS Plans & Recurring Billing
+    // =========================================================================
+    let p53VendorToken, p53AdminToken, p53CustomerToken;
+    let p53StarterPlanId, p53GrowthPlanId, p53EnterprisePlanId;
+    let p53VendorProfileId, p53ActiveSubscriptionId;
+
+    await test('Point 53: Setup - Seed default SaaS plans and initialize vendor wallet', async () => {
+      const resAdmin = await fetch(baseUrl + '/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'superadmin@auramarket.com', password: 'password123' }),
+      });
+      const dataAdmin = await resAdmin.json();
+      p53AdminToken = dataAdmin.token || 'mock_jwt_superadmin_token_2026';
+
+      const resVendor = await fetch(baseUrl + '/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'vendor@auramarket.com', password: 'password123' }),
+      });
+      const dataVendor = await resVendor.json();
+      p53VendorToken = dataVendor.token || 'mock_jwt_vendor_token_2026';
+      p53VendorProfileId = dataVendor.vendorProfile?._id || dataVendor.vendorProfile;
+
+      const resCust = await fetch(baseUrl + '/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'customer@auramarket.com', password: 'password123' }),
+      });
+      const dataCust = await resCust.json();
+      p53CustomerToken = dataCust.token || 'mock_jwt_customer_token_2026';
+
+      const VendorProfile = require('../src/models/VendorProfile');
+      await VendorProfile.updateMany({}, { walletBalance: 50000 });
+      const vProfile = await VendorProfile.findOne();
+      if (vProfile) {
+        p53VendorProfileId = vProfile._id;
+      }
+    });
+
+    await test('Point 53: Test 1 - GET /api/vendor/subscription/plans lists all active SaaS plans with features and pricing', async () => {
+      const res = await fetch(baseUrl + '/vendor/subscription/plans');
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(Array.isArray(body.data));
+      assert.ok(body.data.length >= 3);
+
+      const starter = body.data.find(p => p.slug === 'starter-basic');
+      const growth = body.data.find(p => p.slug === 'growth-accelerate');
+      const enterprise = body.data.find(p => p.slug === 'enterprise-vip');
+
+      assert.ok(starter, 'Starter plan should exist');
+      assert.ok(growth, 'Growth plan should exist');
+      assert.ok(enterprise, 'Enterprise plan should exist');
+
+      p53StarterPlanId = starter._id;
+      p53GrowthPlanId = growth._id;
+      p53EnterprisePlanId = enterprise._id;
+
+      assert.strictEqual(starter.pricing.monthly, 0);
+      assert.strictEqual(growth.pricing.monthly, 999);
+      assert.strictEqual(enterprise.features.maxProducts, -1);
+    });
+
+    await test('Point 53: Test 2 - GET /api/vendor/subscription/current returns vendor active subscription and live product quota', async () => {
+      const res = await fetch(baseUrl + '/vendor/subscription/current', {
+        headers: { Authorization: `Bearer ${p53VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.subscription);
+      assert.ok(body.data.usage);
+      assert.ok(typeof body.data.usage.totalProducts === 'number');
+      assert.ok(typeof body.data.usage.remainingProducts === 'number');
+      assert.ok(typeof body.data.usage.daysRemaining === 'number');
+    });
+
+    await test('Point 53: Test 3 - POST /api/vendor/subscription/subscribe validates required planId', async () => {
+      const res = await fetch(baseUrl + '/vendor/subscription/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p53VendorToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+      assert.strictEqual(res.status, 400);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+    });
+
+    await test('Point 53: Test 4 - POST /api/vendor/subscription/subscribe upgrades vendor to Growth plan, deducts wallet fee, updates commission rate', async () => {
+      const res = await fetch(baseUrl + '/vendor/subscription/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p53VendorToken}`,
+        },
+        body: JSON.stringify({
+          planId: p53GrowthPlanId,
+          billingCycle: 'MONTHLY',
+          paymentMethod: 'WALLET',
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.amountPaid, 999);
+      assert.ok(body.data.invoiceNumber.startsWith('SUB-INV-'));
+
+      p53ActiveSubscriptionId = body.data.subscription._id;
+
+      const VendorProfile = require('../src/models/VendorProfile');
+      const profile = await VendorProfile.findById(p53VendorProfileId);
+      assert.strictEqual(profile.commissionRate, 7.5);
+    });
+
+    await test('Point 53: Test 5 - POST /api/vendor/subscription/cancel disables auto-renewal and records cancellation reason', async () => {
+      const res = await fetch(baseUrl + '/vendor/subscription/cancel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p53VendorToken}`,
+        },
+        body: JSON.stringify({ reason: 'Testing auto-renewal cancellation' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.autoRenew, false);
+      assert.strictEqual(body.data.cancellationReason, 'Testing auto-renewal cancellation');
+    });
+
+    await test('Point 53: Test 6 - GET /api/vendor/subscription/invoices returns billing receipts with sequential invoice numbers', async () => {
+      const res = await fetch(baseUrl + '/vendor/subscription/invoices', {
+        headers: { Authorization: `Bearer ${p53VendorToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(Array.isArray(body.data));
+      assert.ok(body.data.length >= 1);
+      assert.ok(body.data.some(i => i.invoiceNumber.startsWith('SUB-INV-')));
+    });
+
+    await test('Point 53: Test 7 - GET /api/vendor/subscription/invoices/:id/print outputs printable A4 SaaS receipt HTML', async () => {
+      const res = await fetch(`${baseUrl}/vendor/subscription/invoices/${p53ActiveSubscriptionId}/print`);
+      assert.strictEqual(res.status, 200);
+      const html = await res.text();
+      assert.ok(html.includes('AuraMarket SaaS Commerce'));
+      assert.ok(html.includes('Growth Accelerate'));
+      assert.ok(html.includes('PAID'));
+    });
+
+    await test('Point 53: Test 8 - Super Admin can view subscription analytics (MRR, ARR, active subscribers)', async () => {
+      const res = await fetch(baseUrl + '/admin/subscriptions/analytics', {
+        headers: { Authorization: `Bearer ${p53AdminToken}` },
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(body.data.activeSubscribersCount >= 1);
+      assert.ok(body.data.monthlyRecurringRevenue > 0);
+      assert.ok(body.data.annualRecurringRevenue > 0);
+    });
+
+    await test('Point 53: Test 9 - Super Admin can create and update custom subscription plan', async () => {
+      const resCreate = await fetch(baseUrl + '/admin/subscriptions/plans', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p53AdminToken}`,
+        },
+        body: JSON.stringify({
+          name: 'Custom Boutique Plan',
+          slug: 'custom-boutique',
+          pricing: { monthly: 499, yearly: 4990, currency: 'INR' },
+          features: { maxProducts: 150, commissionRatePercent: 9.0 },
+        }),
+      });
+      assert.strictEqual(resCreate.status, 201);
+      const createBody = await resCreate.json();
+      const customId = createBody.data._id;
+
+      const resUpdate = await fetch(`${baseUrl}/admin/subscriptions/plans/${customId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p53AdminToken}`,
+        },
+        body: JSON.stringify({
+          features: { maxProducts: 200, commissionRatePercent: 8.5 },
+        }),
+      });
+      assert.strictEqual(resUpdate.status, 200);
+      const updateBody = await resUpdate.json();
+      assert.strictEqual(updateBody.data.features.maxProducts, 200);
+    });
+
+    await test('Point 53: Test 10 - Role security guardrails (401 unauthenticated, 403 customer access denied to vendor subscription portal)', async () => {
+      const resUnauth = await fetch(baseUrl + '/vendor/subscription/current');
+      assert.strictEqual(resUnauth.status, 401);
+
+      const resForbidden = await fetch(baseUrl + '/vendor/subscription/current', {
+        headers: { Authorization: `Bearer ${p53CustomerToken}` },
+      });
+      assert.strictEqual(resForbidden.status, 403);
     });
 
   } finally {

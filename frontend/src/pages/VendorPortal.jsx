@@ -31,6 +31,7 @@ import {
   Table,
   Megaphone,
   Activity,
+  Crown,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';
@@ -65,6 +66,7 @@ import InventoryAgingRadarModal from '../components/InventoryAgingRadarModal';
 import VendorReturnGradingModal from '../components/VendorReturnGradingModal';
 import VendorEscrowHoldTrackerModal from '../components/VendorEscrowHoldTrackerModal';
 import EInvoiceViewerModal from '../components/EInvoiceViewerModal';
+import VendorSubscriptionModal from '../components/VendorSubscriptionModal';
 import api from '../api/client';
 
 export const VendorPortal = () => {
@@ -121,7 +123,8 @@ export const VendorPortal = () => {
   const [isVacationModalOpen, setIsVacationModalOpen] = useState(false); // Point #59: Vacation Mode Toggle
   const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false); // Point #60: Customer Reviews Management
   const [isWalletLedgerModalOpen, setIsWalletLedgerModalOpen] = useState(false); // Point #61: Financial Wallet & Ledger
-  const [isEscrowModalOpen, setIsEscrowModalOpen] = useState(false); // Point #48: Automated Escrow Payout Engine
+  const [isEscrowModalOpen, setIsEscrowModalOpen] = useState(false);
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false); // Point #48: Automated Escrow Payout Engine
   const [isEInvoiceModalOpen, setIsEInvoiceModalOpen] = useState(false); // Point #49: GST E-Invoicing & TDS
   const [selectedSubOrderForInvoice, setSelectedSubOrderForInvoice] = useState(null);
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
@@ -702,7 +705,20 @@ export const VendorPortal = () => {
             </span>
           </button>
 
-          <button
+                    <button
+            type="button"
+            onClick={() => setIsSubscriptionModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-amber-400/10 to-slate-900 hover:from-amber-500/30 text-white text-xs font-bold shadow-sm transition-all border border-amber-400/40"
+            title="Vendor SaaS Subscription Plans and Quota Management"
+          >
+            <Crown className="w-4 h-4 text-amber-400" />
+            <span>SaaS Plans & Quotas</span>
+            <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
+              #53
+            </span>
+          </button>
+
+<button
             type="button"
             onClick={() => setIsEscrowModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all border border-indigo-500/20"
@@ -2132,7 +2148,13 @@ export const VendorPortal = () => {
         subOrderId={selectedSubOrderForInvoice}
       />
 
-      {/* Point 13: Vendor Sub-Staff Roles & Permissions Modal */}
+      
+      {/* Point 53: Vendor Subscription SaaS Plans & Recurring Billing */}
+      <VendorSubscriptionModal
+        isOpen={isSubscriptionModalOpen}
+        onClose={() => setIsSubscriptionModalOpen(false)}
+      />
+{/* Point 13: Vendor Sub-Staff Roles & Permissions Modal */}
       <VendorStaffManagerModal
         isOpen={isStaffModalOpen}
         onClose={() => setIsStaffModalOpen(false)}

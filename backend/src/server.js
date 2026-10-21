@@ -74,6 +74,7 @@ const { adminRouter: loyaltyAdminRoutes, publicRouter: loyaltyPublicRoutes } = r
 const adRoutes = require('./routes/adRoutes');
 const logisticsRoutes = require('./routes/logisticsRoutes');
 const escrowRoutes = require('./routes/escrowRoutes');
+const fraudRoutes = require('./routes/fraudRoutes');
 
 const app = express();
 
@@ -234,6 +235,8 @@ app.use('/api/loyalty', loyaltyPublicRoutes);
 app.use('/api/ads', adRoutes);
 app.use('/api/logistics', logisticsRoutes);
 app.use('/api/escrow', escrowRoutes);
+app.use('/api/fraud', fraudRoutes);
+app.use('/api/admin/fraud', fraudRoutes);
 
 // Dynamic Technical SEO Endpoints
 const generateSitemap = async (req, res) => {

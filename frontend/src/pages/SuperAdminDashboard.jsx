@@ -133,6 +133,7 @@ import FleetLiveMapRadarModal from '../components/FleetLiveMapRadarModal';
 import ReverseLogisticsRoutingHub from '../components/ReverseLogisticsRoutingHub';
 import AdminEscrowSettlementEngine from '../components/AdminEscrowSettlementEngine';
 import TaxComplianceDashboard from '../components/TaxComplianceDashboard';
+import FraudPreventionDashboard from '../components/FraudPreventionDashboard';
 import api from '../api/client';
 
 export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
@@ -1757,6 +1758,21 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
           </button>
 
           <button
+            onClick={() => setActiveDashboardTab('fraud-prevention')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all ${
+              activeDashboardTab === 'fraud-prevention'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4 text-rose-400" />
+            <span>Fraud Prevention & Risk Radar</span>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-rose-500/30 text-rose-200 ml-1">
+              Point #50
+            </span>
+          </button>
+
+          <button
             onClick={() => setIsInventoryAlertsModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition-all"
             title="Point 10: Multi-Vendor Inventory Low-Stock Radar & Automated Alerts"
@@ -2851,6 +2867,15 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       {activeDashboardTab === 'tax-compliance' && (
         <div className="space-y-6 animate-fade-in">
           <TaxComplianceDashboard />
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 39: FRAUD DETECTION & CYBERSECURITY RADAR (Pillar 5 • Point 50)       */}
+      {/* ========================================================================= */}
+      {activeDashboardTab === 'fraud-prevention' && (
+        <div className="space-y-6 animate-fade-in">
+          <FraudPreventionDashboard />
         </div>
       )}
 

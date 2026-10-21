@@ -28,6 +28,7 @@ const auditLogSchema = new mongoose.Schema(
         'LOGISTICS',
         'SHIPPING_LOGISTICS',
         'TAX',
+        'FRAUD',
       ],
       default: 'SYSTEM',
     },

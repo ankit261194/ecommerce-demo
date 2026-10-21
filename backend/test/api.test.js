@@ -37,6 +37,9 @@ const Category = require('../src/models/Category');
 const CourierIntegration = require('../src/models/CourierIntegration');
 const CourierShipment = require('../src/models/CourierShipment');
 const ReturnRequest = require('../src/models/ReturnRequest');
+const FraudIncident = require('../src/models/FraudIncident');
+const FraudRule = require('../src/models/FraudRule');
+const FraudConfig = require('../src/models/FraudConfig');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -32186,6 +32189,550 @@ const runTests = async () => {
         Math.round((gstr8Body.data.summary.totalGrossSupplies - gstr8Body.data.summary.totalReturns) * 100) / 100,
         'Net taxable supplies must equal gross minus returns'
       );
+    });
+
+    // =========================================================================
+    // PILLAR 5 - POINT 50: FRAUD DETECTION & PREVENTION ENGINE
+    // =========================================================================
+    console.log('\n--- PILLAR 5 - POINT 50: FRAUD DETECTION & PREVENTION ENGINE (RISK SCORING & FINGERPRINTING) ---');
+
+    let p50Admin, p50AdminToken;
+    let p50CustomerClean, p50CustomerCleanToken;
+    let p50CustomerFraud, p50CustomerFraudToken;
+    let p50Vendor, p50VendorProfile;
+    let p50Product;
+
+    await test('Point 50: Setup dedicated accounts, fraud test data, products, and configurations', async () => {
+      // 1. Admin
+      p50Admin = await User.create({
+        name: 'P50 Fraud Director',
+        email: `fraud.admin.${Date.now()}@auramarket.com`,
+        password: 'password123',
+        phone: '9871100099',
+        role: 'superadmin',
+      });
+      p50AdminToken = generateToken(p50Admin._id);
+
+      // 2. Clean Customer
+      p50CustomerClean = await User.create({
+        name: 'P50 Clean Customer',
+        email: `clean.shopper.${Date.now()}@auramarket.com`,
+        password: 'password123',
+        phone: '9871100001',
+        role: 'customer',
+      });
+      p50CustomerCleanToken = generateToken(p50CustomerClean._id);
+
+      // 3. Potential Fraud / Suspect Customer
+      p50CustomerFraud = await User.create({
+        name: 'P50 Suspect Actor',
+        email: `bot.attacker.${Date.now()}@mailinator.com`,
+        password: 'password123',
+        phone: '9999999999',
+        role: 'customer',
+      });
+      p50CustomerFraudToken = generateToken(p50CustomerFraud._id);
+
+      // 4. Vendor & Product
+      const vUser = await User.create({
+        name: 'P50 Vendor Owner',
+        email: `p50.vendor.${Date.now()}@auramarket.com`,
+        password: 'password123',
+        phone: '9871100088',
+        role: 'vendor',
+      });
+      p50VendorProfile = await VendorProfile.create({
+        user: vUser._id,
+        storeName: 'P50 Cyber Gadgets',
+        slug: `p50-cyber-gadgets-${Date.now()}`,
+        status: 'approved',
+      });
+      vUser.vendorProfile = p50VendorProfile._id;
+      await vUser.save();
+
+      const p50Category = (await Category.findOne()) || (await Category.create({ name: 'Security Hardware', slug: `security-hardware-${Date.now()}` }));
+
+      p50Product = await Product.create({
+        title: 'Cyber Security Hardware Key',
+        slug: `cyber-security-hardware-key-${Date.now()}`,
+        sku: `SKU-P50-${Date.now()}`,
+        description: 'Enterprise hardware authentication key with biometric support.',
+        category: p50Category._id,
+        sellingPrice: 1999,
+        originalPrice: 2499,
+        mrp: 2499,
+        stock: 100,
+        countInStock: 100,
+        vendor: p50VendorProfile._id,
+        isPublished: true,
+      });
+
+      assert.ok(p50AdminToken);
+      assert.ok(p50CustomerCleanToken);
+      assert.ok(p50CustomerFraudToken);
+    });
+
+    await test('Point 50: Test 1 - Low-risk domestic order from clean IP yields LOW risk score and ALLOW action', async () => {
+      const res = await fetch(`${baseUrl}/fraud/evaluate-preview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p50CustomerCleanToken}`,
+          'X-Client-IP': '103.21.244.10',
+          'X-City': 'New Delhi',
+          'X-Latitude': '28.6139',
+          'X-Longitude': '77.2090',
+        },
+        body: JSON.stringify({
+          orderData: {
+            totalAmount: 1999,
+            paymentMethod: 'UPI',
+            shippingAddress: {
+              city: 'New Delhi',
+              state: 'Delhi',
+              pincode: '110001',
+              phone: '9871100001',
+            },
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.riskLevel, 'LOW');
+      assert.ok(body.data.riskScore < 40, 'Clean residential transaction must have score < 40');
+      assert.strictEqual(body.data.actionTaken, 'ALLOW');
+      assert.strictEqual(body.data.isBlocked, false);
+      assert.strictEqual(body.data.forcePrepaid, false);
+    });
+
+    await test('Point 50: Test 2 - Order with VPN/Proxy headers triggers RULE_VPN_PROXY and elevates risk score', async () => {
+      const res = await fetch(`${baseUrl}/fraud/evaluate-preview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p50CustomerCleanToken}`,
+          'X-Client-IP': '185.220.101.5',
+          'X-Vpn-Detected': 'true',
+        },
+        body: JSON.stringify({
+          orderData: {
+            totalAmount: 1999,
+            shippingAddress: { city: 'New Delhi', pincode: '110001' },
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      const vpnRule = body.data.triggeredRules.find(r => r.ruleCode === 'RULE_VPN_PROXY');
+      assert.ok(vpnRule, 'RULE_VPN_PROXY must be triggered when VPN/Proxy is detected');
+      assert.ok(body.data.riskScore >= 35, 'Risk score must include VPN penalty');
+    });
+
+    await test('Point 50: Test 3 - Rapid order placement velocity triggers RULE_VELOCITY_HOURLY', async () => {
+      for (let i = 0; i < 3; i++) {
+        await Order.create({
+          orderNumber: `ORD-VELOCITY-${Date.now()}-${i}`,
+          customer: p50CustomerClean._id,
+          totalAmount: 1999,
+          items: [{
+            product: p50Product._id,
+            vendor: p50VendorProfile._id,
+            quantity: 1,
+            price: 1999,
+            totalPrice: 1999,
+          }],
+          shippingAddress: {
+            recipientName: 'Clean Customer',
+            street: '123 MG Road',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+            phone: '9871100001',
+          },
+          status: 'PLACED',
+          createdAt: new Date(Date.now() - 10 * 60 * 1000),
+        });
+      }
+
+      const res = await fetch(`${baseUrl}/fraud/evaluate-preview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p50CustomerCleanToken}`,
+          'X-Client-IP': '103.21.244.10',
+        },
+        body: JSON.stringify({
+          orderData: {
+            totalAmount: 1999,
+            shippingAddress: { city: 'New Delhi', pincode: '110001', phone: '9871100001' },
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      const velocityRule = body.data.triggeredRules.find(r => r.ruleCode === 'RULE_VELOCITY_HOURLY');
+      assert.ok(velocityRule, 'RULE_VELOCITY_HOURLY must trigger when orders in last 1 hour >= 3');
+      assert.ok(body.data.riskScore >= 40, 'Risk score must reflect velocity penalty');
+    });
+
+    await test('Point 50: Test 4 - Multiple customer accounts sharing same Device ID triggers RULE_DEVICE_MULTI_ACCOUNT', async () => {
+      const sharedDeviceId = `DEV-SHARED-FINGERPRINT-${Date.now()}`;
+      await User.findByIdAndUpdate(p50CustomerClean._id, { $addToSet: { deviceFingerprints: sharedDeviceId } });
+      await User.findByIdAndUpdate(p50CustomerFraud._id, { $addToSet: { deviceFingerprints: sharedDeviceId } });
+
+      const res = await fetch(`${baseUrl}/fraud/evaluate-preview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p50CustomerCleanToken}`,
+          'X-Device-Fingerprint': sharedDeviceId,
+        },
+        body: JSON.stringify({
+          orderData: {
+            totalAmount: 1999,
+            shippingAddress: { city: 'New Delhi', pincode: '110001' },
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      const multiAccountRule = body.data.triggeredRules.find(r => r.ruleCode === 'RULE_DEVICE_MULTI_ACCOUNT');
+      assert.ok(multiAccountRule, 'RULE_DEVICE_MULTI_ACCOUNT must trigger when device has multiple accounts');
+    });
+
+    await test('Point 50: Test 5 - Geolocation anomaly (>1,000 km distance between IP and delivery address) triggers RULE_GEO_MISMATCH', async () => {
+      const res = await fetch(`${baseUrl}/fraud/evaluate-preview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p50CustomerCleanToken}`,
+          'X-Client-IP': '103.200.1.1',
+          'X-City': 'Guwahati',
+          'X-Latitude': '26.1445',
+          'X-Longitude': '91.7362',
+        },
+        body: JSON.stringify({
+          orderData: {
+            totalAmount: 1999,
+            shippingAddress: {
+              city: 'Mumbai',
+              state: 'Maharashtra',
+              pincode: '400001',
+              coordinates: { lat: 19.0760, lng: 72.8777 },
+            },
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      const geoRule = body.data.triggeredRules.find(r => r.ruleCode === 'RULE_GEO_MISMATCH');
+      assert.ok(geoRule, 'RULE_GEO_MISMATCH must trigger when distance exceeds threshold');
+      assert.ok(body.data.distanceKm > 1000, `Calculated distance must exceed 1000km, got ${body.data.distanceKm}`);
+    });
+
+    await test('Point 50: Test 6 - Disposable email domain and repeating phone triggers RULE_DISPOSABLE_EMAIL and RULE_SUSPICIOUS_PHONE', async () => {
+      const res = await fetch(`${baseUrl}/fraud/evaluate-preview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p50CustomerFraudToken}`,
+        },
+        body: JSON.stringify({
+          orderData: {
+            totalAmount: 1999,
+            shippingAddress: { city: 'New Delhi', pincode: '110001', phone: '9999999999' },
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      const emailRule = body.data.triggeredRules.find(r => r.ruleCode === 'RULE_DISPOSABLE_EMAIL');
+      const phoneRule = body.data.triggeredRules.find(r => r.ruleCode === 'RULE_SUSPICIOUS_PHONE');
+      assert.ok(emailRule, 'RULE_DISPOSABLE_EMAIL must be triggered for mailinator.com');
+      assert.ok(phoneRule, 'RULE_SUSPICIOUS_PHONE must be triggered for 9999999999');
+    });
+
+    await test('Point 50: Test 7 - Blacklisted IP address triggers RULE_IP_BLACKLIST and yields CRITICAL risk', async () => {
+      const res = await fetch(`${baseUrl}/fraud/evaluate-preview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p50CustomerCleanToken}`,
+          'X-Client-IP': '198.51.100.1',
+        },
+        body: JSON.stringify({
+          orderData: {
+            totalAmount: 1999,
+            shippingAddress: { city: 'New Delhi', pincode: '110001' },
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      const ipRule = body.data.triggeredRules.find(r => r.ruleCode === 'RULE_IP_BLACKLIST');
+      assert.ok(ipRule, 'RULE_IP_BLACKLIST must be triggered');
+      assert.strictEqual(body.data.riskLevel, 'CRITICAL');
+      assert.ok(body.data.riskScore >= 85);
+      assert.strictEqual(body.data.isBlocked, true);
+    });
+
+    await test('Point 50: Test 8 - High-risk order (Score >= 70) enforces PREPAID only and blocks COD', async () => {
+      await User.findByIdAndUpdate(p50CustomerClean._id, { isShadowBanned: false });
+      await Order.deleteMany({ $or: [{ customer: p50CustomerClean._id }, { 'shippingAddress.phone': '9871100001' }] });
+      const sharedDeviceId = `DEV-SHARED-FINGERPRINT-${Date.now()}`;
+      await User.findByIdAndUpdate(p50CustomerClean._id, { $addToSet: { deviceFingerprints: sharedDeviceId } });
+      await User.findByIdAndUpdate(p50CustomerFraud._id, { $addToSet: { deviceFingerprints: sharedDeviceId } });
+
+      const res = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p50CustomerCleanToken}`,
+          'X-Device-Fingerprint': sharedDeviceId,
+          'X-Client-IP': '103.200.1.1',
+          'X-City': 'Guwahati',
+          'X-Latitude': '26.1445',
+          'X-Longitude': '91.7362',
+        },
+        body: JSON.stringify({
+          items: [{ productId: p50Product._id, quantity: 1 }],
+          paymentMethod: 'COD',
+          shippingAddress: {
+            recipientName: 'High Risk Shopper',
+            street: '45 Marine Drive',
+            city: 'Mumbai',
+            state: 'Maharashtra',
+            pincode: '400001',
+            phone: '9871100001',
+            coordinates: { lat: 19.0760, lng: 72.8777 },
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 400);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+      assert.ok(body.forcePrepaid === true || body.message.includes('Cash on Delivery (COD) is unavailable'));
+    });
+
+    await test('Point 50: Test 9 - Critical-risk order triggers transaction block (403) and auto shadow-bans user', async () => {
+      await User.findByIdAndUpdate(p50CustomerFraud._id, { isShadowBanned: false });
+
+      const res = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p50CustomerFraudToken}`,
+          'X-Client-IP': '185.220.101.5',
+          'X-Device-Fingerprint': 'DEV-BLOCKED-EMULATOR-001',
+        },
+        body: JSON.stringify({
+          items: [{ productId: p50Product._id, quantity: 1 }],
+          paymentMethod: 'ONLINE',
+          shippingAddress: {
+            recipientName: 'Fraud Suspect',
+            street: '99 Shady Lane',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+            phone: '9999999999',
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 403);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+      assert.strictEqual(body.riskLevel, 'CRITICAL');
+
+      const updatedUser = await User.findById(p50CustomerFraud._id);
+      assert.strictEqual(updatedUser.isShadowBanned, true);
+    });
+
+    await test('Point 50: Test 10 - Shadow-banned user is strictly blocked from placing orders', async () => {
+      const res = await fetch(`${baseUrl}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p50CustomerFraudToken}`,
+        },
+        body: JSON.stringify({
+          items: [{ productId: p50Product._id, quantity: 1 }],
+          paymentMethod: 'ONLINE',
+          shippingAddress: {
+            recipientName: 'Shadow Banned User',
+            street: '123 MG Road',
+            city: 'New Delhi',
+            state: 'Delhi',
+            pincode: '110001',
+            phone: '9876543210',
+          },
+        }),
+      });
+
+      assert.strictEqual(res.status, 403);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+      assert.strictEqual(body.isShadowBanned, true);
+    });
+
+    await test('Point 50: Test 11 - Super Admin can view fraud dashboard KPIs, list incidents, and inspect forensic dossier', async () => {
+      const resDash = await fetch(`${baseUrl}/admin/fraud/dashboard`, {
+        headers: { Authorization: `Bearer ${p50AdminToken}` },
+      });
+      assert.strictEqual(resDash.status, 200);
+      const dashBody = await resDash.json();
+      assert.strictEqual(dashBody.success, true);
+      assert.ok(dashBody.data.kpis.totalScanned > 0);
+      assert.ok(dashBody.data.kpis.shadowBannedUsersCount >= 1);
+
+      const resInc = await fetch(`${baseUrl}/admin/fraud/incidents?limit=10`, {
+        headers: { Authorization: `Bearer ${p50AdminToken}` },
+      });
+      assert.strictEqual(resInc.status, 200);
+      const incBody = await resInc.json();
+      assert.strictEqual(incBody.success, true);
+      assert.ok(incBody.data.incidents.length > 0);
+
+      const incidentId = incBody.data.incidents[0]._id;
+      const resSingle = await fetch(`${baseUrl}/admin/fraud/incidents/${incidentId}`, {
+        headers: { Authorization: `Bearer ${p50AdminToken}` },
+      });
+      assert.strictEqual(resSingle.status, 200);
+      const singleBody = await resSingle.json();
+      assert.strictEqual(singleBody.success, true);
+      assert.strictEqual(singleBody.data._id, incidentId);
+      assert.ok(singleBody.data.fingerprint);
+      assert.ok(singleBody.data.network);
+    });
+
+    await test('Point 50: Test 12 - Admin resolves incident (FALSE_POSITIVE automatically unbans user)', async () => {
+      const inc = await FraudIncident.findOne({ user: p50CustomerFraud._id });
+      assert.ok(inc, 'Incident must exist for p50CustomerFraud');
+
+      const res = await fetch(`${baseUrl}/admin/fraud/incidents/${inc._id}/resolve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p50AdminToken}`,
+        },
+        body: JSON.stringify({
+          status: 'FALSE_POSITIVE',
+          notes: 'Customer provided legitimate ID proof and billing receipts.',
+          unbanUser: true,
+        }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.resolution.status, 'FALSE_POSITIVE');
+
+      const unbannedUser = await User.findById(p50CustomerFraud._id);
+      assert.strictEqual(unbannedUser.isShadowBanned, false, 'FALSE_POSITIVE resolution must unban customer');
+    });
+
+    await test('Point 50: Test 13 - Admin can toggle user shadow-ban manually', async () => {
+      const resBan = await fetch(`${baseUrl}/admin/fraud/users/${p50CustomerFraud._id}/shadow-ban`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p50AdminToken}`,
+        },
+        body: JSON.stringify({ reason: 'Suspicious card testing behavior' }),
+      });
+      assert.strictEqual(resBan.status, 200);
+      const banBody = await resBan.json();
+      assert.strictEqual(banBody.data.isShadowBanned, true);
+
+      const resUnban = await fetch(`${baseUrl}/admin/fraud/users/${p50CustomerFraud._id}/shadow-ban`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p50AdminToken}`,
+        },
+        body: JSON.stringify({ reason: 'Cleared by compliance' }),
+      });
+      assert.strictEqual(resUnban.status, 200);
+      const unbanBody = await resUnban.json();
+      assert.strictEqual(unbanBody.data.isShadowBanned, false);
+    });
+
+    await test('Point 50: Test 14 - Admin can configure fraud rules and security settings', async () => {
+      const resRules = await fetch(`${baseUrl}/admin/fraud/rules`, {
+        headers: { Authorization: `Bearer ${p50AdminToken}` },
+      });
+      assert.strictEqual(resRules.status, 200);
+      const rulesBody = await resRules.json();
+      const firstRule = rulesBody.data[0];
+
+      const resUpdateRule = await fetch(`${baseUrl}/admin/fraud/rules/${firstRule._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p50AdminToken}`,
+        },
+        body: JSON.stringify({ scoreWeight: 55, isEnabled: true }),
+      });
+      assert.strictEqual(resUpdateRule.status, 200);
+      const updatedRuleBody = await resUpdateRule.json();
+      assert.strictEqual(updatedRuleBody.data.scoreWeight, 55);
+
+      const resUpdateSettings = await fetch(`${baseUrl}/admin/fraud/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${p50AdminToken}`,
+        },
+        body: JSON.stringify({
+          globalThresholds: { mediumRiskThreshold: 45, highRiskThreshold: 75, criticalRiskThreshold: 90 },
+          blacklists: {
+            ipAddresses: ['198.51.100.1', '198.51.100.99'],
+          },
+        }),
+      });
+      assert.strictEqual(resUpdateSettings.status, 200);
+      const settingsBody = await resUpdateSettings.json();
+      assert.strictEqual(settingsBody.data.globalThresholds.mediumRiskThreshold, 45);
+      assert.ok(settingsBody.data.blacklists.ipAddresses.includes('198.51.100.99'));
+    });
+
+    await test('Point 50: Test 15 - Export fraud incidents report generates valid RFC-4180 CSV with UTF-8 BOM', async () => {
+      const resCsv = await fetch(`${baseUrl}/admin/fraud/export-csv`, {
+        headers: { Authorization: `Bearer ${p50AdminToken}` },
+      });
+      assert.strictEqual(resCsv.status, 200);
+      assert.ok(resCsv.headers.get('content-type').includes('text/csv'));
+      const buf = Buffer.from(await resCsv.arrayBuffer());
+      assert.ok(buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf, 'Must start with UTF-8 BOM bytes (EF BB BF)');
+      const text = buf.toString('utf8');
+      assert.ok(text.includes('Incident Number'));
+      assert.ok(text.includes('Risk Score'));
+      assert.ok(text.includes('Triggered Rules'));
+    });
+
+    await test('Point 50: Test 16 - Role security guardrails (401 unauthenticated, 403 customer access denied)', async () => {
+      const resUnauth = await fetch(`${baseUrl}/admin/fraud/dashboard`);
+      assert.strictEqual(resUnauth.status, 401);
+
+      const resForbidden = await fetch(`${baseUrl}/admin/fraud/dashboard`, {
+        headers: { Authorization: `Bearer ${p50CustomerCleanToken}` },
+      });
+      assert.strictEqual(resForbidden.status, 403);
     });
 
   } finally {

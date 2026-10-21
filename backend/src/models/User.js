@@ -233,6 +233,34 @@ const userSchema = new mongoose.Schema(
         default: 0,
       },
     },
+    // Point 50: Fraud Detection, Risk Scoring & Shadow-Ban
+    isShadowBanned: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    shadowBannedAt: {
+      type: Date,
+      default: null,
+    },
+    shadowBanReason: {
+      type: String,
+      default: '',
+    },
+    deviceFingerprints: {
+      type: [String],
+      default: [],
+    },
+    fraudRiskScore: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    lastRiskAssessment: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

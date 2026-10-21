@@ -88,6 +88,15 @@ exports.createOrder = async (req, res, next) => {
       req.user = guestUser;
     }
 
+    // Point 50: Security & Shadow-Ban Protection
+    if (req.user && req.user.isShadowBanned) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account has been restricted from placing orders due to suspicious activity. Please contact security support.',
+        isShadowBanned: true,
+      });
+    }
+
     // Step 1: Validate all items exist and have sufficient stock before decrementing
     let validatedItems = [];
     let totalOrderAmount = 0;
@@ -641,6 +650,57 @@ exports.createOrder = async (req, res, next) => {
       rtoStatus = 'PENDING';
     }
 
+    // Point 50: Enterprise Fraud Detection & Risk Scoring Engine
+    const fraudService = require('../services/fraudDetectionService');
+    const fraudEvaluation = await fraudService.evaluateOrderRisk({
+      user: req.user,
+      orderData: {
+        totalAmount: finalTotalAmount,
+        shippingAddress,
+        paymentMethod: activePaymentMethod,
+      },
+      req,
+    });
+
+    if (fraudEvaluation.isBlocked) {
+      for (const d of decrementedList) {
+        if (d.variantSku) {
+          await Product.updateOne(
+            { _id: d.productId, 'variants.sku': d.variantSku },
+            { $inc: { countInStock: d.quantity, 'variants.$.stock': d.quantity } }
+          );
+        } else {
+          await Product.findByIdAndUpdate(d.productId, { $inc: { countInStock: d.quantity } });
+        }
+      }
+      return res.status(403).json({
+        success: false,
+        message: 'Transaction flagged and blocked by enterprise fraud prevention engine.',
+        riskLevel: fraudEvaluation.riskLevel,
+        riskScore: fraudEvaluation.riskScore,
+        actionTaken: fraudEvaluation.actionTaken,
+      });
+    }
+
+    if (fraudEvaluation.forcePrepaid && activePaymentMethod === 'COD') {
+      for (const d of decrementedList) {
+        if (d.variantSku) {
+          await Product.updateOne(
+            { _id: d.productId, 'variants.sku': d.variantSku },
+            { $inc: { countInStock: d.quantity, 'variants.$.stock': d.quantity } }
+          );
+        } else {
+          await Product.findByIdAndUpdate(d.productId, { $inc: { countInStock: d.quantity } });
+        }
+      }
+      return res.status(400).json({
+        success: false,
+        message: 'Cash on Delivery (COD) is unavailable for this transaction due to security risk assessment. Please complete payment using Online Prepaid methods.',
+        forcePrepaid: true,
+        riskScore: fraudEvaluation.riskScore,
+      });
+    }
+
     // Point 26: Full-Fledged Affiliate & Influencer Tracking
     const rawAffiliateCode = req.body.affiliateCode || req.headers['x-affiliate-code'] || req.query.ref || null;
     let affiliateData = {
@@ -748,6 +808,10 @@ exports.createOrder = async (req, res, next) => {
       rtoVerificationOtp: rtoOtp,
       rtoVerificationOtpExpires: rtoOtpExpires,
       flaggedForRtoRisk: rtoAssessment.isHighRisk,
+      // Point 50: Enterprise Fraud Detection & Risk Scoring
+      fraudRiskScore: fraudEvaluation.riskScore,
+      fraudRiskLevel: fraudEvaluation.riskLevel,
+      fraudIncident: fraudEvaluation.incidentId || null,
       // Point 4: Guest Checkout Metadata
       isGuestOrder: Boolean(accountCreated || req.user.isGuestCreated || req.body.isGuestCheckout),
       guestCredentialsSent: Boolean(accountCreated),
@@ -782,6 +846,11 @@ exports.createOrder = async (req, res, next) => {
         bookedAt: new Date(),
       },
     });
+
+    if (fraudEvaluation.incidentId) {
+      const FraudIncident = require('../models/FraudIncident');
+      await FraudIncident.findByIdAndUpdate(fraudEvaluation.incidentId, { order: masterOrder._id });
+    }
 
     if (affiliatePartnerDoc && affiliateData.partner) {
       try {

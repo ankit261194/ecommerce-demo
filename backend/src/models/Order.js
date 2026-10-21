@@ -262,6 +262,23 @@ const orderSchema = new mongoose.Schema(
       min: 0,
     },
     // Point #74: Fake / Spam Order Prevention (RTO Guard for high-risk COD)
+    // Point 50: Enterprise Fraud Detection & Risk Scoring
+    fraudRiskScore: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    fraudRiskLevel: {
+      type: String,
+      enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'],
+      default: 'LOW',
+    },
+    fraudIncident: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'FraudIncident',
+      default: null,
+    },
     rtoRiskScore: {
       type: Number,
       default: 0,

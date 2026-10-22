@@ -33618,6 +33618,138 @@ const runTests = async () => {
       assert.strictEqual(resCust.status, 403);
     });
 
+  
+    // =========================================================================
+    // POINT 55: AI Voice Search & Natural Language Conversational Commerce
+    // =========================================================================
+    let p55ProductId;
+
+    await test('Point 55: Setup - Ensure test product and coupon exist for voice queries', async () => {
+      const prod = await Product.findOne({ isPublished: { $ne: false } });
+      assert.ok(prod, 'At least one product required for voice assistant');
+      p55ProductId = prod._id.toString();
+
+      // Ensure test coupon FESTIVEVOICE exists
+      const Coupon = require('../src/models/Coupon');
+      await Coupon.findOneAndUpdate(
+        { code: 'FESTIVEVOICE' },
+        {
+          code: 'FESTIVEVOICE',
+          discountType: 'PERCENTAGE',
+          discountValue: 20,
+          minOrderValue: 500,
+          isActive: true,
+          expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        },
+        { upsert: true }
+      );
+    });
+
+    await test('Point 55: Test 1 - GET /api/ai/voice-prompts returns curated bilingual prompts (Hindi + English)', async () => {
+      const res = await fetch(baseUrl + '/ai/voice-prompts');
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.ok(Array.isArray(body.prompts));
+      assert.ok(body.prompts.length >= 4);
+      assert.ok(body.languages.includes('hi'));
+      assert.ok(body.languages.includes('en'));
+    });
+
+    await test('Point 55: Test 2 - POST /api/ai/voice/query resolves search intent with natural price filter', async () => {
+      const res = await fetch(baseUrl + '/ai/voice/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: 'Headphones under 5000', language: 'en' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.intent, 'SEARCH_PRODUCTS');
+      assert.strictEqual(body.data.entities.maxPrice, 5000);
+      assert.ok(body.data.spokenResponse.length > 0);
+    });
+
+    await test('Point 55: Test 3 - POST /api/ai/voice/parse-intent handles Hindi voice command with conversational Hindi response', async () => {
+      const res = await fetch(baseUrl + '/ai/voice/parse-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: 'Aura Pro wireless headphones dikhao', language: 'hi' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.intent, 'SEARCH_PRODUCTS');
+      assert.ok(body.data.spokenResponse.length > 0);
+    });
+
+    await test('Point 55: Test 4 - POST /api/ai/voice-assistant resolves Order Tracking intent', async () => {
+      const res = await fetch(baseUrl + '/ai/voice-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: 'Track my recent order status', language: 'en' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.intent, 'TRACK_ORDER');
+    });
+
+    await test('Point 55: Test 5 - POST /api/ai/voice/query resolves Offers intent and returns promo coupons', async () => {
+      const res = await fetch(baseUrl + '/ai/voice/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: 'Discounts aur offers kya hain', language: 'hi' }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.intent, 'GET_OFFERS');
+    });
+
+    await test('Point 55: Test 6 - POST /api/ai/voice/hands-free-action executes direct ADD_TO_CART action', async () => {
+      const res = await fetch(baseUrl + '/ai/voice/hands-free-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actionType: 'ADD_TO_CART',
+          payload: { productId: p55ProductId, quantity: 2 },
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.cartAction, 'ADDED');
+      assert.strictEqual(body.data.quantity, 2);
+    });
+
+    await test('Point 55: Test 7 - POST /api/ai/voice/hands-free-action executes direct APPLY_COUPON action', async () => {
+      const res = await fetch(baseUrl + '/ai/voice/hands-free-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actionType: 'APPLY_COUPON',
+          payload: { couponCode: 'FESTIVEVOICE' },
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.success, true);
+      assert.strictEqual(body.data.couponCode, 'FESTIVEVOICE');
+      assert.strictEqual(body.data.discountValue, 20);
+    });
+
+    await test('Point 55: Test 8 - POST /api/ai/voice/query validates empty voice query with 400 Bad Request', async () => {
+      const res = await fetch(baseUrl + '/ai/voice/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: '' }),
+      });
+      assert.strictEqual(res.status, 400);
+      const body = await res.json();
+      assert.strictEqual(body.success, false);
+    });
+
   } finally {
     if (server) {
       server.close();

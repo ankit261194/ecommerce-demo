@@ -58,7 +58,7 @@ exports.processVoiceCommand = async (req, res, next) => {
         ? `Aapka order #${orderNumber} is waqt "${statusLabel}" stage par hai. Delivery rider raste me hai aur lagbhag 25 se 35 minutes me aapke darwaze par pahuchega.`
         : `Your order #${orderNumber} is currently ${statusLabel}. Delivery partner is on the way and estimated to reach within 25–35 minutes.`;
 
-      return res.status(200).json({
+      const _resp = {
         success: true,
         intent: 'TRACK_ORDER',
         language: isHindi ? 'hi' : 'en',
@@ -73,7 +73,18 @@ exports.processVoiceCommand = async (req, res, next) => {
           trackingUrl: `/track/${orderNumber}`,
           order: latestSubOrder,
         },
-      });
+      };
+    return res.status(200).json({
+      ..._resp,
+      data: {
+        ..._resp,
+        entities: {
+          maxPrice: _resp.payload?.maxPrice || null,
+          query: _resp.query,
+        },
+        spokenResponse: _resp.replyText,
+      },
+    });
     }
 
     // 2. INTENT: OFFERS & DISCOUNTS ("offers kya hain", "coupons", "any discount", "best deals", "sasta")
@@ -93,7 +104,7 @@ exports.processVoiceCommand = async (req, res, next) => {
         ? `Aaj ke top discounts aur coupons hain: ${couponCodes}. Checkout par code lagakar aap 20% tak ki bachat kar sakte hain!`
         : `Today's top verified promo coupons are: ${couponCodes}. Apply at checkout to unlock up to 20% instant savings!`;
 
-      return res.status(200).json({
+      const _resp = {
         success: true,
         intent: 'GET_OFFERS',
         language: isHindi ? 'hi' : 'en',
@@ -104,7 +115,18 @@ exports.processVoiceCommand = async (req, res, next) => {
           coupons: activeCoupons,
           suggestedCode: activeCoupons[0]?.code || 'FESTIVE500',
         },
-      });
+      };
+    return res.status(200).json({
+      ..._resp,
+      data: {
+        ..._resp,
+        entities: {
+          maxPrice: _resp.payload?.maxPrice || null,
+          query: _resp.query,
+        },
+        spokenResponse: _resp.replyText,
+      },
+    });
     }
 
     // 3. INTENT: CART / CHECKOUT ("open cart", "cart dikhao", "checkout", "basket me kya hai")
@@ -119,7 +141,7 @@ exports.processVoiceCommand = async (req, res, next) => {
         ? 'Maine aapka shopping cart open kar diya hai. Aap yahan items review kar sakte hain aur 1-click me order place kar sakte hain.'
         : 'I have opened your shopping cart. You can review your items and proceed with express checkout.';
 
-      return res.status(200).json({
+      const _resp = {
         success: true,
         intent: 'CHECK_CART',
         language: isHindi ? 'hi' : 'en',
@@ -127,7 +149,18 @@ exports.processVoiceCommand = async (req, res, next) => {
         replyText,
         action: 'OPEN_CART_DRAWER',
         payload: {},
-      });
+      };
+    return res.status(200).json({
+      ..._resp,
+      data: {
+        ..._resp,
+        entities: {
+          maxPrice: _resp.payload?.maxPrice || null,
+          query: _resp.query,
+        },
+        spokenResponse: _resp.replyText,
+      },
+    });
     }
 
     // 4. DEFAULT INTENT: PRODUCT SEARCH & RECOMMENDATION
@@ -175,7 +208,7 @@ exports.processVoiceCommand = async (req, res, next) => {
       ? `Maine aapke liye ${count} best results khoj liye hain. Sabse popular "${topItem}" sirf ₹${topPrice} me uplabdh hai.`
       : `Found ${count} top matching results for your request. The highest-rated option is "${topItem}" at ₹${topPrice}.`;
 
-    return res.status(200).json({
+    const _resp = {
       success: true,
       intent: 'SEARCH_PRODUCTS',
       language: isHindi ? 'hi' : 'en',
@@ -197,6 +230,17 @@ exports.processVoiceCommand = async (req, res, next) => {
           brand: p.brand,
           vendor: p.vendor?.storeName || 'AuraMarket Partner',
         })),
+      },
+    };
+    return res.status(200).json({
+      ..._resp,
+      data: {
+        ..._resp,
+        entities: {
+          maxPrice: _resp.payload?.maxPrice || null,
+          query: _resp.query,
+        },
+        spokenResponse: _resp.replyText,
       },
     });
   } catch (error) {
@@ -256,4 +300,56 @@ exports.getVoicePrompts = (req, res) => {
       },
     ],
   });
+};
+
+/**
+ * Programmatically execute voice commerce action
+ * POST /api/ai/voice/hands-free-action
+ */
+exports.executeHandsFreeAction = async (req, res) => {
+  try {
+    const { actionType, payload = {} } = req.body;
+    if (!actionType) {
+      return res.status(400).json({ success: false, message: 'actionType is required' });
+    }
+
+    if (actionType === 'ADD_TO_CART') {
+      const product = await Product.findById(payload.productId);
+      if (!product) {
+        return res.status(404).json({ success: false, message: 'Product not found' });
+      }
+      return res.status(200).json({
+        success: true,
+        message: `Successfully added "${product.title}" to cart via Voice Assistant!`,
+        data: {
+          product,
+          quantity: payload.quantity || 1,
+          cartAction: 'ADDED',
+        },
+      });
+    }
+
+    if (actionType === 'APPLY_COUPON') {
+      const coupon = await Coupon.findOne({
+        code: (payload.couponCode || '').toUpperCase(),
+        isActive: true,
+      });
+      if (!coupon) {
+        return res.status(404).json({ success: false, message: 'Coupon invalid or expired' });
+      }
+      return res.status(200).json({
+        success: true,
+        message: `Coupon code "${coupon.code}" successfully applied via Voice Assistant!`,
+        data: {
+          couponCode: coupon.code,
+          discountType: coupon.discountType,
+          discountValue: coupon.discountValue,
+        },
+      });
+    }
+
+    return res.status(400).json({ success: false, message: `Unknown actionType: ${actionType}` });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
 };

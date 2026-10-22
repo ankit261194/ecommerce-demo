@@ -33982,6 +33982,102 @@ const runTests = async () => {
       assert.strictEqual(resCust.status, 403);
     });
 
+    // =========================================================================
+    // POINT 57: Dockerfile, Docker Compose & 1-Click Multi-Container Deployment
+    //           + PWA Offline First & Push Notification Engine
+    // =========================================================================
+    await test('Point 57: Test 1 - Dockerfile and multi-stage container specs exist for Backend', async () => {
+      const fs = require('fs');
+      const path = require('path');
+      const dockerfilePath = path.resolve(__dirname, '..', 'Dockerfile');
+      assert.ok(fs.existsSync(dockerfilePath), 'backend/Dockerfile must exist');
+      const content = fs.readFileSync(dockerfilePath, 'utf8');
+      assert.ok(content.includes('FROM node:20-alpine'), 'Should use node:20-alpine base image');
+      assert.ok(content.includes('HEALTHCHECK'), 'Must include automated container healthcheck');
+      assert.ok(content.includes('USER auramarket'), 'Must run as non-root user for enterprise container security');
+    });
+
+    await test('Point 57: Test 2 - Dockerfile and Nginx reverse proxy specs exist for Frontend', async () => {
+      const fs = require('fs');
+      const path = require('path');
+      const dockerfilePath = path.resolve(__dirname, '..', '..', 'frontend', 'Dockerfile');
+      assert.ok(fs.existsSync(dockerfilePath), 'frontend/Dockerfile must exist');
+      const content = fs.readFileSync(dockerfilePath, 'utf8');
+      assert.ok(content.includes('FROM node:20-alpine AS builder'), 'Should use builder stage');
+      assert.ok(content.includes('FROM nginx'), 'Should use nginx runner image');
+
+      const nginxPath = path.resolve(__dirname, '..', '..', 'frontend', 'nginx.conf');
+      assert.ok(fs.existsSync(nginxPath), 'frontend/nginx.conf must exist');
+      const nginxContent = fs.readFileSync(nginxPath, 'utf8');
+      assert.ok(nginxContent.includes('try_files $uri $uri/ /index.html'), 'Must have SPA routing fallback');
+      assert.ok(nginxContent.includes('proxy_pass http://backend:5000/api/'), 'Must proxy API requests to backend container');
+    });
+
+    await test('Point 57: Test 3 - docker-compose.yml defines multi-container orchestration', async () => {
+      const fs = require('fs');
+      const path = require('path');
+      const composePath = path.resolve(__dirname, '..', '..', 'docker-compose.yml');
+      assert.ok(fs.existsSync(composePath), 'docker-compose.yml must exist at project root');
+      const composeContent = fs.readFileSync(composePath, 'utf8');
+      assert.ok(composeContent.includes('mongodb:'), 'Must define MongoDB container service');
+      assert.ok(composeContent.includes('redis:'), 'Must define Redis container service');
+      assert.ok(composeContent.includes('backend:'), 'Must define Backend container service');
+      assert.ok(composeContent.includes('frontend:'), 'Must define Frontend container service');
+      assert.ok(composeContent.includes('auramarket_network:'), 'Must define isolated bridge network');
+      assert.ok(composeContent.includes('mongo_data:'), 'Must declare persistent data volume');
+    });
+
+    await test('Point 57: Test 4 - 1-Click deployment automation scripts exist for Linux & Windows', async () => {
+      const fs = require('fs');
+      const path = require('path');
+      const shPath = path.resolve(__dirname, '..', '..', 'deploy-docker.sh');
+      const batPath = path.resolve(__dirname, '..', '..', 'deploy-docker.bat');
+      assert.ok(fs.existsSync(shPath), 'deploy-docker.sh must exist');
+      assert.ok(fs.existsSync(batPath), 'deploy-docker.bat must exist');
+    });
+
+    await test('Point 57: Test 5 - PWA Web App Manifest (manifest.json) is properly structured', async () => {
+      const fs = require('fs');
+      const path = require('path');
+      const manifestPath = path.resolve(__dirname, '..', '..', 'frontend', 'public', 'manifest.json');
+      assert.ok(fs.existsSync(manifestPath), 'manifest.json must exist in public folder');
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      assert.strictEqual(manifest.short_name, 'AuraMarket');
+      assert.strictEqual(manifest.display, 'standalone');
+      assert.ok(Array.isArray(manifest.icons) && manifest.icons.length > 0);
+      assert.ok(manifest.theme_color);
+    });
+
+    await test('Point 57: Test 6 - PWA Service Worker (sw.js) handles offline caching & push', async () => {
+      const fs = require('fs');
+      const path = require('path');
+      const swPath = path.resolve(__dirname, '..', '..', 'frontend', 'public', 'sw.js');
+      assert.ok(fs.existsSync(swPath), 'sw.js must exist in public folder');
+      const swContent = fs.readFileSync(swPath, 'utf8');
+      assert.ok(swContent.includes('CACHE_NAME'), 'Must declare cache name');
+      assert.ok(swContent.includes('addEventListener(\'fetch\''), 'Must intercept network requests');
+      assert.ok(swContent.includes('addEventListener(\'push\''), 'Must handle web push notifications');
+      assert.ok(swContent.includes('offline'), 'Must provide offline fallback for API');
+    });
+
+    await test('Point 57: Test 7 - Frontend index.html declares PWA manifest and mobile app meta tags', async () => {
+      const fs = require('fs');
+      const path = require('path');
+      const indexPath = path.resolve(__dirname, '..', '..', 'frontend', 'index.html');
+      const indexContent = fs.readFileSync(indexPath, 'utf8');
+      assert.ok(indexContent.includes('rel="manifest"'), 'Must link manifest.json');
+      assert.ok(indexContent.includes('name="theme-color"'), 'Must specify theme-color');
+      assert.ok(indexContent.includes('name="apple-mobile-web-app-capable"'), 'Must support iOS home screen web app');
+    });
+
+    await test('Point 57: Test 8 - Container Healthcheck endpoint /api/health returns operational status', async () => {
+      const res = await fetch(baseUrl + '/health');
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.status, 'healthy');
+      assert.strictEqual(data.database.connected, true);
+    });
+
   } finally {
     if (server) {
       server.close();

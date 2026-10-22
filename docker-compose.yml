@@ -1,33 +1,116 @@
 version: '3.8'
 
+# ==============================================================================
+# AuraMarket Multi-Vendor Marketplace — 1-Click Multi-Container Orchestration
+# Services: Frontend (Nginx), Backend (Node 20), MongoDB 7.0, Redis 7.0
+# ==============================================================================
+
 services:
+  # 1. MongoDB Document Store
   mongodb:
     image: mongo:7.0
-    container_name: auramarket_mongo
+    container_name: auramarket_mongodb
     restart: always
-    ports:
-      - "27017:27017"
     environment:
       MONGO_INITDB_DATABASE: ecommerce_marketplace
+    ports:
+      - "27017:27017"
     volumes:
       - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - auramarket_network
 
+  # 2. Redis In-Memory Cache & Job Queue
+  redis:
+    image: redis:7.0-alpine
+    container_name: auramarket_redis
+    restart: always
+    command: redis-server --appendonly yes --requirepass auramarket_redis_pass_2026
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "auramarket_redis_pass_2026", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - auramarket_network
+
+  # 3. Enterprise Backend REST & WebSocket Engine
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: auramarket_backend
     restart: always
-    ports:
-      - "5000:5000"
     environment:
       PORT: 5000
       NODE_ENV: production
       MONGO_URI: mongodb://mongodb:27017/ecommerce_marketplace
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: auramarket_redis_pass_2026
       JWT_SECRET: production_grade_super_secret_jwt_key_2026_obsidian_amber
       JWT_EXPIRES_IN: 7d
       DEFAULT_PLATFORM_COMMISSION: 10
+      WHATSAPP_VERIFY_TOKEN: auramarket_wa_verify_2026
+    ports:
+      - "5000:5000"
+    volumes:
+      - backend_uploads:/app/uploads
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5000/api/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    networks:
+      - auramarket_network
+
+  # 4. Enterprise Frontend Web Application & Reverse Proxy
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: auramarket_frontend
+    restart: always
+    ports:
+      - "80:80"
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - auramarket_network
 
 volumes:
   mongo_data:
     driver: local
+  redis_data:
+    driver: local
+  backend_uploads:
+    driver: local
+
+networks:
+  auramarket_network:
+    driver: bridge

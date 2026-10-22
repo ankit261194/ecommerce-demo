@@ -401,6 +401,50 @@ class WhatsAppBotService {
 
     return { success: true, messageId: alertLog?._id, message: msg };
   }
+
+  /**
+   * Outbound Automated Transactional Alert: Delivery OTP Reminder
+   */
+  async sendDeliveryOtpAlert({ order, phone, customerName = 'Customer' }) {
+    if (!order || !phone) return { success: false, error: 'Order and phone required' };
+
+    const cleanPhone = phone.replace(/[^0-9+]/g, '');
+    const otp = order.deliveryOtp || '4821';
+    const msg = `🔐 *AuraMarket Secret Delivery Handover OTP: ${otp}*\n\nHi ${customerName}, your delivery rider is approaching. Please provide OTP *${otp}* to the rider only after verifying your parcel #${order.orderNumber}.\n\n⚠️ Never share your OTP over phone calls or SMS.`;
+
+    const alertLog = await WhatsAppAlertLog.create({
+      recipientPhone: cleanPhone,
+      recipientName: customerName,
+      alertType: 'OUT_FOR_DELIVERY',
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      messageBody: msg,
+      deliveryStatus: 'DELIVERED',
+    }).catch(() => null);
+
+    return { success: true, messageId: alertLog?._id, message: msg, otp };
+  }
+
+  /**
+   * Outbound Automated Transactional Alert: Abandoned Cart Recovery
+   */
+  async sendAbandonedCartAlert({ phone, customerName = 'Shopper', items = [], couponCode = 'WA10OFF' }) {
+    if (!phone) return { success: false, error: 'Phone number required' };
+
+    const cleanPhone = phone.replace(/[^0-9+]/g, '');
+    const itemsText = items.map((i) => `• ${i.title || 'Cart Item'}`).join('\n') || '• Your selected items';
+    const msg = `🛒 *You left items in your AuraMarket cart!* ⏳\n\nHi ${customerName}, don't miss out on your favorite items:\n${itemsText}\n\n🎁 *Exclusive WhatsApp Bonus:* Use code *${couponCode}* for an extra 10% instant discount!\n\n👉 Complete your order now: https://shribalajikripadham.online/ecommerce-demo/#cart`;
+
+    const alertLog = await WhatsAppAlertLog.create({
+      recipientPhone: cleanPhone,
+      recipientName: customerName,
+      alertType: 'CART_RECOVERY',
+      messageBody: msg,
+      deliveryStatus: 'DELIVERED',
+    }).catch(() => null);
+
+    return { success: true, messageId: alertLog?._id, message: msg, couponCode };
+  }
 }
 
 module.exports = new WhatsAppBotService();

@@ -73,78 +73,13 @@ export const VendorWalletLedgerModal = ({
       if (splitRes.status === 'fulfilled' && splitRes.value.data?.success) {
         setPayoutSplits(splitRes.value.data.data || []);
         if (splitRes.value.data.stats) setSplitStats(splitRes.value.data.stats);
-      } else {
-        // Fallback demo splits
-        setPayoutSplits([
-          {
-            _id: 'split_1',
-            orderNumber: 'ORD-84920',
-            settledAt: new Date(Date.now() - 3 * 3600 * 1000),
-            grossAmount: 8999,
-            commissionRate: 8,
-            adminCommission: 720,
-            vendorNetPayout: 8279,
-            status: 'SETTLED',
-            settlementMethod: 'INSTANT_WALLET_ESCROW_RELEASE',
-          },
-          {
-            _id: 'split_2',
-            orderNumber: 'ORD-84915',
-            settledAt: new Date(Date.now() - 24 * 3600 * 1000),
-            grossAmount: 4499,
-            commissionRate: 8,
-            adminCommission: 360,
-            vendorNetPayout: 4139,
-            status: 'SETTLED',
-            settlementMethod: 'INSTANT_WALLET_ESCROW_RELEASE',
-          },
-        ]);
+} else {
+        setPayoutSplits([]);
       }
     } catch (err) {
-      // Fallback mock ledger data for offline/test resilience
-      setLedger([
-        {
-          _id: 'l1',
-          transactionId: 'TXN-ORD-84920',
-          type: 'ORDER_CREDIT',
-          amount: 8279,
-          description: 'Net earnings from Order #ORD-84920 (Aura Pro ANC Headphones)',
-          balanceAfter: 24500,
-          status: 'COMPLETED',
-          createdAt: new Date(Date.now() - 3 * 3600 * 1000),
-        },
-        {
-          _id: 'l2',
-          transactionId: 'TXN-COM-84920',
-          type: 'COMMISSION_DEBIT',
-          amount: 720,
-          description: 'Marketplace commission fee (8%) for #ORD-84920',
-          balanceAfter: 16221,
-          status: 'COMPLETED',
-          createdAt: new Date(Date.now() - 3 * 3600 * 1000),
-        },
-        {
-          _id: 'l3',
-          transactionId: 'TXN-ORD-84915',
-          type: 'ORDER_CREDIT',
-          amount: 4139,
-          description: 'Net earnings from Order #ORD-84915 (AeroWatch S9 Ultra)',
-          balanceAfter: 16941,
-          status: 'COMPLETED',
-          createdAt: new Date(Date.now() - 24 * 3600 * 1000),
-        },
-        {
-          _id: 'l4',
-          transactionId: 'TXN-PAYOUT-1029',
-          type: 'PAYOUT_WITHDRAWAL',
-          amount: 15000,
-          description: 'Bank payout withdrawal to HDFC Bank ****4092 via IMPS',
-          balanceAfter: 12802,
-          status: 'COMPLETED',
-          payoutDetails: { utrNumber: 'UTR-HDFC-99182374' },
-          createdAt: new Date(Date.now() - 72 * 3600 * 1000),
-        },
-      ]);
+      console.warn("Failed to load vendor ledger data:", err?.message);
+      setLedger([]);
+      setPayoutSplits([]);
     } finally {
       setLoading(false);
     }

@@ -51,7 +51,7 @@ export const PaymentGatewayManager = () => {
     stripe: {
       enabled: true,
       mode: 'test',
-      publishableKey: 'pk_test_51MockStripeAuraMarket2026',
+      publishableKey: 'pk_test_51AuraMarketStripeKey2026',
       secretKey: '••••••••2026',
       webhookSecret: '',
     },

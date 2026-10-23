@@ -136,7 +136,7 @@ export default function BannerManager() {
       if (res.data?.success && Array.isArray(res.data.data) && res.data.data.length > 0) {
         setBanners(res.data.data);
       } else {
-        // Fallback to public endpoint or mock default
+        // Fallback to default catalog
         const pubRes = await api.get('/banners?activeOnly=false');
         if (pubRes.data?.success && Array.isArray(pubRes.data.data) && pubRes.data.data.length > 0) {
           setBanners(pubRes.data.data);

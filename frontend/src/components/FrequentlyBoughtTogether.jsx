@@ -31,38 +31,7 @@ export const FrequentlyBoughtTogether = ({
         setLoading(false);
       })
       .catch(() => {
-        // Safe local fallback if complementary accessories endpoint fails
-        if (mainProduct) {
-          const mockAccessories = [
-            {
-              _id: 'bundle_acc_1',
-              title: 'Hard Shell EVA Travel Carrying Case & Cable Organizer',
-              image: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=300',
-              sellingPrice: 799,
-              mrp: 1499,
-            },
-            {
-              _id: 'bundle_acc_2',
-              title: '65W GaN Fast Charger with Braided Nylon Type-C Cable',
-              image: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=300',
-              sellingPrice: 1199,
-              mrp: 2299,
-            },
-          ];
-
-          setBundleData({
-            mainProduct: {
-              _id: mainProduct._id || 'main_prod',
-              title: mainProduct.title,
-              image: mainProduct.image || mainProduct.images?.[0],
-              sellingPrice: mainProduct.sellingPrice || mainProduct.price || 8999,
-              mrp: mainProduct.mrp || 14999,
-            },
-            bundleItems: mockAccessories,
-          });
-
-          setSelectedIds(new Set([mainProduct._id || 'main_prod', 'bundle_acc_1', 'bundle_acc_2']));
-        }
+        setBundleData(null);
         setLoading(false);
       });
   }, [productId, mainProduct]);

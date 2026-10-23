@@ -38,7 +38,7 @@ export const SmsWhatsAppSettingsManager = () => {
 
   const [settings, setSettings] = useState({
     sms: {
-      activeProvider: 'mock',
+      activeProvider: 'sandbox',
       fast2sms: { apiKey: '', senderId: 'FSTSMS', route: 'q' },
       msg91: { authKey: '', senderId: 'AURAMK', dltTemplateId: '' },
       twilio: { accountSid: '', authToken: '', fromPhone: '' },
@@ -76,7 +76,7 @@ export const SmsWhatsAppSettingsManager = () => {
         const d = res.data.data;
         setSettings({
           sms: {
-            activeProvider: d.sms?.activeProvider || 'mock',
+            activeProvider: d.sms?.activeProvider || 'sandbox',
             fast2sms: {
               apiKey: d.sms?.fast2sms?.apiKeyMasked || (d.sms?.fast2sms?.hasKey ? '••••••••' : ''),
               senderId: d.sms?.fast2sms?.senderId || 'FSTSMS',
@@ -310,7 +310,7 @@ export const SmsWhatsAppSettingsManager = () => {
                 { id: 'msg91', name: 'MSG91 Enterprise', flag: '⚡' },
                 { id: 'twilio', name: 'Twilio Global', flag: '🌐' },
                 { id: 'gupshup', name: 'Gupshup SMS', flag: '📱' },
-                { id: 'mock', name: 'Sandbox Simulator', flag: '🧪' },
+                { id: 'sandbox', name: 'Sandbox Simulator', flag: '🧪' },
               ].map(p => (
                 <button
                   key={p.id}

@@ -126,7 +126,7 @@ const VendorStoreProfileModal = ({
       }
     } catch (_) {}
 
-    // Fallback to initialData if offline/mock
+    // Fallback to initial data if offline
     if (initialData) {
       setFormData(prev => ({
         ...prev,

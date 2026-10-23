@@ -62,43 +62,8 @@ export const VendorReviewsModal = ({ isOpen, onClose, onRefreshStoreData }) => {
         }
       }
     } catch (err) {
-      // Fallback mock reviews for offline / test resilience
-      setReviews([
-        {
-          _id: 'rev-mock-1',
-          product: {
-            title: 'Aura Pro ANC Wireless Noise-Cancelling Headphones',
-            image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
-            price: 8999,
-          },
-          userName: 'Amit Sharma',
-          rating: 5,
-          title: 'Flawless packaging and authentic product!',
-          comment: 'Arrived within 2 days with OTP delivery. Build quality is exceptional and brand warranty activated without issue.',
-          isVerifiedPurchase: true,
-          helpfulCount: 7,
-          createdAt: new Date(Date.now() - 24 * 3600 * 1000),
-        },
-        {
-          _id: 'rev-mock-2',
-          product: {
-            title: 'AeroWatch S9 Ultra Smartwatch with AMOLED Display',
-            image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
-            price: 4499,
-          },
-          userName: 'Neha Singhania',
-          rating: 4,
-          title: 'Very good quality, highly recommended',
-          comment: 'Product exactly as shown. Comfortable and durable. Prompt shipping by seller.',
-          isVerifiedPurchase: true,
-          helpfulCount: 3,
-          createdAt: new Date(Date.now() - 48 * 3600 * 1000),
-          vendorReply: {
-            comment: 'Thank you Neha! We take great pride in quality packaging and express shipping.',
-            repliedAt: new Date(Date.now() - 36 * 3600 * 1000),
-          },
-        },
-      ]);
+      console.warn("Unable to load reviews:", err?.message);
+      setReviews([]);
     } finally {
       setLoading(false);
     }

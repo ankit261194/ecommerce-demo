@@ -176,7 +176,7 @@ export const ProductDetailModal = ({
         { key: 'Condition', value: '100% Brand New & Factory Sealed' },
       ];
 
-  // Authentic Buyer Reviews Mockup
+  // Authentic Buyer Reviews Preview
   const sampleReviews = [
     {
       id: 1,

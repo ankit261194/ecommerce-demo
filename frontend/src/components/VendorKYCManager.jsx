@@ -52,140 +52,6 @@ export default function VendorKYCManager() {
   const [actionSuccessMessage, setActionSuccessMessage] = useState('');
   const [actionErrorMessage, setActionErrorMessage] = useState('');
 
-  // Fallback demo vendors in case of mock/offline
-  const demoVendorsFallback = [
-    {
-      _id: 'v-demo-1',
-      storeName: 'Aura Sound & Beats Official',
-      storeSlug: 'aura-sound-official',
-      storeLogo: 'https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=150',
-      description: 'Authorized retailer for high-fidelity audio equipment and studio monitors.',
-      status: 'approved',
-      kycStatus: 'VERIFIED',
-      businessType: 'Private Limited',
-      gstNumber: '07AAAAA0000A1Z5',
-      panNumber: 'ABCDE1234F',
-      commissionRate: 10,
-      walletBalance: 124500,
-      totalSales: 450000,
-      rating: 4.9,
-      kycVerifiedAt: new Date().toISOString(),
-      adminNotes: 'Verified platinum partner. Low return rate.',
-      user: {
-        name: 'Vikram Malhotra',
-        email: 'vikram.malhotra@auramarket.com',
-        phone: '+91 98765 43211',
-        isVerified: true,
-      },
-      bankDetails: {
-        accountHolder: 'Aura Sound Private Limited',
-        accountNumber: '91802001928374',
-        ifscCode: 'HDFC0001234',
-        bankName: 'HDFC Bank Ltd',
-      },
-      pickupAddress: {
-        street: 'Plot 45, Phase 2, Okhla Industrial Area',
-        city: 'New Delhi',
-        state: 'Delhi',
-        pincode: '110020',
-        phone: '+91 98765 43211',
-      },
-      kycDocuments: {
-        businessRegistrationProof: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600',
-        gstCertificate: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
-        panCard: 'https://images.unsplash.com/photo-1554224154-26032ffc0d07?w=600',
-        bankProof: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600',
-        idProof: 'https://images.unsplash.com/photo-1554224155-1696413565d3?w=600',
-      },
-    },
-    {
-      _id: 'v-demo-2',
-      storeName: 'Titan Electronics & Gadgets',
-      storeSlug: 'titan-electronics',
-      storeLogo: 'https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=150',
-      description: 'Smart wearables, charging stations, and IoT smart home systems.',
-      status: 'pending',
-      kycStatus: 'PENDING',
-      businessType: 'Partnership',
-      gstNumber: '29ABCDE1234F1Z8',
-      panNumber: 'KLMNO5678P',
-      commissionRate: 12,
-      walletBalance: 0,
-      totalSales: 0,
-      rating: 4.5,
-      adminNotes: 'New merchant onboarded today. Pending GST cross-verification.',
-      user: {
-        name: 'Rohan Deshmukh',
-        email: 'rohan.titan@gmail.com',
-        phone: '+91 98111 22334',
-        isVerified: false,
-      },
-      bankDetails: {
-        accountHolder: 'Titan Electronics LLP',
-        accountNumber: '00120500129384',
-        ifscCode: 'ICIC0000012',
-        bankName: 'ICICI Bank Ltd',
-      },
-      pickupAddress: {
-        street: '12th Cross, Indiranagar',
-        city: 'Bengaluru',
-        state: 'Karnataka',
-        pincode: '560038',
-        phone: '+91 98111 22334',
-      },
-      kycDocuments: {
-        businessRegistrationProof: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600',
-        gstCertificate: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
-        panCard: 'https://images.unsplash.com/photo-1554224154-26032ffc0d07?w=600',
-        bankProof: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600',
-        idProof: 'https://images.unsplash.com/photo-1554224155-1696413565d3?w=600',
-      },
-    },
-    {
-      _id: 'v-demo-3',
-      storeName: 'Apex Luxe Apparel Hub',
-      storeSlug: 'apex-luxe-apparel',
-      storeLogo: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=150',
-      description: 'Premium organic cotton streetwear and formal apparel line.',
-      status: 'rejected',
-      kycStatus: 'REJECTED',
-      businessType: 'Proprietorship',
-      gstNumber: '08XYZAB9876C1Z2',
-      panNumber: 'PQRST4321R',
-      commissionRate: 15,
-      walletBalance: 0,
-      totalSales: 0,
-      rating: 4.0,
-      kycRejectionReason: 'GST registration certificate expired and name mismatch on cancelled cheque.',
-      adminNotes: 'Requested resubmission of corrected bank passbook.',
-      user: {
-        name: 'Priya Rathore',
-        email: 'priya.apex@gmail.com',
-        phone: '+91 97722 88441',
-        isVerified: false,
-      },
-      bankDetails: {
-        accountHolder: 'Priya Rathore Enterprises',
-        accountNumber: '50100234918231',
-        ifscCode: 'SBIN0004521',
-        bankName: 'State Bank of India',
-      },
-      pickupAddress: {
-        street: 'Shop 14, Bapu Bazaar',
-        city: 'Jaipur',
-        state: 'Rajasthan',
-        pincode: '302003',
-        phone: '+91 97722 88441',
-      },
-      kycDocuments: {
-        businessRegistrationProof: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600',
-        gstCertificate: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
-        panCard: 'https://images.unsplash.com/photo-1554224154-26032ffc0d07?w=600',
-        bankProof: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600',
-        idProof: 'https://images.unsplash.com/photo-1554224155-1696413565d3?w=600',
-      },
-    },
-  ];
 
   const fetchVendors = async () => {
     setIsLoading(true);
@@ -204,11 +70,11 @@ export default function VendorKYCManager() {
           setStats(res.data.stats);
         }
       } else {
-        setVendors(demoVendorsFallback);
+        setVendors([]);
       }
     } catch (err) {
       console.warn('Using demo vendor fallback data:', err?.message);
-      setVendors(demoVendorsFallback);
+      setVendors([]);
       setStats({
         totalVendors: 3,
         pendingApproval: 1,

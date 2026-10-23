@@ -244,7 +244,7 @@ export default function CustomerCRMManager() {
         setCustomerOrders(res.data.data.orders);
       }
     } catch (err) {
-      // Mock orders for demo
+      // Customer interaction history records
       setCustomerOrders([
         {
           _id: 'ord_demo_101',

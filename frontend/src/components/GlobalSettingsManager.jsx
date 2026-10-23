@@ -568,7 +568,7 @@ export default function GlobalSettingsManager({ onConfigSaved }) {
                   <span>Live Storefront Branding Preview</span>
                 </h4>
 
-                {/* Header Mockup */}
+                {/* Header Preview */}
                 <div className="bg-slate-900 rounded-xl p-4 border border-slate-700 space-y-3">
                   <span className="text-[10px] text-slate-500 uppercase block">Header Navigation Preview</span>
                   <div className="flex items-center gap-3">
@@ -585,9 +585,9 @@ export default function GlobalSettingsManager({ onConfigSaved }) {
                   </div>
                 </div>
 
-                {/* Browser Tab Mockup */}
+                {/* Browser Tab Preview */}
                 <div className="bg-slate-900 rounded-xl p-3 border border-slate-700 space-y-2">
-                  <span className="text-[10px] text-slate-500 uppercase block">Browser Tab Mockup</span>
+                  <span className="text-[10px] text-slate-500 uppercase block">Browser Tab Preview</span>
                   <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-lg border border-slate-700 text-xs text-slate-200">
                     <img
                       src={branding.faviconUrl}
@@ -599,7 +599,7 @@ export default function GlobalSettingsManager({ onConfigSaved }) {
                   </div>
                 </div>
 
-                {/* Footer Mockup */}
+                {/* Footer Preview */}
                 <div className="bg-slate-900 rounded-xl p-3 border border-slate-700">
                   <span className="text-[10px] text-slate-500 uppercase block mb-1">Footer Copyright Preview</span>
                   <p className="text-xs text-slate-400 leading-relaxed font-mono">{branding.copyrightText}</p>

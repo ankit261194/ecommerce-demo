@@ -129,7 +129,7 @@ export const DemoToolbar = ({
                   ? 'bg-slate-900 text-white font-black shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
-              title="Tablet (iPad) Mockup"
+              title="Tablet (iPad) Preview"
             >
               <Tablet className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">iPad</span>
@@ -142,7 +142,7 @@ export const DemoToolbar = ({
                   ? 'bg-emerald-600 text-white font-black shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
-              title="Android (Samsung / Pixel) Mockup (Flutter App)"
+              title="Android (Samsung / Pixel) Preview (Flutter App)"
             >
               <span className="text-xs">🤖</span>
               <span className="hidden sm:inline">Android</span>
@@ -155,7 +155,7 @@ export const DemoToolbar = ({
                   ? 'bg-slate-900 text-white font-black shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
-              title="Smartphone (iPhone) Mockup"
+              title="Smartphone (iPhone) Preview"
             >
               <Smartphone className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">iPhone</span>

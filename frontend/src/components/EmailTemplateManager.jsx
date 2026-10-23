@@ -35,7 +35,7 @@ export const EmailTemplateManager = () => {
 
   // SMTP Settings State
   const [settings, setSettings] = useState({
-    activeProvider: 'mock',
+    activeProvider: 'sandbox',
     smtp: {
       host: 'smtp.gmail.com',
       port: 587,
@@ -112,7 +112,7 @@ export const EmailTemplateManager = () => {
       if (res.data?.success) {
         const d = res.data.data;
         setSettings({
-          activeProvider: d.activeProvider || 'mock',
+          activeProvider: d.activeProvider || 'sandbox',
           smtp: {
             ...d.smtp,
             password: d.smtp.hasPassword ? '••••••••' : '',
@@ -612,7 +612,7 @@ export const EmailTemplateManager = () => {
                   <div className="flex flex-col items-center justify-start bg-slate-100 p-3 rounded-xl border border-slate-200 overflow-hidden">
                     <div className="text-[10px] font-bold text-slate-500 uppercase mb-2 flex items-center gap-1">
                       <Sparkles className="w-3 h-3 text-purple-600" />
-                      Live Mock Rendered Preview ({previewDevice.toUpperCase()})
+                      Live Rendered Template Preview ({previewDevice.toUpperCase()})
                     </div>
                     <div
                       className={`transition-all bg-white rounded-xl shadow-md overflow-hidden border border-slate-300 w-full ${
@@ -653,7 +653,7 @@ export const EmailTemplateManager = () => {
                 onChange={e => setSettings({ ...settings, activeProvider: e.target.value })}
                 className="px-4 py-2 rounded-xl bg-slate-50 border border-slate-300 font-black text-xs text-slate-900 focus:outline-none focus:border-purple-500"
               >
-                <option value="mock">In-App Mock Mailer (Zero Setup, Dev Mode)</option>
+                <option value="sandbox">Sandbox Simulator Mailer (Zero Setup, Dev Mode)</option>
                 <option value="smtp">Custom SMTP Server (Hostinger, cPanel, Private)</option>
                 <option value="gmail">Google Workspace / Gmail (App Password)</option>
                 <option value="sendgrid">SendGrid Web API</option>

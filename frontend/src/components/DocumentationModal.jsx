@@ -298,7 +298,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     : 'A developer connects your custom domain to an Ubuntu 22.04 LTS VPS instance, installs Node.js 20 & MongoDB, sets up PM2 for permanent process uptime, configures Nginx reverse proxy, and activates Let\'s Encrypt SSL.'}
                 </p>
 
-                {/* Styled Terminal Mockup Screenshot */}
+                {/* Styled Terminal Preview Screenshot */}
                 <div className="rounded-xl overflow-hidden border border-slate-800 shadow-lg bg-slate-950 text-slate-200 font-mono text-xs">
                   <div className="px-3.5 py-2 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
                     <div className="flex items-center gap-1.5">
@@ -389,7 +389,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     : 'Google Play Console mandates an Android App Bundle (.aab) signed with a cryptographic Keystore (keytool). Apple requires Xcode on macOS, Developer Certificates, and App Store Connect review.'}
                 </p>
 
-                {/* Styled Play Console Mockup Screenshot */}
+                {/* Styled Play Console Preview Screenshot */}
                 <div className="rounded-xl overflow-hidden border border-blue-200 shadow-lg bg-white">
                   <div className="px-3.5 py-2 bg-blue-600 text-white flex items-center justify-between text-[11px] font-bold">
                     <div className="flex items-center gap-2">
@@ -542,7 +542,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     : 'Navigate to Super Admin > Integrations & API Hub > SMS Gateways. Choose your provider (Fast2SMS / MSG91 / Twilio), paste your API Key, and click "Send Test SMS" to verify instantly!'}
                 </p>
 
-                {/* UI Mockup Card for SMS */}
+                {/* UI Preview Card for SMS */}
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-900 text-xs">📱 Super Admin SMS Gateway Card</span>
@@ -606,7 +606,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     : 'The shopping cart checkout adapts dynamically to toggled payment gateways in Super Admin. Direct UPI QR offers 0% gateway commission directly to your bank account.'}
                 </p>
 
-                {/* UI Mockup for Payment Cards */}
+                {/* UI Preview for Payment Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
                     <div className="flex items-center justify-between">
@@ -655,7 +655,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     : 'Dispatch branded HTML invoices and receipts using Gmail with a 16-character Google App Password or Hostinger Webmail (smtp.hostinger.com, port 587).'}
                 </p>
 
-                {/* SMTP Mockup Card */}
+                {/* SMTP Preview Card */}
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-900 text-xs">✉️ SMTP Server Configuration Card</span>
@@ -719,7 +719,7 @@ export const DocumentationModal = ({ isOpen, onClose }) => {
                     : 'Product pictures and seller banners store directly in server disk (/uploads) by default with zero monthly expense. For high enterprise scale, seamlessly toggle Cloudinary CDN or AWS S3 from Super Admin.'}
                 </p>
 
-                {/* Storage UI Mockup */}
+                {/* Storage UI Preview */}
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-900 text-xs">☁️ Active Media Storage Provider</span>

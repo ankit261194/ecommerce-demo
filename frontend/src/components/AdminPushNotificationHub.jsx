@@ -480,7 +480,7 @@ export default function AdminPushNotificationHub() {
                 </div>
               </div>
 
-              {/* Mobile Phone Mockup */}
+              {/* Mobile Phone Preview */}
               {previewDevice === 'mobile' ? (
                 <div className="mx-auto max-w-xs bg-slate-950 rounded-3xl p-3 border-4 border-slate-800 shadow-2xl space-y-3">
                   <div className="w-16 h-1 bg-slate-800 rounded-full mx-auto" />
@@ -525,7 +525,7 @@ export default function AdminPushNotificationHub() {
                   </div>
                 </div>
               ) : (
-                /* Desktop Notification Card Mockup */
+                /* Desktop Notification Card Preview */
                 <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800 shadow-2xl space-y-3">
                   <div className="flex items-start gap-3">
                     <div className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 font-black text-xs flex items-center justify-center flex-shrink-0 shadow-md">

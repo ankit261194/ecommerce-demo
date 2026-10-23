@@ -334,7 +334,7 @@ export const StorageConfigManager = () => {
       const signData = presignRes.data.data || presignRes.data;
       setUploadProgress(45);
 
-      // 2. Perform direct PUT upload (with mock / local fallback simulation)
+      // 2. Perform direct PUT upload (with local fallback handling)
       try {
         if (signData.uploadUrl.startsWith('http')) {
           await fetch(signData.uploadUrl, {

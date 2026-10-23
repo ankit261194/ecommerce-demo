@@ -1,37 +1,543 @@
 {
   "version": "2.4.0",
-  "exportedAt": "2026-10-23T12:22:16.583Z",
-  "platform": "AuraMarket Multi-Vendor Marketplace",
-  "defaultCredentials": [
+  "updatedAt": "2026-10-23T18:15:00Z",
+  "uiConfig": {
+    "storeName": "AuraMarket",
+    "theme": "indigo",
+    "announcement": {
+      "enabled": true,
+      "text": "\u26a1 Mega Diwali & Festive Sale: Flat 50% OFF + Free Express Delivery on orders above \u20b9999!",
+      "badge": "FESTIVE SALE"
+    },
+    "shipping": {
+      "freeShippingThreshold": 999,
+      "defaultShippingFee": 99,
+      "expressDeliveryFee": 149
+    },
+    "integrations": {
+      "payments": {
+        "razorpay": {
+          "enabled": true,
+          "keyId": "rzp_test_AuraMarket2026"
+        },
+        "stripe": {
+          "enabled": true,
+          "publishableKey": "pk_test_51AuraMarketStripeKey2026"
+        },
+        "cod": {
+          "enabled": true
+        }
+      }
+    }
+  },
+  "users": [
     {
-      "role": "Super Admin",
+      "_id": "usr_admin_001",
+      "name": "Super Admin",
       "email": "admin@auramarket.com",
-      "password": "admin123456"
+      "password": "admin123456",
+      "role": "superadmin",
+      "phone": "9876543210"
     },
     {
-      "role": "Vendor 1 (Apex Tech Hub)",
+      "_id": "usr_vendor_001",
+      "name": "Rajesh Verma (Apex Electronics)",
       "email": "apex@auramarket.com",
-      "password": "vendor123456"
+      "password": "vendor123456",
+      "role": "vendor",
+      "phone": "9876543211",
+      "vendorProfile": {
+        "_id": "vnd_001",
+        "storeName": "Apex Tech Hub",
+        "storeSlug": "apex-tech-hub",
+        "description": "Authorized retailer for high-end audio, gaming gear, and smartphones.",
+        "commissionRate": 8,
+        "walletBalance": 24500,
+        "totalSales": 185000,
+        "rating": 4.9,
+        "status": "approved",
+        "gstNumber": "07AAAAA0000A1Z5"
+      }
     },
     {
-      "role": "Vendor 2 (Vogue Trends)",
+      "_id": "usr_vendor_002",
+      "name": "Pooja Kapoor (Vogue Trends)",
       "email": "vogue@auramarket.com",
-      "password": "vendor123456"
+      "password": "vendor123456",
+      "role": "vendor",
+      "phone": "9876543212",
+      "vendorProfile": {
+        "_id": "vnd_002",
+        "storeName": "Vogue Trends",
+        "storeSlug": "vogue-trends",
+        "description": "Curated modern streetwear, premium cotton apparel, and accessories.",
+        "commissionRate": 10,
+        "walletBalance": 18200,
+        "totalSales": 94000,
+        "rating": 4.8,
+        "status": "approved",
+        "gstNumber": "27AAAAA0000A1Z6"
+      }
     },
     {
-      "role": "Courier Rider",
+      "_id": "usr_rider_001",
+      "name": "Vikram Singh",
       "email": "rider@auramarket.com",
-      "password": "rider123456"
+      "password": "rider123456",
+      "role": "delivery",
+      "phone": "9876543213"
     },
     {
-      "role": "Customer Shopper",
+      "_id": "usr_cust_001",
+      "name": "Aman Sharma",
       "email": "customer@auramarket.com",
-      "password": "customer123456"
+      "password": "customer123456",
+      "role": "customer",
+      "phone": "9876543214"
     }
   ],
-  "instructions": {
-    "automated": "Run `npm run seed` in backend/ directory",
-    "docker": "Run `docker compose up -d` (automated seeding included)",
-    "manual": "Import collections into MongoDB via MongoDB Compass or mongoimport CLI"
-  }
+  "categories": [
+    {
+      "_id": "cat_001",
+      "name": "Electronics & Audio",
+      "slug": "electronics-audio",
+      "description": "Headphones, smartwatches, speakers, and premium tech gadgets.",
+      "image": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500",
+      "subCategories": [
+        {
+          "_id": "sub_001",
+          "name": "Wireless Headphones",
+          "slug": "wireless-headphones"
+        },
+        {
+          "_id": "sub_002",
+          "name": "Bluetooth Speakers",
+          "slug": "bluetooth-speakers"
+        },
+        {
+          "_id": "sub_003",
+          "name": "Mechanical Keyboards",
+          "slug": "mechanical-keyboards"
+        }
+      ]
+    },
+    {
+      "_id": "cat_002",
+      "name": "Watches & Accessories",
+      "slug": "watches-accessories",
+      "description": "Smartwatches, fitness bands, and analog luxury timepieces.",
+      "image": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500",
+      "subCategories": [
+        {
+          "_id": "sub_004",
+          "name": "Smartwatches & Wearables",
+          "slug": "smartwatches-wearables"
+        },
+        {
+          "_id": "sub_005",
+          "name": "Classic Watches",
+          "slug": "classic-watches"
+        }
+      ]
+    },
+    {
+      "_id": "cat_003",
+      "name": "Fashion & Apparel",
+      "slug": "fashion",
+      "description": "Urban streetwear, oversized tees, hoodies, and lifestyle wear.",
+      "image": "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=500",
+      "subCategories": [
+        {
+          "_id": "sub_006",
+          "name": "Streetwear & Hoodies",
+          "slug": "streetwear-hoodies"
+        },
+        {
+          "_id": "sub_007",
+          "name": "Graphic Tees",
+          "slug": "graphic-tees"
+        }
+      ]
+    },
+    {
+      "_id": "cat_004",
+      "name": "Home & Kitchen",
+      "slug": "home-kitchen",
+      "description": "Smart home living, ergonomic furniture, and coffee gear.",
+      "image": "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=500",
+      "subCategories": [
+        {
+          "_id": "sub_008",
+          "name": "Specialty Coffee",
+          "slug": "specialty-coffee"
+        },
+        {
+          "_id": "sub_009",
+          "name": "Ergonomic Chairs",
+          "slug": "ergonomic-chairs"
+        }
+      ]
+    }
+  ],
+  "banners": [
+    {
+      "_id": "ban_001",
+      "title": "Aura Pro ANC Headphones",
+      "subtitle": "Studio-Grade Spatial Audio with 40h Battery",
+      "badge": "FLAGSHIP LAUNCH",
+      "buttonText": "Shop Now",
+      "link": "#catalog?category=electronics-audio",
+      "image": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=1200&q=80",
+      "position": "hero_slider",
+      "isActive": true
+    },
+    {
+      "_id": "ban_002",
+      "title": "AeroWatch S9 Ultra",
+      "subtitle": "Aerospace Titanium & Always-On AMOLED",
+      "badge": "TRENDING NOW",
+      "buttonText": "Explore Watch",
+      "link": "#catalog?category=watches-accessories",
+      "image": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=1200&q=80",
+      "position": "hero_slider",
+      "isActive": true
+    },
+    {
+      "_id": "ban_003",
+      "title": "Urban Streetwear Drop",
+      "subtitle": "450 GSM Heavyweight French Terry Hoodies",
+      "badge": "LIMITED EDITION",
+      "buttonText": "View Collection",
+      "link": "#catalog?category=fashion",
+      "image": "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=1200&q=80",
+      "position": "promo_banner_top",
+      "isActive": true
+    }
+  ],
+  "products": [
+    {
+      "_id": "prod_001",
+      "title": "Aura Pro ANC Wireless Noise-Cancelling Headphones",
+      "slug": "aura-pro-anc-wireless-headphones",
+      "description": "Studio-grade spatial acoustics with 40-hour battery life and custom titanium drivers.",
+      "category": "cat_001",
+      "categoryName": "Electronics & Audio",
+      "subCategory": "sub_001",
+      "subCategoryName": "Wireless Headphones",
+      "brand": "AuraAudio",
+      "mrp": 14999,
+      "sellingPrice": 8999,
+      "stock": 45,
+      "sku": "APX-HEAD-001",
+      "images": [
+        "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800",
+        "https://images.unsplash.com/photo-1484704849700-f032a568e944?w=800",
+        "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=800"
+      ],
+      "thumbnail": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500",
+      "ratingsAverage": 4.8,
+      "ratingsQuantity": 142,
+      "vendor": {
+        "_id": "vnd_001",
+        "storeName": "Apex Tech Hub",
+        "rating": 4.9
+      },
+      "hasVariants": true,
+      "variants": [
+        {
+          "sku": "APX-HEAD-BLK",
+          "name": "Obsidian Black",
+          "attributes": {
+            "color": "Midnight Black"
+          },
+          "additionalPrice": 0,
+          "stock": 25
+        },
+        {
+          "sku": "APX-HEAD-SLV",
+          "name": "Silver Matte",
+          "attributes": {
+            "color": "Silver Matte"
+          },
+          "additionalPrice": 500,
+          "stock": 20
+        }
+      ],
+      "specifications": [
+        {
+          "key": "Driver Unit",
+          "value": "40mm Custom Titanium"
+        },
+        {
+          "key": "Noise Cancellation",
+          "value": "Hybrid Active Noise Cancellation (-38dB)"
+        },
+        {
+          "key": "Battery",
+          "value": "40 Hours"
+        },
+        {
+          "key": "Color",
+          "value": "Midnight Black"
+        }
+      ],
+      "isFeatured": true
+    },
+    {
+      "_id": "prod_002",
+      "title": "AeroWatch S9 Ultra Smartwatch with AMOLED Display",
+      "slug": "aerowatch-s9-ultra-smartwatch",
+      "description": "Titanium chassis, ECG heart tracking, GPS routing, and IP68 waterproof rating.",
+      "category": "cat_002",
+      "categoryName": "Watches & Accessories",
+      "subCategory": "sub_004",
+      "subCategoryName": "Smartwatches & Wearables",
+      "brand": "AeroTech",
+      "mrp": 9999,
+      "sellingPrice": 4499,
+      "stock": 30,
+      "sku": "APX-WTCH-002",
+      "images": [
+        "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800",
+        "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=800"
+      ],
+      "thumbnail": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500",
+      "ratingsAverage": 4.7,
+      "ratingsQuantity": 88,
+      "vendor": {
+        "_id": "vnd_001",
+        "storeName": "Apex Tech Hub",
+        "rating": 4.9
+      },
+      "hasVariants": false,
+      "variants": [],
+      "specifications": [
+        {
+          "key": "Display",
+          "value": "2.02 inch Always-On AMOLED"
+        },
+        {
+          "key": "Battery",
+          "value": "Up to 7 Days"
+        },
+        {
+          "key": "Water Resistance",
+          "value": "IP68 / 50m"
+        }
+      ],
+      "isFeatured": true
+    },
+    {
+      "_id": "prod_003",
+      "title": "Obsidian Oversized Heavyweight Cotton Hoodie",
+      "slug": "obsidian-oversized-heavyweight-hoodie",
+      "description": "450 GSM French terry cotton with tailored dropped shoulders and ribbed accents.",
+      "category": "cat_003",
+      "categoryName": "Fashion & Apparel",
+      "subCategory": "sub_006",
+      "subCategoryName": "Streetwear & Hoodies",
+      "brand": "Vogue Urban",
+      "mrp": 3999,
+      "sellingPrice": 1999,
+      "stock": 60,
+      "sku": "VOG-HOD-001",
+      "images": [
+        "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=800",
+        "https://images.unsplash.com/photo-1509967419530-da38b4704bc6?w=800"
+      ],
+      "thumbnail": "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=500",
+      "ratingsAverage": 4.9,
+      "ratingsQuantity": 64,
+      "vendor": {
+        "_id": "vnd_002",
+        "storeName": "Vogue Trends",
+        "rating": 4.8
+      },
+      "hasVariants": true,
+      "variants": [
+        {
+          "sku": "VOG-HOD-M",
+          "name": "Medium / Obsidian",
+          "attributes": {
+            "size": "M"
+          },
+          "additionalPrice": 0,
+          "stock": 20
+        },
+        {
+          "sku": "VOG-HOD-L",
+          "name": "Large / Obsidian",
+          "attributes": {
+            "size": "L"
+          },
+          "additionalPrice": 0,
+          "stock": 25
+        },
+        {
+          "sku": "VOG-HOD-XL",
+          "name": "XL / Obsidian",
+          "attributes": {
+            "size": "XL"
+          },
+          "additionalPrice": 100,
+          "stock": 15
+        }
+      ],
+      "specifications": [
+        {
+          "key": "Fabric",
+          "value": "100% Combed Cotton (450 GSM)"
+        },
+        {
+          "key": "Fit",
+          "value": "Tailored Oversized Boxy Cut"
+        }
+      ],
+      "isFeatured": true
+    },
+    {
+      "_id": "prod_004",
+      "title": "Aura Studio Barista Precision Gooseneck Electric Kettle",
+      "slug": "aura-studio-barista-precision-kettle",
+      "description": "1200W rapid boil with variable digital PID temperature control and 60-min heat hold.",
+      "category": "cat_004",
+      "categoryName": "Home & Kitchen",
+      "subCategory": "sub_008",
+      "subCategoryName": "Specialty Coffee",
+      "brand": "AuraHome",
+      "mrp": 7999,
+      "sellingPrice": 4999,
+      "stock": 25,
+      "sku": "AH-KET-004",
+      "images": [
+        "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=800"
+      ],
+      "thumbnail": "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=500",
+      "ratingsAverage": 4.9,
+      "ratingsQuantity": 52,
+      "vendor": {
+        "_id": "vnd_001",
+        "storeName": "Apex Tech Hub",
+        "rating": 4.9
+      },
+      "hasVariants": false,
+      "variants": [],
+      "specifications": [
+        {
+          "key": "Capacity",
+          "value": "900ml"
+        },
+        {
+          "key": "Power",
+          "value": "1200W Strix Thermostat"
+        }
+      ],
+      "isFeatured": true
+    }
+  ],
+  "coupons": [
+    {
+      "_id": "coup_001",
+      "code": "AURA50",
+      "title": "Welcome 50% Special Discount",
+      "discountType": "PERCENTAGE",
+      "discountValue": 50,
+      "maxDiscountAmount": 1000,
+      "minOrderAmount": 999,
+      "isActive": true
+    },
+    {
+      "_id": "coup_002",
+      "code": "FIRST10",
+      "title": "First Order 10% OFF",
+      "discountType": "PERCENTAGE",
+      "discountValue": 10,
+      "maxDiscountAmount": 500,
+      "minOrderAmount": 499,
+      "isActive": true
+    },
+    {
+      "_id": "coup_003",
+      "code": "FREESHIP",
+      "title": "Free Delivery Coupon",
+      "discountType": "FLAT",
+      "discountValue": 99,
+      "maxDiscountAmount": 99,
+      "minOrderAmount": 299,
+      "isActive": true
+    }
+  ],
+  "orders": [
+    {
+      "_id": "ord_demo_001",
+      "orderNumber": "ORD-2026-94820",
+      "customer": {
+        "_id": "usr_cust_001",
+        "name": "Aman Sharma",
+        "email": "customer@auramarket.com",
+        "phone": "9876543214"
+      },
+      "items": [
+        {
+          "product": {
+            "_id": "prod_001",
+            "title": "Aura Pro ANC Wireless Noise-Cancelling Headphones",
+            "price": 8999,
+            "thumbnail": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=200"
+          },
+          "quantity": 1,
+          "price": 8999
+        }
+      ],
+      "totalAmount": 8999,
+      "status": "placed",
+      "paymentMethod": "ONLINE",
+      "paymentStatus": "PAID",
+      "deliveryOtp": "4821",
+      "shippingAddress": {
+        "recipientName": "Aman Sharma",
+        "phone": "9876543214",
+        "street": "Flat 402, Green Valley Apartments",
+        "city": "New Delhi",
+        "state": "Delhi",
+        "pincode": "110001"
+      },
+      "subOrders": [
+        {
+          "_id": "sub_ord_001",
+          "vendor": {
+            "_id": "vnd_001",
+            "storeName": "Apex Tech Hub"
+          },
+          "items": [
+            {
+              "title": "Aura Pro ANC Wireless Headphones",
+              "quantity": 1,
+              "price": 8999
+            }
+          ],
+          "subTotal": 8999,
+          "status": "placed",
+          "deliveryOtp": "4821"
+        }
+      ],
+      "createdAt": "2026-10-23T12:00:00Z"
+    }
+  ],
+  "wallet": {
+    "coins": 250,
+    "balance": 1500,
+    "history": [
+      {
+        "type": "CREDIT",
+        "amount": 250,
+        "description": "Welcome Cashback Reward Coins",
+        "date": "2026-10-23T10:00:00Z"
+      }
+    ]
+  },
+  "wishlist": [
+    "prod_001",
+    "prod_002"
+  ]
 }

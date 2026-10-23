@@ -303,24 +303,14 @@ export const VendorPortal = () => {
         images: allImgs,
       });
       await fetchVendorData();
-    } catch (_) {}
-
-    const created = {
-      id: 'p_' + Date.now(),
-      title: newProduct.title,
-      sku: newProduct.sku || 'SKU-' + Date.now().toString().slice(-4),
-      mrp: Number(newProduct.mrp) || Number(newProduct.sellingPrice) * 1.3,
-      sellingPrice: Number(newProduct.sellingPrice),
-      stock: Number(newProduct.stock),
-      category: newProduct.category,
-      image: primaryImg,
-      thumbnail: primaryImg,
-      gallery: prodGallery,
-      variantsCount: newProduct.colorVariant || newProduct.sizeVariant ? 2 : 0,
-    };
-
-    setProducts(prev => [created, ...prev]);
-    setIsAddProductDrawerOpen(false);
+      setIsAddProductDrawerOpen(false);
+      setNotification(`🎉 Success: Product "${newProduct.title}" has been published!`);
+      return;
+    } catch (err) {
+      console.error('Failed to publish product:', err);
+      alert(err.response?.data?.message || err.message || 'Failed to publish product. Please check connection.');
+      return;
+    }
     setNewProduct({
       title: '',
       category: 'Electronics & Audio',
@@ -424,34 +414,14 @@ export const VendorPortal = () => {
         category: firstCatId || '66a123456789012345678901',
       });
       await fetchVendorData();
-    } catch (_) {}
-
-    const colorSwatches = Array.from(
-      new Set(payload.variants.map((v) => v.colorCode).filter(Boolean))
-    );
-    const sizeMatrix = Array.from(
-      new Set(payload.variants.map((v) => v.attributes?.size).filter(Boolean))
-    );
-
-    const created = {
-      id: 'p_' + Date.now(),
-      title: payload.title,
-      sku: payload.sku || 'SKU-' + Date.now().toString().slice(-4),
-      mrp: payload.mrp,
-      sellingPrice: payload.sellingPrice,
-      stock: payload.stock,
-      category: payload.category,
-      image: payload.images?.[0] || 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=500',
-      variantsCount: payload.variants.length,
-      hasVariants: true,
-      colorSwatches,
-      sizeMatrix,
-    };
-
-    setProducts((prev) => [created, ...prev]);
-    setNotification(
-      `Multi-variant product '${created.title}' published with ${payload.variants.length} SKUs and ${payload.stock} total stock!`
-    );
+      setIsMultiVariantModalOpen(false);
+      setNotification(`🎉 Multi-variant product '${payload.title}' published successfully!`);
+      return;
+    } catch (err) {
+      console.error('Failed to create multi-variant product:', err);
+      alert(err.response?.data?.message || err.message || 'Failed to create multi-variant product.');
+      return;
+    }
   };
 
   // Handle Payout Withdrawal

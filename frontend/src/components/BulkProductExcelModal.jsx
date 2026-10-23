@@ -142,42 +142,12 @@ export default function BulkProductExcelModal({
       }
       throw new Error(res.data?.message || 'Bulk upload failed');
     } catch (err) {
-      console.warn('Backend bulk upload attempt, falling back to local simulation:', err.message);
-      // Fallback for standalone demo mode
-      const newProducts = parsedRows.map((r, idx) => {
-        const sellPrice = Math.max(0, Number(r.sellingprice || r.price) || 999);
-        const mrpVal = Math.max(sellPrice, Number(r.mrp || r.originalprice) || Math.round(sellPrice * 1.25));
-        return {
-          id: 'bulk-prod-' + Date.now() + '-' + idx,
-          title: r.title || r.name || `Bulk Item ${idx + 1}`,
-          sku: r.sku || `SKU-BULK-${Date.now().toString().slice(-4)}-${idx}`,
-          category: r.category || 'Electronics',
-          brand: r.brand || 'Apex Tech',
-          mrp: mrpVal,
-          sellingPrice: sellPrice,
-          stock: Math.max(0, parseInt(r.stock || r.quantity || 20, 10)),
-          lowStockThreshold: Math.max(1, parseInt(r.lowstockthreshold || 5, 10)),
-          description: r.description || `${r.title} - Quality product`,
-          image: r.image || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
-          hasVariants: false,
-          variants: [],
-        };
+      console.error('Bulk upload failed:', err);
+      setImportResult({
+        success: false,
+        message: err.response?.data?.message || err.message || 'Bulk upload failed. Please verify CSV format and server connection.',
+        errors: err.response?.data?.errors || [err.message],
       });
-
-      const mockResult = {
-        success: true,
-        message: `Bulk import completed: ${newProducts.length} items processed successfully.`,
-        totalProcessed: newProducts.length,
-        insertedCount: newProducts.length,
-        updatedCount: 0,
-        errorCount: 0,
-        errors: [],
-        data: newProducts,
-      };
-      setImportResult(mockResult);
-      if (onProductsImported) {
-        onProductsImported(newProducts);
-      }
     } finally {
       setIsProcessing(false);
     }

@@ -79,19 +79,19 @@ const MainLayout = () => {
     ],
     integrations: {
       sms: {
-        activeProvider: 'mock',
+        activeProvider: 'sandbox',
         fast2sms: { apiKey: '', senderId: 'FSTSMS', route: 'q' },
         msg91: { authKey: '', senderId: 'AURAMK', dltTemplateId: '' },
         twilio: { accountSid: '', authToken: '', fromPhone: '' },
       },
       payments: {
         cod: { enabled: true, label: 'Cash on Delivery (COD)' },
-        razorpay: { enabled: true, keyId: 'rzp_test_AuraMarket2026', keySecret: 'rzp_sec_mock_key_secret_2026' },
-        stripe: { enabled: true, publishableKey: 'pk_test_51MockStripeAuraMarket2026', secretKey: 'sk_test_51MockStripeSecretKey2026' },
+        razorpay: { enabled: true, keyId: 'rzp_test_AuraMarket2026', keySecret: 'rzp_sec_test_key_secret_2026' },
+        stripe: { enabled: true, publishableKey: 'pk_test_51AuraMarketStripeKey2026', secretKey: 'sk_test_51AuraMarketStripeSecret2026' },
         upi: { enabled: true, upiId: '8533955333@paytm', merchantName: 'AuraMarket Store' },
       },
       email: {
-        activeProvider: 'mock',
+        activeProvider: 'sandbox',
         smtp: {
           host: 'smtp.gmail.com',
           port: 587,

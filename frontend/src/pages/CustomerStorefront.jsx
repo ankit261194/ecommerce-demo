@@ -1484,20 +1484,6 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
   // Handle Checkout Order Placement
   const handlePlaceOrder = async () => {
     if (cartItems.length === 0) return;
-
-    const fallbackOrderId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
-    const fallbackSubOrdersList = Object.keys(vendorBreakdown).map(vId => {
-      const vData = vendorBreakdown[vId];
-      return {
-        subOrderId: `SUB-${Math.floor(1000 + Math.random() * 9000)}`,
-        vendorName: vData.vendorName,
-        itemsCount: vData.items.length,
-        subTotal: vData.subTotal,
-        otp: '4821', // Secret 4-digit code shown to customer
-        status: 'placed',
-      };
-    });
-
     try {
       const isGuestCheckout = !localStorage.getItem('token');
       const orderEndpoint = isGuestCheckout ? '/orders/guest-checkout' : '/orders';
@@ -1623,29 +1609,11 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
         return;
       }
-    } catch (_) {
-      // Graceful fallback to rich local confirmation in offline or demo preview
+    } catch (err) {
+      console.error('Order placement failed:', err);
+      alert(err.response?.data?.message || err.message || 'Order processing failed. Please check server connection.');
+      return;
     }
-
-    const freeThresh = uiConfig?.shipping?.freeShippingThreshold ?? 999;
-    const defaultShipFee = uiConfig?.shipping?.defaultShippingFee ?? 99;
-    const isFree = cartTotal >= freeThresh;
-    const activeShipFee = isFree ? 0 : defaultShipFee;
-    const couponDiscount = appliedCoupon?.discountAmount || 0;
-    const fallbackTotal = Math.max(0, cartTotal - couponDiscount + activeShipFee);
-
-    localStorage.setItem('last_placed_order_id', fallbackOrderId);
-    setActiveOrderConfirmation({
-      orderId: fallbackOrderId,
-      subOrders: fallbackSubOrdersList,
-      totalAmount: fallbackTotal,
-      address,
-      paymentMethod,
-      paymentDetails,
-      paymentStatus: paymentMethod === 'COD' ? 'PENDING' : 'PAID',
-      deliveryInstructions,
-    });
-
     clearCart();
     setAppliedCoupon(null);
     setDeliveryInstructions('');

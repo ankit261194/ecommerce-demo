@@ -242,7 +242,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
   // Master Integrations State (Dynamic Plug & Play for Non-Developers)
   const [integrations, setIntegrations] = useState({
     sms: {
-      activeProvider: uiConfig?.integrations?.sms?.activeProvider || 'mock',
+      activeProvider: uiConfig?.integrations?.sms?.activeProvider || 'sandbox',
       fast2sms: {
         apiKey: uiConfig?.integrations?.sms?.fast2sms?.apiKey || '',
         senderId: uiConfig?.integrations?.sms?.fast2sms?.senderId || 'FSTSMS',
@@ -267,12 +267,12 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       razorpay: {
         enabled: uiConfig?.integrations?.payments?.razorpay?.enabled ?? true,
         keyId: uiConfig?.integrations?.payments?.razorpay?.keyId || 'rzp_test_AuraMarket2026',
-        keySecret: uiConfig?.integrations?.payments?.razorpay?.keySecret || 'rzp_sec_mock_key_secret_2026',
+        keySecret: uiConfig?.integrations?.payments?.razorpay?.keySecret || 'rzp_sec_test_key_secret_2026',
       },
       stripe: {
         enabled: uiConfig?.integrations?.payments?.stripe?.enabled ?? true,
-        publishableKey: uiConfig?.integrations?.payments?.stripe?.publishableKey || 'pk_test_51MockStripeAuraMarket2026',
-        secretKey: uiConfig?.integrations?.payments?.stripe?.secretKey || 'sk_test_51MockStripeSecretKey2026',
+        publishableKey: uiConfig?.integrations?.payments?.stripe?.publishableKey || 'pk_test_51AuraMarketStripeKey2026',
+        secretKey: uiConfig?.integrations?.payments?.stripe?.secretKey || 'sk_test_51AuraMarketStripeSecret2026',
       },
       upi: {
         enabled: uiConfig?.integrations?.payments?.upi?.enabled ?? true,
@@ -281,7 +281,7 @@ export const SuperAdminDashboard = ({ uiConfig, setUiConfig }) => {
       },
     },
     email: {
-      activeProvider: uiConfig?.integrations?.email?.activeProvider || 'mock',
+      activeProvider: uiConfig?.integrations?.email?.activeProvider || 'sandbox',
       smtp: {
         host: uiConfig?.integrations?.email?.smtp?.host || 'smtp.gmail.com',
         port: uiConfig?.integrations?.email?.smtp?.port || 587,

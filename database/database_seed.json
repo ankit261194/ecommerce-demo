@@ -1,0 +1,37 @@
+{
+  "version": "2.4.0",
+  "exportedAt": "2026-10-23T12:22:16.583Z",
+  "platform": "AuraMarket Multi-Vendor Marketplace",
+  "defaultCredentials": [
+    {
+      "role": "Super Admin",
+      "email": "admin@auramarket.com",
+      "password": "admin123456"
+    },
+    {
+      "role": "Vendor 1 (Apex Tech Hub)",
+      "email": "apex@auramarket.com",
+      "password": "vendor123456"
+    },
+    {
+      "role": "Vendor 2 (Vogue Trends)",
+      "email": "vogue@auramarket.com",
+      "password": "vendor123456"
+    },
+    {
+      "role": "Courier Rider",
+      "email": "rider@auramarket.com",
+      "password": "rider123456"
+    },
+    {
+      "role": "Customer Shopper",
+      "email": "customer@auramarket.com",
+      "password": "customer123456"
+    }
+  ],
+  "instructions": {
+    "automated": "Run `npm run seed` in backend/ directory",
+    "docker": "Run `docker compose up -d` (automated seeding included)",
+    "manual": "Import collections into MongoDB via MongoDB Compass or mongoimport CLI"
+  }
+}

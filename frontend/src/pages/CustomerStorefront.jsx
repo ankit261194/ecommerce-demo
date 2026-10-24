@@ -50,6 +50,8 @@ import {
   Package,
   RefreshCw,
   Radio,
+  Tag,
+  Gift,
 } from 'lucide-react';
 import SupportHelpdeskModal from '../components/SupportHelpdeskModal';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';

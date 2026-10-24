@@ -71,6 +71,9 @@ import {
   Crown,
   Video,
   Compass,
+  BellRing,
+  HelpCircle,
+  Zap,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';

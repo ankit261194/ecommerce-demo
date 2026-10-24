@@ -24,7 +24,8 @@ import {
   ExternalLink,
   ChevronRight,
   Sparkles,
-  Zap
+  Zap,
+  AlertCircle,
 } from 'lucide-react';
 import api from '../api/client';
 

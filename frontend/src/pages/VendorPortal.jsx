@@ -32,6 +32,7 @@ import {
   Megaphone,
   Activity,
   Crown,
+  FileText,
 } from 'lucide-react';
 import { BentoGrid, BentoCard } from '../components/BentoGrid';
 import { SlideOverDrawer } from '../components/SlideOverDrawer';

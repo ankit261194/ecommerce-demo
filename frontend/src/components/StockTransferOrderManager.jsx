@@ -24,6 +24,7 @@ import {
   Compass,
   CornerDownRight,
   UserCheck,
+  Navigation,
 } from 'lucide-react';
 import api from '../api/client';
 

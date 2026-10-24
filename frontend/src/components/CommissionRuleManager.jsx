@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Percent,
   Plus,
@@ -96,7 +96,7 @@ export default function CommissionRuleManager() {
           amount: amt,
           defaultVendorRate: Number(simVendorRate) || 10,
         });
-        if (res.data?.success) {
+        if (res.data?.success && res.data.data && !Array.isArray(res.data.data)) {
           setSimResult(res.data.data);
         }
       } catch (err) {
@@ -415,7 +415,7 @@ export default function CommissionRuleManager() {
           </div>
 
           <div className="lg:col-span-6 bg-slate-950/80 border border-slate-800/80 rounded-xl p-4">
-            {simResult ? (
+            {simResult && simResult.appliedRule ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
                   <span className="text-xs text-slate-400">Matched Rule:</span>

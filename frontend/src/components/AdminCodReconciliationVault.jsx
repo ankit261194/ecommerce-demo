@@ -120,8 +120,8 @@ export const AdminCodReconciliationVault = () => {
         api.get('/cod-vault/riders-limit-monitor').catch(() => ({ data: { data: { summary: {}, riders: [] } } })),
       ]);
 
-      if (sumRes.data?.success && sumRes.data.data) {
-        setVaultSummary(sumRes.data.data);
+      if (sumRes.data?.success && sumRes.data.data && !Array.isArray(sumRes.data.data)) {
+        setVaultSummary((prev) => ({ ...prev, ...sumRes.data.data }));
       }
       if (setRes.data?.success && Array.isArray(setRes.data.data)) {
         setSettlements(setRes.data.data);
@@ -129,7 +129,7 @@ export const AdminCodReconciliationVault = () => {
       if (ridRes.data?.success && Array.isArray(ridRes.data.data)) {
         setPendingRiders(ridRes.data.data);
       }
-      if (limRes.data?.success && limRes.data.data) {
+      if (limRes.data?.success && limRes.data.data && !Array.isArray(limRes.data.data)) {
         setRidersLimitRadar(limRes.data.data);
       }
     } catch (err) {
@@ -412,7 +412,7 @@ export const AdminCodReconciliationVault = () => {
               <span>Physical Cash in Vault</span>
             </div>
             <div className="text-2xl font-black text-white mt-1">
-              ₹{vaultSummary.cashInVault.toLocaleString('en-IN')}
+              ₹{(vaultSummary?.cashInVault || 0).toLocaleString('en-IN')}
             </div>
             <div className="text-[10px] text-slate-400 mt-0.5">Verified & held at hub desk</div>
           </div>
@@ -423,10 +423,10 @@ export const AdminCodReconciliationVault = () => {
               <span>Cash in Transit (Riders)</span>
             </div>
             <div className="text-2xl font-black text-amber-400 mt-1">
-              ₹{vaultSummary.cashInTransit.toLocaleString('en-IN')}
+              ₹{(vaultSummary?.cashInTransit || 0).toLocaleString('en-IN')}
             </div>
             <div className="text-[10px] text-slate-400 mt-0.5">
-              {vaultSummary.activeRidersWithCashCount} active riders holding cash
+              {vaultSummary?.activeRidersWithCashCount || 0} active riders holding cash
             </div>
           </div>
 
@@ -436,7 +436,7 @@ export const AdminCodReconciliationVault = () => {
               <span>Net Cash Shortages</span>
             </div>
             <div className="text-2xl font-black text-rose-400 mt-1">
-              ₹{vaultSummary.totalShortages.toLocaleString('en-IN')}
+              ₹{(vaultSummary?.totalShortages || 0).toLocaleString('en-IN')}
             </div>
             <div className="text-[10px] text-slate-400 mt-0.5">Unreconciled rider deficit</div>
           </div>
@@ -447,7 +447,7 @@ export const AdminCodReconciliationVault = () => {
               <span>Deposited into Bank</span>
             </div>
             <div className="text-2xl font-black text-indigo-300 mt-1">
-              ₹{vaultSummary.totalDepositedToBank.toLocaleString('en-IN')}
+              ₹{(vaultSummary?.totalDepositedToBank || 0).toLocaleString('en-IN')}
             </div>
             <div className="text-[10px] text-slate-400 mt-0.5">Total credited via bank UTR</div>
           </div>

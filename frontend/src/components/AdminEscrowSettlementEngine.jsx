@@ -93,8 +93,8 @@ export const AdminEscrowSettlementEngine = () => {
     setLoading(true);
     try {
       const res = await api.get('/admin/escrow/radar');
-      if (res.data?.success && res.data?.data) {
-        setRadarData(res.data.data);
+      if (res.data?.success && res.data?.data && !Array.isArray(res.data.data)) {
+        setRadarData((prev) => ({ ...prev, ...res.data.data }));
         if (res.data.data.config) {
           setConfigForm({
             defaultHoldDays: res.data.data.config.defaultHoldDays || 7,
@@ -222,7 +222,8 @@ export const AdminEscrowSettlementEngine = () => {
     }
   };
 
-  const filteredOrders = radarData.recentEscrowSubOrders.filter(order => {
+  const recentOrders = Array.isArray(radarData?.recentEscrowSubOrders) ? radarData.recentEscrowSubOrders : [];
+  const filteredOrders = recentOrders.filter(order => {
     if (filterStatus === 'MATURED' && !order.isMatured) return false;
     if (filterStatus === 'LOCKED' && (order.isMatured || order.isDisputed)) return false;
     if (filterStatus === 'DISPUTED' && !order.isDisputed) return false;

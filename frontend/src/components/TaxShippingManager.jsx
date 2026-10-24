@@ -144,8 +144,17 @@ export default function TaxShippingManager({ onConfigSaved }) {
         api.get('/ui/config'),
       ]);
 
-      if (taxRes.status === 'fulfilled' && taxRes.value.data?.success && taxRes.value.data.data) {
-        setTaxMatrix(taxRes.value.data.data);
+      if (taxRes.status === 'fulfilled' && taxRes.value.data?.success && taxRes.value.data.data && !Array.isArray(taxRes.value.data.data)) {
+        const d = taxRes.value.data.data;
+        const normalizedSlabs = Array.isArray(d.slabs)
+          ? d.slabs.map(s => typeof s === 'object' ? s : { rate: s, name: `${s}% GST`, isActive: true, isDefault: s === 18 })
+          : undefined;
+        setTaxMatrix((prev) => ({
+          ...prev,
+          ...d,
+          slabs: normalizedSlabs || prev.slabs,
+          hsnMappings: Array.isArray(d.hsnMappings) ? d.hsnMappings : prev.hsnMappings,
+        }));
       }
 
       if (shipRes.status === 'fulfilled' && shipRes.value.data?.success && shipRes.value.data.config) {
@@ -281,7 +290,7 @@ export default function TaxShippingManager({ onConfigSaved }) {
 
   // Real-time calculation for Simulator
   const isIntraState = simOriginState.trim().toLowerCase() === simDestinationState.trim().toLowerCase();
-  const selectedHsnObj = taxMatrix.hsnMappings.find((h) => h.hsnCode === simSelectedHsn);
+  const selectedHsnObj = (taxMatrix?.hsnMappings || []).find((h) => h.hsnCode === simSelectedHsn);
   const activeSlabRate = taxMatrix.isGstEnabled
     ? (selectedHsnObj ? (selectedHsnObj.isExempt ? 0 : selectedHsnObj.gstRate) : 18)
     : 0;

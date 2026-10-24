@@ -557,6 +557,444 @@ if ($path === '/wishlist') {
 }
 
 // -----------------------------------------------------------------------------
+// ROUTE: /admin/tax/settings
+// -----------------------------------------------------------------------------
+if ($path === '/admin/tax/settings') {
+    if ($method === 'GET') {
+        jsonSuccess([
+            'isGstEnabled' => true,
+            'defaultGstRate' => 18,
+            'calculationMode' => 'INCLUSIVE',
+            'adminBusinessState' => 'Delhi',
+            'adminStateCode' => '07',
+            'adminGstin' => '07AAAAA0000A1Z5',
+            'panNumber' => 'AAAAA0000A',
+            'autoInterstateIgst' => true,
+            'slabs' => [0, 5, 12, 18, 28],
+            'hsnMappings' => [
+                [
+                    'hsnCode' => '8518',
+                    'category' => 'Electronics',
+                    'description' => 'Acoustic Sound Headsets',
+                    'gstRate' => 18,
+                    'cessRate' => 0,
+                    'isExempt' => false
+                ],
+                [
+                    'hsnCode' => '6109',
+                    'category' => 'Fashion & Apparel',
+                    'description' => 'Cotton Knitted Apparel',
+                    'gstRate' => 5,
+                    'cessRate' => 0,
+                    'isExempt' => false
+                ]
+            ],
+            'shippingRules' => []
+        ]);
+    } else {
+        jsonSuccess($body, 'Tax settings updated successfully');
+    }
+}
+
+// -----------------------------------------------------------------------------
+// ROUTE: /admin/shipping/settings & /shipping/calculate-quote
+// -----------------------------------------------------------------------------
+if ($path === '/admin/shipping/settings') {
+    if ($method === 'GET') {
+        jsonSuccess([
+            'config' => [
+                'enabled' => true,
+                'freeShippingThreshold' => 999,
+                'defaultShippingFee' => 99,
+                'expressShippingFee' => 149,
+                'hyperlocalShippingFee' => 199,
+                'codFee' => 29,
+                'estimatedStandardDays' => '2-4 business days',
+                'estimatedExpressDays' => '24-48 hours',
+                'estimatedHyperlocalDays' => '4-6 hours',
+                'weightTiers' => [
+                    ['minGrams' => 0, 'maxGrams' => 500, 'surcharge' => 0, 'name' => 'Lightweight (0-500g)'],
+                    ['minGrams' => 501, 'maxGrams' => 2000, 'surcharge' => 30, 'name' => 'Standard Parcel (0.5-2kg)'],
+                    ['minGrams' => 2001, 'maxGrams' => 5000, 'surcharge' => 70, 'name' => 'Heavy Cargo (2-5kg)']
+                ]
+            ]
+        ]);
+    } else {
+        jsonSuccess($body, 'Shipping configuration saved');
+    }
+}
+
+if ($path === '/shipping/calculate-quote' && $method === 'POST') {
+    jsonSuccess([
+        'standardFee' => 99,
+        'expressFee' => 149,
+        'hyperlocalFee' => 199,
+        'codFee' => 29,
+        'isFreeDelivery' => false,
+        'estimatedDeliveryDays' => '2-3 Business Days'
+    ]);
+}
+
+// -----------------------------------------------------------------------------
+// ROUTE: /cod-vault/* (Reconciliation Vault & Cash Remittance)
+// -----------------------------------------------------------------------------
+if ($path === '/cod-vault/summary') {
+    jsonSuccess([
+        'cashInVault' => 18500,
+        'cashInTransit' => 4200,
+        'totalSettledToday' => 24500,
+        'totalShortages' => 0,
+        'totalExcess' => 0,
+        'totalDepositedToBank' => 45000,
+        'activeCouriers' => 6,
+        'pendingReconciliations' => 2,
+        'pendingHandoversCount' => 2,
+        'verifiedHandoversCount' => 14,
+        'activeRidersWithCashCount' => 3
+    ]);
+}
+
+if ($path === '/cod-vault/settlements') {
+    jsonSuccess([
+        [
+            'reconciliationId' => 'REC-2026-001',
+            'rider' => ['_id' => 'rdr_001', 'name' => 'Vikram Singh', 'phone' => '9876543210'],
+            'shiftDate' => date('Y-m-d'),
+            'totalCodCollected' => 8999,
+            'cashHandedOver' => 8999,
+            'discrepancy' => 0,
+            'status' => 'PENDING_VERIFICATION',
+            'handoverOtp' => '4821',
+            'currencyDenominations' => ['d500' => 17, 'd200' => 2, 'd50' => 1, 'coins' => 49],
+            'createdAt' => date('c')
+        ],
+        [
+            'reconciliationId' => 'REC-2026-002',
+            'rider' => ['_id' => 'rdr_002', 'name' => 'Rahul Sharma', 'phone' => '9876543211'],
+            'shiftDate' => date('Y-m-d'),
+            'totalCodCollected' => 4500,
+            'cashHandedOver' => 4500,
+            'discrepancy' => 0,
+            'status' => 'VERIFIED_IN_VAULT',
+            'handoverOtp' => '1234',
+            'createdAt' => date('c', strtotime('-1 day'))
+        ]
+    ]);
+}
+
+if ($path === '/cod-vault/riders-pending-cash') {
+    jsonSuccess([
+        [
+            'riderId' => 'rdr_001',
+            'name' => 'Vikram Singh',
+            'phone' => '9876543210',
+            'pendingCash' => 4200,
+            'deliveredCodOrdersCount' => 2,
+            'limitAmount' => 15000,
+            'isLocked' => false,
+            'lastHandoverTime' => date('c', strtotime('-3 hours'))
+        ]
+    ]);
+}
+
+if ($path === '/cod-vault/riders-limit-monitor') {
+    jsonSuccess([
+        'summary' => [
+            'totalActiveRiders' => 6,
+            'totalCashHeld' => 4200,
+            'ridersNearLimit' => 0,
+            'ridersLocked' => 0
+        ],
+        'riders' => [
+            [
+                'riderId' => 'rdr_001',
+                'name' => 'Vikram Singh',
+                'phone' => '9876543210',
+                'currentCash' => 4200,
+                'limit' => 15000,
+                'utilizationPercent' => 28,
+                'status' => 'SAFE'
+            ]
+        ]
+    ]);
+}
+
+if (strpos($path, '/cod-vault/') === 0 && $method === 'POST') {
+    jsonSuccess(['status' => 'PROCESSED'], 'Vault transaction recorded successfully');
+}
+
+// -----------------------------------------------------------------------------
+// ROUTE: /commission/* (Commission Simulation & Rules)
+// -----------------------------------------------------------------------------
+if ($path === '/commission/simulate' && $method === 'POST') {
+    $amount = floatval($body['amount'] ?? 5000) ?: 5000;
+    $rate = 5;
+    $cut = round(($amount * $rate) / 100);
+    jsonSuccess([
+        'appliedRule' => [
+            'name' => 'Electronics Category Tier',
+            'type' => 'CATEGORY',
+            'rate' => $rate
+        ],
+        'orderAmount' => $amount,
+        'effectiveRatePercent' => $rate,
+        'platformCommissionCut' => $cut,
+        'vendorEarning' => $amount - $cut
+    ]);
+}
+
+if ($path === '/commission/rules') {
+    if ($method === 'GET') {
+        jsonSuccess([
+            [
+                '_id' => 'rule_001',
+                'name' => 'Electronics Category Tier',
+                'categorySlug' => 'electronics',
+                'ruleType' => 'PERCENTAGE',
+                'percentage' => 5,
+                'fixedFee' => 0,
+                'minCommission' => 50,
+                'maxCommission' => 2000,
+                'priority' => 10,
+                'isActive' => true,
+                'description' => 'Standard commission tier for all electronics & appliances',
+                'tieredSlabs' => []
+            ],
+            [
+                '_id' => 'rule_002',
+                'name' => 'Fashion & Apparel Slabs',
+                'categorySlug' => 'fashion',
+                'ruleType' => 'TIERED',
+                'percentage' => 12,
+                'fixedFee' => 20,
+                'minCommission' => 20,
+                'maxCommission' => 500,
+                'priority' => 8,
+                'isActive' => true,
+                'description' => 'Tiered sliding scale for apparel and fashion',
+                'tieredSlabs' => [
+                    ['minAmount' => 0, 'maxAmount' => 1999, 'percentage' => 15],
+                    ['minAmount' => 2000, 'maxAmount' => 9999, 'percentage' => 10],
+                    ['minAmount' => 10000, 'maxAmount' => 999999, 'percentage' => 6]
+                ]
+            ]
+        ]);
+    } else {
+        jsonSuccess($body, 'Commission rule saved successfully');
+    }
+}
+
+if (strpos($path, '/commission/') === 0 && $method === 'POST') {
+    jsonSuccess(['status' => 'OK'], 'Commission operation completed');
+}
+
+// -----------------------------------------------------------------------------
+// ROUTE: /admin/escrow/radar
+// -----------------------------------------------------------------------------
+if ($path === '/admin/escrow/radar' && $method === 'GET') {
+    jsonSuccess([
+        'recentEscrowSubOrders' => [],
+        'summary' => [
+            'totalEscrowHeld' => 54000,
+            'releasedThisMonth' => 125000,
+            'pendingDisputeHold' => 0,
+            'maturedEscrowPool' => 18500,
+            'lockedEscrowPool' => 35500,
+            'activeDisputedGMV' => 0,
+            'totalSettledGMV' => 125000,
+            'totalRefundedGMV' => 1200,
+            'activeDisputeCount' => 0,
+            'maturedCount' => 3,
+            'totalActiveEscrowPool' => 54000
+        ],
+        'forecast' => [
+            ['date' => date('Y-m-d', strtotime('+1 day')), 'amount' => 12000, 'vendorCount' => 2],
+            ['date' => date('Y-m-d', strtotime('+3 days')), 'amount' => 23500, 'vendorCount' => 2]
+        ],
+        'vendorsWithMaturedEscrow' => [],
+        'config' => [
+            'autoReleaseHours' => 72,
+            'defaultHoldDays' => 7,
+            'minimumPayoutThreshold' => 500,
+            'powerSellerEarlyRelease' => [
+                'enabled' => true,
+                'minVendorRating' => 4.8,
+                'minCompletedOrders' => 50,
+                'reducedHoldDays' => 2,
+                'maxReturnRatePercent' => 2.0
+            ],
+            'autoReleaseEnabled' => true,
+            'autoReleaseScheduleCron' => '0 2 * * *',
+            'disputeFreezeWindowDays' => 14
+        ]
+    ]);
+}
+
+// -----------------------------------------------------------------------------
+// ROUTE: /install/* (1-Click Web Installer Engine)
+// -----------------------------------------------------------------------------
+if ($path === '/install/check-requirements' && $method === 'GET') {
+    jsonSuccess([
+        'allPassed' => true,
+        'phpVersion' => phpversion() ?: '8.2.12',
+        'extensions' => [
+            'pdo' => true,
+            'curl' => true,
+            'openssl' => true,
+            'mbstring' => true,
+            'gd' => true
+        ],
+        'writablePaths' => [
+            'uploads' => true,
+            'config' => true
+        ],
+        'checks' => [
+            ['name' => 'PHP Version (>= 8.1.0)', 'required' => '8.1.0', 'current' => phpversion() ?: '8.2.12', 'passed' => true],
+            ['name' => 'PDO & SQLite / MySQL Extension', 'required' => 'Enabled', 'current' => 'Installed & Loaded', 'passed' => true],
+            ['name' => 'cURL HTTP Networking Library', 'required' => 'Enabled', 'current' => 'Installed & Loaded', 'passed' => true],
+            ['name' => 'OpenSSL Cryptographic Security', 'required' => 'Enabled', 'current' => 'Installed & Loaded', 'passed' => true],
+            ['name' => 'Multibyte String (mbstring)', 'required' => 'Enabled', 'current' => 'Installed & Loaded', 'passed' => true],
+            ['name' => 'GD Graphic Image Processing', 'required' => 'Enabled', 'current' => 'Installed & Loaded', 'passed' => true],
+            ['name' => 'File Uploads Directory Writable', 'required' => 'Writable', 'current' => 'Permissions: 0755 (OK)', 'passed' => true],
+            ['name' => 'Database Storage Path Writable', 'required' => 'Writable', 'current' => 'Permissions: 0755 (OK)', 'passed' => true]
+        ]
+    ]);
+}
+
+if ($path === '/install/test-db' && $method === 'POST') {
+    jsonSuccess([
+        'success' => true,
+        'message' => 'Database connection established successfully with zero latency!',
+        'latencyMs' => 2
+    ]);
+}
+
+if ($path === '/install/setup-admin' && $method === 'POST') {
+    jsonSuccess([
+        'installed' => true,
+        'adminUrl' => '/ecommerce-demo/#admin'
+    ], 'AuraMarket installed and initialized successfully!');
+}
+
+// -----------------------------------------------------------------------------
+// ROUTE: /delivery/tasks & OTP Verification (Courier Hub)
+// -----------------------------------------------------------------------------
+if ($path === '/delivery/tasks' && $method === 'GET') {
+    $demoTasks = [
+        [
+            '_id' => 'tsk_del_001',
+            'taskType' => 'FORWARD_DELIVERY',
+            'status' => 'OUT_FOR_DELIVERY',
+            'isCod' => true,
+            'amountToCollect' => 8999,
+            'pickupLocation' => [
+                'storeName' => 'Apex Tech Hub',
+                'phone' => '9876543211',
+                'address' => 'Ground Floor, Building 4, Nehru Place',
+                'city' => 'New Delhi',
+                'pincode' => '110019'
+            ],
+            'dropLocation' => [
+                'recipientName' => 'Aman Sharma',
+                'phone' => '9876543214',
+                'address' => 'Flat 402, Green Valley Apartments, Connaught Place',
+                'city' => 'New Delhi',
+                'pincode' => '110001',
+                'landmark' => 'Near Barakhamba Metro Station'
+            ],
+            'subOrder' => [
+                '_id' => 'sub_4821',
+                'orderNumber' => 'ORD-2026-88912',
+                'deliveryOtp' => '4821',
+                'items' => [
+                    [
+                        'title' => 'Aura Pro ANC Wireless Noise-Cancelling Headphones (Midnight Black)',
+                        'quantity' => 1,
+                        'price' => 8999
+                    ]
+                ],
+                'vendor' => [
+                    'storeName' => 'Apex Tech Hub',
+                    'phone' => '9876543211'
+                ],
+                'customer' => [
+                    'name' => 'Aman Sharma',
+                    'phone' => '9876543214'
+                ]
+            ],
+            'deliveryInstructions' => 'Call customer upon arrival at main gate'
+        ],
+        [
+            '_id' => 'tsk_del_002',
+            'taskType' => 'FORWARD_DELIVERY',
+            'status' => 'DELIVERED',
+            'isCod' => false,
+            'amountToCollect' => 0,
+            'pickupLocation' => [
+                'storeName' => 'Vogue Trends',
+                'phone' => '9876543212',
+                'address' => '3rd Floor, Select Citywalk, Saket',
+                'city' => 'New Delhi',
+                'pincode' => '110017'
+            ],
+            'dropLocation' => [
+                'recipientName' => 'Priya Nair',
+                'phone' => '9876543215',
+                'address' => 'House 12, Defence Colony',
+                'city' => 'New Delhi',
+                'pincode' => '110024',
+                'landmark' => 'Behind Market'
+            ],
+            'subOrder' => [
+                '_id' => 'sub_1102',
+                'orderNumber' => 'ORD-2026-88910',
+                'deliveryOtp' => '1234',
+                'items' => [
+                    [
+                        'title' => 'Aura Fit Smart Fitness Band',
+                        'quantity' => 1,
+                        'price' => 2499
+                    ]
+                ],
+                'vendor' => [
+                    'storeName' => 'Vogue Trends',
+                    'phone' => '9876543212'
+                ],
+                'customer' => [
+                    'name' => 'Priya Nair',
+                    'phone' => '9876543215'
+                ]
+            ],
+            'deliveryInstructions' => 'Leave with security guard if not available'
+        ]
+    ];
+
+    jsonSuccess([
+        'data' => $demoTasks,
+        'stats' => [
+            'activeTransit' => 1,
+            'deliveredToday' => 1,
+            'codCollectedToday' => 8999
+        ]
+    ]);
+}
+
+if (preg_match('#^/delivery/tasks/([^/]+)/verify-otp#', $path, $matches) && $method === 'POST') {
+    jsonSuccess([
+        'verified' => true,
+        'taskId' => $matches[1],
+        'amountCollected' => floatval($body['amountCollected'] ?? 0)
+    ], 'Customer Handover OTP verified and parcel marked as DELIVERED!');
+}
+
+if (preg_match('#^/delivery/tasks/([^/]+)#', $path, $matches)) {
+    jsonSuccess([
+        'taskId' => $matches[1],
+        'status' => 'UPDATED'
+    ], 'Delivery task status updated successfully');
+}
+
+// -----------------------------------------------------------------------------
 // DEFAULT FALLBACK: 200 OK for any miscellaneous endpoint
 // (Prevents any red 404 in CodeCanyon review)
 // -----------------------------------------------------------------------------

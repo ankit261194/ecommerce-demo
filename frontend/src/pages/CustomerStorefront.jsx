@@ -1545,6 +1545,8 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
 
         setActiveOrderConfirmation({
           orderId: placedOrderId,
+          otp: order.deliveryOtp || '4821',
+          deliveryOtp: order.deliveryOtp || '4821',
           subOrders: (order.subOrders || []).map(so => ({
             subOrderId: so._id ? `SUB-${so._id.toString().slice(-4)}` : 'SUB-001',
             vendorName: so.vendor?.storeName || 'Verified Partner Store',
@@ -3378,7 +3380,7 @@ export const CustomerStorefront = ({ searchQuery, uiConfig, activeCategoryFilter
                 <KeyRound className="w-4 h-4" /> Secure Delivery Handover OTP
               </span>
               <div className="text-4xl font-black tracking-widest text-slate-900">
-                4821
+                {activeOrderConfirmation?.otp || activeOrderConfirmation?.deliveryOtp || '4821'}
               </div>
               <p className="text-[11px] text-slate-600 max-w-xs mx-auto font-medium">
                 Share this 4-digit secret code with the courier rider (<strong className="text-slate-900">Vikram Singh</strong>) only when you receive your physical parcel.

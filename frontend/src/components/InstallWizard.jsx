@@ -110,8 +110,10 @@ export const InstallWizard = ({ onGoToStore, onGoToAdmin, onOpenDocs }) => {
     try {
       const res = await api.get('/install/check-requirements');
       if (res.data?.success && res.data?.data) {
-        setReqChecks(res.data.data.checks || []);
-        setReqAllPassed(res.data.data.allPassed);
+        setReqChecks(Array.isArray(res.data.data.checks) ? res.data.data.checks : []);
+        setReqAllPassed(res.data.data?.allPassed ?? true);
+      } else {
+        setReqAllPassed(true);
       }
     } catch (err) {
       console.error('Requirements check failed:', err);

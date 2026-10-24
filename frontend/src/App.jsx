@@ -8,6 +8,7 @@ import { DocumentationModal } from './components/DocumentationModal';
 import { CmsPolicyViewerModal } from './components/CmsPolicyViewerModal';
 import { FaqSection } from './components/FaqSection';
 import { ExitIntentCartModal } from './components/ExitIntentCartModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { ShoppingBag, Flame, Layers, LayoutGrid, MessageCircle, Phone, BookOpen, ChevronUp, RefreshCw } from 'lucide-react';
 import api from './api/client';
 
@@ -390,7 +391,8 @@ const MainLayout = () => {
 
       {/* Main Panel Content Area with Dynamic Suspense Code-Splitting */}
       <main className="flex-1">
-        <Suspense fallback={<PortalLoadingSkeleton label={`Loading ${activeTab}...`} />}>
+        <ErrorBoundary fallbackTitle="Portal Display Notice">
+          <Suspense fallback={<PortalLoadingSkeleton label={`Loading ${activeTab}...`} />}>
           {activeTab === 'customer' && (
             <CustomerStorefront searchQuery={searchQuery} uiConfig={uiConfig} />
           )}
@@ -413,6 +415,7 @@ const MainLayout = () => {
             />
           )}
         </Suspense>
+        </ErrorBoundary>
       </main>
 
       {/* Real Customer Mobile Bottom Navigation Bar (No role clutter!) */}
@@ -766,12 +769,14 @@ const MainLayout = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <CartProvider>
-        <LocalizationProvider>
-          <MainLayout />
-        </LocalizationProvider>
-      </CartProvider>
-    </AuthProvider>
+    <ErrorBoundary fallbackTitle="AuraMarket Application Notice">
+      <AuthProvider>
+        <CartProvider>
+          <LocalizationProvider>
+            <MainLayout />
+          </LocalizationProvider>
+        </CartProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

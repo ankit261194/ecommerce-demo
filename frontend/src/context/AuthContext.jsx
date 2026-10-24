@@ -55,8 +55,12 @@ export const DEMO_PERSONAS = {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('auramarket_user');
-    return saved ? JSON.parse(saved) : DEMO_PERSONAS.customer;
+    try {
+      const saved = localStorage.getItem('auramarket_user');
+      return saved ? JSON.parse(saved) : DEMO_PERSONAS.customer;
+    } catch {
+      return DEMO_PERSONAS.customer;
+    }
   });
 
   const [activeRole, setActiveRole] = useState(() => {

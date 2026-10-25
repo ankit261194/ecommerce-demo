@@ -994,6 +994,127 @@ if (preg_match('#^/delivery/tasks/([^/]+)#', $path, $matches)) {
     ], 'Delivery task status updated successfully');
 }
 
+if ($path === '/admin/rto-guard/overview') {
+    jsonSuccess([
+        'stats' => [
+            'totalCodOrders' => 48,
+            'highRiskBlocked' => 3,
+            'addressFixed' => 7,
+            'rtoRatePercent' => 4.2,
+            'codOtpSuccessRate' => 98.4
+        ],
+        'data' => [
+            [
+                '_id' => 'rto_flag_01',
+                'orderNumber' => 'ORD-2026-9901',
+                'riskScore' => 88,
+                'reasons' => ['Incomplete delivery address', 'Unverified new customer phone'],
+                'actionTaken' => 'FLAGGED_FOR_OTP',
+                'createdAt' => date('c', strtotime('-2 hours'))
+            ]
+        ]
+    ]);
+}
+
+if ($path === '/logistics/dispatch/radar') {
+    jsonSuccess([
+        'tasks' => [
+            [
+                '_id' => 'tsk_dsp_01',
+                'taskType' => 'FORWARD_DELIVERY',
+                'status' => 'ASSIGNED',
+                'orderNumber' => 'ORD-2026-88912',
+                'customerName' => 'Aman Sharma',
+                'customerAddress' => 'Flat 402, Connaught Place, New Delhi',
+                'pincode' => '110001',
+                'rider' => ['name' => 'Vikram Singh', 'phone' => '9876543210'],
+                'slot' => '14:00 - 16:00'
+            ]
+        ],
+        'riders' => [
+            ['_id' => 'rdr_01', 'name' => 'Vikram Singh', 'status' => 'ON_DUTY', 'activeTasks' => 1, 'phone' => '9876543210'],
+            ['_id' => 'rdr_02', 'name' => 'Rajesh Kumar', 'status' => 'AVAILABLE', 'activeTasks' => 0, 'phone' => '9876543219']
+        ],
+        'zones' => [
+            ['name' => 'Central Delhi', 'pincodePrefix' => '11000', 'activeRiders' => 2]
+        ],
+        'stats' => [
+            'pendingAssignment' => 0,
+            'inTransit' => 1,
+            'deliveredToday' => 5
+        ]
+    ]);
+}
+
+if ($path === '/logistics/slots/config') {
+    jsonSuccess([
+        'slots' => [
+            ['id' => 'slot_morning', 'label' => '09:00 AM - 12:00 PM', 'cutoffMinutes' => 60, 'active' => true],
+            ['id' => 'slot_afternoon', 'label' => '01:00 PM - 05:00 PM', 'cutoffMinutes' => 60, 'active' => true],
+            ['id' => 'slot_evening', 'label' => '06:00 PM - 09:00 PM', 'cutoffMinutes' => 60, 'active' => true]
+        ],
+        'leadHours' => 2,
+        'maxOrdersPerSlot' => 50
+    ]);
+}
+
+if ($path === '/logistics/riders') {
+    jsonSuccess([
+        ['_id' => 'rdr_01', 'name' => 'Vikram Singh', 'phone' => '9876543210', 'status' => 'ON_DUTY', 'batteryPercent' => 84, 'currentLocation' => ['lat' => 28.6139, 'lng' => 77.2090]],
+        ['_id' => 'rdr_02', 'name' => 'Rajesh Kumar', 'phone' => '9876543219', 'status' => 'AVAILABLE', 'batteryPercent' => 95, 'currentLocation' => ['lat' => 28.6200, 'lng' => 77.2100]]
+    ]);
+}
+
+if ($path === '/logistics/slots/available') {
+    jsonSuccess([
+        ['date' => date('Y-m-d'), 'slots' => ['09:00 AM - 12:00 PM', '01:00 PM - 05:00 PM', '06:00 PM - 09:00 PM']],
+        ['date' => date('Y-m-d', strtotime('+1 day')), 'slots' => ['09:00 AM - 12:00 PM', '01:00 PM - 05:00 PM', '06:00 PM - 09:00 PM']]
+    ]);
+}
+
+if ($path === '/chat/customer/inquiries') {
+    jsonSuccess([
+        'inquiries' => []
+    ]);
+}
+
+if ($path === '/chat/vendor/summary') {
+    jsonSuccess([
+        'unreadCount' => 0,
+        'activeInquiries' => 0
+    ]);
+}
+
+if ($path === '/flash-deals/active') {
+    jsonSuccess([
+        'deals' => []
+    ]);
+}
+
+if ($path === '/products/social-proof/recent-activities') {
+    jsonSuccess([
+        'activities' => [
+            ['user' => 'Rohit S.', 'city' => 'Bengaluru', 'action' => 'bought Aura Pro ANC Headphones', 'timeAgo' => '3 mins ago'],
+            ['user' => 'Ananya M.', 'city' => 'Mumbai', 'action' => 'bought Aura Fit Smart Band', 'timeAgo' => '12 mins ago']
+        ]
+    ]);
+}
+
+if (strpos($path, '/reviews/product/') === 0) {
+    jsonSuccess([
+        'reviews' => [],
+        'averageRating' => 4.9,
+        'totalCount' => 18
+    ]);
+}
+
+if (strpos($path, '/questions/product/') === 0) {
+    jsonSuccess([
+        'questions' => [],
+        'totalCount' => 4
+    ]);
+}
+
 // -----------------------------------------------------------------------------
 // DEFAULT FALLBACK: 200 OK for any miscellaneous endpoint
 // (Prevents any red 404 in CodeCanyon review)

@@ -1087,8 +1087,15 @@ if ($path === '/chat/vendor/summary') {
 
 if ($path === '/flash-deals/active') {
     jsonSuccess([
+        'hasActiveDeal' => false,
         'deals' => []
     ]);
+}
+
+if ($path === '/products/flash-deals') {
+    $allProds = $db['products'] ?? [];
+    $flashProds = array_slice($allProds, 0, 4);
+    jsonSuccess($flashProds);
 }
 
 if ($path === '/products/social-proof/recent-activities') {

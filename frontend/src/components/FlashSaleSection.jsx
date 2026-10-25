@@ -75,7 +75,14 @@ export default function FlashSaleSection({
         if (res.ok) {
           const data = await res.json();
           if (isMounted && data.success) {
-            setDeals(data.data || []);
+            const rawDeals = Array.isArray(data.data)
+              ? data.data
+              : Array.isArray(data.data?.products)
+              ? data.data.products
+              : Array.isArray(data.products)
+              ? data.products
+              : [];
+            setDeals(rawDeals);
             setCampaign(data.campaign || null);
 
             // Calculate initial time left from endsAt timestamp
@@ -137,7 +144,9 @@ export default function FlashSaleSection({
     if (el) el.scrollBy({ left: 320, behavior: 'smooth' });
   };
 
-  if (!loading && deals.length === 0) {
+  const safeDeals = Array.isArray(deals) ? deals : [];
+
+  if (!loading && safeDeals.length === 0) {
     return null;
   }
 
@@ -239,7 +248,7 @@ export default function FlashSaleSection({
         id="flash-deals-scroller"
         className="relative z-10 mt-6 flex gap-4 overflow-x-auto pb-3 custom-device-scrollbar scroll-smooth"
       >
-        {deals.map(deal => {
+        {safeDeals.map(deal => {
           const discount = deal.discountPercentage || Math.round(((deal.mrp - deal.sellingPrice) / deal.mrp) * 100) || 50;
           const claimedPercent = deal.claimedPercent || 78;
           const imgUrl = deal.images?.[0] || 'https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=600';

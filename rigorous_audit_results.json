@@ -1,0 +1,503 @@
+{
+  "demoHub": {},
+  "otpSimulator": {
+    "otpSimRes": {
+      "clickedOtpTab": true
+    },
+    "otpGetRes": {
+      "clickedGetOtp": true
+    },
+    "otpVerifyRes": {
+      "hasDispatchedNotice": true,
+      "codeRendered": true,
+      "hasVerifyBtn": true
+    }
+  },
+  "customerStorefront": {
+    "searchTest": {
+      "searched": true
+    },
+    "productModalRes": {
+      "openedProductModal": true,
+      "productTitle": "Multi-Vendor Marketplace"
+    },
+    "modalAddCartRes": {
+      "modalFound": false
+    },
+    "checkoutBtnRes": {
+      "clickedCheckout": false
+    },
+    "placeOrderRes": {
+      "clickedPlaceOrder": false
+    },
+    "orderConfirmRes": {
+      "hasOrderConfirmed": false,
+      "hasOtp4821": false,
+      "hasRiderVikram": false,
+      "hasGstInvoiceBtn": false,
+      "hasScratchCard": true,
+      "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Super Admin Vendor Portal Courier Hub Web Installer Desktop iPad 🤖 Android iPhone Buy: 8533955333 Reset ⚡ Mega Diwali & Festive Sale: Flat 50% OFF + Free Express Delivery on orders above ₹999! A AuraMarket B2B+B2C  Multi-Vendor Marketplace  DELIVER TO  New Delhi, 110001 All Voice AI Track Order Orders & Invoices Alerts W"
+    }
+  },
+  "superAdminTabs": [
+    {
+      "id": "overview",
+      "span": "Marketplace Overview",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "orders",
+      "span": "Orders Command Center",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "categories",
+      "span": "Categories Tree",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "brands",
+      "span": "Brands Directory",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "banners",
+      "span": "Hero & Promo Banners",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "announcement",
+      "span": "Top Announcement",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "coupons",
+      "span": "Coupons & Promo Codes",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "flash-deals",
+      "span": "Flash Deals & Sales",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "abandoned-carts",
+      "span": "Abandoned Carts",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "customers",
+      "span": "Customer CRM Directory",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "vendors",
+      "span": "Vendor KYC & Stores",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "payouts",
+      "span": "Vendor Payouts & Withdrawals",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "layout",
+      "span": "Homepage Layout",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "integrations",
+      "span": "Integrations & API Hub",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "seo",
+      "span": "SEO & Webmaster Hub",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "tax-shipping",
+      "span": "Tax & Shipping Engine",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "staff-roles",
+      "span": "Staff Roles & Permissions",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "audit-backup",
+      "span": "Audit Trail & DB Backup",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "rto-guard",
+      "span": "RTO Guard Anti-Fraud",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "localization",
+      "span": "Currency & Language",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "global-settings",
+      "span": "Site Maintenance & Global Settings",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "audit-trail",
+      "span": "Activity & Security Audit Trail",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "push-notifications",
+      "span": "Web Push Broadcast Studio",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "wallet-vault",
+      "span": "Wallet & Scratch Rewards Vault",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "emi-engine",
+      "span": "EMI & BNPL Studio",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "social-og",
+      "span": "Social & OpenGraph Cards",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "gift-wrap",
+      "span": "Gift Wrap & Greeting Studio",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "hyperlocal",
+      "span": "Hyperlocal Geofence & Hubs",
+      "found": true,
+      "pass": true,
+      "newExc": 0,
+      "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Manager Low-Stock Radar #10 1-Click Seed Demo 1-Click Wipe Demo Marketplace Overview Orders Command Center 1 Categories Tree POINT #36 Brands Directory P"
+    },
+    {
+      "id": "cod-vault",
+      "span": "COD Vault & Remittance",
+      "found": true,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "ai-studio",
+      "span": "AI Listing & SEO Studio",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "whatsapp-bot",
+      "span": "WhatsApp Shopping Bot",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "group-buy",
+      "span": "Group Buying (Team Purchase)",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "video-shopping",
+      "span": "Live Video Shopping & Reels",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "rto-predictor",
+      "span": "Smart RTO Fraud Predictor",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "cms-pages",
+      "span": "CMS & Legal Pages",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "faqs",
+      "span": "FAQ Builder",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "commission-rules",
+      "span": "Commission Rules",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "logistics-zones",
+      "span": "Zone Logistics",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "telemetry-health",
+      "span": "Server Health & Telemetry",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "vendor-verification",
+      "span": "Vendor KYC & Penny-Drop",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "shipping-manifest",
+      "span": "Courier Manifests",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "job-queues",
+      "span": "Job Queues & Workers",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "multi-warehouse",
+      "span": "Multi-Warehouse Hub",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "stock-transfers",
+      "span": "Stock Transfers (STO)",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "affiliates",
+      "span": "Affiliate & Influencers",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "loyalty",
+      "span": "VIP Loyalty & Tiers",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "flash-sales-mega",
+      "span": "Mega Flash Sales",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "cart-recovery-drip",
+      "span": "Cart Recovery Drip",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "hyperlocal-dispatch",
+      "span": "Hyperlocal Dispatch Radar",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "fleet-live-map",
+      "span": "Fleet Live Map Radar",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "reverse-logistics",
+      "span": "Reverse Logistics & SPF",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "escrow",
+      "span": "Escrow Settlement Engine",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "tax-compliance",
+      "span": "GST & TDS E-Invoicing",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    },
+    {
+      "id": "fraud-prevention",
+      "span": "Fraud Prevention & Risk Radar",
+      "found": false,
+      "pass": false,
+      "newExc": 0,
+      "contentSnippet": "Portal Display Notice  Cannot read properties of undefined (reading 'toLocaleString')  Reload Portal View"
+    }
+  ],
+  "vendorPortal": {
+    "hasApexHeading": false,
+    "hasSalesKpi": true,
+    "hasWalletKpi": false,
+    "hasActiveOrders": true,
+    "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Super Admin Vendor Portal Courier Hub Web Installer Desktop iPad 🤖 Android iPhone Buy: 8533955333 Reset ⚡ Mega Diwali & Festive Sale: Flat 50% OFF + Free Express Delivery on orders above ₹999! A AuraMarket B2B+B2C  Multi-V"
+  },
+  "courierPortal": {
+    "hasVikram": true,
+    "hasTasks": true,
+    "hasOtpBtn": false,
+    "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Super Admin Vendor Portal Courier Hub Web Installer Desktop iPad 🤖 Android iPhone Buy: 8533955333 Reset ⚡ Mega Diwali & Festive Sale: Flat 50% OFF + Free Express Delivery on orders above ₹999! A AuraMarket B2B+B2C  Multi-V"
+  },
+  "installerWizard": {
+    "installerStep1": {
+      "step1Title": true,
+      "clickedCheckReq": true
+    },
+    "installerStep2": {
+      "hasServerAudit": true,
+      "configureDbBtnFound": true,
+      "configureDbBtnDisabled": false,
+      "buttonClasses": "px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-black text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all"
+    }
+  },
+  "totalExceptions": 0,
+  "totalConsoleErrors": 3
+}

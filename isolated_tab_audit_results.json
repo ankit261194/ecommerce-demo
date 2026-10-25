@@ -1,0 +1,542 @@
+[
+  {
+    "tabNumber": 1,
+    "id": "overview",
+    "span": "Marketplace Overview",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 2,
+    "id": "orders",
+    "span": "Orders Command Center",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 3,
+    "id": "categories",
+    "span": "Categories Tree",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 4,
+    "id": "brands",
+    "span": "Brands Directory",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 5,
+    "id": "banners",
+    "span": "Hero & Promo Banners",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 6,
+    "id": "announcement",
+    "span": "Top Announcement",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 7,
+    "id": "coupons",
+    "span": "Coupons & Promo Codes",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 8,
+    "id": "flash-deals",
+    "span": "Flash Deals & Sales",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 9,
+    "id": "abandoned-carts",
+    "span": "Abandoned Carts",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 10,
+    "id": "customers",
+    "span": "Customer CRM Directory",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 11,
+    "id": "vendors",
+    "span": "Vendor KYC & Stores",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 12,
+    "id": "payouts",
+    "span": "Vendor Payouts & Withdrawals",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 13,
+    "id": "layout",
+    "span": "Homepage Layout",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 14,
+    "id": "integrations",
+    "span": "Integrations & API Hub",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 15,
+    "id": "seo",
+    "span": "SEO & Webmaster Hub",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 16,
+    "id": "tax-shipping",
+    "span": "Tax & Shipping Engine",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 17,
+    "id": "staff-roles",
+    "span": "Staff Roles & Permissions",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 18,
+    "id": "audit-backup",
+    "span": "Audit Trail & DB Backup",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 19,
+    "id": "rto-guard",
+    "span": "RTO Guard Anti-Fraud",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 20,
+    "id": "localization",
+    "span": "Currency & Language",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 21,
+    "id": "global-settings",
+    "span": "Site Maintenance & Global Settings",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 22,
+    "id": "audit-trail",
+    "span": "Activity & Security Audit Trail",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 23,
+    "id": "push-notifications",
+    "span": "Web Push Broadcast Studio",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 24,
+    "id": "wallet-vault",
+    "span": "Wallet & Scratch Rewards Vault",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 25,
+    "id": "emi-engine",
+    "span": "EMI & BNPL Studio",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 26,
+    "id": "social-og",
+    "span": "Social & OpenGraph Cards",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 27,
+    "id": "gift-wrap",
+    "span": "Gift Wrap & Greeting Studio",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 28,
+    "id": "hyperlocal",
+    "span": "Hyperlocal Geofence & Hubs",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 29,
+    "id": "cod-vault",
+    "span": "COD Vault & Remittance",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 30,
+    "id": "ai-studio",
+    "span": "AI Listing & SEO Studio",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 31,
+    "id": "whatsapp-bot",
+    "span": "WhatsApp Shopping Bot",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 32,
+    "id": "group-buy",
+    "span": "Group Buying (Team Purchase)",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 33,
+    "id": "video-shopping",
+    "span": "Live Video Shopping & Reels",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 34,
+    "id": "rto-predictor",
+    "span": "Smart RTO Fraud Predictor",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 35,
+    "id": "cms-pages",
+    "span": "CMS & Legal Pages",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 36,
+    "id": "faqs",
+    "span": "FAQ Builder",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 37,
+    "id": "commission-rules",
+    "span": "Commission Rules",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 38,
+    "id": "logistics-zones",
+    "span": "Zone Logistics",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 39,
+    "id": "telemetry-health",
+    "span": "Server Health & Telemetry",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 40,
+    "id": "vendor-verification",
+    "span": "Vendor KYC & Penny-Drop",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 41,
+    "id": "shipping-manifest",
+    "span": "Courier Manifests",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 42,
+    "id": "job-queues",
+    "span": "Job Queues & Workers",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 43,
+    "id": "multi-warehouse",
+    "span": "Multi-Warehouse Hub",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 44,
+    "id": "stock-transfers",
+    "span": "Stock Transfers (STO)",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 45,
+    "id": "affiliates",
+    "span": "Affiliate & Influencers",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 46,
+    "id": "loyalty",
+    "span": "VIP Loyalty & Tiers",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 47,
+    "id": "flash-sales-mega",
+    "span": "Mega Flash Sales",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 48,
+    "id": "cart-recovery-drip",
+    "span": "Cart Recovery Drip",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 49,
+    "id": "hyperlocal-dispatch",
+    "span": "Hyperlocal Dispatch Radar",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Hyperlocal Dispatch & Delivery Slot Scheduler Point #42 Live Dispatch Radar  1-Hour instant express, dynamic time slot capacity, and automated least-l"
+  },
+  {
+    "tabNumber": 50,
+    "id": "fleet-live-map",
+    "span": "Fleet Live Map Radar",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Logistics Central Radar • Fleet Live Map REAL-TIME GPS Point #43  Live OpenStreetMap & Leaflet Tile Radar • Multi-Rider Telemetry & Dynamic Route Insp"
+  },
+  {
+    "tabNumber": 51,
+    "id": "reverse-logistics",
+    "span": "Reverse Logistics & SPF",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 52,
+    "id": "escrow",
+    "span": "Escrow Settlement Engine",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 53,
+    "id": "tax-compliance",
+    "span": "GST & TDS E-Invoicing",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  },
+  {
+    "tabNumber": 54,
+    "id": "fraud-prevention",
+    "span": "Fraud Prevention & Risk Radar",
+    "found": true,
+    "passed": true,
+    "crashed": false,
+    "newExceptions": 0,
+    "contentSnippet": "Super Admin Control Center MASTER LEVEL  Global Marketplace Metrics, Partner Verification, and Plug-and-Play External Integrations  Theme & Banner Man"
+  }
+]

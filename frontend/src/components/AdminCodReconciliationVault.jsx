@@ -492,7 +492,7 @@ export const AdminCodReconciliationVault = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {ridersLimitRadar.riders.map((r) => {
+            {(ridersLimitRadar?.riders || []).map((r) => {
               const isBreached = r.status === 'BREACHED_LOCKED';
               const isWarning = r.status === 'WARNING';
               return (
@@ -528,8 +528,8 @@ export const AdminCodReconciliationVault = () => {
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-400">Cash in Hand:</span>
                       <span className="font-mono font-black text-white">
-                        ₹{r.currentCashInHand.toLocaleString('en-IN')}{' '}
-                        <span className="text-slate-500">/ ₹{r.cashInHandLimit.toLocaleString('en-IN')}</span>
+                        ₹{(r?.currentCashInHand || 0).toLocaleString('en-IN')}{' '}
+                        <span className="text-slate-500">/ ₹{(r?.cashInHandLimit || 0).toLocaleString('en-IN')}</span>
                       </span>
                     </div>
 
@@ -593,7 +593,7 @@ export const AdminCodReconciliationVault = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {pendingRiders.map((rider) => (
+            {(pendingRiders || []).map((rider) => (
               <div
                 key={rider.riderId}
                 className="p-4 rounded-2xl bg-white border border-amber-200/80 shadow-xs flex flex-col justify-between space-y-3"
@@ -612,7 +612,7 @@ export const AdminCodReconciliationVault = () => {
                   <div>
                     <span className="text-[10px] text-slate-400 font-bold uppercase block">Cash in Bag</span>
                     <span className="text-base font-black text-amber-950 font-mono">
-                      ₹{rider.totalPendingCash.toLocaleString('en-IN')}
+                      ₹{(rider?.totalPendingCash || 0).toLocaleString('en-IN')}
                     </span>
                   </div>
 
@@ -712,7 +712,7 @@ export const AdminCodReconciliationVault = () => {
                   </td>
                 </tr>
               ) : (
-                filteredSettlements.map((s) => {
+                (filteredSettlements || []).map((s) => {
                   const isMismatch = s.discrepancy !== 0;
                   return (
                     <tr key={s._id} className="hover:bg-slate-50 transition-colors">
@@ -720,7 +720,7 @@ export const AdminCodReconciliationVault = () => {
                       <td className="py-4 px-3">
                         <div className="font-mono font-black text-slate-900">{s.reconciliationId}</div>
                         <div className="text-[10px] text-slate-400 font-mono">
-                          {new Date(s.createdAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                          {new Date(s?.createdAt || Date.now()).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
                         </div>
                         {s.notes && <div className="text-[10px] text-slate-500 italic truncate max-w-xs">{s.notes}</div>}
                       </td>
@@ -733,7 +733,7 @@ export const AdminCodReconciliationVault = () => {
 
                       {/* Total Counted */}
                       <td className="py-4 px-3 font-mono font-black text-sm text-slate-900">
-                        ₹{s.totalCounted.toLocaleString('en-IN')}
+                        ₹{(s?.totalCounted || 0).toLocaleString('en-IN')}
                         <div className="text-[9px] text-slate-400 font-normal">
                           {s.denominations?.d500 ? `500×${s.denominations.d500} ` : ''}
                           {s.denominations?.d200 ? `200×${s.denominations.d200} ` : ''}
@@ -743,7 +743,7 @@ export const AdminCodReconciliationVault = () => {
 
                       {/* Expected & Discrepancy */}
                       <td className="py-4 px-3">
-                        <div className="text-slate-600 font-mono">Expected: ₹{s.totalExpected.toLocaleString('en-IN')}</div>
+                        <div className="text-slate-600 font-mono">Expected: ₹{(s?.totalExpected || 0).toLocaleString('en-IN')}</div>
                         {isMismatch ? (
                           <span
                             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black mt-0.5 ${
@@ -751,8 +751,8 @@ export const AdminCodReconciliationVault = () => {
                             }`}
                           >
                             {s.discrepancy < 0
-                              ? `⚠️ Short ₹${Math.abs(s.discrepancy).toLocaleString('en-IN')}`
-                              : `⚡ Excess +₹${s.discrepancy.toLocaleString('en-IN')}`}
+                              ? `⚠️ Short ₹${Math.abs(s?.discrepancy || 0).toLocaleString('en-IN')}`
+                              : `⚡ Excess +₹${(s?.discrepancy || 0).toLocaleString('en-IN')}`}
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black mt-0.5 bg-emerald-100 text-emerald-800">
@@ -936,12 +936,12 @@ export const AdminCodReconciliationVault = () => {
                 <div className="flex justify-between text-xs font-bold text-indigo-950">
                   <span>Cash Handed Over:</span>
                   <span className="font-mono text-base font-black text-indigo-700">
-                    ₹{selectedSettlementForVerify.totalCounted.toLocaleString('en-IN')}
+                    ₹{(selectedSettlementForVerify?.totalCounted || 0).toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div className="flex justify-between text-xs font-bold text-slate-600">
                   <span>Expected from Orders:</span>
-                  <span className="font-mono">₹{selectedSettlementForVerify.totalExpected.toLocaleString('en-IN')}</span>
+                  <span className="font-mono">₹{(selectedSettlementForVerify?.totalExpected || 0).toLocaleString('en-IN')}</span>
                 </div>
                 {selectedSettlementForVerify.discrepancy !== 0 && (
                   <div
@@ -1033,7 +1033,7 @@ export const AdminCodReconciliationVault = () => {
               <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200 flex justify-between items-center text-xs font-bold text-emerald-950">
                 <span>Amount to Deposit:</span>
                 <span className="font-mono text-base font-black text-emerald-700">
-                  ₹{selectedSettlementForDeposit.totalCounted.toLocaleString('en-IN')}
+                  ₹{(selectedSettlementForDeposit?.totalCounted || 0).toLocaleString('en-IN')}
                 </span>
               </div>
 
@@ -1125,13 +1125,13 @@ export const AdminCodReconciliationVault = () => {
                 <div>
                   <div className="text-[10px] text-slate-400 font-bold uppercase">Expected Cash</div>
                   <div className="text-base font-mono font-black text-white mt-0.5">
-                    ₹{selectedRiderForHandover.totalPendingCash.toLocaleString('en-IN')}
+                    ₹{(selectedRiderForHandover?.totalPendingCash || 0).toLocaleString('en-IN')}
                   </div>
                 </div>
                 <div>
                   <div className="text-[10px] text-amber-400 font-bold uppercase">Counted Cash</div>
                   <div className="text-base font-mono font-black text-amber-400 mt-0.5">
-                    ₹{calculatedHandoverTotal.toLocaleString('en-IN')}
+                    ₹{(calculatedHandoverTotal || 0).toLocaleString('en-IN')}
                   </div>
                 </div>
                 <div>
@@ -1147,7 +1147,7 @@ export const AdminCodReconciliationVault = () => {
                   >
                     {calculatedHandoverTotal - selectedRiderForHandover.totalPendingCash === 0
                       ? 'Exact'
-                      : `₹${(calculatedHandoverTotal - selectedRiderForHandover.totalPendingCash).toLocaleString('en-IN')}`}
+                      : `₹${((calculatedHandoverTotal || 0) - (selectedRiderForHandover?.totalPendingCash || 0)).toLocaleString('en-IN')}`}
                   </div>
                 </div>
               </div>
@@ -1369,8 +1369,8 @@ export const AdminCodReconciliationVault = () => {
                   <span>Discrepancy:</span>
                   <span className="font-mono font-black text-rose-700">
                     {selectedSettlementForDispute.discrepancy < 0
-                      ? `Shortage: -₹${Math.abs(selectedSettlementForDispute.discrepancy).toLocaleString('en-IN')}`
-                      : `Excess: +₹${selectedSettlementForDispute.discrepancy.toLocaleString('en-IN')}`}
+                      ? `Shortage: -₹${Math.abs(selectedSettlementForDispute?.discrepancy || 0).toLocaleString('en-IN')}`
+                      : `Excess: +₹${(selectedSettlementForDispute?.discrepancy || 0).toLocaleString('en-IN')}`}
                   </span>
                 </div>
                 {selectedSettlementForDispute.dispute?.reason && (
@@ -1472,7 +1472,7 @@ export const AdminCodReconciliationVault = () => {
               <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 flex justify-between items-center text-xs font-bold text-amber-950">
                 <span>Total Cash to Lock:</span>
                 <span className="font-mono text-base font-black text-amber-800">
-                  ₹{selectedSettlementForVaultDrop.totalCounted.toLocaleString('en-IN')}
+                  ₹{(selectedSettlementForVaultDrop?.totalCounted || 0).toLocaleString('en-IN')}
                 </span>
               </div>
 

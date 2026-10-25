@@ -1,0 +1,611 @@
+{
+  "timestamp": "2026-10-24T07:55:09.893Z",
+  "liveUrl": "https://shribalajikripadham.online/ecommerce-demo/",
+  "sections": {
+    "demoHub": {
+      "title": "AuraMarket — The Next-Gen Multi-Vendor Commerce Platform",
+      "cards": [
+        "Cross-Platform Flutter Mobile Apps (Android & iOS)",
+        "Verified Enterprise Multi-Vendor Architecture"
+      ],
+      "buttonCount": 32,
+      "hasAuthorNotice": true,
+      "hasInstallerBadge": true,
+      "bodyPreview": "A AuraMarket DEMO SHOWCASE • Developed by Ankit Chaudhary (8533955333)  Multi-Vendor B2B + B2C Marketplace Script (React + Node.js + Flutter)  Web Installer (/install) 📖 Setup Guide / कैसे यूज़ करें Buy: 8533955333 OFFICIAL COMMERCIAL MARKETPLACE DEMO Select a Portal to Test the Demo  Just like off",
+      "otpSimulator": {
+        "otpFound": false,
+        "otpSnippet": null
+      },
+      "setupGuideModal": {
+        "modalOpened": true,
+        "textSnippet": "AuraMarket कम्प्लीट सेटअप व डेवलपर गाइड V2.4  डेवलपर: अंकित चौधरी • कॉल / WhatsApp: +91 8533955333  🇮🇳 हिंदी 🇺🇸 English 🌟 सभी गाइड्स (All) 🛠️ डेवलपर की ज़रूरत (VPS, Store Apps, Backups) ⚡ एडमिन "
+      }
+    },
+    "customerStorefront": {
+      "isErrorBoundary": false,
+      "productCount": 31,
+      "hasSearchInput": true,
+      "hasCartButton": true,
+      "headingsSample": [
+        "Aura Pro ANC Headphones",
+        "Aura Pro ANC Headphones",
+        "Shop by Category",
+        "All Products",
+        "Electronics & Audio",
+        "Fashion & Apparel",
+        "Watches & Wearables",
+        "Home & Kitchen",
+        "My Wishlist (0)",
+        "Filter by Brand Partner\nVerified"
+      ],
+      "bodySnippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Super Admin Vendor Portal Courier Hub Web Installer Desktop iPad 🤖 Android iPhone Buy: 8533955333 Reset ⚡ Mega Diwali & Festive Sale: Flat 50% OFF + Free Express Delivery on orders above ₹999! A AuraMarket B2B+B2C  Multi-V",
+      "productDetailModal": {
+        "modalOpened": true,
+        "swatchesCount": 1,
+        "hasAddCartButton": true,
+        "clickedAddCart": true,
+        "modalSnippet": "AuraMarket कम्प्लीट सेटअप व डेवलपर गाइड V2.4  डेवलपर: अंकित चौधरी • कॉल / WhatsApp: +91 8533955333  🇮🇳 हिंदी 🇺🇸 English 🌟 सभी गाइड्स (All) 🛠️ डेवलपर की ज़रूरत (VPS, Store Apps, Backups) ⚡ एडमिन "
+      },
+      "cartDrawer": {
+        "hasCheckoutBtn": true,
+        "clickedCheckout": true,
+        "bodyTextSnippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Super Admin Vendor Portal Courier Hub Web Installer Desktop iPad 🤖 Android iPhone Buy: 8533955333 Reset ⚡ Mega Diwali & Festive Sale: Flat 50% OFF + Free Express Delivery on orders above ₹999! A AuraMarket B2B+B2C  Multi-V"
+      },
+      "orderConfirmation": {
+        "hasOrderPlaced": true,
+        "otpMatched": null,
+        "confirmationSnippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Super Admin Vendor Portal Courier Hub Web Installer Desktop iPad 🤖 Android iPhone Buy: 8533955333 Reset ⚡ Mega Diwali & Festive Sale: Flat 50% OFF + Free Express Delivery on orders above ₹999! A AuraMarket B2B+B2C  Multi-Vendor Marketplace  DELIVER TO  New Delhi, 110001 All Voice AI Track Order Orders & Invoices Alerts W"
+      }
+    },
+    "superAdminDashboard": {
+      "overview": {
+        "isErrorBoundary": false,
+        "headings": [
+          "Super Admin Control Center\nMASTER LEVEL",
+          "₹2,74,000",
+          "₹24,600",
+          "6 / 8",
+          "48",
+          "Vendor Storefronts & Commission Control",
+          "AuraMarket कम्प्लीट सेटअप व डेवलपर गाइड\nV2.4",
+          "यह पूरा मल्टी-वेंडर ई-कॉमर्स सॉफ्टवेयर अपने ब्रांड पर शुरू करें",
+          "🛠️\nडेवलपर की ज़रूरत कहाँ होगी? (Developer Required Tasks)",
+          "⚡\nबिना डेवलपर के आप खुद क्या कर सकते हैं? (Admin Zero-Code Tasks)"
+        ],
+        "kpis": [
+          "₹",
+          "2",
+          "₹2,74,000",
+          "₹24,600",
+          "48",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "bodySnippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Super Admin Vendor Portal Courier Hub Web Installer Desktop iPad 🤖 Android iPhone Buy: 8533955333 Reset ⚡ Mega Diwali & Festive Sale: Flat 50% OFF + Free Express Delivery o"
+      },
+      "tabsAudited": [
+        {
+          "tabId": "overview",
+          "tabName": "Overview Bento Grid",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "orders",
+          "tabName": "Orders & Fulfillment",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "categories",
+          "tabName": "Category Tree Manager",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "brands",
+          "tabName": "Brand Directory",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "banners",
+          "tabName": "Banner Manager",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "announcement",
+          "tabName": "Announcement Bar Manager",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "coupons",
+          "tabName": "Coupons & Discounts",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "flash-deals",
+          "tabName": "Flash Deals",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "abandoned-carts",
+          "tabName": "Abandoned Carts",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "customers",
+          "tabName": "Customer CRM",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "vendors",
+          "tabName": "Vendor KYC & Storefronts",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "payouts",
+          "tabName": "Vendor Payouts",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "tax-shipping",
+          "tabName": "Tax & Shipping Zones",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "staff-roles",
+          "tabName": "Staff Roles & Permissions",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "audit-backup",
+          "tabName": "System Audit & Backups",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "rto-guard",
+          "tabName": "RTO Guard Engine",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "localization",
+          "tabName": "Localization & Multi-Currency",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "global-settings",
+          "tabName": "Global Settings",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "audit-trail",
+          "tabName": "Audit Trail Manager",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "push-notifications",
+          "tabName": "Web Push Notifications",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "wallet-vault",
+          "tabName": "Admin Wallet Vault",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "emi-engine",
+          "tabName": "EMI Breakdown Manager",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "social-og",
+          "tabName": "Social Share & OpenGraph Hub",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "gift-wrap",
+          "tabName": "Gift Wrap Manager",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "hyperlocal",
+          "tabName": "Hyperlocal Geofence",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "cod-vault",
+          "tabName": "COD Reconciliation Vault",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "ai-studio",
+          "tabName": "AI Smart Product Studio",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "whatsapp-bot",
+          "tabName": "WhatsApp Shopping Bot",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "group-buy",
+          "tabName": "Group Buying Engine",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "video-shopping",
+          "tabName": "Live Video Shopping",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "rto-predictor",
+          "tabName": "AI Smart RTO Predictor",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "cms-pages",
+          "tabName": "CMS Page Builder",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "faqs",
+          "tabName": "FAQ Manager",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "commission-rules",
+          "tabName": "Commission Rule Engine",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "logistics-zones",
+          "tabName": "Pincode Zone Logistics",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "telemetry-health",
+          "tabName": "Server Telemetry Health",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "vendor-verification",
+          "tabName": "Vendor Verification Hub",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "shipping-manifest",
+          "tabName": "Shipping Manifest Hub",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "job-queues",
+          "tabName": "Job Queue Monitor",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "multi-warehouse",
+          "tabName": "Multi-Warehouse Routing",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "stock-transfers",
+          "tabName": "Stock Transfer Orders",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "affiliates",
+          "tabName": "Affiliate Program Manager",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "loyalty",
+          "tabName": "Loyalty Tier Manager",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "flash-sales-mega",
+          "tabName": "Flash Mega Campaigns",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "cart-recovery-drip",
+          "tabName": "Cart Recovery Drip",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "hyperlocal-dispatch",
+          "tabName": "Hyperlocal Dispatch",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "fleet-live-map",
+          "tabName": "Fleet Live Map Radar",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "reverse-logistics",
+          "tabName": "Reverse Logistics Hub",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "escrow",
+          "tabName": "Admin Escrow Engine",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "tax-compliance",
+          "tabName": "Tax Compliance Dashboard",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "fraud-prevention",
+          "tabName": "Fraud Prevention",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "layout",
+          "tabName": "Homepage Layout Builder",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "integrations",
+          "tabName": "Integrations Hub",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        },
+        {
+          "tabId": "seo",
+          "tabName": "SEO Engine",
+          "status": "PASS",
+          "htmlLength": 141628,
+          "newExceptions": 0,
+          "snippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Sup"
+        }
+      ]
+    },
+    "vendorPortal": {
+      "isErrorBoundary": false,
+      "hasStoreName": true,
+      "headingsSample": [
+        "Apex Tech Hub\nVERIFIED PARTNER",
+        "₹24,500",
+        "₹1,85,000",
+        "4",
+        "4.9 ★",
+        "Orders Assigned to Your Store (Package Dispatch Lifecycle)\nPOINT #56",
+        "Store Product Catalog (4 Items)",
+        "Aura Pro ANC Wireless Noise-Cancelling Headphones",
+        "AeroWatch S9 Ultra Smartwatch with AMOLED Display",
+        "Obsidian Oversized Heavyweight Cotton Hoodie"
+      ],
+      "actionButtonsSample": [
+        "← All Portals Hub",
+        "📖 Setup Guide / कैसे यूज़ करें",
+        "Storefront",
+        "Super Admin",
+        "Vendor Portal",
+        "Courier Hub",
+        "Web Installer",
+        "Desktop",
+        "iPad",
+        "🤖\nAndroid",
+        "iPhone",
+        "Reset",
+        "DELIVER TO\n\nNew Delhi, 110001",
+        "🇮🇳₹INR",
+        "🇺🇸English"
+      ],
+      "bodySnippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Super Admin Vendor Portal Courier Hub Web Installer Desktop iPad 🤖 Android iPhone Buy: 8533955333 Reset ⚡ Mega Diwali & Festive Sale: Flat 50% OFF + Free Express Delivery on orders above ₹999! A AuraMarket B2B+B2C  Multi-V"
+    },
+    "courierHub": {
+      "isErrorBoundary": false,
+      "hasRider": true,
+      "headingsSample": [
+        "Courier & Express Logistics Hub\nFIELD PARTNER",
+        "0",
+        "0",
+        "₹0",
+        "Vikram Singh",
+        "Assigned Drops Stream\n0 tasks found",
+        "No Deliveries Matching Query",
+        "MARKETPLACE",
+        "CUSTOMER SUPPORT",
+        "LEGAL & POLICIES"
+      ],
+      "verifyBtnsCount": 3,
+      "bodySnippet": "← All Portals Hub 📖 Setup Guide / कैसे यूज़ करें AuraMarket Demo Storefront Super Admin Vendor Portal Courier Hub Web Installer Desktop iPad 🤖 Android iPhone Buy: 8533955333 Reset ⚡ Mega Diwali & Festive Sale: Flat 50% OFF + Free Express Delivery on orders above ₹999! A AuraMarket B2B+B2C  Multi-V",
+      "otpModal": {
+        "modalOpened": true,
+        "snippet": "AuraMarket कम्प्लीट सेटअप व डेवलपर गाइड V2.4  डेवलपर: अंकित चौधरी • कॉल / WhatsApp: +91 8533955333  🇮🇳 हिंदी 🇺🇸 English 🌟 सभी गाइड्स (All) 🛠️ डेवलपर की ज़रूरत (VPS, Store Apps, Backups) ⚡ एडमिन "
+      }
+    },
+    "installWizard": {
+      "step1": {
+        "isErrorBoundary": false,
+        "hasInstallerTitle": false,
+        "headingsSample": [
+          "AuraMarket Web Installer\nV2.5 ENTERPRISE",
+          "Welcome to AuraMarket Installation",
+          "Full Multi-Vendor",
+          "Enterprise Security",
+          "Zero Setup Overhead",
+          "ENVATO / CODECANYON LICENSE TERMS\nSTANDARD / EXTENDED LICENSE",
+          "AuraMarket कम्प्लीट सेटअप व डेवलपर गाइड\nV2.4",
+          "यह पूरा मल्टी-वेंडर ई-कॉमर्स सॉफ्टवेयर अपने ब्रांड पर शुरू करें",
+          "🛠️\nडेवलपर की ज़रूरत कहाँ होगी? (Developer Required Tasks)",
+          "1. VPS सर्वर, डोमेन व SSL सर्टिफिकेट सेटअप (Hostinger / AWS / Ubuntu)"
+        ],
+        "hasNextButton": false,
+        "bodySnippet": "A AuraMarket Web Installer V2.5 ENTERPRISE  Automated 1-Click Multi-Vendor Platform Setup Wizard  Setup Guide 1 Welcome & License 2 Server Audit 3 Database 4 Admin & Store 5 Finalize STEP 1 OF 5 Welcome to AuraMarket Installation  Thank you for purchasing AuraMarket! This interactive installer will "
+      },
+      "step2": {
+        "hasPrerequisites": true,
+        "bodySnippet": "A AuraMarket Web Installer V2.5 ENTERPRISE  Automated 1-Click Multi-Vendor Platform Setup Wizard  Setup Guide 1 Welcome & License 2 Server Audit 3 Database 4 Admin & Store 5 Finalize STEP 1 OF 5 Welcome to AuraMarket Installation  Thank you for purchasing AuraMarket! This interactive installer will "
+      }
+    }
+  },
+  "summary": {
+    "totalExceptions": 0,
+    "totalConsoleErrors": 0,
+    "exceptionsList": [],
+    "consoleErrorsList": []
+  }
+}
